@@ -1,0 +1,77 @@
+/* NexSpiro "Soft Clay & Pill" design tokens.
+   Light is the default; the dark block is applied via <html data-theme="dark"> (see theme.ts). */
+:root {
+  color-scheme: light;
+  /* canvas */
+  --canvas-hi: #FBFAF7;
+  --canvas-1: #F5F4F0;
+  --canvas-2: #ECEAE4;
+  /* surfaces */
+  --surface-1: #FAF9F6;          /* floating panels */
+  --surface-2: #F3F1EC;          /* raised controls (top of gradient is surface-1) */
+  --surface-well: #EDEBE5;       /* depressed inputs */
+  --surface-scrim: rgba(236, 234, 228, .55);
+  /* type */
+  --text: #2A2D34;
+  --text-2: #4F535D;
+  --text-3: #6C6F78;
+  --text-on-accent: #17382A;
+  --line: rgba(42, 45, 52, .08);
+  /* accents: base / deep (text & icons on light) / tint (fills) */
+  --sage: #7DAA92;   --sage-deep: #3F7058;   --sage-tint: #D2E3D8;
+  --sky: #7EA8BE;    --sky-deep: #3E6F89;    --sky-tint: #D9E8F5;
+  --coral: #E2856E;  --coral-deep: #A94A33;  --coral-tint: #F8DFD6;
+  --violet: #8A79B8; --violet-deep: #5F4E94; --violet-tint: #E6E1F3;
+  --amber: #D9A55B;  --amber-deep: #8C5E14;  --amber-tint: #F6E7CC;
+  /* elevation */
+  --sh-float: 0 12px 32px -4px rgba(160, 150, 140, .18), 0 2px 6px rgba(160, 150, 140, .10), inset 0 1px 2px rgba(255, 255, 255, .85);
+  --sh-raised: 0 4px 12px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .05), inset 0 1px 1px rgba(255, 255, 255, .95);
+  --sh-raised-hover: 0 6px 16px rgba(0, 0, 0, .10), 0 1px 2px rgba(0, 0, 0, .05), inset 0 1px 1px rgba(255, 255, 255, .95);
+  --sh-well: inset 0 2px 4px rgba(0, 0, 0, .06), inset 0 -1px 2px rgba(255, 255, 255, .9);
+  --sh-pressed: inset 0 2px 5px rgba(0, 0, 0, .12), inset 0 -1px 1px rgba(255, 255, 255, .7);
+  --sh-pop: 0 24px 60px -12px rgba(90, 80, 70, .32), 0 4px 12px rgba(90, 80, 70, .10), inset 0 1px 2px rgba(255, 255, 255, .9);
+  --ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--sky);
+  /* shape */
+  --r-card: 22px; --r-inner: 16px; --r-pill: 999px;
+  /* motion */
+  --spring: 200ms cubic-bezier(.34, 1.56, .64, 1);
+  --ease: 260ms cubic-bezier(.4, 0, .2, 1);
+  /* type */
+  --font: ui-rounded, "SF Pro Rounded", "Nunito Sans", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* gradients */
+  --grad-raised: linear-gradient(180deg, #FFFFFF 0%, var(--surface-2) 100%);
+  --grad-primary: linear-gradient(180deg, #93BCA6 0%, var(--sage) 55%, #6C9C83 100%);
+  --grad-nl: linear-gradient(160deg, var(--violet-tint) 0%, var(--surface-1) 70%);
+  --view-bg: radial-gradient(120% 90% at 50% 38%, var(--canvas-hi) 0%, var(--canvas-1) 48%, var(--canvas-2) 100%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas-hi: #2A2C31;
+  --canvas-1: #1F2125;
+  --canvas-2: #16171A;
+  --surface-1: #2B2E34;
+  --surface-2: #24272C;
+  --surface-well: #212328;
+  --surface-scrim: rgba(22, 23, 26, .6);
+  --text: #ECEAE4;
+  --text-2: #C3C1BA;
+  --text-3: #9C9AA2;
+  --text-on-accent: #10261B;
+  --line: rgba(255, 255, 255, .07);
+  --sage: #86B59C;   --sage-deep: #9CCBB1;   --sage-tint: #2F4238;
+  --sky: #86B1C7;    --sky-deep: #A5CBDF;    --sky-tint: #2B3D49;
+  --coral: #E8917A;  --coral-deep: #F2A794;  --coral-tint: #4A312B;
+  --violet: #9887C5; --violet-deep: #BDB0E3; --violet-tint: #382F52;
+  --amber: #E0B06A;  --amber-deep: #EBC587;  --amber-tint: #43371F;
+  --sh-float: 0 14px 36px -6px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .3), inset 0 1px 1px rgba(255, 255, 255, .07);
+  --sh-raised: 0 4px 12px rgba(0, 0, 0, .4), 0 1px 2px rgba(0, 0, 0, .3), inset 0 1px 1px rgba(255, 255, 255, .09);
+  --sh-raised-hover: 0 6px 16px rgba(0, 0, 0, .5), 0 1px 2px rgba(0, 0, 0, .3), inset 0 1px 1px rgba(255, 255, 255, .11);
+  --sh-well: inset 0 2px 5px rgba(0, 0, 0, .45), inset 0 -1px 1px rgba(255, 255, 255, .05);
+  --sh-pressed: inset 0 2px 6px rgba(0, 0, 0, .55), inset 0 -1px 1px rgba(255, 255, 255, .04);
+  --sh-pop: 0 28px 70px -10px rgba(0, 0, 0, .7), 0 4px 12px rgba(0, 0, 0, .4), inset 0 1px 1px rgba(255, 255, 255, .08);
+  --grad-raised: linear-gradient(180deg, #353941 0%, var(--surface-2) 100%);
+  --grad-primary: linear-gradient(180deg, #9CC8B1 0%, var(--sage) 55%, #78A58D 100%);
+  --grad-nl: linear-gradient(160deg, var(--violet-tint) 0%, var(--surface-1) 70%);
+}
