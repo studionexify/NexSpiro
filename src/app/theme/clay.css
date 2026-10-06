@@ -74,7 +74,7 @@ button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
 .row.range { display: grid; grid-template-columns: 1fr auto; row-gap: 6px; align-items: center; }
 .row.range input[type=range] { grid-column: 1 / -1; }
 .row .v { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; font-size: 12px; background: none; }
-input[type=number], input[type=text], select, textarea {
+input[type=number], input[type=text], input[type=password], select, textarea {
   background: var(--surface-well); box-shadow: var(--sh-well); border: 0; border-radius: 12px; padding: 0 10px; height: 32px; color: var(--text);
   width: 132px; min-width: 0;
 }

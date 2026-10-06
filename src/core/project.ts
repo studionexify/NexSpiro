@@ -1,5 +1,5 @@
 import { patterns, type PatternParams } from "./patterns.ts";
-import { primitives, type PrimitiveName } from "./primitives.ts";
+import { primitiveDefs, buildPrimitive, type PrimitiveName } from "./primitives.ts";
 import { createMask, type PaintMask } from "./mask.ts";
 import { profileBody, meshBody, type Body } from "./body.ts";
 import type { Mesh } from "./mesh.ts";
@@ -7,7 +7,7 @@ import type { MachinePreset, ProcessPreset, Preset } from "./presets.ts";
 
 // Multi-plate, multi-object project model + .nexspiro (JSON) container.
 export type ObjectTransform = { x: number; y: number; scaleXY: number; scaleZ: number; rotation: number }; // x,y: mm from bed centre
-export type ObjectSource = { kind: "primitive"; primitive: PrimitiveName } | { kind: "mesh"; meshId: string };
+export type ObjectSource = { kind: "primitive"; primitive: PrimitiveName; params?: Record<string, number> } | { kind: "mesh"; meshId: string };
 export type PlateObject = {
   id: string; name: string; source: ObjectSource; transform: ObjectTransform;
   base: { pattern: string; params: PatternParams };
@@ -27,14 +27,14 @@ let seq = 0;
 const uid = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 export function newObject(source: ObjectSource = { kind: "primitive", primitive: "bowl" }, name?: string): PlateObject {
   return {
-    id: uid("obj"), name: name ?? (source.kind === "primitive" ? source.primitive : "mesh"), source,
+    id: uid("obj"), name: name ?? (source.kind === "primitive" ? (primitiveDefs[source.primitive]?.label ?? source.primitive) : "mesh"), source,
     transform: { x: 0, y: 0, scaleXY: 1, scaleZ: 1, rotation: 0 },
     base: { pattern: "knit", params: { ...patterns.knit.defaults } }, regionParams: [], mask: createMask(256, 256),
   };
 }
 export function cloneObject(o: PlateObject): PlateObject {
   return {
-    ...o, id: uid("obj"), name: `${o.name} copy`, source: { ...o.source }, transform: { ...o.transform },
+    ...o, id: uid("obj"), name: `${o.name} copy`, source: { ...o.source, ...(o.source.kind === "primitive" && o.source.params ? { params: { ...o.source.params } } : {}) } as typeof o.source, transform: { ...o.transform },
     base: { pattern: o.base.pattern, params: { ...o.base.params } }, regionParams: o.regionParams.map((r) => ({ ...r })),
     mask: { cols: o.mask.cols, rows: o.mask.rows, regions: o.mask.regions.map((r) => ({ ...r, params: r.params && { ...r.params }, weight: r.weight.slice() })) },
   };
@@ -45,7 +45,7 @@ export function newPlate(name = "Plate", objects: PlateObject[] = [newObject()])
 export const clonePlate = (p: Plate): Plate => ({ ...newPlate(`${p.name} copy`, p.objects.map(cloneObject)) });
 
 export function objectBody(o: PlateObject, meshes: Record<string, Mesh>): Body {
-  if (o.source.kind === "primitive") return profileBody(primitives[o.source.primitive]());
+  if (o.source.kind === "primitive") return profileBody(buildPrimitive(o.source.primitive, o.source.params));
   const m = meshes[o.source.meshId];
   if (!m) throw new Error(`Missing mesh ${o.source.meshId}`);
   return meshBody(m);
@@ -176,7 +176,7 @@ export function deserializeProject(json: string): Project {
     if (m.tris.length % 9) throw new Error("Corrupt mesh data");
   }
   for (const pl of raw.plates) for (const o of pl.objects) {
-    if (o.source.kind === "primitive" && !(o.source.primitive in primitives)) throw new Error(`Unknown primitive: ${o.source.primitive}`);
+    if (o.source.kind === "primitive" && !(o.source.primitive in primitiveDefs)) throw new Error(`Unknown primitive: ${o.source.primitive}`);
     if (o.source.kind === "mesh" && !raw.meshes[o.source.meshId]) throw new Error(`Missing mesh ${o.source.meshId}`);
     for (const r of o.mask.regions) {
       if (!(r.pattern in patterns)) throw new Error(`Unknown pattern: ${r.pattern}`);

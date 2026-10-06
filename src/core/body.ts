@@ -11,6 +11,13 @@ export type Body = {
 
 export function profileBody(p: Profile): Body {
   let rMax = 0; for (let i = 0; i <= 200; i++) rMax = Math.max(rMax, p.radius(i / 200));
+  if (p.contour) { // explicit outline (prisms, lobed, twisted…): arc-length resampled like a mesh slice
+    const outline = p.contour;
+    return {
+      height: p.height, footprintRadius: rMax, warnings: [],
+      ring: (z, M) => resampleLoop(outline(Math.min(1, Math.max(0, z / p.height))), M),
+    };
+  }
   return {
     height: p.height, footprintRadius: rMax, warnings: [],
     ring(z, M) {

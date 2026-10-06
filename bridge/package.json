@@ -1,0 +1,11 @@
+{
+  "name": "nexspiro-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local helper that lets NexSpiro (a browser app) send G-code to Bambu Lab printers in LAN mode (FTPS + MQTT).",
+  "type": "module",
+  "bin": { "nexspiro-bridge": "cli.mjs" },
+  "scripts": { "start": "node cli.mjs" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "basic-ftp": "^5.0.5", "mqtt": "^5.10.0" }
+}

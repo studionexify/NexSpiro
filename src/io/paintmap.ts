@@ -6,16 +6,16 @@ import { dominantState, encodeState } from "./paint.ts";
 /** Maps object-space points (normalized mesh / body coordinates) to the (u, t) paint parameterisation. */
 export function surfaceProjector(body: Body, M = 256, R = 128) {
   const H = body.height, rings = Array.from({ length: R }, (_, j) => body.ring(((j + 0.5) / R) * H, M));
-  return (x: number, y: number, z: number): [number, number] => {
+  return (x: number, y: number, z: number): [number, number, number] => {
     const t = Math.min(1, Math.max(0, z / H));
     let j = Math.min(R - 1, Math.max(0, Math.round(t * R - 0.5)));
     // nearest non-empty ring
     for (let d = 0; d < R && !rings[j]; d++) j = rings[Math.min(R - 1, j + d)] ? Math.min(R - 1, j + d) : Math.max(0, j - d);
     const ring = rings[j];
-    if (!ring) return [0, t];
+    if (!ring) return [0, t, Infinity];
     let best = 0, bd = Infinity;
     for (let k = 0; k < M; k++) { const d = (ring.x[k] - x) ** 2 + (ring.y[k] - y) ** 2; if (d < bd) { bd = d; best = k; } }
-    return [best / M, t];
+    return [best / M, t, Math.sqrt(bd)]; // third value: distance (mm) from the point to the printed wall contour
   };
 }
 
@@ -71,4 +71,47 @@ export function maskToPaintColor(mesh: Mesh, body: Body, mask: PaintMask): strin
     out.push(best >= 0 ? encodeState(best + 1) : "");
   }
   return out;
+}
+
+/**
+ * Paint (or erase) a set of display-mesh triangles into a mask region. Triangles are sampled on a barycentric grid
+ * and each sample is projected onto the printed wall; samples farther than `maxDist` from the wall (caps, interior
+ * faces) are ignored, so only faces that actually become spiral wall can carry a texture.
+ */
+export function paintTriangles(
+  tris: Float32Array, selected: Iterable<number>, project: ReturnType<typeof surfaceProjector>, mask: PaintMask, region: number,
+  opts: { erase?: boolean; height: number; radius: number; maxDist?: number } = { height: 1, radius: 1 },
+): number {
+  const w = mask.regions[region]?.weight; if (!w) return 0;
+  const cell = Math.min((2 * Math.PI * Math.max(opts.radius, 1)) / mask.cols, opts.height / mask.rows), maxDist = opts.maxDist ?? 1 + cell;
+  const hit = new Uint8Array(mask.cols * mask.rows); let used = 0;
+  // sample spacing must be finer than one mask cell or large flat triangles (a cube face is two) leave gaps
+  const list = [...selected], subdiv = (f: number) => {
+    const o = f * 9;
+    return Math.max(...[0, 1, 2].map((c) => Math.hypot(tris[o + c * 3] - tris[o + ((c + 1) % 3) * 3], tris[o + c * 3 + 1] - tris[o + ((c + 1) % 3) * 3 + 1], tris[o + c * 3 + 2] - tris[o + ((c + 1) % 3) * 3 + 2]))) / cell;
+  };
+  let total = 0; for (const f of list) total += Math.ceil(subdiv(f)) ** 2 / 2;
+  const shrink = Math.max(1, Math.sqrt(total / 3_000_000));
+  for (const f of list) {
+    const o = f * 9, P = [0, 1, 2].map((c) => [tris[o + c * 3], tris[o + c * 3 + 1], tris[o + c * 3 + 2]]);
+    const s = Math.min(900, Math.max(1, Math.ceil(subdiv(f) / shrink)));
+    for (let i = 0; i <= s; i++) for (let j = 0; j <= s - i; j++) {
+      const a = i / s, b = j / s, c = 1 - a - b;
+      const [u, v, d] = project(a * P[0][0] + b * P[1][0] + c * P[2][0], a * P[0][1] + b * P[1][1] + c * P[2][1], a * P[0][2] + b * P[1][2] + c * P[2][2]);
+      if (d > maxDist) continue;
+      const cx = Math.min(mask.cols - 1, Math.floor(u * mask.cols)), cy = Math.min(mask.rows - 1, Math.round(v * (mask.rows - 1)));
+      if (!hit[cy * mask.cols + cx]) used++;
+      hit[cy * mask.cols + cx] = 1;
+    }
+  }
+  for (let y = 0; y < mask.rows; y++) for (let x = 0; x < mask.cols; x++) {
+    if (!hit[y * mask.cols + x]) continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const yy = y + dy; if (yy < 0 || yy >= mask.rows) continue;
+      const i = yy * mask.cols + ((x + dx + mask.cols) % mask.cols);
+      if (opts.erase) w[i] = 0;
+      else { w[i] = 1; for (const other of mask.regions) if (other.weight !== w) other.weight[i] = 0; }
+    }
+  }
+  return used;
 }

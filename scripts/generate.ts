@@ -2,7 +2,7 @@
 // e.g.   npm run generate -- bowl knit machine/voron-24 bowl.gcode
 import { writeFileSync } from "node:fs";
 import {
-  primitives, buildSpiral, planMotion, toGcode, sliceStats, formatDuration, PresetRegistry,
+  buildPrimitive, buildSpiral, planMotion, toGcode, sliceStats, formatDuration, PresetRegistry,
   type PrimitiveName, type MachinePreset, type FilamentPreset, type ProcessPreset,
 } from "../src/core/index.ts";
 
@@ -11,7 +11,7 @@ const reg = new PresetRegistry();
 const machine = reg.resolve<"machine">(machineId) as MachinePreset;
 const filament = reg.resolve<"filament">("filament/pla") as FilamentPreset;
 const proc = reg.resolve<"process">("process/vase-0.4") as ProcessPreset;
-const tp = buildSpiral(primitives[prim as PrimitiveName](), {
+const tp = buildSpiral(buildPrimitive(prim as PrimitiveName), {
   layerHeight: proc.layerHeight, firstLayerHeight: proc.firstLayerHeight, lineWidth: proc.lineWidth,
   filamentDiameter: filament.diameter, segmentsPerRev: proc.segmentsPerRev, pattern, fadeHeight: proc.fadeHeight,
   center: [0, 0], zCap: machine.zWobbleMax, planar: !proc.nonLinear.enabled,

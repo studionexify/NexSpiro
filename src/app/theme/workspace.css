@@ -28,7 +28,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--canvas
 
 /* ---- left: tool dock + slide-out card ---- */
 #left { position: absolute; left: var(--gap); top: var(--free-top); bottom: var(--free-bottom); display: flex; align-items: center; z-index: 4; }
-#dock { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px; border-radius: 28px; max-height: 100%; transition: transform var(--ease), opacity var(--ease); }
+#dock { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px; border-radius: 28px; max-height: 100%; transition: transform var(--ease), opacity var(--ease); }
 #dock .grp { display: flex; flex-direction: column; gap: 3px; }
 #dock .grp + .grp { margin-top: 5px; padding-top: 8px; border-top: 1px solid var(--line); }
 .tool { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 16px; color: var(--text-2); transition: transform var(--spring), box-shadow var(--spring), background var(--ease), color var(--ease); }
@@ -42,7 +42,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--canvas
   white-space: nowrap; color: var(--text); background: var(--surface-1); box-shadow: var(--sh-float); opacity: 0; pointer-events: none; transition: opacity 140ms, transform 140ms; z-index: 20;
 }
 .tool[data-tip]:hover::after { opacity: 1; transform: translate(0, -50%); transition-delay: 350ms; }
-#toolcard { position: absolute; left: calc(100% + 10px); top: 50%; width: 288px; max-height: 100%; overflow: auto; scrollbar-width: none; transform: translate(-14px, -50%) scale(.97); transform-origin: left center; opacity: 0; visibility: hidden; pointer-events: none !important; transition: transform var(--ease), opacity var(--ease), visibility 0s linear 260ms; }
+#toolcard { z-index: 1; position: absolute; left: calc(100% + 10px); top: 50%; width: 288px; max-height: 100%; overflow: auto; scrollbar-width: none; transform: translate(-14px, -50%) scale(.97); transform-origin: left center; opacity: 0; visibility: hidden; pointer-events: none !important; transition: transform var(--ease), opacity var(--ease), visibility 0s linear 260ms; }
 #toolcard::-webkit-scrollbar { display: none; }
 #toolcard.open { transform: translate(0, -50%) scale(1); opacity: 1; visibility: visible; pointer-events: auto !important; transition: transform var(--ease), opacity var(--ease), visibility 0s; }
 #toolcard .card-head .ic { color: var(--sky-deep); }
@@ -151,3 +151,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--canvas
   .plate-card { width: 192px; } .plate-card .thumb { width: 56px; height: 56px; }
 }
 @media (max-height: 700px) { #hud { --free-top: 78px; --free-bottom: 128px; } #tray { min-height: 92px; } .plate-card .thumb { width: 64px; height: 64px; } #dock { overflow-y: auto; scrollbar-width: none; } }
+
+/* ---- path-preview toggle, mini headings, zone rows ---- */
+#topbar .live.on { background: var(--surface-well); box-shadow: var(--sh-pressed); color: var(--violet-deep, var(--sky-deep)); }
+#topbar .live .ic { transition: transform var(--spring); } #topbar .live.on .ic { transform: scale(1.08); }
+h2.mini { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 0 0 8px; }
+#toolcard .list-item .acts { display: flex; gap: 2px; }
+@media (max-width: 1100px) { #topbar .live .tx { display: none; } }
+
+/* ---- network printers ---- */
+.meter { height: 8px; border-radius: 99px; background: var(--surface-well); box-shadow: var(--sh-well); overflow: hidden; margin-top: 10px; }
+.meter > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--sage), var(--sky)); transition: width 600ms var(--ease-out, ease); }
+.row input[type=text], .row input[type=password] { width: 200px; text-align: left; }
+.issue.ok { background: color-mix(in srgb, var(--sage) 16%, transparent); color: var(--sage-deep); }
+.dot.amber { background: var(--amber, #D9A55B); } .dot.sky { background: var(--sky); }
+#drawer .list-item small.muted { display: block; font-weight: 400; }
+.btn.danger { color: var(--coral-deep, #B95A44); }

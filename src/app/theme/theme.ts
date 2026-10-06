@@ -17,12 +17,13 @@ export function setThemeAttr(mode: ThemeMode) {
 export type Palette3D = {
   bedFill: number; bedGrid: number; bedEdge: number; bedActive: number; bedLocked: number; exclude: number;
   ring: number; ringSel: number; pathBase: number; pathSel: number; shadow: string;
+  model: number; modelSel: number; hover: number;
 };
 export const PALETTE_3D: Record<ThemeMode, Palette3D> = {
   light: { bedFill: 0xF8F6F1, bedGrid: 0xE3DFD6, bedEdge: 0xC9C3B7, bedActive: 0x7EA8BE, bedLocked: 0xD2A57C, exclude: 0xE2856E,
-    ring: 0xD0CABD, ringSel: 0x5E94B0, pathBase: 0x5A5750, pathSel: 0xC9803A, shadow: "rgba(110,98,84," },
+    ring: 0xD0CABD, ringSel: 0x5E94B0, pathBase: 0x5A5750, pathSel: 0xC9803A, shadow: "rgba(110,98,84,", model: 0xD9D4C8, modelSel: 0xE8E3D8, hover: 0xE2856E },
   dark: { bedFill: 0x2D3036, bedGrid: 0x383C44, bedEdge: 0x4B505B, bedActive: 0x86B1C7, bedLocked: 0xB58B64, exclude: 0xE8917A,
-    ring: 0x555C69, ringSel: 0x9CC2D6, pathBase: 0xE6E2D8, pathSel: 0xF2C779, shadow: "rgba(0,0,0," },
+    ring: 0x555C69, ringSel: 0x9CC2D6, pathBase: 0xE6E2D8, pathSel: 0xF2C779, shadow: "rgba(0,0,0,", model: 0x8D939D, modelSel: 0xA5ABB5, hover: 0xE8917A },
 };
 /** Paint-region colours: sky, coral, sage, amber, violet, teal, rose. */
 export const REGION_COLORS = [0x7EA8BE, 0xE2856E, 0x7DAA92, 0xD9A55B, 0x8A79B8, 0x5FB3B3, 0xC97B96];

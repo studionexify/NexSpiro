@@ -15,6 +15,8 @@ export function rangeRow(label: string, attrs: string, value: number, min: numbe
 }
 export const numRow = (label: string, attrs: string, value: number | string, o: { unit?: string; step?: number | string; min?: number; max?: number; disabled?: boolean } = {}) =>
   `<label class="row"><span class="lbl">${label}</span><span class="numwrap"><input type="number" ${attrs} step="${o.step ?? "any"}"${o.min !== undefined ? ` min="${o.min}"` : ""}${o.max !== undefined ? ` max="${o.max}"` : ""} value="${value}"${o.disabled ? " disabled" : ""}>${o.unit ? `<span class="unit">${o.unit}</span>` : ""}</span></label>`;
+export const textRow = (label: string, attrs: string, value: string, o: { type?: string; placeholder?: string } = {}) =>
+  `<label class="row"><span class="lbl">${label}</span><input type="${o.type ?? "text"}" ${attrs} value="${esc(value)}"${o.placeholder ? ` placeholder="${esc(o.placeholder)}"` : ""} autocomplete="off" spellcheck="false"></label>`;
 export const switchRow = (label: string, attrs: string, on: boolean, o: { disabled?: boolean } = {}) =>
   `<label class="row"><span class="lbl">${label}</span><input type="checkbox" ${attrs}${on ? " checked" : ""}${o.disabled ? " disabled" : ""}></label>`;
 export const selectRow = (label: string, attrs: string, options: string) =>

@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
-  patterns, primitives, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, newObject, clonePlate, cloneObject,
+  patterns, primitiveDefs, primitiveDefaults, buildPrimitive, PRIMITIVE_GROUPS, buildSelMesh, fillFaces, pickEdge, trianglesNearSegments, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, newObject, clonePlate, cloneObject,
   objectBody, arrangePlate, footprint, normalizeMesh, bounds,
-  type PatternParams, type PrimitiveName, type MotionPath, type SliceStats, type PlateIssue, type Plate, type PlateObject,
+  type PatternParams, type PrimitiveName, type SelMesh, type FillMode, type Seg, type MotionPath, type SliceStats, type PlateIssue, type Plate, type PlateObject,
   type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail, type Mesh, type Body, type Project,
 } from "../core/index.ts";
 import type { SliceRequest, SliceResponse } from "./worker.ts";
@@ -12,30 +12,37 @@ import { ACCEPT, type ImportResult } from "../io/importers/index.ts";
 import type { Imported3MF } from "../io/importers/threemf.ts";
 import { toolheadEnvelope, parseBedExclusionSVG } from "../io/importers/machineGeometry.ts";
 import { toBambuSettings } from "../io/importers/profiles.ts";
-import { paintMeshToMask } from "../io/paintmap.ts";
+import { paintMeshToMask, paintTriangles, surfaceProjector } from "../io/paintmap.ts";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { PLATE_TYPES, bedLook, bedCanvasSize, BED_PAD, drawBed, defaultPlateType, type PlateType } from "./bed.ts";
 import { export3MF } from "../io/exporters/threemf.ts";
 import { writeProjectArchive, readProjectArchive } from "../io/exporters/project.ts";
-import { writeSTL, writeOBJ, bakeToolpath, tessellateBody, transformMesh } from "../io/exporters/mesh.ts";
+import { writeSTL, writeOBJ, bakeToolpath, tessellateBody, profileMesh, transformMesh } from "../io/exporters/mesh.ts";
 import { trajectoryCSV, trajectoryJSON } from "../io/exporters/trajectory.ts";
 import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
 import { icon } from "./icons.ts";
-import { rangeRow, numRow, switchRow, selectRow, seg, pct, materialOf, statusBadge, slicingKind, rampGradient, slug, DualSlider, type SegItem } from "./components.ts";
+import { rangeRow, numRow, switchRow, selectRow, textRow, seg, pct, materialOf, statusBadge, slicingKind, rampGradient, slug, DualSlider, type SegItem } from "./components.ts";
+import { connectorFor, validatePrinter, mixedContentProblem, PRINTER_KINDS, type PrinterConfig, type PrinterStatus, type PrinterKind } from "../net/printers.ts";
 import { initialTheme, setThemeAttr, PALETTE_3D, REGION_COLORS, hex, type ThemeMode } from "./theme/theme.ts";
 
 
 // ======================= state =======================
-type Dock = "select" | "move" | "rotate" | "scale" | "texture" | "paint" | "arrange";
+type Dock = "select" | "move" | "rotate" | "scale" | "texture" | "faces" | "paint" | "arrange";
 type PreviewMode = "feature" | "speed" | "height" | "layerTime" | "curvature";
 const PREVIEW_LABELS: Record<PreviewMode, string> = {
   feature: "Feature type (paint region)", speed: "Speed", height: "Height", layerTime: "Layer time",
   curvature: "Curvature & Non-Linear Feedrate",
 };
 type SliceResult = Extract<SliceResponse, { ok: true }> & { key: string };
-type ObjView = { obj: PlateObject; group: THREE.Group; surface: THREE.Mesh | null; shadow: THREE.Mesh | null; maskTex: THREE.DataTexture; maskVersion: number; footprintRing: THREE.Line | null };
+type ObjView = {
+  obj: PlateObject; group: THREE.Group; surface: THREE.Mesh | null; solid: THREE.Mesh | null; shadow: THREE.Mesh | null; maskTex: THREE.DataTexture; maskVersion: number; footprintRing: THREE.Line | null;
+  sel?: SelMesh; proj?: ReturnType<typeof surfaceProjector>; hoverMesh?: THREE.Mesh; hoverLines?: THREE.LineSegments;
+};
 type PlateView = {
-  plate: Plate; group: THREE.Group; bed: THREE.LineSegments; objs: ObjView[];
+  plate: Plate; group: THREE.Group; bed: THREE.Object3D; objs: ObjView[];
   lines: THREE.Line[]; status: "idle" | "slicing" | "done" | "error"; error?: string;
   result?: SliceResult; pendingKey?: string; worker: Worker; reqId: number; thumb?: string;
+  marker: THREE.Mesh; head?: { k: number; idx: number };
 };
 
 const USER_PRESETS_KEY = "nexspiro.userPresets";
@@ -45,24 +52,38 @@ const persistUserPresets = () => { try { localStorage.setItem(USER_PRESETS_KEY, 
 
 const meshes: Record<string, Mesh> = {};
 const bodyCache = new Map<string, Body>();
+const sourceKey = (o: PlateObject) => (o.source.kind === "mesh" ? `m:${o.source.meshId}` : `p:${o.source.primitive}:${JSON.stringify(o.source.params ?? {})}`);
 function bodyOf(o: PlateObject): Body {
-  const key = o.source.kind === "mesh" ? `m:${o.source.meshId}` : `p:${o.source.primitive}`;
+  const key = sourceKey(o);
   let b = bodyCache.get(key);
-  if (!b) { b = objectBody(o, meshes); bodyCache.set(key, b); }
+  if (!b) { if (bodyCache.size > 96) bodyCache.clear(); b = objectBody(o, meshes); bodyCache.set(key, b); }
   return b;
+}
+/** Triangles shown in the viewport and picked for faces/edges: the imported mesh, or the exact tessellation of a primitive. */
+const displayCache = new Map<string, Mesh>();
+function displayMesh(o: PlateObject): Mesh {
+  if (o.source.kind === "mesh") return meshes[o.source.meshId];
+  const key = sourceKey(o);
+  let m = displayCache.get(key);
+  if (!m) { if (displayCache.size > 48) displayCache.clear(); m = profileMesh(buildPrimitive(o.source.primitive, o.source.params), o.name); displayCache.set(key, m); }
+  return m;
 }
 
 const ui = {
   mode: "prepare" as "prepare" | "preview" | "print",
-  dock: "select" as Dock | null, modal: null as PresetKind | null, tier: null as "quality" | "strength" | "speed" | null,
+  dock: "select" as Dock | null, modal: null as PresetKind | "printer" | null, tier: null as "quality" | "strength" | "speed" | null,
+  livePaths: false, plateType: "textured-pei" as PlateType, plateTouched: false,
+  faceKind: "face" as "face" | "edge", faceOp: "add" as "add" | "remove", faceFill: "flat" as FillMode, faceAngle: 25, edgeAngle: 35, edgeBand: 3, edgeChain: true,
   dragSlider: false, presetsOpen: false, nlOpen: false, drawerOpen: window.innerWidth >= 1100, uniform: true, paintErase: false,
   scrub: 1, playing: false, goPreview: false, theme: initialTheme() as ThemeMode, projectName: "Untitled project",
   selected: { machine: "machine/bambu-x1", filament: "filament/pla", process: "process/vase-0.4" } as Record<PresetKind, string>,
   edited: {} as Partial<Record<PresetKind, MachinePreset | FilamentPreset | ProcessPreset>>,
   active: 0, activeObj: 0, target: -1,
-  tool: "orbit" as "orbit" | "move" | "paint" | "erase", brush: 8, showSurface: true,
+  tool: "orbit" as "orbit" | "move" | "paint" | "erase" | "faces", brush: 8, showSurface: true,
   preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
   exportFormat: "gcode" as ExportFormat, developer: false,
+  printerId: "", confirmPrint: false, netBusy: "", netMsg: null as null | { tone: "ok" | "err"; text: string },
+  draft: null as null | (Partial<PrinterConfig> & { editing?: boolean; msg?: { tone: "ok" | "err"; text: string } }),
 };
 type ExportFormat = "gcode" | "3mf" | "nexspiro" | "stl" | "obj" | "baked" | "csv" | "json";
 const EXPORT_LABELS: Record<ExportFormat, string> = {
@@ -85,10 +106,11 @@ const scene = new THREE.Scene();
 // background stays transparent: the CSS radial "studio light" gradient on #view shows through
 const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 10000);
 camera.up.set(0, 0, 1);
-camera.position.set(300, -345, 250);
+camera.position.set(390, -450, 325);
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(200, -150, 300); scene.add(sun);
+const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(200, -150, 300); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-250, 200, 120); scene.add(fill);
 
 const pathMat = new THREE.LineBasicMaterial({ vertexColors: true });
 const views: PlateView[] = [];
@@ -118,54 +140,63 @@ const slabTexture = () => cachedTexture("slab", (g, n) => {
   const m = n * 0.19, r = n * 0.04; g.beginPath(); g.roundRect(m - 4000, m, n - 2 * m, n - 2 * m, r); g.fill();
 }, 256);
 function disposeTree(o: THREE.Object3D) {
-  o.traverse((c) => { const m = c as THREE.Mesh; m.geometry?.dispose(); if (m.material && !Array.isArray(m.material)) m.material.dispose(); });
+  o.traverse((c) => {
+    const m = c as THREE.Mesh; m.geometry?.dispose();
+    if (m.material && !Array.isArray(m.material)) { if (m.material.userData.ownMap) (m.material as THREE.MeshBasicMaterial).map?.dispose(); m.material.dispose(); }
+  });
 }
 
-/** Bed as a soft clay slab: diffuse shadow, matte top, faint grid, tinted rim (sky = active, clay = locked, coral = keep-out). */
-function bedLines(active: boolean, locked: boolean) {
-  const pal = P3(), [bx, by] = machine().bed, pts: number[] = [], step = 32, hx = bx / 2, hy = by / 2;
-  for (let x = -hx + step; x < hx - 1e-6; x += step) pts.push(x, -hy, 0, x, hy, 0);
-  for (let y = -hy + step; y < hy - 1e-6; y += step) pts.push(-hx, y, 0, hx, y, 0);
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: pal.bedGrid }));
-  const rim = [-hx, -hy, 0, hx, -hy, 0, hx, -hy, 0, hx, hy, 0, hx, hy, 0, -hx, hy, 0, -hx, hy, 0, -hx, -hy, 0];
-  const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.Float32BufferAttribute(rim, 3));
-  lines.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: locked ? pal.bedLocked : active ? pal.bedActive : pal.bedEdge })));
-  const fill = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ color: pal.bedFill, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
-  fill.position.z = -0.1; fill.renderOrder = -2; lines.add(fill);
-  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(bx * 1.45, by * 1.45), new THREE.MeshBasicMaterial({ map: slabTexture(), transparent: true, depthWrite: false }));
-  shadow.position.set(0, -by * 0.025, -0.5); shadow.renderOrder = -3; lines.add(shadow);
+/** Build plate: a canvas-drawn replica of the selected printer's bed and plate type, on a soft clay slab shadow. */
+function bedLines(active: boolean, locked: boolean, plateNo = 1) {
+  const pal = P3(), M = machine(), [bx, by] = M.bed, hx = bx / 2, hy = by / 2, g = new THREE.Group();
+  const look = bedLook(registry.get(ui.selected.machine)?.name ?? "", M.flavor, ui.plateType);
+  const cv = document.createElement("canvas");
+  drawBed(cv, { bed: M.bed, look, plateNo, active, locked, accent: hex(pal.bedActive), lockColor: hex(pal.bedLocked), nozzle: M.nozzle });
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const { w, h } = bedCanvasSize(M.bed);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  plane.material.userData.ownMap = true;
+  plane.position.set(0, -(BED_PAD.bottom - BED_PAD.top) / 2, -0.1); plane.renderOrder = -2; g.add(plane);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(bx * 1.55, by * 1.55), new THREE.MeshBasicMaterial({ map: slabTexture(), transparent: true, depthWrite: false }));
+  shadow.position.set(0, -by * 0.03, -0.5); shadow.renderOrder = -3; g.add(shadow);
   const ex: number[] = []; // bed exclusion zones (bed-corner coordinates → bed-centre)
-  for (const poly of machine().bedExclude ?? []) poly.forEach(([x, y], i) => {
+  for (const poly of M.bedExclude ?? []) poly.forEach(([x, y], i) => {
     const [nx, ny] = poly[(i + 1) % poly.length];
     ex.push(x - hx, y - hy, 0.1, nx - hx, ny - hy, 0.1);
   });
   if (ex.length) {
     const eg = new THREE.BufferGeometry(); eg.setAttribute("position", new THREE.Float32BufferAttribute(ex, 3));
-    lines.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: pal.exclude })));
+    g.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: pal.exclude })));
   }
   if (bedTexture) {
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ map: bedTexture, transparent: true, opacity: 0.6, depthWrite: false }));
-    plane.position.z = -0.05; lines.add(plane);
+    const over = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ map: bedTexture, transparent: true, opacity: 0.6, depthWrite: false }));
+    over.position.z = -0.05; g.add(over);
   }
-  return lines;
+  // origin axes (X red, Y green, Z blue) at the front-left corner, as in Bambu Studio
+  const ax = new THREE.BufferGeometry(); ax.setAttribute("position", new THREE.Float32BufferAttribute([-hx, -hy, 0.2, -hx + 24, -hy, 0.2, -hx, -hy, 0.2, -hx, -hy + 24, 0.2, -hx, -hy, 0.2, -hx, -hy, 24], 3));
+  ax.setAttribute("color", new THREE.Float32BufferAttribute([0.9, 0.25, 0.25, 0.9, 0.25, 0.25, 0.3, 0.75, 0.35, 0.3, 0.75, 0.35, 0.3, 0.45, 0.95, 0.3, 0.45, 0.95], 3));
+  g.add(new THREE.LineSegments(ax, new THREE.LineBasicMaterial({ vertexColors: true })));
+  return g;
 }
 let bedTexture: THREE.Texture | null = null;
 
 function makeObjView(pv: PlateView, obj: PlateObject): ObjView {
   const maskTex = new THREE.DataTexture(new Uint8Array(obj.mask.cols * obj.mask.rows * 4), obj.mask.cols, obj.mask.rows);
   maskTex.wrapS = THREE.RepeatWrapping; maskTex.magFilter = THREE.LinearFilter;
-  const ov: ObjView = { obj, group: new THREE.Group(), surface: null, shadow: null, maskTex, maskVersion: 0, footprintRing: null };
+  const ov: ObjView = { obj, group: new THREE.Group(), surface: null, solid: null, shadow: null, maskTex, maskVersion: 0, footprintRing: null };
   pv.group.add(ov.group);
   refreshMaskTexture(ov); buildSurface(ov);
   return ov;
 }
 function disposeObjView(pv: PlateView, ov: ObjView) {
-  pv.group.remove(ov.group); ov.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose()); ov.maskTex.dispose();
+  pv.group.remove(ov.group); clearHover(ov); ov.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose()); ov.maskTex.dispose();
 }
 function makeView(plate: Plate): PlateView {
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false), objs: [], lines: [], status: "idle", worker, reqId: 0 };
+  const marker = new THREE.Mesh(new THREE.ConeGeometry(2.4, 8, 20).rotateX(-Math.PI / 2).translate(0, 0, 4), new THREE.MeshStandardMaterial({ color: 0xE2856E, roughness: 0.4, emissive: 0xE2856E, emissiveIntensity: 0.25 }));
+  marker.visible = false; marker.renderOrder = 6;
+  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false, views.length + 1), objs: [], lines: [], status: "idle", worker, reqId: 0, marker };
+  v.group.add(marker);
   worker.onmessage = (ev: MessageEvent<SliceResponse>) => onSliced(v, ev.data);
   v.group.add(v.bed); scene.add(v.group);
   v.objs = plate.objects.map((o) => makeObjView(v, o));
@@ -176,10 +207,11 @@ function disposeView(v: PlateView) {
   v.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
 }
 function layoutPlates() {
+  if (!ui.plateTouched) ui.plateType = defaultPlateType(registry.get(ui.selected.machine)?.name ?? "", machine().flavor);
   views.forEach((v, i) => {
     v.group.position.copy(plateOrigin(i));
     v.group.remove(v.bed); disposeTree(v.bed);
-    v.bed = bedLines(i === ui.active, v.plate.locked); v.group.add(v.bed);
+    v.bed = bedLines(i === ui.active, v.plate.locked, i + 1); v.group.add(v.bed);
     v.objs.forEach(placeObj);
   });
   updateSurfaceVisibility();
@@ -205,11 +237,9 @@ function buildSurface(ov: ObjView) {
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
   if (ov.surface) { ov.group.remove(ov.surface); ov.surface.geometry.dispose(); }
-  ov.surface = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: ov.maskTex, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
-  const t = ov.obj.transform;
-  ov.surface.scale.set(t.scaleXY, t.scaleXY, t.scaleZ);
-  ov.surface.rotation.z = (t.rotation * Math.PI) / 180;
+  ov.surface = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: ov.maskTex, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
   ov.group.add(ov.surface);
+  buildSolid(ov); applyObjTransform(ov);
   // footprint circle (arrange / clearance envelope)
   if (ov.footprintRing) { ov.group.remove(ov.footprintRing); ov.footprintRing.geometry.dispose(); }
   const r = footprint(ov.obj, body, proc()), fp: number[] = [];
@@ -225,14 +255,39 @@ function buildSurface(ov: ObjView) {
   updateSurfaceVisibility();
 }
 function applyObjTransform(ov: ObjView) { // cheap live update while a slider is dragged (full rebuild on release)
-  if (!ov.surface) return;
   const t = ov.obj.transform;
-  ov.surface.scale.set(t.scaleXY, t.scaleXY, t.scaleZ); ov.surface.rotation.z = (t.rotation * Math.PI) / 180;
+  for (const m of [ov.surface, ov.solid]) if (m) { m.scale.set(t.scaleXY, t.scaleXY, t.scaleZ); m.rotation.z = (t.rotation * Math.PI) / 180; }
 }
+/** Solid, shaded model of the object (the real mesh, or the exact tessellation of a primitive). Rebuilt only when its geometry changes. */
+function buildSolid(ov: ObjView) {
+  const key = sourceKey(ov.obj) + (ov.obj.source.kind === "mesh" ? "" : "");
+  if (ov.solid && ov.solid.userData.key === key) return;
+  clearHover(ov);
+  if (ov.solid) { ov.group.remove(ov.solid); ov.solid.geometry.dispose(); (ov.solid.material as THREE.Material).dispose(); ov.solid = null; }
+  ov.sel = undefined; ov.proj = undefined;
+  let m: Mesh | undefined; try { m = displayMesh(ov.obj); } catch { m = undefined; }
+  if (!m?.tris.length) return;
+  const g0 = new THREE.BufferGeometry(); g0.setAttribute("position", new THREE.BufferAttribute(m.tris, 3));
+  const g = toCreasedNormals(g0, Math.PI / 5);
+  ov.solid = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: P3().model, roughness: 0.8, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  ov.solid.userData.key = key; ov.group.add(ov.solid);
+}
+function clearHover(ov: ObjView) {
+  for (const k of ["hoverMesh", "hoverLines"] as const) { const h = ov[k]; if (h) { h.parent?.remove(h); h.geometry.dispose(); (h.material as THREE.Material).dispose(); ov[k] = undefined; } }
+}
+/** Paths are drawn in Preview/Print, and in Prepare only while "Path preview" is on. */
+const showPaths = () => ui.mode !== "prepare" || ui.livePaths;
 function updateSurfaceVisibility() {
+  const ghost = ui.mode === "prepare" && ui.livePaths, hideSolid = ui.mode !== "prepare";
   views.forEach((v, i) => v.objs.forEach((ov, k) => {
     const sel = i === ui.active && k === ui.activeObj;
-    if (ov.surface) ov.surface.visible = ui.showSurface && sel;
+    if (ov.surface) ov.surface.visible = ui.showSurface && sel && ui.mode === "prepare";
+    if (ov.solid) {
+      const m = ov.solid.material as THREE.MeshStandardMaterial;
+      ov.solid.visible = !hideSolid; m.color.set(sel && views.length ? P3().modelSel : P3().model);
+      if (m.transparent !== ghost) { m.transparent = ghost; m.needsUpdate = true; }
+      m.opacity = ghost ? 0.14 : 1; m.depthWrite = !ghost;
+    }
     if (ov.footprintRing) (ov.footprintRing.material as THREE.LineBasicMaterial).color.set(sel ? P3().ringSel : P3().ring);
   }));
 }
@@ -296,8 +351,8 @@ function redrawPaths(v: PlateView) {
   const range = legendRange(v.result.mps, ui.preview), total = v.result.mps.reduce((s, m) => s + m.count, 0);
   v.result.mps.forEach((mp, k) => {
     const sel = views.indexOf(v) === ui.active && k === ui.activeObj;
-    const full = makeLine(mp, 1, ui.preview, range, sel); full.userData.lod = "full"; v.lines.push(full);
-    if (total > 400_000) { const lod = makeLine(mp, 4, ui.preview, range, sel); lod.userData.lod = "far"; v.lines.push(lod); }
+    const full = makeLine(mp, 1, ui.preview, range, sel); full.userData.lod = "full"; full.userData.k = k; v.lines.push(full);
+    if (total > 400_000) { const lod = makeLine(mp, 4, ui.preview, range, sel); lod.userData.lod = "far"; lod.userData.k = k; v.lines.push(lod); }
   });
   v.lines.forEach((l) => v.group.add(l));
   applyLayerRange(v);
@@ -309,11 +364,23 @@ function layerSpan(l: THREE.Line): [number, number] {
   const first = (L: number) => { let a = 0, b = count; while (a < b) { const m = (a + b) >> 1; if (layer[m] < L) a = m + 1; else b = m; } return a; };
   return [first(lo), first(hi + 1)];
 }
+/** Draw range per object in print order: the scrub position sweeps through objects one after another, like the machine does. */
 function applyLayerRange(v: PlateView) {
+  const order = v.result?.order ?? [], seq = order.map((k) => v.lines.find((l) => l.userData.k === k && l.userData.lod === "full")).filter((l): l is THREE.Line => !!l);
+  const spans = seq.map((l) => layerSpan(l)), total = spans.reduce((a, [x, y]) => a + (y - x), 0);
+  let remaining = Math.ceil(total * ui.scrub); const draw = new Map<number, number>(); let head: PlateView["head"];
+  seq.forEach((l, i) => {
+    const [a, b] = spans[i], n = Math.min(b - a, remaining); remaining -= n; draw.set(l.userData.k, n);
+    if (n > 0) head = { k: l.userData.k, idx: a + n - 1 };
+  });
+  v.head = head;
   for (const l of v.lines) {
-    const [a, b] = layerSpan(l), s = l.userData.stride as number, end = a + Math.ceil((b - a) * ui.scrub);
+    const [a, b] = layerSpan(l), s = l.userData.stride as number, n = draw.get(l.userData.k) ?? b - a, end = a + Math.min(n, b - a);
     l.geometry.setDrawRange(Math.floor(a / s), Math.max(0, Math.ceil((end - a) / s)));
   }
+  const mp = head && v.result?.mps[head.k];
+  v.marker.visible = !!mp && ui.scrub < 1 && showPaths();
+  if (mp && head) v.marker.position.set(mp.xyz[head.idx * 3], mp.xyz[head.idx * 3 + 1], mp.xyz[head.idx * 3 + 2]);
 }
 
 // ======================= slicing (worker per plate, cached) =======================
@@ -350,7 +417,7 @@ const sliceAll = () => views.forEach(slice);
 // ======================= pointer tools: select / move / paint =======================
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), nrm = new THREE.Vector3();
 const bedPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-let dragging: null | "paint" | { dx: number; dy: number } = null;
+let dragging: null | "paint" | "faces" | { dx: number; dy: number } = null;
 function setRay(ev: PointerEvent) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -362,6 +429,14 @@ function bedPoint(): THREE.Vector2 | null { // in active plate coordinates (mm f
   const o = plateOrigin(ui.active);
   return new THREE.Vector2(p.x - o.x, p.y - o.y);
 }
+/** Index of the object under the pointer ray (real surface hit), or -1. */
+function pickSolid(): { k: number; hit: THREE.Intersection } | null {
+  const v = activeView(), solids = v.objs.map((o) => o.solid).filter((m): m is THREE.Mesh => !!m && m.visible);
+  const hit = ray.intersectObjects(solids, false)[0];
+  if (!hit) return null;
+  const k = v.objs.findIndex((o) => o.solid === hit.object);
+  return k < 0 ? null : { k, hit };
+}
 function pickObject(p: THREE.Vector2): number {
   let best = -1, bestD = Infinity;
   activeView().plate.objects.forEach((o, k) => {
@@ -369,6 +444,62 @@ function pickObject(p: THREE.Vector2): number {
     if (d <= footprint(o, bodyOf(o), proc()) && d < bestD) { best = k; bestD = d; }
   });
   return best;
+}
+// ---- face / edge selection (non-linear + texture zones) ----
+const selMeshOf = (ov: ObjView): SelMesh => (ov.sel ??= buildSelMesh({ tris: displayMesh(ov.obj).tris }));
+type Pick = { tris: number[]; segs: Seg[] | null };
+/** What a click at `hit` would select with the current Face/Edge settings. */
+function computePick(ov: ObjView, hit: THREE.Intersection): Pick | null {
+  if (hit.faceIndex == null || !ov.solid) return null;
+  const sm = selMeshOf(ov);
+  if (ui.faceKind === "face") return { tris: fillFaces(sm, hit.faceIndex, ui.faceFill, ui.faceAngle), segs: null };
+  const local = ov.solid.worldToLocal(hit.point.clone()), pt: [number, number, number] = [local.x, local.y, local.z];
+  const sc = ov.obj.transform.scaleXY || 1, segs = pickEdge(sm, hit.faceIndex, pt, ui.edgeAngle, Math.max(2.5, ui.edgeBand * 0.9) / sc, ui.edgeChain);
+  return segs ? { tris: trianglesNearSegments(sm, segs, ui.edgeBand / sc), segs } : null;
+}
+function showHover(ov: ObjView, pick: Pick | null) {
+  clearHover(ov);
+  if (!pick || !ov.solid) return;
+  const tris = displayMesh(ov.obj).tris, pos = new Float32Array(pick.tris.length * 9);
+  pick.tris.forEach((f, i) => pos.set(tris.subarray(f * 9, f * 9 + 9), i * 9));
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const col = ui.faceOp === "remove" ? P3().hover : REGION_COLORS[Math.max(0, ui.target) % REGION_COLORS.length];
+  ov.hoverMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.72, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
+  ov.solid.add(ov.hoverMesh);
+  if (pick.segs) {
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(pick.segs.flat(), 3));
+    ov.hoverLines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: col, depthTest: false })); ov.hoverLines.renderOrder = 5; ov.solid.add(ov.hoverLines);
+  }
+}
+/** Make sure a zone (paint region) exists and is targeted; new zones start with a Z-wobbling knit texture. */
+function ensureZone(ov: ObjView): number {
+  const o = ov.obj;
+  if (ui.target >= 0 && o.mask.regions[ui.target]) return ui.target;
+  const k = o.mask.regions.length ? 0 : addRegion(o.mask, "knit");
+  if (!o.regionParams[k]) o.regionParams[k] = { ...patterns[o.mask.regions[k].pattern].defaults };
+  ui.target = k; return k;
+}
+let lastCommit = "";
+function commitPick(ov: ObjView, hit: THREE.Intersection, force = false) {
+  const key = `${ui.active}:${ui.activeObj}:${hit.faceIndex}:${ui.faceKind}:${ui.faceOp}`;
+  if (!force && key === lastCommit) return; lastCommit = key;
+  const pick = computePick(ov, hit); if (!pick || !pick.tris.length) return;
+  const zone = ensureZone(ov), body = bodyOf(ov.obj);
+  ov.proj ??= surfaceProjector(body);
+  paintTriangles(displayMesh(ov.obj).tris, pick.tris, ov.proj, ov.obj.mask, zone, { erase: ui.faceOp === "remove", height: body.height, radius: body.footprintRadius });
+  ov.maskVersion++; refreshMaskTexture(ov);
+  showHover(ov, pick); renderStatus(); sliceActiveSoon(250);
+}
+let hoverRaf = 0, hoverEv: PointerEvent | null = null;
+function hoverSelect(ev: PointerEvent) {
+  hoverEv = ev; if (hoverRaf) return;
+  hoverRaf = requestAnimationFrame(() => {
+    hoverRaf = 0; const e = hoverEv; if (!e || ui.tool !== "faces" || !activeView()) return;
+    setRay(e); const hit = pickSolid(), ov = activeObjView();
+    views.forEach((v) => v.objs.forEach((o) => { if (o !== ov || !hit) clearHover(o); }));
+    if (!hit || !ov || hit.k !== ui.activeObj) { renderer.domElement.style.cursor = hit ? "pointer" : ""; return; }
+    renderer.domElement.style.cursor = "crosshair"; showHover(ov, computePick(ov, hit.hit));
+  });
 }
 function paintAt() {
   const ov = activeObjView();
@@ -382,18 +513,27 @@ renderer.domElement.addEventListener("pointerdown", (ev) => {
   if (ev.button !== 0 || !activeView()) return;
   setRay(ev);
   if ((ui.tool === "paint" || ui.tool === "erase") && ui.target >= 0) { dragging = "paint"; controls.enabled = false; paintAt(); return; }
-  const p = bedPoint(); if (!p) return;
-  const k = pickObject(p);
+  if (ui.tool === "faces" && !activeView().plate.locked) { // pick faces / edges on the real surface; empty space keeps orbiting
+    const hit = pickSolid();
+    if (hit) {
+      if (hit.k !== ui.activeObj) { selectObject(hit.k); return; }
+      dragging = "faces"; controls.enabled = false; lastCommit = ""; commitPick(activeObjView()!, hit.hit, true); return;
+    }
+    return;
+  }
+  const solidHit = pickSolid(), p = bedPoint(); if (!p && !solidHit) return;
+  const k = solidHit ? solidHit.k : pickObject(p!);
   if (k >= 0 && k !== ui.activeObj) selectObject(k);
   if (ui.tool === "move" && k >= 0 && !activeView().plate.locked) {
     const t = activeView().plate.objects[k].transform;
-    dragging = { dx: t.x - p.x, dy: t.y - p.y }; controls.enabled = false;
+    dragging = { dx: t.x - (p?.x ?? t.x), dy: t.y - (p?.y ?? t.y) }; controls.enabled = false;
   }
 });
 renderer.domElement.addEventListener("pointermove", (ev) => {
-  if (!dragging) return;
+  if (!dragging) { if (ui.tool === "faces" && ev.buttons === 0) hoverSelect(ev); return; }
   setRay(ev);
   if (dragging === "paint") { paintAt(); return; }
+  if (dragging === "faces") { const h = pickSolid(), ov = activeObjView(); if (h && ov && h.k === ui.activeObj) commitPick(ov, h.hit); return; }
   const p = bedPoint(), ov = activeObjView(); if (!p || !ov) return;
   ov.obj.transform.x = Math.round((p.x + dragging.dx) * 10) / 10; ov.obj.transform.y = Math.round((p.y + dragging.dy) * 10) / 10;
   placeObj(ov);
@@ -401,7 +541,8 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
 });
 window.addEventListener("pointerup", () => {
   if (!dragging) return;
-  dragging = null; controls.enabled = true; renderPanel(); sliceActiveSoon(0);
+  const wasFaces = dragging === "faces"; dragging = null; controls.enabled = true; renderPanel();
+  if (wasFaces) renderToolCard(); else sliceActiveSoon(0);
 });
 
 // ======================= plates & objects =======================
@@ -608,7 +749,7 @@ function isolatePlate<T>(v: PlateView, fn: (cam: THREE.PerspectiveCamera) => T):
   const full = v.lines.filter((l) => l.userData.lod === "full");
   if (!full.length) return undefined;
   const hidden = views.filter((o) => o !== v).map((o) => { const was = o.group.visible; o.group.visible = false; return [o, was] as const; });
-  const extras: THREE.Object3D[] = [v.bed, ...v.objs.flatMap((o) => [o.surface, o.footprintRing, o.shadow].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
+  const extras: THREE.Object3D[] = [v.bed, v.marker, ...v.objs.flatMap((o) => [o.surface, o.solid, o.footprintRing, o.shadow].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
   const vis = extras.map((o) => o.visible), fullVis = full.map((l) => l.visible);
   extras.forEach((o) => (o.visible = false)); full.forEach((l) => (l.visible = true));
   const prevBg = scene.background; scene.background = null;
@@ -648,17 +789,19 @@ function trayThumb(v: PlateView): string | undefined {
     return cv.toDataURL("image/png");
   });
 }
-function exportGcode(i = ui.active) {
-  const v = views[i];
-  if (!v.result || v.status !== "done") { alert("Slice the plate first."); return; }
-  if (v.result.issues.some((x) => x.level === "error") && !confirm("This plate has errors. Export anyway?")) return;
+/** G-code text for plate `i`, or null (with an alert/notice) when it can't be produced. `interactive` shows dialogs. */
+function buildGcode(i = ui.active, interactive = true): { name: string; text: string } | null {
+  const v = views[i], fail = (m: string) => { if (interactive) alert(m); else throw new Error(m); return null; };
+  if (!v.result || v.status !== "done") return fail("Slice the plate first.");
+  if (v.result.issues.some((x) => x.level === "error") && (!interactive || !confirm("This plate has errors. Export anyway?"))) return interactive ? null : fail("The plate has errors (see the estimate card) — fix them before printing.");
   const M = machine();
-  let g: string;
-  try { g = toGcode(v.result.order.map((k) => v.result!.mps[k]), {
-    machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v), presetNames: presetNames(),
-  }); } catch (e) { alert(`G-code export refused: ${e instanceof Error ? e.message : e}`); return; }
-  download(`${v.plate.name.replace(/\W+/g, "_")}.gcode`, g, "text/plain");
+  try {
+    return { name: `${v.plate.name.replace(/\W+/g, "_")}.gcode`, text: toGcode(v.result.order.map((k) => v.result!.mps[k]), {
+      machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v), presetNames: presetNames(),
+    }) };
+  } catch (e) { return fail(`G-code export refused: ${e instanceof Error ? e.message : e}`); }
 }
+function exportGcode(i = ui.active) { const g = buildGcode(i); if (g) download(g.name, g.text, "text/plain"); }
 
 // ======================= UI: "Soft Clay & Pill" workspace =======================
 // Four decoupled floating layers over the canvas: top capsule, left tool dock (+ slide-out card), right drawer, bottom tray.
@@ -717,6 +860,7 @@ function renderTopbar() {
     ${seg("setMode", MODES, ui.mode)}
     <span class="vr"></span>
     <button class="btn plate-btn" data-act="plateMenu" aria-haspopup="menu">${icon("layers")}<span class="nowrap">${esc(v.plate.name)}</span>${icon("chevdown")}</button>
+    ${ui.mode === "prepare" ? `<button class="btn live${ui.livePaths ? " on" : ""}" data-act="livePaths" aria-pressed="${ui.livePaths}" title="${ui.livePaths ? "Hide" : "Show"} the toolpath while you edit — no need to leave Prepare">${icon(ui.livePaths ? "eye" : "eyeoff")}<span class="tx">Path preview</span></button>` : ""}
     <button class="btn primary slice${busy ? " busy" : ""}" data-act="sliceNow"${v.plate.objects.length ? "" : " disabled"} title="${nl ? "Slice this plate with non-linear surface toolpaths" : "Slice this plate (planar spiral)"}"><span class="spin"></span>${icon("bolt")}<span class="tx">${nl ? "Slice &amp; Non-Linear Path" : "Slice plate"}</span></button>
     <button class="icon-btn" data-act="exportMenu" title="Export & project" aria-label="Export and project" aria-haspopup="menu">${icon("export")}</button>
     <button class="icon-btn" data-act="toggleDrawer" title="${ui.drawerOpen ? "Hide" : "Show"} process panel" aria-label="Toggle process panel" aria-pressed="${ui.drawerOpen}">${icon("panel")}</button>
@@ -727,23 +871,54 @@ function renderTopbar() {
 type DockItem = { id: Dock | "layflat" | "cut" | "text"; tip: string; icon: string; soon?: boolean };
 const DOCK: DockItem[][] = [
   [{ id: "select", tip: "Select (V)", icon: "select" }, { id: "move", tip: "Move (M)", icon: "move" }, { id: "rotate", tip: "Rotate (R)", icon: "rotate" }, { id: "scale", tip: "Scale (S)", icon: "scale" }],
-  [{ id: "texture", tip: "Wall texture (T)", icon: "texture" }, { id: "paint", tip: "Paint regions (P)", icon: "paint" }],
+  [{ id: "texture", tip: "Wall texture (T)", icon: "texture" }, { id: "faces", tip: "Select faces & edges (F)", icon: "faces" }, { id: "paint", tip: "Paint zones with a brush (P)", icon: "paint" }],
   [{ id: "arrange", tip: "Auto-arrange (A)", icon: "arrange" }],
   [{ id: "layflat", tip: "Lay flat · needs mesh pipeline", icon: "layflat", soon: true }, { id: "cut", tip: "Cut · needs mesh pipeline", icon: "cut", soon: true }, { id: "text", tip: "Text · needs mesh pipeline", icon: "text", soon: true }],
 ];
-const DOCK_KEYS: Record<string, Dock> = { v: "select", m: "move", r: "rotate", s: "scale", t: "texture", p: "paint" };
+const DOCK_KEYS: Record<string, Dock> = { v: "select", m: "move", r: "rotate", s: "scale", t: "texture", f: "faces", p: "paint" };
 const DOCK_TITLES: Record<Dock, [string, string]> = {
-  select: ["cube", "Objects"], move: ["move", "Move"], rotate: ["rotate", "Rotate"], scale: ["scale", "Scale"], texture: ["texture", "Wall texture"], paint: ["paint", "Paint"], arrange: ["arrange", "Auto-arrange"],
+  select: ["cube", "Objects"], move: ["move", "Move"], rotate: ["rotate", "Rotate"], scale: ["scale", "Scale"], texture: ["texture", "Wall texture"], faces: ["faces", "Faces & edges"], paint: ["paint", "Paint"], arrange: ["arrange", "Auto-arrange"],
 };
 function renderDock() {
   setHtml(dock, DOCK.map((g) => `<div class="grp">${g.map((t) =>
     `<button class="tool${ui.dock === t.id ? " on" : ""}" data-act="setDock" data-arg="${t.id}" data-tip="${t.tip}" aria-label="${t.tip}" aria-pressed="${ui.dock === t.id}"${t.soon ? " disabled" : ""}>${icon(t.icon)}</button>`).join("")}</div>`).join(""));
 }
-const toolFor = (d: Dock | null): typeof ui.tool => (d === "move" ? "move" : d === "paint" ? (ui.paintErase ? "erase" : "paint") : "orbit");
+const toolFor = (d: Dock | null): typeof ui.tool => (d === "move" ? "move" : d === "faces" ? "faces" : d === "paint" ? (ui.paintErase ? "erase" : "paint") : "orbit");
 function setDock(d: Dock | null, _fromKey = false) {
   ui.dock = d === ui.dock ? null : d;
   ui.tool = ui.mode === "prepare" ? toolFor(ui.dock) : "orbit";
   renderDock(); renderToolCard(); updateViewInsets();
+}
+
+function shapeParams(o: PlateObject | undefined, dis: string) {
+  if (!o || o.source.kind !== "primitive") return "";
+  const def = primitiveDefs[o.source.primitive] as (typeof primitiveDefs)[PrimitiveName], cur = { ...primitiveDefaults(o.source.primitive), ...o.source.params };
+  return `<div class="sep"></div><h2 class="mini">${esc(def.label)} · dimensions</h2>${def.params.map((d) => rangeRow(d.label, `data-in="shape" data-key="${d.key}"${dis}`, cur[d.key], d.min, d.max, d.step, { unit: d.unit, disabled: !!dis })).join("")}
+    <div class="actions"><button class="btn sm ghost" data-act="resetShape"${dis}>Reset shape</button></div>`;
+}
+/** Texture / non-linear controls of the targeted zone (or the base wall). */
+function zoneControls(o: PlateObject, dis: string) {
+  const P = ui.target < 0 ? o.base.params : o.regionParams[ui.target], pat = ui.target < 0 ? o.base.pattern : o.mask.regions[ui.target].pattern;
+  return `${selectRow("Wall texture", `data-in="pattern"${dis}`, Object.entries(patterns).map(([k, x]) => opt(k, x.label, k === pat)).join(""))}
+    ${PARAM_UI.map(([k, l, mn, mx, st]) => rangeRow(l, `data-in="param" data-key="${k}"`, P[k], mn, mx, st, { unit: PARAM_UNIT[k], disabled: !!dis })).join("")}`;
+}
+function facesCard(o: PlateObject, dis: string) {
+  const zones = o.mask.regions.map((r, k) => `<div class="list-item${k === ui.target ? " on" : ""}" role="button" tabindex="0" data-act="selTarget" data-arg="${k}"><span class="obj-name"><span class="swatch" style="background:${hex(REGION_COLORS[k % REGION_COLORS.length])}"></span><span class="nowrap">Zone ${k + 1} · ${patterns[r.pattern].label}</span></span>
+      <span class="acts"><button class="icon-btn sm flat" data-act="clearZone" data-arg="${k}" title="Clear zone" aria-label="Clear zone"${dis}>${icon("erase")}</button><button class="icon-btn sm flat" data-act="delZone" data-arg="${k}" title="Delete zone" aria-label="Delete zone"${dis}>${icon("trash")}</button></span></div>`).join("");
+  const face = ui.faceKind === "face"
+    ? `${seg("faceFill", [{ value: "flat", label: "Flat" }, { value: "smooth", label: "Smooth" }, { value: "single", label: "Single" }], ui.faceFill, { cls: "sm block" })}
+       ${ui.faceFill === "single" ? "" : rangeRow("Angle tolerance", `data-in="faceAngle"`, ui.faceAngle, 1, 90, 1, { unit: "°", cls: "violet" })}`
+    : `${rangeRow("Sharp-edge angle", `data-in="edgeAngle"`, ui.edgeAngle, 8, 85, 1, { unit: "°", cls: "violet" })}
+       ${rangeRow("Band width", `data-in="edgeBand"`, ui.edgeBand, 0.5, 20, 0.5, { unit: "mm", cls: "violet" })}
+       ${switchRow("Follow the whole edge", `data-in="edgeChain"`, ui.edgeChain)}`;
+  return `${seg("faceKind", [{ value: "face", label: "Faces", icon: "faces" }, { value: "edge", label: "Edges", icon: "edge" }], ui.faceKind, { cls: "block" })}
+    <div style="margin-top:8px">${seg("faceOp", [{ value: "add", label: "Add", icon: "plus" }, { value: "remove", label: "Remove", icon: "erase" }], ui.faceOp, { cls: "block sm" })}</div>
+    <div style="margin-top:10px">${face}</div>
+    <div class="sep"></div><h2 class="mini">Zones — textured &amp; non-linear</h2>
+    <div class="objlist">${zones || `<div class="muted" style="padding:4px">Nothing selected yet — click a face on the model. Everything else prints as a plain wall.</div>`}</div>
+    <div class="actions"><button class="btn sm" data-act="addRegion"${dis}>${icon("plus")}New zone</button><button class="btn sm" data-act="zoneAll" data-arg="${ui.target}"${dis}${ui.target < 0 ? " disabled" : ""}>Whole wall</button></div>
+    ${ui.target >= 0 && o.mask.regions[ui.target] ? `<div class="sep"></div>${zoneControls(o, dis)}` : ""}
+    <p class="hint">Hover to preview, click or drag to ${ui.faceOp === "add" ? "add to" : "remove from"} the active zone. Only surfaces that become printed wall can carry a texture; unselected walls print plain, like Bambu Studio.</p>`;
 }
 
 // ---------- slide-out tool card ----------
@@ -762,7 +937,8 @@ function renderToolCard() {
           <span class="obj-name">${icon(ob.source.kind === "mesh" ? "cube" : "cylinder")}<span class="nowrap">${esc(ob.name)}</span></span>
           <span class="acts"><button class="icon-btn sm flat" data-act="dupObj" data-arg="${k}" title="Duplicate (Ctrl+D)" aria-label="Duplicate"${dis}>${icon("copy")}</button><button class="icon-btn sm flat" data-act="delObj" data-arg="${k}" title="Delete (Del)" aria-label="Delete"${dis}>${icon("trash")}</button></span></div>`).join("") || `<div class="muted" style="padding:6px 4px">Empty plate</div>`}</div>
         <div class="actions"><label class="btn sm primary file-btn${p.locked ? " disabled" : ""}" for="fileImport" title="STL, OBJ, PLY, 3MF, STEP/STP, .nexspiro, Bambu/Orca JSON or PrusaSlicer INI">${icon("import")}Import…</label></div>
-        <div class="row" style="margin-top:10px"><select data-in="addPrim" aria-label="Add primitive"${dis}><option value="">+ Add primitive…</option>${Object.keys(primitives).map((k) => opt(k, k, false)).join("")}</select></div>
+        <div class="row" style="margin-top:10px"><select data-in="addPrim" aria-label="Add primitive"${dis}><option value="">+ Add shape…</option>${PRIMITIVE_GROUPS.map((g) => `<optgroup label="${g}">${(Object.keys(primitiveDefs) as PrimitiveName[]).filter((k) => primitiveDefs[k].group === g).map((k) => opt(k, primitiveDefs[k].label, false)).join("")}</optgroup>`).join("")}</select></div>
+        ${shapeParams(o, dis)}
         <p class="hint">Click a footprint in the viewport to select. Drop files anywhere to import.</p>`;
       break;
     }
@@ -783,6 +959,7 @@ function renderToolCard() {
         ${PARAM_UI.map(([k, l, mn, mx, st]) => rangeRow(l, `data-in="param" data-key="${k}"`, P[k], mn, mx, st, { unit: PARAM_UNIT[k], disabled: !!p.locked })).join("")}`;
       break;
     }
+    case "faces": body = !o ? needObj : facesCard(o, dis); break;
     case "paint": {
       if (!o) { body = needObj; break; }
       body = `${seg("noop", [{ value: "color", label: "Color", icon: "paint" }, { value: "support", label: "Support", icon: "support", disabled: true, title: "Support enforce/block needs a support engine" }, { value: "seam", label: "Seam", icon: "seam", disabled: true, title: "Seam painting is not supported yet" }], "color", { cls: "sm block" })}
@@ -815,7 +992,8 @@ function cardSetup() {
   const dot = (k: PresetKind) => (ui.edited[k] ? `<span class="dot" title="Modified"></span>` : "");
   return `<section class="card"><header class="card-head">${icon("gear")}<h3>Printer &amp; material</h3></header>
     <button class="chip" data-act="openModal" data-arg="machine"><span class="glyph">${icon("printer")}</span><span class="grow"><b class="nowrap">${esc(mn)}</b><small>⌀ ${M.nozzle} mm nozzle · ${M.bed[0]}×${M.bed[1]} mm</small></span>${dot("machine")}${icon("chevright", "end")}</button>
-    <button class="chip" data-act="openModal" data-arg="filament"><span class="glyph sage">${icon("spool")}</span><span class="grow"><b class="nowrap">${esc(fn)}</b><small>${materialOf(fn)} · ${F.nozzleTemp} °C nozzle · ${F.bedTemp} °C bed</small></span>${dot("filament")}${icon("chevright", "end")}</button></section>`;
+    <button class="chip" data-act="openModal" data-arg="filament"><span class="glyph sage">${icon("spool")}</span><span class="grow"><b class="nowrap">${esc(fn)}</b><small>${materialOf(fn)} · ${F.nozzleTemp} °C nozzle · ${F.bedTemp} °C bed</small></span>${dot("filament")}${icon("chevright", "end")}</button>
+    <button class="chip" data-act="plateTypeMenu" aria-haspopup="menu"><span class="glyph violet">${icon("layers")}</span><span class="grow"><b class="nowrap">${esc(PLATE_TYPES.find((p) => p.id === ui.plateType)!.label)}</b><small>Build plate · shown on the bed</small></span>${icon("chevdown", "end")}</button></section>`;
 }
 function cardProcess() {
   const P = proc() as unknown as Record<string, number>, list = registry.list("process");
@@ -833,7 +1011,7 @@ function cardProcess() {
     <div class="collapse${ui.presetsOpen ? " open" : ""}"><div class="inner"><div class="preset-list">${others.map((p) => row(p, false)).join("")}</div></div></div>
     <div class="tier-grid">${tiers}</div>${sliders}${mod}</section>`;
 }
-function cardNonLinear() {
+function cardNonLinear(forceOpen = false) {
   const N = proc().nonLinear, r = activeView().result, viol = r ? r.mps.reduce((a, m) => a + m.inclinationViolations, 0) : -1, on = N.enabled;
   const health = viol < 0 ? `<span class="dot mute"></span>Slice to verify the limits` : viol === 0 ? `<span class="dot sage"></span>All segments within limits` : `<span class="dot coral"></span>${viol.toLocaleString()} segments exceed the tilt limit`;
   const k = `data-in="path" data-kind="process"`;
@@ -842,13 +1020,26 @@ function cardNonLinear() {
       <input type="checkbox" ${k} data-path="nonLinear.enabled"${on ? " checked" : ""} aria-label="Enable Non-Linear Surface Toolpaths"></header>
     <div class="summary">${tile("Tilt limit", `${N.maxInclination}°`)}${tile("Clearance", `+${N.collisionMargin} mm`)}${tile("Tolerance", `${N.deviationTol} mm`)}</div>
     <div class="health">${health}</div>
-    <div class="collapse${on && ui.nlOpen ? " open" : ""}"><div class="inner" style="padding-top:6px">
+    <div class="collapse${on && (forceOpen || ui.nlOpen) ? " open" : ""}"><div class="inner" style="padding-top:6px">
       ${rangeRow("Spline deviation", `${k} data-path="nonLinear.deviationTol"`, N.deviationTol, 0.001, 0.2, 0.001, { unit: "mm", cls: "violet" })}
       ${rangeRow("Max toolhead tilt", `${k} data-path="nonLinear.maxInclination"`, N.maxInclination, 5, 80, 1, { unit: "°", cls: "violet" })}
       ${rangeRow("Collision clearance", `${k} data-path="nonLinear.collisionMargin"`, N.collisionMargin, 0, 10, 0.5, { unit: "mm", cls: "violet" })}
       ${rangeRow("Z-axis smoothing", `${k} data-path="nonLinear.zSmoothing"`, N.zSmoothing, 0, 1, 0.05, { cls: "violet" })}</div></div>
-    <button class="btn sm ghost toggle-more" data-act="nlMore" aria-expanded="${ui.nlOpen}">${ui.nlOpen ? "Hide" : "Fine-tune"} ${icon("chevdown", "disclose" + (ui.nlOpen ? " open" : ""))}</button>
+    ${forceOpen ? "" : `<button class="btn sm ghost toggle-more" data-act="nlMore" aria-expanded="${ui.nlOpen}">${ui.nlOpen ? "Hide" : "Fine-tune"} ${icon("chevdown", "disclose" + (ui.nlOpen ? " open" : ""))}</button>`}
     <p class="off-note">Planar spiral: layers stay flat and pattern Z motion is suppressed.</p></section>`;
+}
+/** Preview-side motion tuning: zone textures (the non-linear shape of the path) and path resolution, re-sliced live. */
+function cardMotion() {
+  const v = activeView(), o = v.plate.objects[ui.activeObj], dis = v.plate.locked ? " disabled" : "", P = proc(), k = `data-in="path" data-kind="process"`;
+  const targets = o ? selectRow("Tune", `data-in="target"`, opt("-1", "Base wall", ui.target < 0) + o.mask.regions.map((_, i) => opt(String(i), `Zone ${i + 1}`, i === ui.target)).join("")) : "";
+  return `<section class="card"><header class="card-head">${icon("nonlinear")}<h3>Motion tuning</h3></header>
+    ${o ? `${targets}${zoneControls(o, dis)}` : `<div class="empty">Select an object to tune its wall motion.</div>`}
+    <div class="sep"></div>
+    ${rangeRow("Wall speed", `${k} data-path="wallSpeed"`, P.wallSpeed, 5, 150, 1, { unit: "mm/s", cls: "violet" })}
+    ${rangeRow("Segments / rev", `${k} data-path="segmentsPerRev"`, P.segmentsPerRev, 120, 2400, 10, { cls: "violet" })}
+    ${rangeRow("Pattern fade-in", `${k} data-path="fadeHeight"`, P.fadeHeight, 0, 20, 0.5, { unit: "mm", cls: "violet" })}
+    ${switchRow("Fit arcs (G2/G3)", `${k} data-path="arcFitting"`, P.arcFitting)}
+    <p class="hint">Changes re-slice automatically; scrub or press play to watch the nozzle follow the new motion.</p></section>`;
 }
 function cardView() {
   const v = activeView(), r = v.result, o = v.plate.objects[ui.activeObj];
@@ -888,10 +1079,127 @@ function cardExport() {
 }
 function renderDrawer() {
   if (!activeView()) return;
-  const html = ui.mode === "prepare" ? cardSetup() + cardProcess() + cardNonLinear() : ui.mode === "preview" ? cardView() + cardSummary() + cardNonLinear() : cardSummary() + cardExport();
+  const html = ui.mode === "prepare" ? cardSetup() + cardProcess() + cardNonLinear() : ui.mode === "preview" ? cardView() + cardSummary() + cardNonLinear(true) + cardMotion() : cardPrinters() + cardSend() + cardSummary() + cardExport();
   // never swap the DOM under a slider that is being dragged; it refreshes on release
   if (drawer.contains(document.activeElement) && (document.activeElement as HTMLInputElement).type === "range" && ui.dragSlider) return;
   const top = drawer.scrollTop; setHtml(drawer, html); drawer.scrollTop = top;
+}
+
+// ======================= network printers (Print tab) =======================
+const PRINTERS_KEY = "nexspiro.printers";
+let printers: PrinterConfig[] = [];
+try { printers = JSON.parse(localStorage.getItem(PRINTERS_KEY) ?? "[]"); } catch { /* storage unavailable */ }
+ui.printerId = printers[0]?.id ?? "";
+const persistPrinters = () => { try { localStorage.setItem(PRINTERS_KEY, JSON.stringify(printers)); } catch { /* ignore */ } };
+const printerLive: Record<string, { status?: PrinterStatus; error?: string }> = {};
+const curPrinter = () => printers.find((p) => p.id === ui.printerId);
+const kindLabel = (k: PrinterKind) => PRINTER_KINDS.find((x) => x.id === k)?.label ?? k;
+let pollTimer = 0, polling = false;
+async function pollOnce() {
+  const p = curPrinter(); if (!p || polling) return; polling = true;
+  try { printerLive[p.id] = { status: await connectorFor(p).status() }; }
+  catch (e) { printerLive[p.id] = { error: e instanceof Error ? e.message : String(e) }; }
+  finally { polling = false; if (ui.mode === "print") renderDrawer(); }
+}
+function syncPolling() {
+  clearInterval(pollTimer); pollTimer = 0;
+  if (ui.mode === "print" && curPrinter()) { void pollOnce(); pollTimer = window.setInterval(pollOnce, 3000); }
+}
+const fmtTemp = (a?: number, t?: number) => (a === undefined ? "–" : `${a.toFixed(0)}${t ? ` / ${t.toFixed(0)}` : ""}°`);
+function cardPrinters() {
+  const rows = printers.map((p) => {
+    const l = printerLive[p.id], st = l?.status?.state, tone = l?.error ? "coral" : st === "printing" ? "sage" : st === "paused" ? "amber" : st ? "sky" : "mute";
+    return `<div class="list-item${p.id === ui.printerId ? " on" : ""}" role="button" tabindex="0" data-act="pickPrinter" data-arg="${esc(p.id)}">
+      <span class="obj-name"><span class="dot ${tone}"></span><span class="grow"><b class="nowrap">${esc(p.name)}</b><small class="muted nowrap">${esc(p.host)} · ${esc(kindLabel(p.kind))}</small></span></span>
+      <span class="acts"><button class="icon-btn sm flat" data-act="editPrinter" data-arg="${esc(p.id)}" title="Edit" aria-label="Edit printer">${icon("edit")}</button><button class="icon-btn sm flat" data-act="delPrinter" data-arg="${esc(p.id)}" title="Remove" aria-label="Remove printer">${icon("trash")}</button></span></div>`;
+  }).join("");
+  return `<section class="card"><header class="card-head">${icon("wifi")}<h3>Network printers</h3><button class="icon-btn sm" data-act="addPrinter" title="Add printer" aria-label="Add printer">${icon("plus")}</button></header>
+    ${rows ? `<div class="objlist">${rows}</div>` : `<div class="empty">Connect a printer over your network to send G-code straight to it.<br><button class="btn primary sm" data-act="addPrinter">${icon("plus")}Add printer</button></div>`}</section>`;
+}
+function cardSend() {
+  const p = curPrinter(); if (!p) return "";
+  const l = printerLive[p.id] ?? {}, s = l.status, v = activeView(), ready = v.status === "done" && isFresh(v), prob = mixedContentProblem(p);
+  const state = l.error ? "Unreachable" : !s ? "Connecting…" : { offline: "Offline", idle: "Ready", printing: "Printing", paused: "Paused", error: "Error" }[s.state];
+  const tone = l.error ? "coral" : s?.state === "printing" ? "sage" : s?.state === "paused" ? "amber" : s?.state === "error" ? "coral" : "sky";
+  const busy = !!ui.netBusy, active = s?.state === "printing" || s?.state === "paused";
+  const prog = s?.progress !== undefined && active ? `<div class="meter"><i style="width:${Math.round(s.progress * 100)}%"></i></div><div class="legend-ends"><span>${Math.round(s.progress * 100)}%${s.layers ? ` · layer ${s.layer ?? "?"}/${s.layers}` : ""}</span><span>${s.remainingS ? `${formatDuration(s.remainingS)} left` : ""}</span></div>${s.file ? `<div class="muted nowrap" style="margin-top:4px">${esc(s.file)}</div>` : ""}` : "";
+  const confirm_ = ui.confirmPrint ? `<div class="issue warn">${icon("warn")}<span>This starts printing on <b>${esc(p.name)}</b> right away. Is the build plate clear and the filament loaded?</span></div>
+      <div class="actions"><button class="btn primary" data-act="sendPrint" data-arg="1"${busy ? " disabled" : ""}>${icon("play")}Start print</button><button class="btn" data-act="cancelConfirm">Cancel</button></div>` : "";
+  return `<section class="card"><header class="card-head">${icon("send")}<h3>Send to ${esc(p.name)}</h3><span class="badge ${tone}">${state}</span></header>
+    ${prob ? `<div class="issue error">${icon("warn")}<span>${esc(prob)}</span></div>` : ""}
+    ${l.error ? `<div class="issue error">${icon("warn")}<span>${esc(l.error)}</span></div>` : ""}
+    ${s ? `<div class="tiles">${tile("Nozzle", fmtTemp(s.nozzle, s.nozzleTarget))}${tile("Bed", fmtTemp(s.bed, s.bedTarget))}</div>${s.message ? `<div class="issue warn">${icon("warn")}<span>${esc(s.message)}</span></div>` : ""}${prog}` : ""}
+    ${active ? `<div class="actions"><button class="btn" data-act="netCmd" data-arg="${s!.state === "paused" ? "resume" : "pause"}"${busy ? " disabled" : ""}>${icon(s!.state === "paused" ? "play" : "pause")}${s!.state === "paused" ? "Resume" : "Pause"}</button><button class="btn danger" data-act="netCmd" data-arg="cancel"${busy ? " disabled" : ""}>${icon("stop")}Stop</button></div>` : `
+      ${confirm_ || `<div class="actions"><button class="btn" data-act="sendPrint" data-arg="0"${busy || !v.plate.objects.length ? " disabled" : ""}>${icon("send")}Send</button><button class="btn primary" data-act="askPrint"${busy || !v.plate.objects.length ? " disabled" : ""}>${icon("play")}Send &amp; print</button></div>`}
+      <p class="hint">${ready ? `Plate “${esc(v.plate.name)}” is sliced and up to date.` : "The plate is re-sliced automatically before sending."}</p>`}
+    ${ui.netBusy ? `<div class="muted" style="margin-top:8px"><span class="dot sky"></span>${esc(ui.netBusy)}</div>` : ""}
+    ${ui.netMsg ? `<div class="issue ${ui.netMsg.tone === "ok" ? "ok" : "error"}">${icon(ui.netMsg.tone === "ok" ? "check" : "warn")}<span>${esc(ui.netMsg.text)}</span></div>` : ""}</section>`;
+}
+function renderPrinterForm() {
+  const d = ui.draft ?? {}, k = (d.kind ?? "bambu") as PrinterKind, def = PRINTER_KINDS.find((x) => x.id === k)!, f = (key: string) => `data-in="pf" data-key="${key}"`, prob = d.host ? mixedContentProblem(d as PrinterConfig) : null;
+  return `${selectRow("Type", f("kind"), PRINTER_KINDS.map((x) => opt(x.id, x.label, x.id === k)).join(""))}
+    <p class="hint" style="margin-top:0">${esc(def.hint)}</p>
+    ${textRow("Name", f("name"), d.name ?? "", { placeholder: "e.g. P1S on the desk" })}
+    ${textRow("IP / hostname", f("host"), d.host ?? "", { placeholder: k === "moonraker" ? "192.168.1.50 (port 7125 assumed)" : "192.168.1.50" })}
+    ${k === "bambu" ? `${textRow("Serial number", f("serial"), d.serial ?? "", { placeholder: "printer label / Device page" })}${textRow("LAN access code", f("accessCode"), d.accessCode ?? "", { type: "password", placeholder: "8 characters on the printer" })}${textRow("Bridge URL", f("bridge"), d.bridge ?? "", { placeholder: "http://localhost:8787" })}`
+      : textRow(k === "moonraker" ? "API key (optional)" : "API key", f("apiKey"), d.apiKey ?? "", { type: "password" })}
+    ${prob ? `<div class="issue error">${icon("warn")}<span>${esc(prob)}</span></div>` : ""}
+    ${d.msg ? `<div class="issue ${d.msg.tone === "ok" ? "ok" : "error"}">${icon(d.msg.tone === "ok" ? "check" : "warn")}<span>${esc(d.msg.text)}</span></div>` : ""}
+    <div class="actions"><button class="btn" data-act="testPrinter">${icon("link")}Test connection</button><button class="btn primary" data-act="savePrinter">${icon("check")}${d.editing ? "Save" : "Add printer"}</button></div>
+    <p class="hint">Credentials are stored in this browser only. Prefer a LAN-only network; the bridge and printers speak plain LAN protocols.</p>`;
+}
+function draftConfig(): PrinterConfig {
+  const d = ui.draft ?? {};
+  return { id: d.id ?? `net-${Date.now().toString(36)}`, name: d.name?.trim() ?? "", kind: (d.kind ?? "bambu") as PrinterKind, host: d.host?.trim() ?? "", apiKey: d.apiKey?.trim(), accessCode: d.accessCode?.trim(), serial: d.serial?.trim(), bridge: d.bridge?.trim() };
+}
+async function sendToPrinter(print: boolean) {
+  const p = curPrinter(), v = activeView(); if (!p || ui.netBusy) return;
+  ui.netMsg = null; ui.confirmPrint = false;
+  try {
+    if (!isFresh(v)) { // slice on demand, then continue
+      ui.netBusy = "Slicing the plate…"; renderDrawer();
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("Slicing took too long")), 120_000);
+        const check = () => { if (v.status === "done" && isFresh(v)) { clearTimeout(t); resolve(); } else if (v.status === "error") { clearTimeout(t); reject(new Error(v.error ?? "Slicing failed")); } else setTimeout(check, 150); };
+        slice(v); check();
+      });
+    }
+    const g = buildGcode(ui.active, false)!;
+    ui.netBusy = `Uploading ${g.name} (${(g.text.length / 1048576).toFixed(1)} MB)…`; renderDrawer();
+    await connectorFor(p).upload(g.name, g.text, print);
+    ui.netMsg = { tone: "ok", text: print ? `Sent “${g.name}” — ${p.name} is starting the print.` : `Sent “${g.name}” to ${p.name}. Start it from the printer.` };
+  } catch (e) { ui.netMsg = { tone: "err", text: e instanceof Error ? e.message : String(e) }; }
+  ui.netBusy = ""; renderDrawer(); void pollOnce();
+}
+function netActions(): Record<string, (arg: string, el: HTMLElement) => void> {
+  return {
+    pickPrinter: (a) => { ui.printerId = a; ui.netMsg = null; ui.confirmPrint = false; renderDrawer(); syncPolling(); },
+    addPrinter: () => { ui.draft = { kind: "bambu", bridge: "http://localhost:8787" }; ui.modal = "printer"; renderModal(); },
+    editPrinter: (a) => { const p = printers.find((x) => x.id === a); if (!p) return; ui.draft = { ...p, editing: true }; ui.modal = "printer"; renderModal(); },
+    delPrinter: (a) => { printers = printers.filter((p) => p.id !== a); persistPrinters(); if (ui.printerId === a) ui.printerId = printers[0]?.id ?? ""; renderDrawer(); syncPolling(); },
+    testPrinter: async () => {
+      const d = draftConfig(), bad = validatePrinter(d); if (!ui.draft) return;
+      ui.draft.msg = bad ? { tone: "err", text: bad } : { tone: "ok", text: "Connecting…" }; renderModal(); if (bad) return;
+      try { const s = await connectorFor(d).status(); ui.draft.msg = { tone: "ok", text: `Connected — printer is ${s.state}${s.nozzle !== undefined ? `, nozzle ${s.nozzle.toFixed(0)}°C` : ""}.` }; }
+      catch (e) { ui.draft.msg = { tone: "err", text: e instanceof Error ? e.message : String(e) }; }
+      renderModal();
+    },
+    savePrinter: () => {
+      const d = draftConfig(), bad = validatePrinter(d); if (!ui.draft) return;
+      if (bad) { ui.draft.msg = { tone: "err", text: bad }; renderModal(); return; }
+      const i = printers.findIndex((p) => p.id === d.id); if (i >= 0) printers[i] = d; else printers.push(d);
+      persistPrinters(); ui.printerId = d.id; closeModal(); renderDrawer(); syncPolling();
+    },
+    askPrint: () => { ui.confirmPrint = true; ui.netMsg = null; renderDrawer(); },
+    cancelConfirm: () => { ui.confirmPrint = false; renderDrawer(); },
+    sendPrint: (a) => void sendToPrinter(a === "1"),
+    netCmd: async (a) => {
+      const p = curPrinter(); if (!p) return;
+      try { await connectorFor(p).command(a as "pause" | "resume" | "cancel"); ui.netMsg = { tone: "ok", text: a === "cancel" ? "Stop sent." : `${a === "pause" ? "Pause" : "Resume"} sent.` }; }
+      catch (e) { ui.netMsg = { tone: "err", text: e instanceof Error ? e.message : String(e) }; }
+      renderDrawer(); void pollOnce();
+    },
+  };
 }
 
 // ======================= bottom tray =======================
@@ -934,11 +1242,13 @@ function updateReadout() {
   layerSlider.set(ui.layerMin, ui.layerMax);
   let total = 0; for (const l of v.lines) if (l.userData.lod !== "far") { const [a, b] = layerSpan(l); total += b - a; }
   const shown = Math.ceil(total * ui.scrub);
-  byId("readout").innerHTML = layers ? `Layers <b>${L(ui.layerMin)}–${L(ui.layerMax)}</b> / ${layers}<br>Step <b>${shown.toLocaleString()}</b> / ${total.toLocaleString()}` : "Slice the plate to preview";
+  const hd = v.head && r ? { mp: r.mps[v.head.k], i: v.head.idx } : null;
+  const motion = hd && ui.scrub < 1 ? `<br>Nozzle <b>${hd.mp.feed[Math.max(1, hd.i)].toFixed(1)}</b> mm/s · Z <b>${hd.mp.xyz[hd.i * 3 + 2].toFixed(2)}</b> mm (${hd.mp.zOff[hd.i] >= 0 ? "+" : ""}${hd.mp.zOff[hd.i].toFixed(2)} wobble)` : "";
+  byId("readout").innerHTML = layers ? `Layers <b>${L(ui.layerMin)}–${L(ui.layerMax)}</b> / ${layers} · Step <b>${shown.toLocaleString()}</b> / ${total.toLocaleString()}${motion}` : "Slice the plate to preview";
 }
 
 // ======================= modal preset editor =======================
-const MODAL_TITLES: Record<PresetKind, [string, string]> = { machine: ["printer", "Printer"], filament: ["spool", "Filament"], process: ["layers", "Process"] };
+const MODAL_TITLES: Record<PresetKind | "printer", [string, string]> = { machine: ["printer", "Printer preset"], filament: ["spool", "Filament preset"], process: ["layers", "Process preset"], printer: ["wifi", "Network printer"] };
 function machineGeometryUI(m: MachinePreset) {
   const n = (m.bedExclude ?? []).length;
   return `<h2>Machine geometry</h2><div class="actions" style="margin-top:6px">
@@ -961,10 +1271,10 @@ function renderModal() {
   modal.classList.toggle("show", !!kind);
   if (!kind) return;
   const body = sheet.querySelector<HTMLElement>(".body"), top = body?.scrollTop ?? 0, [ic, title] = MODAL_TITLES[kind];
-  setHtml(sheet, `<div class="head"><span class="glyph-s">${icon(ic)}</span><h1>${title} preset</h1><button class="icon-btn sm" data-act="closeModal" aria-label="Close">${icon("close")}</button></div><div class="body">${renderPresetBody(kind)}</div>`);
+  setHtml(sheet, `<div class="head"><span class="glyph-s">${icon(ic)}</span><h1>${title}</h1><button class="icon-btn sm" data-act="closeModal" aria-label="Close">${icon("close")}</button></div><div class="body">${kind === "printer" ? renderPrinterForm() : renderPresetBody(kind)}</div>`);
   const nb = sheet.querySelector<HTMLElement>(".body"); if (nb) nb.scrollTop = top;
 }
-const closeModal = () => { ui.modal = null; renderModal(); };
+const closeModal = () => { ui.modal = null; ui.draft = null; renderModal(); };
 modal.addEventListener("pointerdown", (e) => { if (e.target === modal) closeModal(); });
 
 // ======================= status, layout, theme =======================
@@ -977,7 +1287,8 @@ function renderAll() {
 }
 function setMode(m: typeof ui.mode) {
   ui.mode = m; ui.playing = false; ui.tool = m === "prepare" ? toolFor(ui.dock) : "orbit"; syncPlay();
-  closePop(); renderAll();
+  hoverReset(); updateSurfaceVisibility(); views.forEach(applyLayerRange);
+  closePop(); renderAll(); syncPolling();
 }
 function applyTheme(mode: ThemeMode) {
   ui.theme = mode; setThemeAttr(mode);
@@ -1031,6 +1342,18 @@ const exportMenu = (anchor: HTMLElement) => openPop(anchor, `<div class="menu-he
   <div class="list-item" role="menuitem" tabindex="0" data-act="saveProject"><span class="obj-name">${icon("save")}Save project</span></div>
   <div class="list-item" role="menuitem" tabindex="0" data-act="openProject"><span class="obj-name">${icon("folder")}Open project…</span></div>
   <div class="list-item" role="menuitem" tabindex="0" data-act="importProfile"><span class="obj-name">${icon("import")}Import profile…</span></div>`);
+function hoverReset() { views.forEach((v) => v.objs.forEach(clearHover)); lastCommit = ""; }
+function zoneFill(k: number, w: number) {
+  const ov = activeObjView(); if (!ov || objLocked() || !ov.obj.mask.regions[k]) return;
+  ov.obj.mask.regions[k].weight.fill(w);
+  if (w > 0) for (const [i, r] of ov.obj.mask.regions.entries()) if (i !== k) r.weight.fill(0);
+  ov.maskVersion++; refreshMaskTexture(ov); renderStatus(); sliceActiveSoon(0);
+}
+let shapeRaf = 0;
+function rebuildShape(ov: ObjView) {
+  cancelAnimationFrame(shapeRaf);
+  buildSurface(ov); placeObj(ov); focusActive(); ov.proj = undefined; renderStatus(); sliceActiveSoon();
+}
 const ACT: Record<string, (arg: string, el: HTMLElement) => void> = {
   noop: () => {},
   setMode: (a) => setMode(a as typeof ui.mode),
@@ -1048,8 +1371,28 @@ const ACT: Record<string, (arg: string, el: HTMLElement) => void> = {
   arrange: (a) => arrangeAndReport(a === "all" ? views : [activeView()]),
   paintMode: (a) => { ui.paintErase = a === "erase"; ui.tool = toolFor(ui.dock); renderToolCard(); },
   selTarget: (a) => { ui.target = Number(a); ui.tool = toolFor(ui.dock); renderToolCard(); },
-  addRegion: () => { const o = activeObjView()?.obj; if (!o) return; const k = addRegion(o.mask, "sine"); o.regionParams[k] = { ...patterns.sine.defaults }; ui.target = k; ui.paintErase = false; ui.tool = toolFor(ui.dock); renderToolCard(); },
+  addRegion: () => {
+    const o = activeObjView()?.obj; if (!o) return;
+    const pat = ui.dock === "faces" ? "knit" : "sine", k = addRegion(o.mask, pat); o.regionParams[k] = { ...patterns[pat].defaults };
+    ui.target = k; ui.paintErase = false; ui.tool = toolFor(ui.dock); renderToolCard(); renderDrawer();
+  },
+  faceKind: (a) => { ui.faceKind = a as typeof ui.faceKind; hoverReset(); renderToolCard(); },
+  faceOp: (a) => { ui.faceOp = a as typeof ui.faceOp; hoverReset(); renderToolCard(); },
+  faceFill: (a) => { ui.faceFill = a as FillMode; hoverReset(); renderToolCard(); },
+  clearZone: (a) => zoneFill(Number(a), 0),
+  zoneAll: (a) => zoneFill(Number(a), 1),
+  delZone: (a) => {
+    const ov = activeObjView(); if (!ov || objLocked()) return; const k = Number(a);
+    ov.obj.mask.regions.splice(k, 1); ov.obj.regionParams.splice(k, 1);
+    ui.target = Math.min(ui.target, ov.obj.mask.regions.length - 1); if (ui.target < k && ui.target >= 0) ui.target = Math.max(0, ui.target);
+    ov.maskVersion++; refreshMaskTexture(ov); renderToolCard(); renderDrawer(); renderStatus(); sliceActiveSoon(0);
+  },
+  resetShape: () => { const ov = activeObjView(); if (!ov || objLocked() || ov.obj.source.kind !== "primitive") return; delete ov.obj.source.params; rebuildShape(ov); renderToolCard(); },
+  livePaths: () => { ui.livePaths = !ui.livePaths; if (ui.livePaths) sliceActiveSoon(0); updateSurfaceVisibility(); renderTopbar(); renderDrawer(); },
+  plateTypeMenu: (_, el) => openPop(el, `<div class="menu-head">Build plate</div>${PLATE_TYPES.map((p) => `<div class="list-item${p.id === ui.plateType ? " on" : ""}" role="menuitem" tabindex="0" data-act="pickPlateType" data-arg="${p.id}"><span class="obj-name">${icon(p.id === ui.plateType ? "check" : "layers")}<span><b>${p.label}</b><br><small class="muted">${p.hint}</small></span></span></div>`).join("")}`),
+  pickPlateType: (a) => { ui.plateType = a as PlateType; ui.plateTouched = true; layoutPlates(); renderDrawer(); },
   openModal: (a) => { ui.modal = a as PresetKind; renderModal(); },
+  ...netActions(),
   closeModal,
   pickProcess: (a) => { ui.selected.process = a; delete ui.edited.process; ui.presetsOpen = false; afterPresetEdit("process"); },
   tier: (a) => { ui.tier = ui.tier === a ? null : (a as typeof ui.tier); renderDrawer(); },
@@ -1113,25 +1456,44 @@ const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
     placeObj(ov); renderStatus(); sliceActiveSoon();
   },
   uniform: (el) => { ui.uniform = el.checked; },
-  target: (el) => { ui.target = Number(el.value); ui.tool = toolFor(ui.dock); renderToolCard(); },
+  target: (el) => { ui.target = Number(el.value); ui.tool = toolFor(ui.dock); renderToolCard(); renderDrawer(); },
   pattern(el) {
     const ov = activeObjView(); if (!ov || objLocked()) return;
     const o = ov.obj, defs = { ...patterns[el.value].defaults };
     if (ui.target < 0) o.base = { pattern: el.value, params: defs }; else { o.mask.regions[ui.target].pattern = el.value; o.regionParams[ui.target] = defs; }
-    buildSurface(ov); renderToolCard(); renderStatus(); sliceActiveSoon();
+    buildSurface(ov); renderToolCard(); renderDrawer(); renderStatus(); sliceActiveSoon();
   },
   param(el) {
     const ov = activeObjView(); if (!ov || objLocked()) return;
     (ui.target < 0 ? ov.obj.base.params : ov.obj.regionParams[ui.target])[el.dataset.key as keyof PatternParams] = Number(el.value);
-    syncRange(el); renderStatus(); sliceActiveSoon();
+    syncRange(el); ui.dragSlider = true; renderStatus(); sliceActiveSoon();
   },
   brush: (el) => { ui.brush = Number(el.value); syncRange(el); },
   showSurface: (el) => { ui.showSurface = el.checked; updateSurfaceVisibility(); },
-  addPrim(el) { const k = el.value as PrimitiveName; if (k) addObject(newObject({ kind: "primitive", primitive: k })); el.value = ""; },
+  addPrim(el) {
+    const k = el.value as PrimitiveName;
+    if (k) { const o = newObject({ kind: "primitive", primitive: k, params: primitiveDefaults(k) }); o.base = { pattern: "none", params: { ...patterns.none.defaults } }; addObject(o); }
+    el.value = "";
+  },
+  shape(el, phase) {
+    const ov = activeObjView(); if (!ov || objLocked() || ov.obj.source.kind !== "primitive") return;
+    const src = ov.obj.source; src.params = { ...primitiveDefaults(src.primitive), ...src.params, [el.dataset.key!]: Number(el.value) };
+    syncRange(el); ui.dragSlider = true;
+    if (phase === "input") { cancelAnimationFrame(shapeRaf); shapeRaf = requestAnimationFrame(() => rebuildShape(ov)); } else rebuildShape(ov);
+  },
+  pf(el) {
+    if (!ui.draft) return; const key = el.dataset.key as string;
+    (ui.draft as Record<string, unknown>)[key] = el.value; ui.draft.msg = undefined;
+    if (key === "kind") renderModal(); // other fields must not re-render: it would swallow the click that caused the blur
+  },
+  faceAngle: (el) => { ui.faceAngle = Number(el.value); syncRange(el); hoverReset(); },
+  edgeAngle: (el) => { ui.edgeAngle = Number(el.value); syncRange(el); hoverReset(); },
+  edgeBand: (el) => { ui.edgeBand = Number(el.value); syncRange(el); hoverReset(); },
+  edgeChain: (el) => { ui.edgeChain = el.checked; hoverReset(); },
   developer: (el) => { ui.developer = el.checked; if (!ui.developer && (ui.exportFormat === "csv" || ui.exportFormat === "json")) ui.exportFormat = "gcode"; renderAll(); },
-  presetSel(el) { const kind = ui.modal!; ui.selected[kind] = el.value; delete ui.edited[kind]; afterPresetEdit(kind); },
+  presetSel(el) { if (!ui.modal || ui.modal === "printer") return; const kind = ui.modal; ui.selected[kind] = el.value; delete ui.edited[kind]; afterPresetEdit(kind); },
   path(el, phase) {
-    const kind = (el.dataset.kind as PresetKind | undefined) ?? ui.modal; if (!kind) return;
+    const kind = (el.dataset.kind as PresetKind | undefined) ?? (ui.modal === "printer" ? null : ui.modal); if (!kind) return;
     const val = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.dataset.array ? el.value.split(",").map(Number) : el.value;
     setPresetValue(kind, el.dataset.path!, val);
     if (el.type === "range" && phase === "input") { syncRange(el); ui.dragSlider = true; renderStatus(); sliceActiveSoon(); return; }
@@ -1143,7 +1505,7 @@ for (const phase of ["input", "change"] as const) document.addEventListener(phas
   if (phase === "input" && el.type !== "range") return; // text/number/select commit on change; sliders are live
   IN[name]?.(el, phase);
 });
-document.addEventListener("pointerup", () => { ui.dragSlider = false; });
+document.addEventListener("pointerup", () => { if (ui.dragSlider) { ui.dragSlider = false; renderDrawer(); } });
 
 // ---------- hidden file inputs ----------
 const fileHandler = (id: string, fn: (files: FileList) => void) => { const el = byId<HTMLInputElement>(id); el.onchange = () => { if (el.files?.length) fn(el.files); el.value = ""; }; };
@@ -1197,7 +1559,7 @@ renderer.setAnimationLoop(() => {
   }
   for (const v of views) {
     const far = camera.position.distanceTo(v.group.position) > 450, hasLod = v.lines.some((l) => l.userData.lod === "far");
-    if (!dragging) for (const l of v.lines) l.visible = !hasLod || (l.userData.lod === "far") === far;
+    if (!dragging) for (const l of v.lines) l.visible = showPaths() && (!hasLod || (l.userData.lod === "far") === far);
   }
   renderer.render(scene, camera);
   frames++;
@@ -1208,3 +1570,4 @@ applyThemeBoot();
 addPlate(newPlate("Plate 1"));
 resize();
 function applyThemeBoot() { setThemeAttr(ui.theme); }
+if (import.meta.env?.DEV) (window as unknown as Record<string, unknown>).__ns = { ui, views, scene, camera, THREE };
