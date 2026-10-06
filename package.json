@@ -1,0 +1,12 @@
+{
+  "name": "nexspiro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Texture-first spiral slicer: parametric toolpath patterns (knit, rope, perforated) to G-code.",
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "generate": "node --experimental-strip-types --no-warnings scripts/generate.ts"
+  },
+  "engines": { "node": ">=22.6" }
+}
