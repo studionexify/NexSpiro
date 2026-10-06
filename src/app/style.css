@@ -17,3 +17,17 @@ button.on, button.primary { background:var(--accent); }
 .warn { color:#ffb454; }
 .swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle; }
 @media (max-width: 700px) { body { flex-direction:column; } #panel { width:100%; max-height:45vh; } }
+.tabs { display:flex; gap:4px; margin-bottom:10px; }
+.tabs button { flex:1; margin:0; }
+.summary { font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:6px; }
+.muted { color:var(--muted); font-size:12px; margin:4px 0; }
+.err { color:#ff6b5b; }
+textarea { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:4px; font:11px ui-monospace, monospace; margin-top:4px; }
+.field-block { margin:8px 0; }
+input[type=text] { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:3px 6px; width:150px; }
+#plates { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; gap:6px; }
+#plates .plate { display:flex; align-items:center; gap:2px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 2px 2px 8px; cursor:pointer; }
+#plates .plate.on { border-color:var(--accent); }
+#plates .plate button { padding:2px 6px; margin:0; background:transparent; }
+#plates .plate button:disabled { opacity:.3; cursor:default; }
+#stats { background:rgba(22,24,29,.75); padding:6px 8px; border-radius:6px; }

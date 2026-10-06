@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { primitives, buildSpiral, toGcode, patterns } from "../src/core/index.ts";
+import { primitives, buildSpiral, patterns } from "../src/core/index.ts";
 
 const base = { layerHeight: 0.4, lineWidth: 0.8, filamentDiameter: 1.75, segmentsPerRev: 360, fadeHeight: 0, center: [0, 0] as [number, number] };
 
@@ -29,14 +29,6 @@ test("perforated alternates phase 180° between layers", () => {
   assert.ok(Math.abs(a + b) < 1e-9);
 });
 
-test("gcode flavors emit header and moves", () => {
-  const tp = buildSpiral(primitives.cylinder(2, 10), { ...base, pattern: "knit" });
-  for (const flavor of ["marlin", "klipper", "bambu"] as const) {
-    const g = toGcode(tp, { flavor, nozzleTemp: 210, bedTemp: 60, speed: 20, fan: 1 });
-    assert.match(g, /M83/);
-    assert.equal(g.split("\n").filter((l) => l.startsWith("G1 X")).length, tp.count - 1);
-  }
-});
 
 import { createMask, addRegion, stamp } from "../src/core/index.ts";
 

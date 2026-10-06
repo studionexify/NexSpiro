@@ -12,6 +12,9 @@ export type PathSettings = {
   fadeHeight: number;     // mm: pattern ramps from 0 at bottom to full over this height
   center: [number, number];
   zCap?: number;          // max |dz| allowed by printer (mm)
+  planar?: boolean;       // true → suppress pattern Z (standard planar spiral)
+  firstLayerHeight?: number; // defaults to layerHeight
+  scaleXY?: number; scaleZ?: number; rotation?: number; // object transform (rotation in degrees about Z)
   paint?: PaintMask;
 };
 // Flat typed arrays: x,y,z per point; e = absolute E; tag = dominant region (0 = base, i+1 = paint region i).
@@ -26,7 +29,9 @@ const resolve = (name: string, over?: Partial<PatternParams>) => {
 export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
   const base = resolve(s.pattern, s.params);
   const regions = (s.paint?.regions ?? []).map((r) => resolve(r.pattern, r.params));
-  const layers = Math.floor(profile.height / s.layerHeight);
+  const sxy = s.scaleXY ?? 1, H = profile.height * (s.scaleZ ?? 1);
+  const rot = ((s.rotation ?? 0) * Math.PI) / 180, flh = s.firstLayerHeight ?? s.layerHeight;
+  const layers = Math.max(1, Math.floor((H - flh) / s.layerHeight + 1e-9) + 1);
   const n = layers * s.segmentsPerRev + 1;
   const xyz = new Float32Array(n * 3), e = new Float64Array(n), tag = new Uint8Array(n);
   const filArea = Math.PI * (s.filamentDiameter / 2) ** 2;
@@ -36,9 +41,9 @@ export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
   for (let i = 0; i < n; i++) {
     const layer = i / s.segmentsPerRev;            // continuous (spiral)
     const u = (i % s.segmentsPerRev) / s.segmentsPerRev, theta = u * 2 * Math.PI;
-    const zBase = s.layerHeight * (1 + layer);
-    const t = Math.min(1, zBase / profile.height);
-    const fade = s.fadeHeight > 0 ? Math.min(1, (zBase - s.layerHeight) / s.fadeHeight) : 1;
+    const zBase = flh + s.layerHeight * layer;
+    const t = Math.min(1, zBase / H);
+    const fade = s.fadeHeight > 0 ? Math.min(1, (zBase - flh) / s.fadeHeight) : 1;
     const L = Math.floor(layer);
 
     // Blend base + painted regions by mask weight.
@@ -58,11 +63,11 @@ export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
         if (bestW > 0.5) tag[i] = best;
       }
     }
-    let dz = fade * m.dz;
+    let dz = s.planar ? 0 : fade * m.dz;
     if (Math.abs(dz) > cap) { dz = Math.sign(dz) * cap; zClipped++; }
 
-    const r = profile.radius(t) + fade * m.dr;
-    const x = s.center[0] + r * Math.cos(theta), y = s.center[1] + r * Math.sin(theta);
+    const r = profile.radius(t) * sxy + fade * m.dr;
+    const x = s.center[0] + r * Math.cos(theta + rot), y = s.center[1] + r * Math.sin(theta + rot);
     const z = zBase + dz;
     if (i > 0) E += (Math.hypot(x - px, y - py, z - pz) * beadArea * (1 + fade * (m.e - 1))) / filArea;
     xyz[i * 3] = x; xyz[i * 3 + 1] = y; xyz[i * 3 + 2] = z; e[i] = E;

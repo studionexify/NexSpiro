@@ -1,12 +1,22 @@
-// Usage: npm run generate -- <primitive> <pattern> <flavor> [out.gcode]
+// Usage: npm run generate -- <primitive> <pattern> <machine-id> [out.gcode]
+// e.g.   npm run generate -- bowl knit machine/voron-24 bowl.gcode
 import { writeFileSync } from "node:fs";
-import { primitives, buildSpiral, toGcode, type PrimitiveName, type Flavor } from "../src/core/index.ts";
+import {
+  primitives, buildSpiral, planMotion, toGcode, sliceStats, formatDuration, PresetRegistry,
+  type PrimitiveName, type MachinePreset, type FilamentPreset, type ProcessPreset,
+} from "../src/core/index.ts";
 
-const [prim = "bowl", pattern = "knit", flavor = "marlin", out = `${prim}-${pattern}.gcode`] = process.argv.slice(2);
-const profile = primitives[prim as PrimitiveName]();
-const tp = buildSpiral(profile, {
-  layerHeight: 0.4, lineWidth: 0.8, filamentDiameter: 1.75, segmentsPerRev: 720,
-  pattern, fadeHeight: 2, center: [128, 128],
+const [prim = "bowl", pattern = "knit", machineId = "machine/bambu-x1", out = `${prim}-${pattern}.gcode`] = process.argv.slice(2);
+const reg = new PresetRegistry();
+const machine = reg.resolve<"machine">(machineId) as MachinePreset;
+const filament = reg.resolve<"filament">("filament/pla") as FilamentPreset;
+const proc = reg.resolve<"process">("process/vase-0.4") as ProcessPreset;
+const tp = buildSpiral(primitives[prim as PrimitiveName](), {
+  layerHeight: proc.layerHeight, firstLayerHeight: proc.firstLayerHeight, lineWidth: proc.lineWidth,
+  filamentDiameter: filament.diameter, segmentsPerRev: proc.segmentsPerRev, pattern, fadeHeight: proc.fadeHeight,
+  center: [0, 0], zCap: machine.zWobbleMax, planar: !proc.nonLinear.enabled,
 });
-writeFileSync(out, toGcode(tp, { flavor: flavor as Flavor, nozzleTemp: 220, bedTemp: 60, speed: 25, fan: 1 }));
-console.log(`${out}: ${tp.count} points, ${(tp.e[tp.count - 1] / 1000).toFixed(2)} m filament`);
+const mp = planMotion(tp, proc.segmentsPerRev, { machine, filament, process: proc });
+writeFileSync(out, toGcode(mp, { machine, filament, process: proc, offset: [machine.bed[0] / 2, machine.bed[1] / 2] }));
+const st = sliceStats(mp, filament);
+console.log(`${out}: ${mp.count} moves (${mp.decimated} decimated), ${formatDuration(st.timeS)}, ${st.grams.toFixed(1)} g, ${(st.filamentMm / 1000).toFixed(2)} m`);

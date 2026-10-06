@@ -3,4 +3,6 @@ export * from "./patterns.ts";
 export * from "./path.ts";
 export * from "./gcode.ts";
 export * from "./mask.ts";
-export * from "./printers.ts";
+export * from "./presets.ts";
+export * from "./motion.ts";
+export * from "./project.ts";
