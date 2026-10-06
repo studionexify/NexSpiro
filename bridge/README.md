@@ -1,19 +1,27 @@
-# NexSpiro Bridge (Bambu Lab LAN mode)
+# NexSpiro Bridge
 
-Browsers can't open the MQTT and FTPS connections Bambu printers use, so this small local helper does it for NexSpiro.
-Klipper (Moonraker), OctoPrint and PrusaLink printers do **not** need it — NexSpiro talks to them directly.
+A small local helper that makes wireless printing work from the browser. It
+
+* **serves NexSpiro itself** at `http://localhost:8787` (an https page — or the hosted artifact — is not allowed to talk to plain-http printers on your network);
+* **finds printers** on your Wi-Fi/LAN (Bambu via SSDP, Klipper via Moonraker probe) — *Find printers on my network* in the Add printer dialog;
+* **relays** calls to Klipper / OctoPrint / PrusaLink machines so CORS never gets in the way (LAN addresses only);
+* **speaks Bambu Lab's LAN protocol** (FTPS 990 + MQTT 8883), which browsers cannot.
 
 ```bash
-cd bridge
-npm install
-npm start            # http://127.0.0.1:8787
+npm run connect      # from the repo root: builds the app, installs the bridge, starts it
+# open http://localhost:8787
 ```
 
-On the printer: **Settings → Network → LAN Only Mode** (or LAN mode liveview) and note the **Access code**; the serial number is on the label / Device page. Newer firmware may also require *Developer mode* for third-party control.
+## Your printers
 
-In NexSpiro: **Print → Add printer → Bambu Lab (LAN mode)**, enter IP, serial and access code, press *Test connection*.
+| Printer | Protocol | On the printer |
+|---|---|---|
+| Bambu Lab A1 / A1 mini combo | Bambu LAN (bridge) | Settings → WLAN, enable **LAN Only Mode**; note IP, **Access code**, **serial** |
+| Bambu Lab P1S combo | Bambu LAN (bridge) | Settings → WLAN → Network, enable **LAN Only Mode**; note IP, Access code, serial |
+| Creality Ender-3 V3 KE | Klipper · Moonraker :7125 | Connect to Wi-Fi, note IP (Fluidd: `http://IP:4408`) |
+| Elegoo Neptune 4 Max | Klipper · Moonraker :7125 | Connect to Wi-Fi, note IP (Fluidd: `http://IP`) |
 
-* The bridge listens on `127.0.0.1` only. Set `ALLOW_ORIGIN=http://localhost:5173` to accept requests from one origin only.
-* G-code is uploaded to the printer's SD card via FTPS (`bblp` @ port 990) and started with an MQTT `gcode_file` command.
-* Status/commands use MQTT over TLS on port 8883.
-* Status: written from community protocol notes; verify on your own printer. Always watch the first layer.
+Pick the model in **Print → Add printer**; the form fills in the protocol and shows the setup steps. Computer and printers must be on the same network.
+
+* Binds to `127.0.0.1`; only `localhost` origins may use it (`ALLOW_ORIGIN=…` to change). `HOST=0.0.0.0` exposes it to your LAN.
+* Bambu: G-code goes to the SD card by FTPS (`bblp`@990) and starts with an MQTT `gcode_file` command. Written from community protocol notes and **not yet verified on real hardware**; newer firmware may require Developer mode. Always watch the first layer.

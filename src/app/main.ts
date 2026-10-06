@@ -22,7 +22,7 @@ import { trajectoryCSV, trajectoryJSON } from "../io/exporters/trajectory.ts";
 import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
 import { icon } from "./icons.ts";
 import { rangeRow, numRow, switchRow, selectRow, textRow, seg, pct, materialOf, statusBadge, slicingKind, rampGradient, slug, DualSlider, type SegItem } from "./components.ts";
-import { connectorFor, validatePrinter, mixedContentProblem, PRINTER_KINDS, type PrinterConfig, type PrinterStatus, type PrinterKind } from "../net/printers.ts";
+import { connectorFor, validatePrinter, mixedContentProblem, scanNetwork, PRINTER_KINDS, PRINTER_MODELS, type Found, type PrinterConfig, type PrinterStatus, type PrinterKind } from "../net/printers.ts";
 import { initialTheme, setThemeAttr, PALETTE_3D, REGION_COLORS, hex, type ThemeMode } from "./theme/theme.ts";
 
 
@@ -83,7 +83,7 @@ const ui = {
   preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
   exportFormat: "gcode" as ExportFormat, developer: false,
   printerId: "", confirmPrint: false, netBusy: "", netMsg: null as null | { tone: "ok" | "err"; text: string },
-  draft: null as null | (Partial<PrinterConfig> & { editing?: boolean; msg?: { tone: "ok" | "err"; text: string } }),
+  draft: null as null | (Partial<PrinterConfig> & { editing?: boolean; found?: Found[]; scanning?: boolean; msg?: { tone: "ok" | "err"; text: string } }),
 };
 type ExportFormat = "gcode" | "3mf" | "nexspiro" | "stl" | "obj" | "baked" | "csv" | "json";
 const EXPORT_LABELS: Record<ExportFormat, string> = {
@@ -1137,20 +1137,25 @@ function cardSend() {
 }
 function renderPrinterForm() {
   const d = ui.draft ?? {}, k = (d.kind ?? "bambu") as PrinterKind, def = PRINTER_KINDS.find((x) => x.id === k)!, f = (key: string) => `data-in="pf" data-key="${key}"`, prob = d.host ? mixedContentProblem(d as PrinterConfig) : null;
-  return `${selectRow("Type", f("kind"), PRINTER_KINDS.map((x) => opt(x.id, x.label, x.id === k)).join(""))}
-    <p class="hint" style="margin-top:0">${esc(def.hint)}</p>
+  const model = PRINTER_MODELS.find((m) => m.id === d.model);
+  const found = (d.found ?? []).map((x, i) => `<div class="list-item" role="button" tabindex="0" data-act="useFound" data-arg="${i}"><span class="obj-name"><span class="dot sage"></span><span class="grow"><b class="nowrap">${esc(x.name)}</b><small class="muted nowrap">${esc(x.host)} · ${esc(x.model ?? kindLabel(x.kind))}</small></span></span><span class="badge sky">Use</span></div>`).join("");
+  return `${selectRow("Printer", f("model"), opt("", "Other / custom…", !model) + PRINTER_MODELS.map((m) => opt(m.id, m.label, m.id === d.model)).join(""))}
+    ${model ? `<p class="hint" style="margin-top:0">${esc(model.steps)}</p>` : `${selectRow("Type", f("kind"), PRINTER_KINDS.map((x) => opt(x.id, x.label, x.id === k)).join(""))}<p class="hint" style="margin-top:0">${esc(def.hint)}</p>`}
+    <div class="actions"><button class="btn sm" data-act="scanPrinters"${d.scanning ? " disabled" : ""}>${icon("wifi")}${d.scanning ? "Scanning the network…" : "Find printers on my network"}</button></div>
+    ${found ? `<div class="objlist">${found}</div>` : d.found ? `<p class="hint">Nothing found. Check the printer is on the same Wi-Fi, then enter its IP by hand.</p>` : ""}
     ${textRow("Name", f("name"), d.name ?? "", { placeholder: "e.g. P1S on the desk" })}
-    ${textRow("IP / hostname", f("host"), d.host ?? "", { placeholder: k === "moonraker" ? "192.168.1.50 (port 7125 assumed)" : "192.168.1.50" })}
-    ${k === "bambu" ? `${textRow("Serial number", f("serial"), d.serial ?? "", { placeholder: "printer label / Device page" })}${textRow("LAN access code", f("accessCode"), d.accessCode ?? "", { type: "password", placeholder: "8 characters on the printer" })}${textRow("Bridge URL", f("bridge"), d.bridge ?? "", { placeholder: "http://localhost:8787" })}`
+    ${textRow("IP / hostname", f("host"), d.host ?? "", { placeholder: "192.168.1.50" })}
+    ${k === "bambu" ? `${textRow("Serial number", f("serial"), d.serial ?? "", { placeholder: "printer label / Device page" })}${textRow("LAN access code", f("accessCode"), d.accessCode ?? "", { type: "password", placeholder: "8 characters on the printer" })}`
       : textRow(k === "moonraker" ? "API key (optional)" : "API key", f("apiKey"), d.apiKey ?? "", { type: "password" })}
+    ${textRow("NexSpiro Bridge", f("bridge"), d.bridge ?? "", { placeholder: "http://localhost:8787" })}
     ${prob ? `<div class="issue error">${icon("warn")}<span>${esc(prob)}</span></div>` : ""}
     ${d.msg ? `<div class="issue ${d.msg.tone === "ok" ? "ok" : "error"}">${icon(d.msg.tone === "ok" ? "check" : "warn")}<span>${esc(d.msg.text)}</span></div>` : ""}
     <div class="actions"><button class="btn" data-act="testPrinter">${icon("link")}Test connection</button><button class="btn primary" data-act="savePrinter">${icon("check")}${d.editing ? "Save" : "Add printer"}</button></div>
-    <p class="hint">Credentials are stored in this browser only. Prefer a LAN-only network; the bridge and printers speak plain LAN protocols.</p>`;
+    <p class="hint">Start the helper with <code>npm run connect</code> and open <b>http://localhost:8787</b> — it finds printers, relays to Klipper machines and speaks Bambu's LAN protocol. Credentials stay in this browser.</p>`;
 }
 function draftConfig(): PrinterConfig {
   const d = ui.draft ?? {};
-  return { id: d.id ?? `net-${Date.now().toString(36)}`, name: d.name?.trim() ?? "", kind: (d.kind ?? "bambu") as PrinterKind, host: d.host?.trim() ?? "", apiKey: d.apiKey?.trim(), accessCode: d.accessCode?.trim(), serial: d.serial?.trim(), bridge: d.bridge?.trim() };
+  return { id: d.id ?? `net-${Date.now().toString(36)}`, name: d.name?.trim() ?? "", kind: (d.kind ?? "bambu") as PrinterKind, host: d.host?.trim() ?? "", apiKey: d.apiKey?.trim(), accessCode: d.accessCode?.trim(), serial: d.serial?.trim(), bridge: d.bridge?.trim(), model: d.model };
 }
 async function sendToPrinter(print: boolean) {
   const p = curPrinter(), v = activeView(); if (!p || ui.netBusy) return;
@@ -1174,9 +1179,20 @@ async function sendToPrinter(print: boolean) {
 function netActions(): Record<string, (arg: string, el: HTMLElement) => void> {
   return {
     pickPrinter: (a) => { ui.printerId = a; ui.netMsg = null; ui.confirmPrint = false; renderDrawer(); syncPolling(); },
-    addPrinter: () => { ui.draft = { kind: "bambu", bridge: "http://localhost:8787" }; ui.modal = "printer"; renderModal(); },
+    addPrinter: () => { ui.draft = { kind: "bambu", model: "bambu-a1", bridge: location.protocol === "http:" && location.hostname === "localhost" && location.port === "8787" ? location.origin : "http://localhost:8787" }; ui.modal = "printer"; renderModal(); },
     editPrinter: (a) => { const p = printers.find((x) => x.id === a); if (!p) return; ui.draft = { ...p, editing: true }; ui.modal = "printer"; renderModal(); },
     delPrinter: (a) => { printers = printers.filter((p) => p.id !== a); persistPrinters(); if (ui.printerId === a) ui.printerId = printers[0]?.id ?? ""; renderDrawer(); syncPolling(); },
+    scanPrinters: async () => {
+      if (!ui.draft) return; ui.draft.scanning = true; ui.draft.msg = undefined; renderModal();
+      try { ui.draft.found = await scanNetwork(ui.draft.bridge?.trim() || "http://localhost:8787"); }
+      catch (e) { if (ui.draft) ui.draft.msg = { tone: "err", text: e instanceof Error ? e.message : String(e) }; }
+      if (ui.draft) ui.draft.scanning = false; renderModal();
+    },
+    useFound: (a) => {
+      const x = ui.draft?.found?.[Number(a)]; if (!x || !ui.draft) return;
+      const m = PRINTER_MODELS.find((q) => q.kind === x.kind && (!x.model || q.label.toLowerCase().includes(x.model.toLowerCase().replace(/[^a-z0-9]/g, "")))) ?? undefined;
+      Object.assign(ui.draft, { kind: x.kind, host: x.host, name: ui.draft.name || x.name, serial: x.serial ?? ui.draft.serial, model: x.kind === "bambu" ? ui.draft.model : ui.draft.model ?? m?.id }); renderModal();
+    },
     testPrinter: async () => {
       const d = draftConfig(), bad = validatePrinter(d); if (!ui.draft) return;
       ui.draft.msg = bad ? { tone: "err", text: bad } : { tone: "ok", text: "Connecting…" }; renderModal(); if (bad) return;
@@ -1484,7 +1500,8 @@ const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
   pf(el) {
     if (!ui.draft) return; const key = el.dataset.key as string;
     (ui.draft as Record<string, unknown>)[key] = el.value; ui.draft.msg = undefined;
-    if (key === "kind") renderModal(); // other fields must not re-render: it would swallow the click that caused the blur
+    if (key === "model") { const m = PRINTER_MODELS.find((q) => q.id === el.value); if (m) { ui.draft.kind = m.kind; ui.draft.name ||= m.label.replace(/ \(combo\)/, ""); } renderModal(); }
+    if (key === "kind") { ui.draft.model = undefined; renderModal(); } // other fields must not re-render: it would swallow the click that caused the blur
   },
   faceAngle: (el) => { ui.faceAngle = Number(el.value); syncRange(el); hoverReset(); },
   edgeAngle: (el) => { ui.edgeAngle = Number(el.value); syncRange(el); hoverReset(); },

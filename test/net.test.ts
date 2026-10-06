@@ -94,3 +94,26 @@ test("bridge: routes, validation, CORS preflight and file hand-off (fake driver)
     await fetch(u(`/bambu/command?${q}&cmd=pause`), { method: "POST" }); assert.equal(seen[1], "pause");
   } finally { srv.close(); }
 });
+
+import http from "node:http";
+import { PRINTER_MODELS, scanNetwork } from "../src/net/printers.ts";
+test("the four supported machines are presets and bridge relay + scan work", async () => {
+  assert.deepEqual(PRINTER_MODELS.map((m) => m.kind), ["bambu", "bambu", "moonraker", "moonraker"]);
+  // a fake Moonraker on the "LAN"; the relay is reached through the bridge because the direct call is blocked
+  const seen: string[] = [];
+  const printer = http.createServer((req, res) => { seen.push(`${req.method} ${req.url} ${req.headers["content-type"]?.split(";")[0] ?? ""}`); res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ result: { status: { print_stats: { state: "standby" }, extruder: { temperature: 22 } } } })); });
+  await new Promise<void>((r) => printer.listen(0, "127.0.0.1", r));
+  const srv = createBridge({ status: async () => ({}), send: async () => {}, command: async () => {} }, { scan: async () => [{ kind: "moonraker", host: "192.168.1.60", name: "ke" }] });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const bridge = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  try {
+    const cfg: PrinterConfig = { ...base, kind: "moonraker", host: `127.0.0.1:${(printer.address() as { port: number }).port}`, bridge };
+    const blocked = (url: string, init?: RequestInit) => (url.startsWith(bridge) ? fetch(url, init) : Promise.reject(new TypeError("Failed to fetch")));
+    const c = connectorFor(cfg, blocked);
+    assert.equal((await c.status()).nozzle, 22);
+    await c.upload("a.gcode", "G28\n", false); assert.ok(seen.some((l) => l.startsWith("POST /server/files/upload multipart/form-data")));
+    assert.equal((await scanNetwork(bridge)).length, 1);
+    const bad = await fetch(`${bridge}/relay?url=${encodeURIComponent("http://8.8.8.8/")}`); assert.equal(bad.status, 400);
+    const evil = await fetch(`${bridge}/scan`, { headers: { Origin: "https://evil.example" } }); assert.equal(evil.status, 403);
+  } finally { srv.close(); printer.close(); }
+});

@@ -8,7 +8,8 @@ export type PrinterConfig = {
   apiKey?: string;         // Moonraker (optional) / OctoPrint / PrusaLink
   accessCode?: string;     // Bambu LAN access code (printer screen → Network)
   serial?: string;         // Bambu serial number
-  bridge?: string;         // Bambu: NexSpiro Bridge URL
+  bridge?: string;         // NexSpiro Bridge URL (required for Bambu; relays CORS-blocked Klipper/OctoPrint/PrusaLink calls)
+  model?: string;          // PRINTER_MODELS id (UI preset only)
 };
 export type PrinterState = "offline" | "idle" | "printing" | "paused" | "error";
 export type PrinterStatus = {
@@ -32,6 +33,15 @@ export const PRINTER_KINDS: { id: PrinterKind; label: string; hint: string; port
   { id: "prusalink", label: "PrusaLink", hint: "Prusa MK4, XL, Mini, Core One — API key from Settings → PrusaLink", port: "" },
 ];
 
+/** One-click presets for the form: picks the protocol, default port and the setup steps for each machine. */
+export type PrinterModel = { id: string; label: string; kind: PrinterKind; port: string; steps: string };
+export const PRINTER_MODELS: PrinterModel[] = [
+  { id: "bambu-a1", label: "Bambu Lab A1 / A1 mini (combo)", kind: "bambu", port: "", steps: "On the printer: Settings → WLAN (connect to the same Wi-Fi as this computer) → enable LAN Only Mode, then note the IP, Access code and the serial number (Settings → Device). Keep the NexSpiro Bridge running." },
+  { id: "bambu-p1s", label: "Bambu Lab P1S / P1P (combo)", kind: "bambu", port: "", steps: "On the printer: Settings → WLAN → enable LAN Only Mode (screen → Network), then note the IP, Access code and serial number (Device page / label). Keep the NexSpiro Bridge running." },
+  { id: "creality-ke", label: "Creality Ender-3 V3 KE", kind: "moonraker", port: "7125", steps: "Connect the printer to Wi-Fi (Settings → Network) and note its IP. It runs Klipper/Moonraker on port 7125 (Fluidd opens at http://IP:4408). No API key needed." },
+  { id: "elegoo-n4max", label: "Elegoo Neptune 4 Max", kind: "moonraker", port: "7125", steps: "Connect the printer to Wi-Fi (Settings → Network) and note its IP. It runs Klipper/Moonraker on port 7125 (Fluidd opens at http://IP). No API key needed." },
+];
+
 export const baseUrl = (host: string, fallbackPort = ""): string => {
   let h = host.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(h)) h = `http://${h}${fallbackPort && !/:\d+$/.test(h) ? `:${fallbackPort}` : ""}`;
@@ -42,8 +52,9 @@ const isLocal = (u: string) => /^https?:\/\/(localhost|127\.|\[::1\])/i.test(u);
 /** Browsers refuse http:// requests from an https:// page (except to localhost). Returns the explanation, or null when fine. */
 export function mixedContentProblem(cfg: PrinterConfig, pageProtocol = typeof location === "undefined" ? "http:" : location.protocol): string | null {
   const target = cfg.kind === "bambu" ? bridgeUrl(cfg) : baseUrl(cfg.host);
+  if (cfg.kind !== "bambu" && cfg.bridge?.trim()) return null; // goes through the bridge on localhost, which https pages may call
   if (pageProtocol === "https:" && target.startsWith("http:") && !isLocal(target))
-    return "This page is served over https, so the browser blocks plain-http printers on your network. Open NexSpiro from a local copy (npm run dev / npm run preview) or put the printer behind https.";
+    return "This page is served over https, so the browser blocks plain-http printers on your network. Run `npm run connect` and open http://localhost:8787 (or add the NexSpiro Bridge URL to this printer).";
   return null;
 }
 export const bridgeUrl = (cfg: PrinterConfig) => baseUrl(cfg.bridge || "http://localhost:8787");
@@ -59,10 +70,25 @@ async function call(f: Fetch, url: string, init: RequestInit = {}, what = "print
     }
     return r;
   } catch (e) {
-    if (e instanceof Error && /answered \d+/.test(e.message)) throw e;
+    if (e instanceof Error && /answered \d+|Bridge/.test(e.message)) throw e;
     if (e instanceof DOMException && e.name === "AbortError") throw new Error(`${what} did not answer in time`);
     throw new Error(`Could not reach ${what} (offline, wrong address, CORS or mixed-content block)`);
   } finally { clearTimeout(timer); }
+}
+/** Direct call first; if the browser blocks it (CORS / mixed content), retry through the NexSpiro Bridge's LAN relay. */
+function withRelay(cfg: PrinterConfig, f: Fetch): Fetch {
+  const bridge = cfg.bridge?.trim() ? bridgeUrl(cfg) : "";
+  if (!bridge) return f;
+  const relay: Fetch = (url, init) => f(`${bridge}/relay?url=${encodeURIComponent(url)}`, init);
+  const samePage = typeof location !== "undefined" && location.origin === bridge;
+  return async (url, init) => {
+    try { return await (samePage ? relay : f)(url, init); }
+    catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+      try { return await (samePage ? f : relay)(url, init); }
+      catch { throw new Error(`Could not reach ${cfg.host}. Browsers block this from here — start the NexSpiro Bridge (npm run connect) and open NexSpiro at ${bridge}`); }
+    }
+  };
 }
 const json = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
@@ -144,9 +170,9 @@ function bambu(cfg: PrinterConfig, f: Fetch): Connector {
 
 export function connectorFor(cfg: PrinterConfig, fetchFn: Fetch = (u, i) => fetch(u, i)): Connector {
   switch (cfg.kind) {
-    case "moonraker": return moonraker(cfg, fetchFn);
-    case "octoprint": return octoprint(cfg, fetchFn);
-    case "prusalink": return prusalink(cfg, fetchFn);
+    case "moonraker": return moonraker(cfg, withRelay(cfg, fetchFn));
+    case "octoprint": return octoprint(cfg, withRelay(cfg, fetchFn));
+    case "prusalink": return prusalink(cfg, withRelay(cfg, fetchFn));
     case "bambu": return bambu(cfg, fetchFn);
   }
 }
@@ -158,4 +184,14 @@ export function validatePrinter(c: Partial<PrinterConfig>): string | null {
   if (c.kind === "bambu") { if (!c.serial?.trim()) return "Enter the printer serial number"; if (!c.accessCode?.trim()) return "Enter the LAN access code shown on the printer"; }
   if ((c.kind === "octoprint" || c.kind === "prusalink") && !c.apiKey?.trim()) return "Enter the API key";
   return null;
+}
+
+export type Found = { kind: PrinterKind; host: string; name: string; model?: string; serial?: string };
+/** Asks the bridge to look for printers on the local network (Bambu via SSDP, Klipper via Moonraker probe). */
+export async function scanNetwork(bridge: string, f: Fetch = (u, i) => fetch(u, i)): Promise<Found[]> {
+  const base = baseUrl(bridge || "http://localhost:8787");
+  let r: Response;
+  try { r = await f(`${base}/scan`, {}); } catch { throw new Error(`Could not reach the NexSpiro Bridge at ${base} — run \`npm run connect\` on this computer and open NexSpiro at that address.`); }
+  if (!r.ok) throw new Error(`Bridge answered ${r.status}`);
+  return ((await r.json()) as { printers: Found[] }).printers ?? [];
 }
