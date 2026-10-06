@@ -4,6 +4,7 @@ import {
 } from "../core/index.ts";
 import { planPrint } from "../core/planar/plan.ts";
 import { generateSupports } from "../core/planar/supports.ts";
+import { crossSection } from "../core/planar/motion.ts";
 import { writePlanarGcode, type PlanarGcodeOptions } from "../core/planar/gcodeWriter.ts";
 import { buildPreview } from "../core/planar/preview.ts";
 import type { PlanarJob, PlanarObject, PlanarPlan, PreviewSegments } from "../core/planar/types.ts";
@@ -35,10 +36,25 @@ function slicePlanar(req: SliceRequest): SliceResponse {
   const job: PlanarJob = { objects, machine, filament, process, settings: resolveSettings(process) };
   const plan = planPrint(job, (ctx) => generateSupports({ ...ctx, nozzle: machine.nozzle, lineWidth: Number(ctx.settings.support_line_width) || machine.nozzle }));
   const prev = buildPreview(plan, job, { travel: true });
-  const g = writePlanarGcode(plan, job, { offset: [machine.bed[0] / 2, machine.bed[1] / 2] });
+  // estimate without writing the (large) G-code: the preview carries the look-ahead time model, E comes from the path geometry
+  const flowK = (Number(job.settings.print_flow_ratio) || 1) * filament.flowRatio, byFeature: Record<number, { timeS: number; filamentMm: number }> = {};
+  const filArea = Math.PI * (filament.diameter / 2) ** 2;
+  let volume = 0;
+  for (let i = 0; i < prev.count; i++) { const f = prev.feature[i], x = (byFeature[f] ??= { timeS: 0, filamentMm: 0 }); x.timeS += prev.order[i] - (i ? prev.order[i - 1] : 0); }
+  for (const layer of plan.layers) for (const path of layer.paths) {
+    if (!path.feature) continue;
+    const n = path.xyz.length / 3, segs = path.closed ? n : n - 1, cs = crossSection(path.width, path.height) * path.flow * flowK; let v = 0;
+    for (let k = 0; k < segs; k++) {
+      const a = k * 3, b = ((k + 1) % n) * 3, len = Math.hypot(path.xyz[b] - path.xyz[a], path.xyz[b + 1] - path.xyz[a + 1], path.xyz[b + 2] - path.xyz[a + 2]);
+      const fs = path.flowScale ? (path.flowScale[k] + path.flowScale[(k + 1) % n]) / 2 : 1; v += len * cs * fs;
+    }
+    volume += v; (byFeature[path.feature] ??= { timeS: 0, filamentMm: 0 }).filamentMm += v / filArea;
+  }
+  const filamentMm = volume / filArea, cm3 = volume / 1000, grams = cm3 * filament.density;
+  const g = { timeS: prev.count ? prev.order[prev.count - 1] : 0, filamentMm, filamentCm3: cm3, grams, cost: (grams / 1000) * filament.costPerKg, layers: plan.layers.length, byFeature };
   last = { id, plan, job };
   let nonLinearMm = 0;
-  for (let i = 0; i < prev.count; i++) if (prev.zone[i] && prev.feature[i] >= 1 && prev.feature[i] <= 3 && Math.abs(prev.b[i * 3 + 2] - prev.a[i * 3 + 2]) > 1e-4) nonLinearMm += Math.hypot(prev.b[i * 3] - prev.a[i * 3], prev.b[i * 3 + 1] - prev.a[i * 3 + 1], prev.b[i * 3 + 2] - prev.a[i * 3 + 2]);
+  for (let i = 0; i < prev.count; i++) if (prev.feature[i] >= 1 && prev.feature[i] <= 3 && Math.abs(prev.b[i * 3 + 2] - prev.a[i * 3 + 2]) > 1e-4) nonLinearMm += Math.hypot(prev.b[i * 3] - prev.a[i * 3], prev.b[i * 3 + 1] - prev.a[i * 3 + 1], prev.b[i * 3 + 2] - prev.a[i * 3 + 2]);
   for (const w of plan.warnings) issues.push({ level: "warn", message: w });
   const stats: Stats = { timeS: g.timeS, filamentMm: g.filamentMm, filamentCm3: g.filamentCm3, grams: g.grams, cost: g.cost, layers: g.layers, nonLinearMm };
   return { id, ok: true, mps: [], order: plate.objects.map((_, i) => i), stats, issues, zClipped: 0, ms: performance.now() - t0,

@@ -163,6 +163,29 @@ function walkTree(node: any, out: ExPoly[]) {
 }
 export function treeToPolys(tree: unknown): ExPoly[] { const out: ExPoly[] = []; walkTree(tree, out); return out; }
 
+/** Flat Clipper result → islands. Much cheaper than a PolyTree: holes (negative orientation) go to the smallest outer containing them. */
+export function pathsToIslands(paths: CPaths): ExPoly[] {
+  const outers: { ring: Ring; area: number; idx: PolyIndex | null; b: Bounds4; holes: Ring[] }[] = [], holes: { ring: Ring }[] = [];
+  for (const p of paths) {
+    if (p.length < 3) continue;
+    const ring = pathToRing(p), a = ringArea(ring);
+    if (Math.abs(a) < 1e-7) continue;
+    if (a > 0) outers.push({ ring, area: a, idx: null, b: ringBounds(ring), holes: [] }); else holes.push({ ring });
+  }
+  if (holes.length) {
+    outers.sort((x, y) => x.area - y.area);
+    for (const h of holes) {
+      const x = h.ring[0], y = h.ring[1];
+      for (const o of outers) {
+        if (x < o.b[0] || x > o.b[2] || y < o.b[1] || y > o.b[3]) continue;
+        o.idx ??= new PolyIndex([{ outer: o.ring, holes: [] }]);
+        if (o.idx.contains(x, y)) { o.holes.push(h.ring); break; }
+      }
+    }
+  }
+  return outers.map((o) => ({ outer: o.ring, holes: o.holes }));
+}
+
 type FillT = "nonzero" | "evenodd";
 const fillOf = (f: FillT) => (f === "evenodd" ? C.PolyFillType.pftEvenOdd : C.PolyFillType.pftNonZero);
 /** Raw clipper paths → islands (union under the given fill rule). */
@@ -177,8 +200,8 @@ function bool(type: number, a: ExPoly[], b: ExPoly[]): ExPoly[] {
   const c = new C.Clipper();
   c.AddPaths(polysToPaths(a), C.PolyType.ptSubject, true);
   if (b.length) c.AddPaths(polysToPaths(b), C.PolyType.ptClip, true);
-  const t = new C.PolyTree(); c.Execute(type, t, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
-  return treeToPolys(t);
+  const out: CPaths = []; c.Execute(type, out, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+  return pathsToIslands(out);
 }
 const cloneSafe = (b: ExPoly[]) => (b.length ? bool(C.ClipType.ctUnion, b, []) : []);
 export const unionPolys = (a: ExPoly[], b: ExPoly[] = []): ExPoly[] => bool(C.ClipType.ctUnion, a.length ? a : b, a.length ? b : []);
@@ -194,10 +217,10 @@ export function unionAll(lists: ExPoly[][]): ExPoly[] {
 export function offsetPolys(polys: ExPoly[], delta: number, join: Join = "round", miterLimit = 2): ExPoly[] {
   if (!polys.length) return [];
   if (Math.abs(delta) < 0.5 / SCALE) return polys;
-  const co = new C.ClipperOffset(miterLimit, 0.004 * SCALE);
+  const co = new C.ClipperOffset(miterLimit, 0.02 * SCALE);
   co.AddPaths(polysToPaths(polys), join === "round" ? C.JoinType.jtRound : join === "miter" ? C.JoinType.jtMiter : C.JoinType.jtSquare, C.EndType.etClosedPolygon);
-  const t = new C.PolyTree(); co.Execute(t, delta * SCALE);
-  return treeToPolys(t);
+  const out: CPaths = []; co.Execute(out, delta * SCALE);
+  return pathsToIslands(out);
 }
 /** offset(-r) then offset(+r): removes parts thinner than 2r. */
 export const openPolys = (polys: ExPoly[], r: number): ExPoly[] => offsetPolys(offsetPolys(polys, -r), r);

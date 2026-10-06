@@ -1,9 +1,9 @@
 // Turns plate objects into the solid, bed-space triangle meshes the planar slicer consumes.
 import { profileBody, buildPrimitive, type Body, type Mesh, type PlateObject, type Profile } from "../core/index.ts";
-import { profileMesh } from "./exporters/mesh.ts";
+import { profileMesh, tessellateBody } from "./exporters/mesh.ts";
 
 /** Closed hollow solid from a body's outline: outer wall, rim, inner wall (offset along the outline normals) and inner floor. */
-export function hollowMesh(body: Body, wall: number, floor: number, name: string, rows = 120, cols = 160): Mesh {
+export function hollowMesh(body: Body, wall: number, floor: number, name: string, rows = 90, cols = 112): Mesh {
   const H = body.height, f = Math.min(Math.max(floor, wall), H * 0.5), rings: { x: Float64Array; y: Float64Array; nx: Float64Array; ny: Float64Array; z: number }[] = [];
   for (let j = 0; j <= rows; j++) {
     const z = (j / rows) * H, r = body.ring(Math.min(H - 1e-4, Math.max(1e-4, z)), cols);
@@ -33,7 +33,7 @@ export function solidMesh(o: PlateObject, meshes: Record<string, Mesh>): Mesh {
   const prof: Profile = buildPrimitive(o.source.primitive, o.source.params);
   if (o.hollow && o.hollow > 0 && !prof.contour) return hollowMesh(profileBody(prof), o.hollow, o.hollow, o.name);
   if (o.hollow && o.hollow > 0 && prof.contour) return hollowMesh(profileBody(prof), o.hollow, o.hollow, o.name);
-  return profileMesh(prof, o.name);
+  return prof.contour ? profileMesh(prof, o.name) : tessellateBody(profileBody(prof), o.name, 90, 112);
 }
 
 /** Apply scale, Z rotation and position; the lowest point sits on the plate (z = 0). */
