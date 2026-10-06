@@ -33,7 +33,7 @@ self.onmessage = (ev: MessageEvent<SliceRequest>) => {
     });
     const order = printOrder(plate, bodies, machine, process);
     const res: SliceResponse = { id, ok: true, mps, order, stats: sliceStats(mps, filament), issues, zClipped, ms: performance.now() - t0 };
-    (self as unknown as Worker).postMessage(res, mps.flatMap((m) => [m.xyz.buffer, m.e.buffer, m.tag.buffer, m.layer.buffer, m.feed.buffer, m.curvature.buffer, m.layerTime.buffer, m.layerFan.buffer]));
+    (self as unknown as Worker).postMessage(res, mps.flatMap((m) => [m.xyz.buffer, m.e.buffer, m.tag.buffer, m.normal.buffer, m.zOff.buffer, m.layer.buffer, m.feed.buffer, m.curvature.buffer, m.layerTime.buffer, m.layerFan.buffer]));
   } catch (err) {
     (self as unknown as Worker).postMessage({ id, ok: false, error: String(err instanceof Error ? err.message : err) } satisfies SliceResponse);
   }

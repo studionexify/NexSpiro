@@ -2,11 +2,21 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   patterns, primitives, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, newObject, clonePlate, cloneObject,
-  serializeProject, deserializeProject, objectBody, arrangePlate, footprint, parseSTL, normalizeMesh, bounds,
+  objectBody, arrangePlate, footprint, normalizeMesh, bounds,
   type PatternParams, type PrimitiveName, type MotionPath, type SliceStats, type PlateIssue, type Plate, type PlateObject,
-  type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail, type Mesh, type Body,
+  type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail, type Mesh, type Body, type Project,
 } from "../core/index.ts";
 import type { SliceRequest, SliceResponse } from "./worker.ts";
+import type { IORequest, IOResponse } from "./ioWorker.ts";
+import { ACCEPT, type ImportResult } from "../io/importers/index.ts";
+import type { Imported3MF } from "../io/importers/threemf.ts";
+import { toolheadEnvelope, parseBedExclusionSVG } from "../io/importers/machineGeometry.ts";
+import { toBambuSettings } from "../io/importers/profiles.ts";
+import { paintMeshToMask } from "../io/paintmap.ts";
+import { export3MF } from "../io/exporters/threemf.ts";
+import { writeProjectArchive, readProjectArchive } from "../io/exporters/project.ts";
+import { writeSTL, writeOBJ, bakeToolpath, tessellateBody, transformMesh } from "../io/exporters/mesh.ts";
+import { trajectoryCSV, trajectoryJSON } from "../io/exporters/trajectory.ts";
 import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
 
 
@@ -47,6 +57,12 @@ const ui = {
   active: 0, activeObj: 0, target: -1,
   tool: "orbit" as "orbit" | "move" | "paint" | "erase", brush: 8, showSurface: true,
   preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
+  exportFormat: "gcode" as ExportFormat, developer: false,
+};
+type ExportFormat = "gcode" | "3mf" | "nexspiro" | "stl" | "obj" | "baked" | "csv" | "json";
+const EXPORT_LABELS: Record<ExportFormat, string> = {
+  gcode: "G-code (active plate)", "3mf": "3MF project (all plates)", nexspiro: ".nexspiro project", stl: "STL (selected object)",
+  obj: "OBJ (selected object)", baked: "Baked textured wall STL (active plate)", csv: "Trajectory CSV (developer)", json: "Trajectory JSON (developer)",
 };
 const presetValues = <K extends PresetKind>(k: K) =>
   (ui.edited[k] ?? registry.resolve<K>(ui.selected[k])) as K extends "machine" ? MachinePreset : K extends "filament" ? FilamentPreset : ProcessPreset;
@@ -79,8 +95,23 @@ function bedLines(active: boolean, locked: boolean) {
   for (let y = -hy; y <= hy + 1e-6; y += step) pts.push(-hx, y, 0, hx, y, 0);
   pts.push(-hx, -hy, 0, hx, -hy, 0, hx, -hy, 0, hx, hy, 0, hx, hy, 0, -hx, hy, 0, -hx, hy, 0, -hx, -hy, 0);
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: locked ? 0x7a5c2e : active ? 0x4c8dff : 0x2e3440 }));
+  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: locked ? 0x7a5c2e : active ? 0x4c8dff : 0x2e3440 }));
+  const ex: number[] = []; // bed exclusion zones (bed-corner coordinates → bed-centre)
+  for (const poly of machine().bedExclude ?? []) poly.forEach(([x, y], i) => {
+    const [nx, ny] = poly[(i + 1) % poly.length];
+    ex.push(x - hx, y - hy, 0.1, nx - hx, ny - hy, 0.1);
+  });
+  if (ex.length) {
+    const eg = new THREE.BufferGeometry(); eg.setAttribute("position", new THREE.Float32BufferAttribute(ex, 3));
+    lines.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xff5b5b })));
+  }
+  if (bedTexture) {
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ map: bedTexture, transparent: true, opacity: 0.6, depthWrite: false }));
+    plane.position.z = -0.05; lines.add(plane);
+  }
+  return lines;
 }
+let bedTexture: THREE.Texture | null = null;
 
 function makeObjView(pv: PlateView, obj: PlateObject): ObjView {
   const maskTex = new THREE.DataTexture(new Uint8Array(obj.mask.cols * obj.mask.rows * 4), obj.mask.cols, obj.mask.rows);
@@ -362,20 +393,90 @@ function focusActive() {
   const delta = camera.position.clone().sub(controls.target);
   controls.target.set(o.x, o.y, h / 2); camera.position.copy(controls.target).add(delta);
 }
-async function importSTL(files: FileList) {
+// ---- imports (parsed in the IO worker; OCCT loads lazily for STEP) ----
+const ioWorker = new Worker(new URL("./ioWorker.ts", import.meta.url), { type: "module" });
+let ioSeq = 0;
+const ioPending = new Map<number, (r: IOResponse) => void>();
+ioWorker.onmessage = (ev: MessageEvent<IOResponse>) => { ioPending.get(ev.data.id)?.(ev.data); ioPending.delete(ev.data.id); };
+async function parseInWorker(file: File): Promise<ImportResult> {
+  const bytes = new Uint8Array(await file.arrayBuffer()), id = ++ioSeq;
+  const res = await new Promise<IOResponse>((resolve) => {
+    ioPending.set(id, resolve);
+    ioWorker.postMessage({ id, name: file.name, bytes, bed: machine().bed } satisfies IORequest, [bytes.buffer]);
+  });
+  if (!res.ok) throw new Error(res.error);
+  return res.result;
+}
+const newMeshId = () => `mesh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+function meshObject(m: Mesh): PlateObject {
+  const id = newMeshId(), n = normalizeMesh(m);
+  meshes[id] = n;
+  const o = newObject({ kind: "mesh", meshId: id }, n.name);
+  o.base = { pattern: "none", params: { ...patterns.none.defaults } };
+  if (n.paint?.color?.some(Boolean)) {
+    const r = paintMeshToMask(n, bodyOf(o), o.mask);
+    for (let k = 0; k < o.mask.regions.length; k++) o.regionParams[k] = { ...patterns[o.mask.regions[k].pattern].defaults };
+    if (r.facets) notes.push(`${n.name}: ${r.facets} colour-painted facets → paint regions 1–${r.maxState} (set each region's texture in Wall pattern → Target)`);
+  }
+  return o;
+}
+const notes: string[] = [];
+async function importFiles(files: FileList | File[]) {
+  notes.length = 0;
   for (const f of Array.from(files)) {
     try {
-      const m = normalizeMesh(parseSTL(await f.arrayBuffer(), f.name.replace(/\.stl$/i, "")));
-      const id = `mesh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      meshes[id] = m;
-      const b = bounds(m.tris);
-      const o = newObject({ kind: "mesh", meshId: id }, m.name);
-      o.base = { pattern: "none", params: { ...patterns.none.defaults } };
-      addObject(o);
-      console.info(`Imported ${f.name}: ${m.tris.length / 9} triangles, ${(b.max[0] - b.min[0]).toFixed(1)}×${(b.max[1] - b.min[1]).toFixed(1)}×${(b.max[2] - b.min[2]).toFixed(1)} mm`);
-    } catch (e) { alert(`${f.name}: ${e instanceof Error ? e.message : e}`); }
+      const ext = f.name.toLowerCase().split(".").pop();
+      if (ext === "nexspiro") { applyProject(readProjectArchive(new Uint8Array(await f.arrayBuffer())), "replace"); continue; }
+      status(`Importing ${f.name}…`);
+      const r = await parseInWorker(f);
+      notes.push(...r.warnings.map((w) => `${f.name}: ${w}`));
+      if (r.kind === "meshes") {
+        for (const m of r.meshes) {
+          const b = bounds(m.tris);
+          addObject(meshObject(m));
+          console.info(`Imported ${m.name}: ${m.tris.length / 9} triangles, ${(b.max[0] - b.min[0]).toFixed(1)}×${(b.max[1] - b.min[1]).toFixed(1)}×${(b.max[2] - b.min[2]).toFixed(1)} mm`);
+        }
+      } else if (r.kind === "3mf") apply3MF(r.data, f.name);
+      else if (r.kind === "presets") addPresets(r.presets);
+      else applyProject(r.project, "replace");
+    } catch (e) { notes.push(`${f.name}: ${e instanceof Error ? e.message : e}`); }
   }
+  renderAll();
+  if (notes.length) alert(notes.join("\n"));
 }
+function addPresets(ps: Preset[]) {
+  for (const p of ps) { registry.add(p); ui.selected[p.kind] = p.id; delete ui.edited[p.kind]; }
+  persistUserPresets();
+  if (ps.length) { notes.push(`Imported presets: ${ps.map((p) => `${p.name} (${p.kind})`).join(", ")}`); onPresetsChanged(); }
+}
+function apply3MF(d: Imported3MF, file: string) {
+  if (d.project) { applyProject(d.project, "append"); notes.push(`${file}: NexSpiro project restored from the 3MF`); return; }
+  addPresets(d.presets);
+  const first = views.length;
+  d.plates.forEach((pl, i) => {
+    const objs = d.objects.filter((o) => o.plate === i).map((io) => { const o = meshObject(io.mesh); o.transform.x = io.x; o.transform.y = io.y; return o; });
+    if (!objs.length) return;
+    const plate = newPlate(`${pl.name} (${file})`, objs); plate.locked = pl.locked;
+    const v = makeView(plate); views.push(v);
+  });
+  ui.active = Math.min(first, views.length - 1); ui.activeObj = 0; ui.target = -1;
+  layoutPlates(); focusActive(); sliceAll();
+}
+function applyProject(proj: Project, mode: "replace" | "append") {
+  for (const p of proj.userPresets) registry.add(p);
+  persistUserPresets();
+  if (mode === "replace") {
+    for (const k of ["machine", "filament", "process"] as const) if (registry.get(proj.presets[k])) ui.selected[k] = proj.presets[k];
+    ui.edited = {};
+    views.splice(0).forEach(disposeView);
+  }
+  Object.assign(meshes, proj.meshes);
+  const first = views.length;
+  for (const p of proj.plates) views.push(makeView(p));
+  ui.active = mode === "replace" ? 0 : first; ui.activeObj = 0; ui.target = -1;
+  layoutPlates(); focusActive(); sliceAll(); renderAll();
+}
+function status(msg: string) { statsEl.textContent = msg; }
 
 let clipboard: PlateObject | null = null;
 window.addEventListener("keydown", (ev) => {
@@ -392,31 +493,64 @@ window.addEventListener("keydown", (ev) => {
 });
 
 // ======================= project I/O & export =======================
-function download(name: string, data: BlobPart, type = "application/octet-stream") {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name; a.click();
+function download(name: string, data: string | Uint8Array, type = "application/octet-stream") {
+  const part: BlobPart = typeof data === "string" ? data : (data.slice().buffer as ArrayBuffer);
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([part], { type })); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+function currentProject(): Project {
+  return { version: 2, presets: { ...ui.selected } as never, userPresets: registry.user(), plates: views.map((v) => v.plate), meshes };
+}
+const b64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+function plateThumb(v: PlateView): Uint8Array | undefined {
+  const t = thumbnails(v, [[300, 300]])[0];
+  return t ? b64ToBytes(t.pngBase64) : undefined;
+}
 function saveProject() {
-  download("project.nexspiro", serializeProject({
-    version: 2, presets: { ...ui.selected } as never, userPresets: registry.user(), plates: views.map((v) => v.plate), meshes,
-  }), "application/json");
+  download("project.nexspiro", writeProjectArchive(currentProject(), views.map((v) => plateThumb(v) ?? new Uint8Array())), "application/zip");
 }
-async function loadProject(file: File) {
+function presetNames() {
+  return { machine: registry.get(ui.selected.machine)!.name, filament: registry.get(ui.selected.filament)!.name, process: registry.get(ui.selected.process)!.name };
+}
+function selectedObjectMesh(): Mesh | null {
+  const ov = activeObjView(); if (!ov) { alert("Select an object first."); return null; }
+  const o = ov.obj, src = o.source.kind === "mesh" ? meshes[o.source.meshId] : tessellateBody(bodyOf(o), o.name);
+  const M = machine();
+  return transformMesh(src, o.transform, [M.bed[0] / 2, M.bed[1] / 2]);
+}
+function doExport() {
+  const v = activeView(), M = machine(), name = v.plate.name.replace(/\W+/g, "_"), off: [number, number] = [M.bed[0] / 2, M.bed[1] / 2];
+  const sliced = () => { if (!v.result || v.status !== "done") { alert("Slice the plate first."); return null; } return v.result; };
   try {
-    const proj = deserializeProject(await file.text());
-    for (const p of proj.userPresets) registry.add(p);
-    persistUserPresets();
-    for (const k of ["machine", "filament", "process"] as const) if (registry.get(proj.presets[k])) ui.selected[k] = proj.presets[k];
-    ui.edited = {};
-    Object.assign(meshes, proj.meshes);
-    views.splice(0).forEach(disposeView);
-    for (const p of proj.plates) views.push(makeView(p));
-    ui.active = 0; ui.activeObj = 0; ui.target = -1; layoutPlates(); focusActive(); sliceAll(); renderAll();
-  } catch (e) { alert(`Could not open project: ${e instanceof Error ? e.message : e}`); }
+    switch (ui.exportFormat) {
+      case "gcode": return exportGcode();
+      case "nexspiro": return saveProject();
+      case "3mf": {
+        const thumbs = views.map((pv) => plateThumb(pv) ?? new Uint8Array());
+        const bytes = export3MF({
+          plates: views.map((pv) => pv.plate), meshes, bed: M.bed,
+          projectSettings: toBambuSettings({ machine: M, filament: filament() as never, process: proc() as never }, presetNames()),
+          nexspiroArchive: writeProjectArchive(currentProject()), thumbnails: thumbs,
+        });
+        return download("project.3mf", bytes, "model/3mf");
+      }
+      case "stl": { const m = selectedObjectMesh(); if (m) download(`${m.name}.stl`, writeSTL([m]), "model/stl"); return; }
+      case "obj": { const m = selectedObjectMesh(); if (m) download(`${m.name}.obj`, writeOBJ([m]), "model/obj"); return; }
+      case "baked": {
+        const r = sliced(); if (!r) return;
+        const P = proc();
+        const walls = r.mps.map((mp, k) => transformMesh(bakeToolpath(mp, P.lineWidth, P.layerHeight, v.plate.objects[k]?.name ?? `wall_${k}`), { x: 0, y: 0, scaleXY: 1, scaleZ: 1, rotation: 0 }, off));
+        return download(`${name}-baked.stl`, writeSTL(walls, "NexSpiro baked textured wall"), "model/stl");
+      }
+      case "csv": { const r = sliced(); if (r) download(`${name}-trajectory.csv`, trajectoryCSV(r.order.map((k) => r.mps[k]), off), "text/csv"); return; }
+      case "json": { const r = sliced(); if (r) download(`${name}-trajectory.json`, trajectoryJSON(r.order.map((k) => r.mps[k]), off), "application/json"); return; }
+    }
+  } catch (e) { alert(`Export failed: ${e instanceof Error ? e.message : e}`); }
 }
-function thumbnails(v: PlateView): Thumbnail[] {
-  const sizes = [[300, 300], [96, 96]] as const, out: Thumbnail[] = [];
+function thumbnails(v: PlateView, sizes: readonly (readonly [number, number])[] = [[32, 32], [300, 300], [600, 600]]): Thumbnail[] {
+  const out: Thumbnail[] = [];
   const hidden = views.filter((o) => o !== v).map((o) => { const was = o.group.visible; o.group.visible = false; return [o, was] as const; });
+  if (!v.lines.length) return out;
   const extras: THREE.Object3D[] = [v.bed, ...v.objs.flatMap((o) => [o.surface, o.footprintRing].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
   const vis = extras.map((o) => o.visible); extras.forEach((o) => (o.visible = false));
   const full = v.lines.filter((l) => l.userData.lod === "full"), fullVis = full.map((l) => l.visible); full.forEach((l) => (l.visible = true));
@@ -437,10 +571,10 @@ function exportGcode(i = ui.active) {
   if (!v.result || v.status !== "done") { alert("Slice the plate first."); return; }
   if (v.result.issues.some((x) => x.level === "error") && !confirm("This plate has errors. Export anyway?")) return;
   const M = machine();
-  const g = toGcode(v.result.order.map((k) => v.result!.mps[k]), {
-    machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v),
-    presetNames: { machine: registry.get(ui.selected.machine)!.name, filament: registry.get(ui.selected.filament)!.name, process: registry.get(ui.selected.process)!.name },
-  });
+  let g: string;
+  try { g = toGcode(v.result.order.map((k) => v.result!.mps[k]), {
+    machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v), presetNames: presetNames(),
+  }); } catch (e) { alert(`G-code export refused: ${e instanceof Error ? e.message : e}`); return; }
   download(`${v.plate.name.replace(/\W+/g, "_")}.gcode`, g, "text/plain");
 }
 
@@ -461,7 +595,7 @@ function renderPrepareTab() {
   let html = `
     <h2>Plate · ${esc(p.name)}${p.locked ? " 🔒" : ""}</h2>
     <div class="objlist">${objList || '<div class="muted">Empty plate</div>'}</div>
-    <label class="file-btn${p.locked ? " disabled" : ""}">Import STL…<input type="file" id="stlFile" accept=".stl" multiple hidden${dis}></label>
+    <label class="file-btn${p.locked ? " disabled" : ""}" title="STL, OBJ, PLY, 3MF, STEP/STP, .nexspiro, Bambu/Orca JSON or PrusaSlicer INI profiles">Import…<input type="file" id="importFile" accept="${ACCEPT}" multiple hidden${dis}></label>
     <select id="addPrim"${dis}><option value="">+ Add primitive…</option>${Object.keys(primitives).map((k) => opt(k, k, false)).join("")}</select>
     <div><button id="arrange"${dis}>Arrange plate (A)</button><button id="arrangeAll">Arrange all</button></div>
     <div class="tools">${TOOLS.map(([t, l, title]) => `<button data-tool="${t}" title="${title}" class="${ui.tool === t ? "on" : ""}">${l}</button>`).join("")}</div>`;
@@ -495,6 +629,17 @@ function renderPrepareTab() {
     <label>Layer to <input type="range" id="layerMax" min="0" max="1" step="0.001" value="${ui.layerMax}"></label>`;
   return html;
 }
+function machineGeometryUI(m: MachinePreset) {
+  return `<h2>Machine geometry</h2>
+    <label class="file-btn" title="Hotend + carriage mesh, nozzle tip lowest">Toolhead mesh (STL/STEP)…<input type="file" id="toolheadFile" accept=".stl,.step,.stp,.obj,.3mf" hidden></label>
+    <label class="file-btn" title="Polygons/rects/straight paths in mm, origin top-left">Bed exclusion SVG…<input type="file" id="excludeFile" accept=".svg" hidden></label>
+    <label class="file-btn">Bed texture PNG…<input type="file" id="bedPng" accept="image/png,image/jpeg" hidden></label>
+    <div class="muted">${(m.bedExclude ?? []).length} exclusion zone(s)${(m.bedExclude ?? []).length ? ' <button id="clearExclude">Clear</button>' : ""}</div>`;
+}
+function editMachine(patch: Partial<MachinePreset>) {
+  ui.edited.machine = { ...structuredClone(machine()), ...patch };
+  onPresetsChanged();
+}
 function renderPresetTab(kind: PresetKind) {
   const vals = presetValues(kind) as unknown as Record<string, unknown>, dirty = !!ui.edited[kind];
   const cur = registry.get(ui.selected[kind])!;
@@ -503,6 +648,8 @@ function renderPresetTab(kind: PresetKind) {
     <label>Preset <select id="presetSel">${list.map((p) => opt(p.id, `${p.system ? "" : "★ "}${p.name}`, p.id === ui.selected[kind])).join("")}</select></label>
     <div class="muted">${cur.inherits ? `inherits ${registry.get(cur.inherits)?.name ?? cur.inherits}` : "root preset"}${dirty ? ' · <span class="warn">modified</span>' : ""}</div>
     <button id="presetSave" class="primary">Save as…</button>${dirty ? '<button id="presetRevert">Revert</button>' : ""}${!cur.system ? '<button id="presetDelete">Delete</button>' : ""}
+    <label class="file-btn" title="Bambu Studio / OrcaSlicer .json or PrusaSlicer .ini">Import profile…<input type="file" id="profileFile" accept=".json,.ini" multiple hidden></label>
+    ${kind === "machine" ? machineGeometryUI(vals as unknown as MachinePreset) : ""}
     ${GROUPS[kind].map(([g, keys]) => `<h2>${g}</h2>${keys.map((k) => field(k, getPath(vals, k))).join("")}`).join("")}`;
 }
 
@@ -519,9 +666,12 @@ function renderPanel() {
     ${ui.tab === "prepare" ? renderPrepareTab() : renderPresetTab(ui.tab)}
     <h2>Project</h2>
     <button id="slicePlate" class="primary">Slice plate</button><button id="sliceAll">Slice all</button>
-    <button id="export" class="primary">Export G-code</button>
+    <h2>Export</h2>
+    <label>Format <select id="exportFormat">${(Object.keys(EXPORT_LABELS) as ExportFormat[]).filter((f) => ui.developer || (f !== "csv" && f !== "json")).map((f) => opt(f, EXPORT_LABELS[f], f === ui.exportFormat)).join("")}</select></label>
+    <button id="export" class="primary">Export</button>
     <button id="saveProject">Save project</button><button id="openProject">Open…</button>
-    <input type="file" id="projectFile" accept=".nexspiro,application/json" hidden>`;
+    <label>Developer mode <input type="checkbox" id="developer"${ui.developer ? " checked" : ""}></label>
+    <input type="file" id="projectFile" accept=".nexspiro,.3mf,application/json" hidden>`;
   bindPanel();
 }
 
@@ -572,7 +722,7 @@ function bindPanel() {
     panel.querySelectorAll<HTMLElement>("[data-obj]").forEach((el) => el.onclick = (e) => { if (!(e.target as HTMLElement).closest("button")) selectObject(Number(el.dataset.obj)); });
     panel.querySelectorAll<HTMLElement>("[data-objdup]").forEach((el) => el.onclick = () => addObject(cloneObject(v.plate.objects[Number(el.dataset.objdup)])));
     panel.querySelectorAll<HTMLElement>("[data-objdel]").forEach((el) => el.onclick = () => deleteObject(Number(el.dataset.objdel)));
-    $("stlFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importSTL(fl); };
+    $("importFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importFiles(fl); };
     $<HTMLSelectElement>("addPrim")!.onchange = (e) => { const k = (e.target as HTMLSelectElement).value as PrimitiveName; if (k) addObject(newObject({ kind: "primitive", primitive: k })); };
     $("arrange")!.onclick = () => arrangeAndReport([v]);
     $("arrangeAll")!.onclick = () => arrangeAndReport(views);
@@ -623,6 +773,31 @@ function bindPanel() {
       registry.saveDelta(id, name, kind, parent, presetValues(kind) as never);
       ui.selected[kind] = id; delete ui.edited[kind]; persistUserPresets(); onPresetsChanged();
     };
+    $("profileFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importFiles(fl); };
+    const th = $("toolheadFile"); if (th) th.onchange = async (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+      try {
+        const r = await parseInWorker(f);
+        const mesh = r.kind === "meshes" ? r.meshes[0] : r.kind === "3mf" ? r.data.objects[0]?.mesh : undefined;
+        if (!mesh) throw new Error("No geometry in file");
+        const g = prompt("Gantry height above nozzle tip (mm). Geometry above it is treated as gantry, not toolhead:", String(machine().clearanceHeight));
+        if (g === null) return;
+        const env = toolheadEnvelope(mesh, Number(g) > 0 ? Number(g) : undefined);
+        editMachine({ clearanceRadius: env.clearanceRadius, clearanceHeight: env.clearanceHeight });
+        alert(`Toolhead envelope: radius ${env.clearanceRadius} mm, gantry ${env.clearanceHeight} mm.\nRadius by height: ${env.profile.map((b) => `${b.z}mm:${b.r.toFixed(0)}`).join(" ")}\nSave the printer preset to keep it.`);
+      } catch (err) { alert(`Toolhead import failed: ${err instanceof Error ? err.message : err}`); }
+    };
+    const ex = $("excludeFile"); if (ex) ex.onchange = async (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+      try { const r = parseBedExclusionSVG(await f.text()); editMachine({ bedExclude: r.polygons }); if (r.warnings.length) alert(r.warnings.join("\n")); }
+      catch (err) { alert(`Bed exclusion import failed: ${err instanceof Error ? err.message : err}`); }
+    };
+    const ce = $("clearExclude"); if (ce) ce.onclick = () => editMachine({ bedExclude: [] });
+    const bp = $("bedPng"); if (bp) bp.onchange = (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+      const url = URL.createObjectURL(f);
+      new THREE.TextureLoader().load(url, (t) => { bedTexture = t; layoutPlates(); }, undefined, () => alert("Could not read image"));
+    };
     const rev = $("presetRevert"); if (rev) rev.onclick = () => { delete ui.edited[kind]; onPresetsChanged(); };
     const del = $("presetDelete"); if (del) del.onclick = () => {
       const cur = registry.get(ui.selected[kind])!; registry.remove(cur.id); ui.selected[kind] = cur.inherits ?? registry.list(kind)[0].id;
@@ -631,16 +806,18 @@ function bindPanel() {
   }
   $("slicePlate")!.onclick = () => slice(activeView());
   $("sliceAll")!.onclick = sliceAll;
-  $("export")!.onclick = () => exportGcode();
+  $("export")!.onclick = doExport;
+  $<HTMLSelectElement>("exportFormat")!.onchange = (e) => { ui.exportFormat = (e.target as HTMLSelectElement).value as ExportFormat; };
+  $("developer")!.onchange = (e) => { ui.developer = (e.target as HTMLInputElement).checked; if (!ui.developer && (ui.exportFormat === "csv" || ui.exportFormat === "json")) ui.exportFormat = "gcode"; renderPanel(); };
   $("saveProject")!.onclick = saveProject;
   $("openProject")!.onclick = () => $("projectFile")!.click();
-  $("projectFile")!.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) loadProject(f); };
+  $("projectFile")!.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) importFiles([f]); };
 }
 function onPresetsChanged() { views.forEach((v) => v.objs.forEach(buildSurface)); layoutPlates(); focusActive(); renderAll(); sliceActiveSoon(); }
 
 // drag & drop STL onto the viewport
 view.addEventListener("dragover", (e) => e.preventDefault());
-view.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer?.files.length) importSTL(e.dataTransfer.files); });
+view.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer?.files.length) importFiles(e.dataTransfer.files); });
 
 // ======================= loop =======================
 function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }

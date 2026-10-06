@@ -61,6 +61,23 @@ export const objectHeight = (o: PlateObject, b: Body, machine: MachinePreset, pr
 /** Gap between footprints: sequential (by-object) printing needs the toolhead clearance radius. */
 const spacing = (n: number, machine: MachinePreset) => (n > 1 ? machine.clearanceRadius : 0);
 
+/** Does a footprint circle (bed-centre coordinates) touch any bed keep-out polygon? */
+export function hitsExclusion(x: number, y: number, r: number, machine: MachinePreset): boolean {
+  const [bx, by] = machine.bed, cx = x + bx / 2, cy = y + by / 2; // to bed-corner coordinates
+  for (const poly of machine.bedExclude ?? []) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > cy) !== (yj > cy) && cx < ((xj - xi) * (cy - yi)) / (yj - yi) + xi) inside = !inside;
+      const dx = xj - xi, dy = yj - yi, L2 = dx * dx + dy * dy;
+      const t = L2 ? Math.max(0, Math.min(1, ((cx - xi) * dx + (cy - yi) * dy) / L2)) : 0;
+      if (Math.hypot(cx - xi - t * dx, cy - yi - t * dy) < r) return true;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
 /** Greedy circle packing on the bed, largest first, nearest-to-centre placement. Mutates transforms. */
 export function arrangePlate(plate: Plate, bodies: Body[], machine: MachinePreset, process: ProcessPreset): string[] {
   const [bx, by] = machine.bed, gap = spacing(plate.objects.length, machine);
@@ -71,7 +88,7 @@ export function arrangePlate(plate: Plate, bodies: Body[], machine: MachinePrese
   cand.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
   for (const { o, r } of items) {
     const spot = cand.find(([x, y]) =>
-      Math.abs(x) + r <= bx / 2 && Math.abs(y) + r <= by / 2 &&
+      Math.abs(x) + r <= bx / 2 && Math.abs(y) + r <= by / 2 && !hitsExclusion(x, y, r, machine) &&
       placed.every((p) => Math.hypot(p.x - x, p.y - y) >= p.r + r + gap));
     if (!spot) { failed.push(o.name); continue; }
     o.transform.x = spot[0]; o.transform.y = spot[1];
@@ -94,6 +111,8 @@ export function checkPlate(plate: Plate, bodies: Body[], machine: MachinePreset,
     const r = footprint(o, bodies[i], process), h = objectHeight(o, bodies[i], machine, process) + process.nonLinear.collisionMargin;
     if (Math.abs(o.transform.x) + r > bx / 2 || Math.abs(o.transform.y) + r > by / 2)
       issues.push({ level: "error", message: `${o.name}: outside the bed (footprint Ø${(2 * r).toFixed(0)} mm)` });
+    if (hitsExclusion(o.transform.x, o.transform.y, r, machine))
+      issues.push({ level: "error", message: `${o.name}: overlaps a bed exclusion zone` });
     if (h > machine.maxHeight) issues.push({ level: "error", message: `${o.name}: height ${h.toFixed(0)} mm exceeds ${machine.maxHeight} mm` });
     if (process.nonLinear.enabled && maxZAmp(o) > machine.zWobbleMax)
       issues.push({ level: "warn", message: `${o.name}: Z wobble ${maxZAmp(o)} mm capped to ${machine.zWobbleMax} mm by toolhead clearance` });

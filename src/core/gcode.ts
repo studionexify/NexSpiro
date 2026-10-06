@@ -2,7 +2,10 @@ import type { MotionPath } from "./motion.ts";
 import { fillTemplate, type MachinePreset, type FilamentPreset, type ProcessPreset } from "./presets.ts";
 
 export type Thumbnail = { width: number; height: number; pngBase64: string };
-export type SliceStats = { timeS: number; filamentMm: number; filamentCm3: number; grams: number; cost: number; layers: number };
+export type SliceStats = {
+  timeS: number; filamentMm: number; filamentCm3: number; grams: number; cost: number; layers: number;
+  nonLinearMm: number;  // extrusion path length carrying in-layer (pattern) Z motion
+};
 export type GcodeInput = {
   machine: MachinePreset; filament: FilamentPreset; process: ProcessPreset;
   offset?: [number, number];   // added to XY (viewer origin → bed coordinates)
@@ -21,7 +24,11 @@ export function sliceStats(mps: MotionPath | MotionPath[], filament: FilamentPre
   const filamentMm = list.reduce((s, mp) => s + mp.e[mp.count - 1], 0) * filament.flowRatio;
   const filamentCm3 = (filamentMm * Math.PI * (filament.diameter / 2) ** 2) / 1000;
   const grams = filamentCm3 * filament.density;
+  let nonLinearMm = 0;
+  for (const mp of list) for (let i = 1; i < mp.count; i++) if (mp.zOff[i] !== 0 || mp.zOff[i - 1] !== 0)
+    nonLinearMm += Math.hypot(mp.xyz[i * 3] - mp.xyz[i * 3 - 3], mp.xyz[i * 3 + 1] - mp.xyz[i * 3 - 2], mp.xyz[i * 3 + 2] - mp.xyz[i * 3 - 1]);
   return {
+    nonLinearMm,
     timeS: list.reduce((s, mp) => s + mp.time, 0), filamentMm, filamentCm3, grams, cost: (grams / 1000) * filament.costPerKg,
     layers: list.reduce((s, mp) => s + mp.layer[mp.count - 1] + 1, 0), // sequential objects stack their layers
   };
@@ -60,6 +67,8 @@ export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
     `; filament used [cm3] = ${st.filamentCm3.toFixed(2)}`,
     `; filament used [g] = ${st.grams.toFixed(2)}`,
     `; total filament cost = ${st.cost.toFixed(2)}`,
+    `; filament used [m] = ${(st.filamentMm / 1000).toFixed(3)}`,
+    `; nonlinear motion distance [mm] = ${st.nonLinearMm.toFixed(1)}`,
     `; max_z_height: ${f(Math.max(...list.map(maxZ)), 2)}`,
     `; objects: ${list.length} (sequential)`,
     "; HEADER_BLOCK_END", ";",
@@ -76,8 +85,10 @@ export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
 
   const travel = Math.round(M.travelSpeed * 60), zTravel = Math.round(M.maxZSpeed * 60);
   let printedTop = 0, layerBase = 0;
+  for (const mp of list) assertZKinematics(mp, M);
   list.forEach((mp, obj) => {
     const { xyz, e, feed, layer } = mp;
+    const arcs = P.arcFitting ? fitArcs(mp, P.arcTolerance) : null;
     out.push(`; printing object ${obj + 1}/${list.length}`, `M106 S${Math.round((mp.layerFan[0] / 100) * 255)}`);
     if (obj > 0) {
       // hop above everything printed so far (+ wobble + margin), travel, descend, restore temps for first layer
@@ -89,6 +100,7 @@ export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
     let lastF = -1, lastLayer = -1, fanPct = mp.layerFan[0];
     for (let i = 1; i < mp.count; i++) {
       const L = layer[i];
+      const arcEnd = arcs ? arcs.end[i - 1] : -1;
       if (L !== lastLayer) {
         out.push(";LAYER_CHANGE", `;Z:${f(xyz[i * 3 + 2], 3)}`);
         out.push(...fillTemplate(M.layerChangeGcode, { ...vars, layer_num: layerBase + L + 1, layer_z: f(xyz[i * 3 + 2], 3) }).split("\n"));
@@ -96,6 +108,14 @@ export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
         if (mp.layerFan[L] !== fanPct) { fanPct = mp.layerFan[L]; out.push(`M106 S${Math.round((fanPct / 100) * 255)}`); }
         if (M.flavor !== "klipper") out.push(`M73 P${Math.round(((layerBase + L) / Math.max(1, totalLayers(list))) * 100)}`);
         lastLayer = L;
+      }
+      if (arcEnd > 0) { // helical arc from point i-1 to arcEnd
+        const a = i - 1, b = arcEnd, [cx, cy, ccw] = arcs!.circle[a];
+        let v = Infinity; for (let k = i; k <= b; k++) v = Math.min(v, feed[k]);
+        const F60 = Math.round(v * 60); lastF = F60;
+        out.push(`${ccw ? "G3" : "G2"} X${f(xyz[b * 3] + ox)} Y${f(xyz[b * 3 + 1] + oy)} Z${f(xyz[b * 3 + 2])} I${f(cx - xyz[a * 3])} J${f(cy - xyz[a * 3 + 1])} E${f((e[b] - e[a]) * F.flowRatio, 5)} F${F60}`);
+        i = b;
+        continue;
       }
       const F60 = Math.round(feed[i] * 60);
       const fStr = Math.abs(F60 - lastF) > lastF * 0.01 ? ` F${F60}` : "";
@@ -112,3 +132,66 @@ export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
 
 const totalLayers = (list: MotionPath[]) => list.reduce((s, mp) => s + mp.layer[mp.count - 1] + 1, 0);
 function maxZ(mp: MotionPath) { let z = 0; for (let i = 0; i < mp.count; i++) z = Math.max(z, mp.xyz[i * 3 + 2]); return z; }
+
+/** Refuse to emit moves whose Z velocity component exceeds the machine limit (e.g. hand-edited presets). */
+export function assertZKinematics(mp: MotionPath, M: MachinePreset) {
+  for (let i = 1; i < mp.count; i++) {
+    const dz = Math.abs(mp.xyz[i * 3 + 2] - mp.xyz[i * 3 - 1]);
+    if (dz < 1e-6) continue;
+    const L = Math.hypot(mp.xyz[i * 3] - mp.xyz[i * 3 - 3], mp.xyz[i * 3 + 1] - mp.xyz[i * 3 - 2], dz);
+    const vz = (dz / L) * mp.feed[i];
+    if (vz > M.maxZSpeed * 1.001 + 1e-6)
+      throw new Error(`Z speed ${vz.toFixed(2)} mm/s exceeds machine limit ${M.maxZSpeed} mm/s at move ${i}; re-slice with the current printer preset`);
+  }
+}
+
+/**
+ * Helical arc fitting. A run a..b becomes one G2/G3 when every point lies within `tol` of the XY circle
+ * through (a, mid, b), Z and E progress linearly with swept angle / arc length, it stays in one layer and
+ * paint region, carries no non-planar Z offset, and sweeps ≤ 300°.
+ * Returns end[a] = b (or -1) and circle[a] = [cx, cy, ccw].
+ */
+export function fitArcs(mp: MotionPath, tol: number): { end: Int32Array; circle: [number, number, boolean][] } {
+  const n = mp.count, end = new Int32Array(n).fill(-1), circle: [number, number, boolean][] = [];
+  const X = (i: number) => mp.xyz[i * 3], Y = (i: number) => mp.xyz[i * 3 + 1], Z = (i: number) => mp.xyz[i * 3 + 2];
+  const fits = (a: number, b: number): [number, number, boolean] | null => {
+    const m = (a + b) >> 1;
+    const ax = X(a), ay = Y(a), bx = X(m), by = Y(m), cx = X(b), cy = Y(b);
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-9) return null;
+    const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d, uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    const R = Math.hypot(ax - ux, ay - uy);
+    if (R > 1000) return null;
+    const ccw = (bx - ax) * (cy - by) - (by - ay) * (cx - bx) > 0;
+    let sweep = 0, prev = Math.atan2(ay - uy, ax - ux), len = 0;
+    const ang: number[] = [0], arcLen: number[] = [0];
+    for (let k = a + 1; k <= b; k++) {
+      if (mp.layer[k] !== mp.layer[a] || mp.tag[k] !== mp.tag[a] || mp.zOff[k] !== 0) return null;
+      if (Math.abs(Math.hypot(X(k) - ux, Y(k) - uy) - R) > tol) return null;
+      const t = Math.atan2(Y(k) - uy, X(k) - ux);
+      let dt = t - prev; while (dt > Math.PI) dt -= 2 * Math.PI; while (dt < -Math.PI) dt += 2 * Math.PI;
+      if ((dt > 0) !== ccw) return null;
+      sweep += Math.abs(dt); prev = t; ang.push(sweep);
+      len += Math.hypot(X(k) - X(k - 1), Y(k) - Y(k - 1), Z(k) - Z(k - 1)); arcLen.push(len);
+    }
+    if (sweep > (300 * Math.PI) / 180) return null;
+    const dz = Z(b) - Z(a), de = mp.e[b] - mp.e[a];
+    for (let k = a + 1; k < b; k++) {
+      const f = ang[k - a] / sweep;
+      if (Math.abs(Z(k) - (Z(a) + dz * f)) > tol) return null;
+      if (de > 0 && Math.abs((mp.e[k] - mp.e[a]) / de - arcLen[k - a] / len) > 0.02) return null;
+    }
+    return [ux, uy, ccw];
+  };
+  for (let a = 0; a < n - 4;) {
+    let best = -1, bestC: [number, number, boolean] | null = null;
+    for (let b = a + 4; b < n && b - a <= 400; b++) {
+      const c = fits(a, b);
+      if (!c) break;
+      best = b; bestC = c;
+    }
+    if (best > 0) { end[a] = best; circle[a] = bestC!; a = best; } else a++;
+  }
+  return { end, circle };
+}

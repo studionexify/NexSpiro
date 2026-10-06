@@ -21,6 +21,9 @@
     "vite": "^8.3.3"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.2",
+    "fflate": "^0.8.3",
+    "occt-import-js": "^0.0.23",
     "three": "^0.186.1"
   }
 }

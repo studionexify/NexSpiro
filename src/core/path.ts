@@ -19,8 +19,12 @@ export type PathSettings = {
   scaleXY?: number; scaleZ?: number; rotation?: number; // object transform (rotation in degrees about Z)
   paint?: PaintMask;
 };
-// Flat typed arrays: x,y,z per point; e = absolute E; tag = dominant region (0 = base, i+1 = paint region i).
-export type Toolpath = { xyz: Float32Array; e: Float64Array; tag: Uint8Array; count: number; zClipped: number };
+// Flat typed arrays: x,y,z per point; e = absolute E; tag = dominant region (0 = base, i+1 = paint region i);
+// normal = outward wall normal (unit, 3 per point); zOff = in-layer Z offset applied by the pattern (non-planar part).
+export type Toolpath = {
+  xyz: Float32Array; e: Float64Array; tag: Uint8Array; normal: Float32Array; zOff: Float32Array;
+  count: number; zClipped: number;
+};
 
 const resolve = (name: string, over?: Partial<PatternParams>) => {
   const pat = patterns[name];
@@ -38,6 +42,7 @@ export function buildSpiral(shape: Profile | Body, s: PathSettings): Toolpath {
   const layers = Math.max(1, Math.floor((H - flh) / s.layerHeight + 1e-9) + 1);
   const n = layers * M + 1;
   const xyz = new Float32Array(n * 3), e = new Float64Array(n), tag = new Uint8Array(n);
+  const normal = new Float32Array(n * 3), zOff = new Float32Array(n);
   const filArea = Math.PI * (s.filamentDiameter / 2) ** 2;
   const beadArea = s.lineWidth * s.layerHeight;
   const cap = s.zCap ?? Infinity;
@@ -91,8 +96,12 @@ export function buildSpiral(shape: Profile | Body, s: PathSettings): Toolpath {
     const y = s.center[1] + g * ringA.y[k] + f * ringB.y[k] + (off * ny) / nl;
     const z = zBase + dz;
     if (i > 0) E += (Math.hypot(x - px, y - py, z - pz) * beadArea * (1 + fade * (m.e - 1))) / filArea;
-    xyz[i * 3] = x; xyz[i * 3 + 1] = y; xyz[i * 3 + 2] = z; e[i] = E;
+    xyz[i * 3] = x; xyz[i * 3 + 1] = y; xyz[i * 3 + 2] = z; e[i] = E; zOff[i] = dz;
+    // Wall normal: horizontal ring normal tilted by the wall's radial slope between this and the next ring.
+    const slope = ((ringB.x[k] - ringA.x[k]) * nx + (ringB.y[k] - ringA.y[k]) * ny) / nl / s.layerHeight; // dr/dz
+    const inv = 1 / Math.sqrt(1 + slope * slope);
+    normal[i * 3] = (nx / nl) * inv; normal[i * 3 + 1] = (ny / nl) * inv; normal[i * 3 + 2] = -slope * inv;
     px = x; py = y; pz = z;
   }
-  return { xyz, e, tag, count: n, zClipped };
+  return { xyz, e, tag, normal, zOff, count: n, zClipped };
 }

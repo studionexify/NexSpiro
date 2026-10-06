@@ -8,6 +8,8 @@ export type MotionPath = {
   xyz: Float32Array;     // kept points
   e: Float64Array;       // cumulative E (mm filament, before flow ratio)
   tag: Uint8Array;       // paint region tag
+  normal: Float32Array;  // unit outward wall normal, 3 per point
+  zOff: Float32Array;    // in-layer (non-planar) Z offset per point
   layer: Uint32Array;    // layer index per point
   feed: Float32Array;    // mm/s for the move ending at point i (feed[0] unused)
   curvature: Float32Array; // 1/mm at point i
@@ -44,8 +46,11 @@ export function planMotion(tp: Toolpath, segmentsPerRev: number, { machine, fila
   keep.push(tp.count - 1);
   const n = keep.length;
   const xyz = new Float32Array(n * 3), e = new Float64Array(n), tag = new Uint8Array(n), layer = new Uint32Array(n);
+  const normal = new Float32Array(n * 3), zOff = new Float32Array(n);
   keep.forEach((src, k) => {
     xyz[k * 3] = tp.xyz[src * 3]; xyz[k * 3 + 1] = tp.xyz[src * 3 + 1]; xyz[k * 3 + 2] = tp.xyz[src * 3 + 2];
+    normal[k * 3] = tp.normal[src * 3]; normal[k * 3 + 1] = tp.normal[src * 3 + 1]; normal[k * 3 + 2] = tp.normal[src * 3 + 2];
+    zOff[k] = tp.zOff[src];
     e[k] = tp.e[src]; tag[k] = tp.tag[src]; layer[k] = Math.floor(src / segmentsPerRev);
   });
 
@@ -103,5 +108,5 @@ export function planMotion(tp: Toolpath, segmentsPerRev: number, { machine, fila
       : layerTime[L] < filament.fanMaxBelowLayerTime ? filament.fanMax : filament.fanMin;
   }
   const time = layerTime.reduce((s, t) => s + t, 0);
-  return { count: n, xyz, e, tag, layer, feed, curvature, layerTime, layerFan, time, inclinationViolations, decimated: tp.count - n };
+  return { count: n, xyz, e, tag, normal, zOff, layer, feed, curvature, layerTime, layerFan, time, inclinationViolations, decimated: tp.count - n };
 }

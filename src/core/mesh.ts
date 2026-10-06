@@ -1,7 +1,16 @@
 // STL import + planar mesh slicing for spiral (vase-mode) walls.
 // A mesh is a flat Float32Array of triangles: 9 floats (3 vertices × xyz) per triangle.
 
-export type Mesh = { name: string; tris: Float32Array };
+export type Mesh = {
+  name: string;
+  tris: Float32Array;            // 9 floats per triangle
+  normals?: Float32Array;        // optional per-corner normals (9 per triangle), e.g. analytic normals from STEP
+  colors?: Float32Array;         // optional per-corner RGB 0..1 (9 per triangle), e.g. PLY vertex colours
+  triMaterial?: Uint16Array;     // optional per-triangle material index into `materials`
+  materials?: string[];
+  /** Bambu/Prusa TriangleSelector paint strings per triangle (hex, as stored in 3MF). Empty string = unpainted. */
+  paint?: { color?: string[]; supports?: string[]; seam?: string[] };
+};
 export type Bounds = { min: [number, number, number]; max: [number, number, number] };
 
 export function parseSTL(buf: ArrayBuffer, name = "mesh"): Mesh {
@@ -34,10 +43,10 @@ export function bounds(tris: Float32Array): Bounds {
 }
 
 /** Centre the bbox on XY origin and drop onto z = 0 (in place). */
-export function normalizeMesh(m: Mesh): Mesh {
+export function normalizeMesh(m: Mesh): Mesh & { offset: [number, number, number] } {
   const b = bounds(m.tris), cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2;
   for (let i = 0; i < m.tris.length; i += 3) { m.tris[i] -= cx; m.tris[i + 1] -= cy; m.tris[i + 2] -= b.min[2]; }
-  return m;
+  return Object.assign(m, { offset: [cx, cy, b.min[2]] as [number, number, number] });
 }
 
 /** Triangle index sorted by zmin, for fast plane queries. */

@@ -16,6 +16,7 @@ export const LABELS: Record<string, string> = {
   fanMaxBelowLayerTime: "Full fan if layer time below (s)", slowdownLayerTime: "Slow down if layer time below (s)", minSpeed: "Min print speed (mm/s)",
   layerHeight: "Layer height (mm)", firstLayerHeight: "First layer height (mm)", lineWidth: "Line width (mm)",
   wallSpeed: "Wall speed (mm/s)", firstLayerSpeed: "First layer speed (mm/s)", segmentsPerRev: "Segments per revolution", fadeHeight: "Pattern fade-in height (mm)",
+  arcFitting: "Arc fitting (helical G2/G3)", arcTolerance: "Arc fitting tolerance (mm)",
   enabled: "Enable non-linear motion (off = planar)", deviationTol: "Curve deviation tolerance (mm)", maxInclination: "Max surface inclination (°)",
   collisionMargin: "Toolhead collision margin (mm)", zSmoothing: "Z feedrate / jerk smoothing (0–1)",
 };
@@ -24,7 +25,7 @@ export const GROUPS: Record<PresetKind, [string, string[]][]> = {
     ["Toolhead clearance", ["zWobbleMax", "clearanceRadius", "clearanceHeight"]], ["Machine G-code", ["startGcode", "layerChangeGcode", "endGcode"]]],
   filament: [["Basic", ["diameter", "flowRatio", "density", "costPerKg"]], ["Temperature", ["nozzleTempFirst", "nozzleTemp", "bedTempFirst", "bedTemp"]],
     ["Volumetric speed", ["maxVolumetric"]], ["Cooling", ["fanMin", "fanMax", "fanOffFirstLayers", "fanMaxBelowLayerTime", "slowdownLayerTime", "minSpeed"]]],
-  process: [["Quality", ["layerHeight", "firstLayerHeight", "lineWidth", "segmentsPerRev", "fadeHeight"]], ["Speed", ["wallSpeed", "firstLayerSpeed"]],
+  process: [["Quality", ["layerHeight", "firstLayerHeight", "lineWidth", "segmentsPerRev", "fadeHeight"]], ["Speed", ["wallSpeed", "firstLayerSpeed"]], ["G-code output", ["arcFitting", "arcTolerance"]],
     ["NexSpiro Non-Linear Motion", ["nonLinear.enabled", "nonLinear.deviationTol", "nonLinear.maxInclination", "nonLinear.collisionMargin", "nonLinear.zSmoothing"]]],
 };
 

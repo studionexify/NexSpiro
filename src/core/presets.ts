@@ -14,6 +14,7 @@ export type MachinePreset = {
   retractLength: number; retractSpeed: number;
   clearanceRadius: number;        // toolhead envelope radius around nozzle, mm
   clearanceHeight: number;        // nozzle tip → gantry, mm
+  bedExclude: [number, number][][]; // keep-out polygons in bed coordinates (origin = bed corner), mm
   startGcode: string; endGcode: string; layerChangeGcode: string;
 };
 export type FilamentPreset = {
@@ -37,6 +38,8 @@ export type ProcessPreset = {
   layerHeight: number; firstLayerHeight: number; lineWidth: number;
   wallSpeed: number; firstLayerSpeed: number;
   segmentsPerRev: number; fadeHeight: number;
+  arcFitting: boolean;            // emit helical G2/G3 where the path fits a circle
+  arcTolerance: number;           // mm
   nonLinear: NonLinearSettings;
 };
 export type PresetKind = "machine" | "filament" | "process";
@@ -67,7 +70,7 @@ export const systemPresets: Preset[] = [
   // ---- machines ----
   { id: "machine/base", name: "Generic FDM", kind: "machine", system: true, values: {
     flavor: "marlin", bed: [220, 220], maxHeight: 250, nozzle: 0.4, zWobbleMax: 0.6, maxZSpeed: 10, maxAccel: 1500,
-    travelSpeed: 150, retractLength: 0.8, retractSpeed: 35, clearanceRadius: 35, clearanceHeight: 28,
+    travelSpeed: 150, retractLength: 0.8, retractSpeed: 35, clearanceRadius: 35, clearanceHeight: 28, bedExclude: [],
     startGcode: MARLIN_START, endGcode: MARLIN_END, layerChangeGcode: ";LAYER:{layer_num} Z:{layer_z}" } },
   { id: "machine/bambu-x1", name: "Bambu Lab X1/P1 0.4", kind: "machine", inherits: "machine/base", system: true, values: {
     flavor: "bambu", bed: [256, 256], maxHeight: 250, zWobbleMax: 0.5, maxZSpeed: 20, maxAccel: 10000, travelSpeed: 500,
@@ -100,7 +103,7 @@ export const systemPresets: Preset[] = [
   // ---- processes ----
   { id: "process/vase-0.4", name: "0.40mm Texture Vase", kind: "process", system: true, values: {
     layerHeight: 0.4, firstLayerHeight: 0.4, lineWidth: 0.8, wallSpeed: 25, firstLayerSpeed: 15,
-    segmentsPerRev: 720, fadeHeight: 2,
+    segmentsPerRev: 720, fadeHeight: 2, arcFitting: false, arcTolerance: 0.02,
     nonLinear: { enabled: true, deviationTol: 0.01, maxInclination: 30, collisionMargin: 2, zSmoothing: 0.5 } } },
   { id: "process/vase-0.2-fine", name: "0.20mm Fine Texture", kind: "process", inherits: "process/vase-0.4", system: true, values: {
     layerHeight: 0.2, firstLayerHeight: 0.24, lineWidth: 0.5, segmentsPerRev: 1080 } },
