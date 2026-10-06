@@ -1,14 +1,41 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NexSpiro</title>
+  <script>
+    // Set the theme before first paint (no flash). Mirrors initialTheme() in src/app/theme/theme.ts.
+    try { var t = localStorage.getItem("nexspiro.theme"); if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
   <link rel="stylesheet" href="/src/app/style.css" />
 </head>
 <body>
-  <aside id="panel"></aside>
-  <main id="view"><div id="stats"></div></main>
+  <main id="view">
+    <!-- the WebGL canvas is prepended here; #hud floats above it and never swallows viewport pointer events -->
+    <div id="hud" data-mode="prepare" data-drawer="open">
+      <header id="topbar" class="float pill" aria-label="Project bar"></header>
+      <div id="stats" class="float" role="status" aria-live="polite"></div>
+      <div id="left">
+        <nav id="dock" class="float" aria-label="Tools"></nav>
+        <section id="toolcard" class="float card" aria-label="Tool options"></section>
+      </div>
+      <aside id="vlayer" class="float" aria-label="Layer range"></aside>
+      <aside id="drawer" aria-label="Process"></aside>
+      <section id="tray" class="float" aria-label="Plates">
+        <div id="carousel"></div>
+        <div id="timeline"></div>
+      </section>
+    </div>
+  </main>
+  <div id="pop" class="card" role="menu"></div>
+  <div id="modal"><div class="sheet float" role="dialog" aria-modal="true"></div></div>
+  <input type="file" id="fileImport" multiple hidden />
+  <input type="file" id="fileProject" accept=".nexspiro,.3mf,application/json" hidden />
+  <input type="file" id="fileProfile" accept=".json,.ini" multiple hidden />
+  <input type="file" id="fileToolhead" accept=".stl,.step,.stp,.obj,.3mf" hidden />
+  <input type="file" id="fileExclude" accept=".svg" hidden />
+  <input type="file" id="fileBedPng" accept="image/png,image/jpeg" hidden />
   <script type="module" src="/src/app/main.ts"></script>
 </body>
 </html>

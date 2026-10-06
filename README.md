@@ -6,6 +6,7 @@ Texture-first spiral slicer by Studio Nexify. It generates knit, rope, perforate
 - `npm install && npm run dev` starts the web app (Vite + Three.js).
 - `npm test` runs the core engine tests (Node built-in test runner).
 - `npm run typecheck` runs the TypeScript checks.
+- UI design system and layout: [docs/UI.md](docs/UI.md).
 - `npm run generate -- bowl knit machine/voron-24 out.gcode` generates G-code from the command line.
 
 ## Features

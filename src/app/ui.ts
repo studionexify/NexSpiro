@@ -1,7 +1,7 @@
 import type { PresetKind } from "../core/index.ts";
 
-export const opt = (v: string, label: string, sel: boolean) => `<option value="${v}"${sel ? " selected" : ""}>${label}</option>`;
-export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+import { opt, esc, numRow, switchRow, selectRow } from "./components.ts";
+export { opt, esc };
 
 export const LABELS: Record<string, string> = {
   flavor: "G-code flavor", bed: "Bed size X,Y (mm)", maxHeight: "Max height (mm)", nozzle: "Nozzle Ø (mm)",
@@ -29,13 +29,14 @@ export const GROUPS: Record<PresetKind, [string, string[]][]> = {
     ["NexSpiro Non-Linear Motion", ["nonLinear.enabled", "nonLinear.deviationTol", "nonLinear.maxInclination", "nonLinear.collisionMargin", "nonLinear.zSmoothing"]]],
 };
 
+/** One preset parameter as a clay form row. `data-in="path"` is picked up by the delegated input handler in main.ts. */
 export function field(path: string, value: unknown): string {
-  const key = path.split(".").pop()!, label = LABELS[key] ?? key;
-  if (typeof value === "boolean") return `<label>${label} <input type="checkbox" data-path="${path}"${value ? " checked" : ""}></label>`;
-  if (typeof value === "number") return `<label>${label} <input type="number" step="any" data-path="${path}" value="${value}"></label>`;
-  if (key === "flavor") return `<label>${label} <select data-path="${path}">${["marlin", "klipper", "bambu"].map((f) => opt(f, f, f === value)).join("")}</select></label>`;
-  if (Array.isArray(value)) return `<label>${label} <input type="text" data-path="${path}" data-array="1" value="${value.join(",")}"></label>`;
-  return `<div class="field-block">${label}<textarea data-path="${path}" rows="5">${esc(String(value))}</textarea></div>`;
+  const key = path.split(".").pop()!, label = LABELS[key] ?? key, a = `data-in="path" data-path="${path}"`;
+  if (typeof value === "boolean") return switchRow(label, a, value);
+  if (typeof value === "number") return numRow(label, a, value);
+  if (key === "flavor") return selectRow(label, a, ["marlin", "klipper", "bambu"].map((f) => opt(f, f, f === value)).join(""));
+  if (Array.isArray(value)) return `<label class="row"><span class="lbl">${label}</span><input type="text" ${a} data-array="1" value="${value.join(",")}"></label>`;
+  return `<div class="field-block">${label}<textarea ${a} rows="5">${esc(String(value))}</textarea></div>`;
 }
 export const getPath = (o: Record<string, unknown>, path: string) => path.split(".").reduce<unknown>((a, k) => (a as Record<string, unknown>)?.[k], o);
 export function setPath(o: Record<string, unknown>, path: string, v: unknown) {

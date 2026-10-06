@@ -18,22 +18,24 @@ import { writeProjectArchive, readProjectArchive } from "../io/exporters/project
 import { writeSTL, writeOBJ, bakeToolpath, tessellateBody, transformMesh } from "../io/exporters/mesh.ts";
 import { trajectoryCSV, trajectoryJSON } from "../io/exporters/trajectory.ts";
 import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
+import { icon } from "./icons.ts";
+import { rangeRow, numRow, switchRow, selectRow, seg, pct, materialOf, statusBadge, slicingKind, rampGradient, slug, DualSlider, type SegItem } from "./components.ts";
+import { initialTheme, setThemeAttr, PALETTE_3D, REGION_COLORS, hex, type ThemeMode } from "./theme/theme.ts";
 
 
 // ======================= state =======================
-const REGION_COLORS = [0x4c8dff, 0xff6b5b, 0x3ccf91, 0xffb454, 0xc77dff, 0x2fd3e0, 0xf7768e];
-const BASE_COLOR = new THREE.Color(0xd8dce4), SELECTED_TINT = new THREE.Color(0xfff2c0);
+type Dock = "select" | "move" | "rotate" | "scale" | "texture" | "paint" | "arrange";
 type PreviewMode = "feature" | "speed" | "height" | "layerTime" | "curvature";
 const PREVIEW_LABELS: Record<PreviewMode, string> = {
   feature: "Feature type (paint region)", speed: "Speed", height: "Height", layerTime: "Layer time",
   curvature: "Curvature & Non-Linear Feedrate",
 };
 type SliceResult = Extract<SliceResponse, { ok: true }> & { key: string };
-type ObjView = { obj: PlateObject; group: THREE.Group; surface: THREE.Mesh | null; maskTex: THREE.DataTexture; maskVersion: number; footprintRing: THREE.Line | null };
+type ObjView = { obj: PlateObject; group: THREE.Group; surface: THREE.Mesh | null; shadow: THREE.Mesh | null; maskTex: THREE.DataTexture; maskVersion: number; footprintRing: THREE.Line | null };
 type PlateView = {
   plate: Plate; group: THREE.Group; bed: THREE.LineSegments; objs: ObjView[];
   lines: THREE.Line[]; status: "idle" | "slicing" | "done" | "error"; error?: string;
-  result?: SliceResult; pendingKey?: string; worker: Worker; reqId: number;
+  result?: SliceResult; pendingKey?: string; worker: Worker; reqId: number; thumb?: string;
 };
 
 const USER_PRESETS_KEY = "nexspiro.userPresets";
@@ -51,7 +53,10 @@ function bodyOf(o: PlateObject): Body {
 }
 
 const ui = {
-  tab: "prepare" as "prepare" | PresetKind,
+  mode: "prepare" as "prepare" | "preview" | "print",
+  dock: "select" as Dock | null, modal: null as PresetKind | null, tier: null as "quality" | "strength" | "speed" | null,
+  dragSlider: false, presetsOpen: false, nlOpen: false, drawerOpen: window.innerWidth >= 1100, uniform: true, paintErase: false,
+  scrub: 1, playing: false, goPreview: false, theme: initialTheme() as ThemeMode, projectName: "Untitled project",
   selected: { machine: "machine/bambu-x1", filament: "filament/pla", process: "process/vase-0.4" } as Record<PresetKind, string>,
   edited: {} as Partial<Record<PresetKind, MachinePreset | FilamentPreset | ProcessPreset>>,
   active: 0, activeObj: 0, target: -1,
@@ -72,14 +77,15 @@ const activeObjView = (): ObjView | undefined => activeView()?.objs[ui.activeObj
 
 // ======================= scene =======================
 const view = document.getElementById("view")!;
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 view.prepend(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x16181d);
+// background stays transparent: the CSS radial "studio light" gradient on #view shows through
 const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 10000);
 camera.up.set(0, 0, 1);
-camera.position.set(260, -300, 220);
+camera.position.set(300, -345, 250);
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(200, -150, 300); scene.add(sun);
@@ -89,13 +95,46 @@ const views: PlateView[] = [];
 const PLATE_GAP = 60;
 const plateOrigin = (i: number) => { const b = machine().bed; return new THREE.Vector3(i * (b[0] + PLATE_GAP) + b[0] / 2, b[1] / 2, 0); };
 
+const P3 = () => PALETTE_3D[ui.theme];
+const texCache = new Map<string, THREE.CanvasTexture>();
+function cachedTexture(key: string, draw: (g: CanvasRenderingContext2D, n: number) => void, n = 128): THREE.CanvasTexture {
+  const k = `${key}:${ui.theme}`;
+  let t = texCache.get(k);
+  if (!t) {
+    const c = document.createElement("canvas"); c.width = c.height = n; draw(c.getContext("2d")!, n);
+    t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; texCache.set(k, t);
+  }
+  return t;
+}
+/** Soft ambient-occlusion blob under each object. */
+const blobTexture = () => cachedTexture("blob", (g, n) => {
+  const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2), c = P3().shadow;
+  gr.addColorStop(0, `${c}.34)`); gr.addColorStop(0.5, `${c}.16)`); gr.addColorStop(1, `${c}0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, n, n);
+});
+/** Diffuse drop shadow of the bed slab (blurred rounded rect, drawn via an offscreen-offset shadow). */
+const slabTexture = () => cachedTexture("slab", (g, n) => {
+  g.shadowColor = `${P3().shadow}.55)`; g.shadowBlur = n * 0.11; g.shadowOffsetX = 4000; g.shadowOffsetY = n * 0.02; g.fillStyle = "#000";
+  const m = n * 0.19, r = n * 0.04; g.beginPath(); g.roundRect(m - 4000, m, n - 2 * m, n - 2 * m, r); g.fill();
+}, 256);
+function disposeTree(o: THREE.Object3D) {
+  o.traverse((c) => { const m = c as THREE.Mesh; m.geometry?.dispose(); if (m.material && !Array.isArray(m.material)) m.material.dispose(); });
+}
+
+/** Bed as a soft clay slab: diffuse shadow, matte top, faint grid, tinted rim (sky = active, clay = locked, coral = keep-out). */
 function bedLines(active: boolean, locked: boolean) {
-  const [bx, by] = machine().bed, pts: number[] = [], step = 32, hx = bx / 2, hy = by / 2;
-  for (let x = -hx; x <= hx + 1e-6; x += step) pts.push(x, -hy, 0, x, hy, 0);
-  for (let y = -hy; y <= hy + 1e-6; y += step) pts.push(-hx, y, 0, hx, y, 0);
-  pts.push(-hx, -hy, 0, hx, -hy, 0, hx, -hy, 0, hx, hy, 0, hx, hy, 0, -hx, hy, 0, -hx, hy, 0, -hx, -hy, 0);
+  const pal = P3(), [bx, by] = machine().bed, pts: number[] = [], step = 32, hx = bx / 2, hy = by / 2;
+  for (let x = -hx + step; x < hx - 1e-6; x += step) pts.push(x, -hy, 0, x, hy, 0);
+  for (let y = -hy + step; y < hy - 1e-6; y += step) pts.push(-hx, y, 0, hx, y, 0);
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: locked ? 0x7a5c2e : active ? 0x4c8dff : 0x2e3440 }));
+  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: pal.bedGrid }));
+  const rim = [-hx, -hy, 0, hx, -hy, 0, hx, -hy, 0, hx, hy, 0, hx, hy, 0, -hx, hy, 0, -hx, hy, 0, -hx, -hy, 0];
+  const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.Float32BufferAttribute(rim, 3));
+  lines.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: locked ? pal.bedLocked : active ? pal.bedActive : pal.bedEdge })));
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ color: pal.bedFill, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  fill.position.z = -0.1; fill.renderOrder = -2; lines.add(fill);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(bx * 1.45, by * 1.45), new THREE.MeshBasicMaterial({ map: slabTexture(), transparent: true, depthWrite: false }));
+  shadow.position.set(0, -by * 0.025, -0.5); shadow.renderOrder = -3; lines.add(shadow);
   const ex: number[] = []; // bed exclusion zones (bed-corner coordinates → bed-centre)
   for (const poly of machine().bedExclude ?? []) poly.forEach(([x, y], i) => {
     const [nx, ny] = poly[(i + 1) % poly.length];
@@ -103,7 +142,7 @@ function bedLines(active: boolean, locked: boolean) {
   });
   if (ex.length) {
     const eg = new THREE.BufferGeometry(); eg.setAttribute("position", new THREE.Float32BufferAttribute(ex, 3));
-    lines.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xff5b5b })));
+    lines.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: pal.exclude })));
   }
   if (bedTexture) {
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(bx, by), new THREE.MeshBasicMaterial({ map: bedTexture, transparent: true, opacity: 0.6, depthWrite: false }));
@@ -116,7 +155,7 @@ let bedTexture: THREE.Texture | null = null;
 function makeObjView(pv: PlateView, obj: PlateObject): ObjView {
   const maskTex = new THREE.DataTexture(new Uint8Array(obj.mask.cols * obj.mask.rows * 4), obj.mask.cols, obj.mask.rows);
   maskTex.wrapS = THREE.RepeatWrapping; maskTex.magFilter = THREE.LinearFilter;
-  const ov: ObjView = { obj, group: new THREE.Group(), surface: null, maskTex, maskVersion: 0, footprintRing: null };
+  const ov: ObjView = { obj, group: new THREE.Group(), surface: null, shadow: null, maskTex, maskVersion: 0, footprintRing: null };
   pv.group.add(ov.group);
   refreshMaskTexture(ov); buildSurface(ov);
   return ov;
@@ -139,7 +178,7 @@ function disposeView(v: PlateView) {
 function layoutPlates() {
   views.forEach((v, i) => {
     v.group.position.copy(plateOrigin(i));
-    v.group.remove(v.bed); v.bed.geometry.dispose();
+    v.group.remove(v.bed); disposeTree(v.bed);
     v.bed = bedLines(i === ui.active, v.plate.locked); v.group.add(v.bed);
     v.objs.forEach(placeObj);
   });
@@ -176,15 +215,25 @@ function buildSurface(ov: ObjView) {
   const r = footprint(ov.obj, body, proc()), fp: number[] = [];
   for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; fp.push(r * Math.cos(a), r * Math.sin(a), 0.05); }
   const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3));
-  ov.footprintRing = new THREE.Line(fg, new THREE.LineBasicMaterial({ color: 0x5a6375 }));
+  ov.footprintRing = new THREE.Line(fg, new THREE.LineBasicMaterial({ color: P3().ring }));
   ov.group.add(ov.footprintRing);
+  if (!ov.shadow) {
+    ov.shadow = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false }));
+    ov.shadow.position.z = 0.02; ov.shadow.renderOrder = -1; ov.group.add(ov.shadow);
+  }
+  ov.shadow.scale.set(r * 1.2, r * 1.2, 1);
   updateSurfaceVisibility();
+}
+function applyObjTransform(ov: ObjView) { // cheap live update while a slider is dragged (full rebuild on release)
+  if (!ov.surface) return;
+  const t = ov.obj.transform;
+  ov.surface.scale.set(t.scaleXY, t.scaleXY, t.scaleZ); ov.surface.rotation.z = (t.rotation * Math.PI) / 180;
 }
 function updateSurfaceVisibility() {
   views.forEach((v, i) => v.objs.forEach((ov, k) => {
     const sel = i === ui.active && k === ui.activeObj;
     if (ov.surface) ov.surface.visible = ui.showSurface && sel;
-    if (ov.footprintRing) (ov.footprintRing.material as THREE.LineBasicMaterial).color.set(sel ? 0xffd479 : 0x5a6375);
+    if (ov.footprintRing) (ov.footprintRing.material as THREE.LineBasicMaterial).color.set(sel ? P3().ringSel : P3().ring);
   }));
 }
 function refreshMaskTexture(ov: ObjView) {
@@ -203,7 +252,7 @@ function refreshMaskTexture(ov: ObjView) {
 }
 
 // ======================= preview colouring =======================
-const ramp = (t: number, c: THREE.Color) => c.setHSL((1 - Math.min(1, Math.max(0, t))) * 0.66, 0.85, 0.55);
+const ramp = (t: number, c: THREE.Color) => c.setHSL((1 - Math.min(1, Math.max(0, t))) * 0.66, 0.7, 0.5);
 function legendRange(mps: MotionPath[], mode: PreviewMode): [number, number, string] {
   let lo = Infinity, hi = -Infinity;
   for (const mp of mps) {
@@ -215,14 +264,14 @@ function legendRange(mps: MotionPath[], mode: PreviewMode): [number, number, str
 }
 function makeLine(mp: MotionPath, stride: number, mode: PreviewMode, range: [number, number, string], selected: boolean): THREE.Line {
   const n = Math.floor((mp.count - 1) / stride) + 1, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  const c = new THREE.Color(), [lo, hi] = range, span = hi - lo || 1;
+  const c = new THREE.Color(), [lo, hi] = range, span = hi - lo || 1, pal = P3();
   let kMax = 0; if (mode === "curvature") for (let i = 0; i < mp.count; i++) kMax = Math.max(kMax, mp.curvature[i]);
   for (let k = 0; k < n; k++) {
     const i = k * stride;
     pos[k * 3] = mp.xyz[i * 3]; pos[k * 3 + 1] = mp.xyz[i * 3 + 1]; pos[k * 3 + 2] = mp.xyz[i * 3 + 2];
     switch (mode) {
       case "feature":
-        if (mp.tag[i] === 0) c.copy(selected ? SELECTED_TINT : BASE_COLOR); else c.set(REGION_COLORS[(mp.tag[i] - 1) % REGION_COLORS.length]);
+        if (mp.tag[i] === 0) c.set(selected ? pal.pathSel : pal.pathBase); else c.set(REGION_COLORS[(mp.tag[i] - 1) % REGION_COLORS.length]);
         break;
       case "speed": ramp((mp.feed[Math.max(1, i)] - lo) / span, c); break;
       case "height": ramp((mp.xyz[i * 3 + 2] - lo) / span, c); break;
@@ -252,14 +301,18 @@ function redrawPaths(v: PlateView) {
   });
   v.lines.forEach((l) => v.group.add(l));
   applyLayerRange(v);
+  v.thumb = trayThumb(v); // tray preview follows tint, colour mode and theme
+}
+function layerSpan(l: THREE.Line): [number, number] {
+  const mp = l.userData.mp as MotionPath, { layer, count } = mp, layers = layer[count - 1] + 1;
+  const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
+  const first = (L: number) => { let a = 0, b = count; while (a < b) { const m = (a + b) >> 1; if (layer[m] < L) a = m + 1; else b = m; } return a; };
+  return [first(lo), first(hi + 1)];
 }
 function applyLayerRange(v: PlateView) {
   for (const l of v.lines) {
-    const mp = l.userData.mp as MotionPath, { layer, count } = mp, layers = layer[count - 1] + 1;
-    const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
-    const first = (L: number) => { let a = 0, b = count; while (a < b) { const m = (a + b) >> 1; if (layer[m] < L) a = m + 1; else b = m; } return a; };
-    const a = first(lo), b = first(hi + 1), s = l.userData.stride as number;
-    l.geometry.setDrawRange(Math.floor(a / s), Math.max(0, Math.ceil((b - a) / s)));
+    const [a, b] = layerSpan(l), s = l.userData.stride as number, end = a + Math.ceil((b - a) * ui.scrub);
+    l.geometry.setDrawRange(Math.floor(a / s), Math.max(0, Math.ceil((end - a) / s)));
   }
 }
 
@@ -271,7 +324,7 @@ function sliceKey(v: PlateView) {
 function slice(v: PlateView) {
   const key = sliceKey(v);
   if (v.result?.key === key && v.status === "done") return;
-  if (!v.plate.objects.length) { v.result = undefined; v.status = "idle"; redrawPaths(v); renderStatus(); renderPlateBar(); return; }
+  if (!v.plate.objects.length) { v.result = undefined; v.status = "idle"; v.thumb = undefined; ui.goPreview = false; redrawPaths(v); renderStatus(); renderPlateBar(); renderDrawer(); return; }
   v.status = "slicing"; v.reqId++; v.pendingKey = key;
   const used = new Set(v.plate.objects.flatMap((o) => (o.source.kind === "mesh" ? [o.source.meshId] : [])));
   const req: SliceRequest = {
@@ -284,9 +337,11 @@ function slice(v: PlateView) {
 }
 function onSliced(v: PlateView, d: SliceResponse) {
   if (d.id !== v.reqId) return;
-  if (!d.ok) { v.status = "error"; v.error = d.error; renderStatus(); renderPlateBar(); return; }
+  if (!d.ok) { v.status = "error"; v.error = d.error; ui.goPreview = false; renderStatus(); renderPlateBar(); renderDrawer(); return; }
   v.result = { ...d, key: v.pendingKey! }; v.status = "done";
-  redrawPaths(v); renderStatus(); renderPlateBar();
+  redrawPaths(v);
+  if (ui.goPreview && v === activeView()) { ui.goPreview = false; setMode("preview"); return; }
+  renderStatus(); renderPlateBar(); renderDrawer();
 }
 let sliceTimer = 0;
 const sliceActiveSoon = (ms = 150) => { clearTimeout(sliceTimer); sliceTimer = window.setTimeout(() => slice(activeView()), ms); };
@@ -353,13 +408,13 @@ window.addEventListener("pointerup", () => {
 function addPlate(p = newPlate(`Plate ${views.length + 1}`)) {
   const v = makeView(p); views.push(v);
   ui.active = views.length - 1; ui.activeObj = 0; ui.target = -1;
-  layoutPlates(); focusActive(); slice(v); renderAll();
+  layoutPlates(); views.forEach(redrawPaths); focusActive(); slice(v); renderAll();
 }
 function deletePlate(i: number) {
   if (views.length <= 1 || views[i].plate.locked) return;
   disposeView(views[i]); views.splice(i, 1);
   ui.active = Math.min(ui.active, views.length - 1); ui.activeObj = 0; ui.target = -1;
-  layoutPlates(); focusActive(); renderAll();
+  layoutPlates(); views.forEach(redrawPaths); focusActive(); renderAll();
 }
 function selectPlate(i: number) { ui.active = i; ui.activeObj = 0; ui.target = -1; layoutPlates(); views.forEach(redrawPaths); focusActive(); renderAll(); }
 function selectObject(k: number) { ui.activeObj = k; ui.target = -1; updateSurfaceVisibility(); redrawPaths(activeView()); renderAll(); }
@@ -441,7 +496,7 @@ async function importFiles(files: FileList | File[]) {
       else applyProject(r.project, "replace");
     } catch (e) { notes.push(`${f.name}: ${e instanceof Error ? e.message : e}`); }
   }
-  renderAll();
+  toast(""); renderAll();
   if (notes.length) alert(notes.join("\n"));
 }
 function addPresets(ps: Preset[]) {
@@ -476,18 +531,19 @@ function applyProject(proj: Project, mode: "replace" | "append") {
   ui.active = mode === "replace" ? 0 : first; ui.activeObj = 0; ui.target = -1;
   layoutPlates(); focusActive(); sliceAll(); renderAll();
 }
-function status(msg: string) { statsEl.textContent = msg; }
+function status(msg: string) { toast(msg); }
 
 let clipboard: PlateObject | null = null;
 window.addEventListener("keydown", (ev) => {
-  if ((ev.target as HTMLElement).closest("input, textarea, select")) return;
+  if ((ev.target as HTMLElement).closest("input:not([type=range]):not([type=checkbox]), textarea, select")) return; // sliders/switches don't take letter keys
   const mod = ev.ctrlKey || ev.metaKey, ov = activeObjView();
   if (mod && ev.key === "c" && ov) clipboard = cloneObject(ov.obj);
   else if (mod && ev.key === "v" && clipboard) addObject(cloneObject(clipboard));
   else if (mod && ev.key === "d" && ov) addObject(cloneObject(ov.obj));
   else if ((ev.key === "Delete" || ev.key === "Backspace") && ov) deleteObject(ui.activeObj);
   else if (ev.key === "a" && !mod) arrangeAndReport([activeView()]);
-  else if (ev.key === "m" && !mod) { ui.tool = ui.tool === "move" ? "orbit" : "move"; renderPanel(); }
+  else if (!mod && DOCK_KEYS[ev.key.toLowerCase()] && ui.mode === "prepare") setDock(DOCK_KEYS[ev.key.toLowerCase()], true);
+  else if (ev.key === "Escape" && (ui.modal || pop.classList.contains("show") || ui.dock)) { if (ui.modal) closeModal(); else if (pop.classList.contains("show")) closePop(); else setDock(null); }
   else return;
   ev.preventDefault();
 });
@@ -507,7 +563,7 @@ function plateThumb(v: PlateView): Uint8Array | undefined {
   return t ? b64ToBytes(t.pngBase64) : undefined;
 }
 function saveProject() {
-  download("project.nexspiro", writeProjectArchive(currentProject(), views.map((v) => plateThumb(v) ?? new Uint8Array())), "application/zip");
+  download(`${slug(ui.projectName)}.nexspiro`, writeProjectArchive(currentProject(), views.map((v) => plateThumb(v) ?? new Uint8Array())), "application/zip");
 }
 function presetNames() {
   return { machine: registry.get(ui.selected.machine)!.name, filament: registry.get(ui.selected.filament)!.name, process: registry.get(ui.selected.process)!.name };
@@ -547,24 +603,50 @@ function doExport() {
     }
   } catch (e) { alert(`Export failed: ${e instanceof Error ? e.message : e}`); }
 }
-function thumbnails(v: PlateView, sizes: readonly (readonly [number, number])[] = [[32, 32], [300, 300], [600, 600]]): Thumbnail[] {
-  const out: Thumbnail[] = [];
+/** Run `fn` with only plate `v`'s full-detail toolpath visible and a camera framing it (used for G-code and tray thumbnails). */
+function isolatePlate<T>(v: PlateView, fn: (cam: THREE.PerspectiveCamera) => T): T | undefined {
+  const full = v.lines.filter((l) => l.userData.lod === "full");
+  if (!full.length) return undefined;
   const hidden = views.filter((o) => o !== v).map((o) => { const was = o.group.visible; o.group.visible = false; return [o, was] as const; });
-  if (!v.lines.length) return out;
-  const extras: THREE.Object3D[] = [v.bed, ...v.objs.flatMap((o) => [o.surface, o.footprintRing].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
-  const vis = extras.map((o) => o.visible); extras.forEach((o) => (o.visible = false));
-  const full = v.lines.filter((l) => l.userData.lod === "full"), fullVis = full.map((l) => l.visible); full.forEach((l) => (l.visible = true));
+  const extras: THREE.Object3D[] = [v.bed, ...v.objs.flatMap((o) => [o.surface, o.footprintRing, o.shadow].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
+  const vis = extras.map((o) => o.visible), fullVis = full.map((l) => l.visible);
+  extras.forEach((o) => (o.visible = false)); full.forEach((l) => (l.visible = true));
   const prevBg = scene.background; scene.background = null;
-  const box = new THREE.Box3(); full.forEach((l) => box.expandByObject(l));
-  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2 || 50;
-  const cam = new THREE.PerspectiveCamera(35, 1, 0.5, 5000); cam.up.set(0, 0, 1);
-  cam.position.copy(c).add(new THREE.Vector3(1, -1, 0.8).normalize().multiplyScalar(r / Math.sin((17.5 * Math.PI) / 180))); cam.lookAt(c);
-  const tr = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-  for (const [w, h] of sizes) { tr.setSize(w, h, false); tr.render(scene, cam); out.push({ width: w, height: h, pngBase64: tr.domElement.toDataURL("image/png").split(",")[1] }); }
-  tr.dispose();
-  scene.background = prevBg; extras.forEach((o, i) => (o.visible = vis[i])); full.forEach((l, i) => (l.visible = fullVis[i]));
-  hidden.forEach(([o, was]) => (o.group.visible = was));
-  return out;
+  try {
+    scene.updateMatrixWorld(true); // lines created this tick have no world matrix yet
+    const box = new THREE.Box3(); full.forEach((l) => box.expandByObject(l));
+    const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2 || 50;
+    const cam = new THREE.PerspectiveCamera(35, 1, 0.5, 5000); cam.up.set(0, 0, 1);
+    cam.position.copy(c).add(new THREE.Vector3(1, -1, 0.8).normalize().multiplyScalar(r / Math.sin((17.5 * Math.PI) / 180))); cam.lookAt(c);
+    return fn(cam);
+  } finally {
+    scene.background = prevBg; extras.forEach((o, i) => (o.visible = vis[i])); full.forEach((l, i) => (l.visible = fullVis[i]));
+    hidden.forEach(([o, was]) => (o.group.visible = was));
+  }
+}
+function thumbnails(v: PlateView, sizes: readonly (readonly [number, number])[] = [[32, 32], [300, 300], [600, 600]]): Thumbnail[] {
+  return isolatePlate(v, (cam) => {
+    const out: Thumbnail[] = [], tr = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    for (const [w, h] of sizes) { tr.setSize(w, h, false); tr.render(scene, cam); out.push({ width: w, height: h, pngBase64: tr.domElement.toDataURL("image/png").split(",")[1] }); }
+    tr.dispose();
+    return out;
+  }) ?? [];
+}
+/** Small preview for the plate tray. Renders into a render target of the main renderer (no extra WebGL context). */
+function trayThumb(v: PlateView): string | undefined {
+  return isolatePlate(v, (cam) => {
+    const S = 168, rt = new THREE.WebGLRenderTarget(S, S, { samples: 4 }), px = new Uint8Array(S * S * 4);
+    rt.texture.colorSpace = THREE.SRGBColorSpace;
+    const prevRT = renderer.getRenderTarget(), prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, cam);
+    renderer.readRenderTargetPixels(rt, 0, 0, S, S, px);
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevColor, prevAlpha); rt.dispose();
+    const cv = document.createElement("canvas"); cv.width = cv.height = S;
+    const img = new ImageData(S, S);
+    for (let y = 0; y < S; y++) img.data.set(px.subarray((S - 1 - y) * S * 4, (S - y) * S * 4), y * S * 4); // GL rows are bottom-up
+    cv.getContext("2d")!.putImageData(img, 0, 0);
+    return cv.toDataURL("image/png");
+  });
 }
 function exportGcode(i = ui.active) {
   const v = views[i];
@@ -578,262 +660,551 @@ function exportGcode(i = ui.active) {
   download(`${v.plate.name.replace(/\W+/g, "_")}.gcode`, g, "text/plain");
 }
 
-// ======================= UI =======================
-const panel = document.getElementById("panel")!, statsEl = document.getElementById("stats")!;
+// ======================= UI: "Soft Clay & Pill" workspace =======================
+// Four decoupled floating layers over the canvas: top capsule, left tool dock (+ slide-out card), right drawer, bottom tray.
+// Rendering is string-based per layer; behaviour is delegated: clicks via [data-act], inputs via [data-in] (ACT / IN tables below).
+const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const hud = byId("hud"), topbar = byId("topbar"), dock = byId("dock"), toolcard = byId("toolcard"), drawer = byId("drawer"), tray = byId("tray"),
+  carousel = byId("carousel"), timeline = byId("timeline"), vlayerEl = byId("vlayer"), statsEl = byId("stats"), pop = byId("pop"), modal = byId("modal"),
+  sheet = modal.firstElementChild as HTMLElement;
+const lastHtml = new WeakMap<HTMLElement, string>();
+/** Replace innerHTML only when it changed, so unchanged layers keep focus, scroll and in-flight drags. */
+function setHtml(el: HTMLElement, html: string) { if (lastHtml.get(el) !== html) { lastHtml.set(el, html); el.innerHTML = html; } }
+const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const PARAM_UI: [keyof PatternParams, string, number, number, number][] = [
-  ["amplitude", "Amplitude mm", 0, 4, 0.05], ["wavesPerRev", "Waves / rev", 0, 200, 1],
-  ["phasePerLayer", "Phase / layer °", 0, 360, 1], ["zAmplitude", "Z wobble mm", 0, 1.5, 0.01],
+  ["amplitude", "Amplitude", 0, 4, 0.05], ["wavesPerRev", "Waves / rev", 0, 200, 1],
+  ["phasePerLayer", "Phase / layer", 0, 360, 1], ["zAmplitude", "Z wobble", 0, 1.5, 0.01],
   ["extrusionPulse", "Extrusion pulse", 0, 1, 0.01],
 ];
-const TOOLS: [typeof ui.tool, string, string][] = [["orbit", "Select", "Click an object's footprint to select"], ["move", "Move (M)", "Drag objects on the bed"], ["paint", "Paint", "Paint the selected region"], ["erase", "Erase", "Erase the selected region"]];
+const PARAM_UNIT: Partial<Record<keyof PatternParams, string>> = { amplitude: "mm", phasePerLayer: "°", zAmplitude: "mm" };
 
-function renderPrepareTab() {
-  const v = activeView(), p = v.plate, dis = p.locked ? " disabled" : "";
-  const objList = p.objects.map((o, k) => `<div class="obj${k === ui.activeObj ? " on" : ""}" data-obj="${k}">
-      <span>${o.source.kind === "mesh" ? "▲" : "●"} ${esc(o.name)}</span>
-      <span><button data-objdup="${k}" title="Duplicate"${dis}>⧉</button><button data-objdel="${k}" title="Delete"${dis}>✕</button></span></div>`).join("");
-  let html = `
-    <h2>Plate · ${esc(p.name)}${p.locked ? " 🔒" : ""}</h2>
-    <div class="objlist">${objList || '<div class="muted">Empty plate</div>'}</div>
-    <label class="file-btn${p.locked ? " disabled" : ""}" title="STL, OBJ, PLY, 3MF, STEP/STP, .nexspiro, Bambu/Orca JSON or PrusaSlicer INI profiles">Import…<input type="file" id="importFile" accept="${ACCEPT}" multiple hidden${dis}></label>
-    <select id="addPrim"${dis}><option value="">+ Add primitive…</option>${Object.keys(primitives).map((k) => opt(k, k, false)).join("")}</select>
-    <div><button id="arrange"${dis}>Arrange plate (A)</button><button id="arrangeAll">Arrange all</button></div>
-    <div class="tools">${TOOLS.map(([t, l, title]) => `<button data-tool="${t}" title="${title}" class="${ui.tool === t ? "on" : ""}">${l}</button>`).join("")}</div>`;
-  const o = p.objects[ui.activeObj];
-  if (o) {
-    const P = ui.target < 0 ? o.base.params : o.regionParams[ui.target];
-    const pat = ui.target < 0 ? o.base.pattern : o.mask.regions[ui.target].pattern;
-    html += `
-    <h2>Object · ${esc(o.name)}</h2>
-    <label>X mm <input type="number" data-tf="x" step="1" value="${o.transform.x}"${dis}></label>
-    <label>Y mm <input type="number" data-tf="y" step="1" value="${o.transform.y}"${dis}></label>
-    <label>Scale XY % <input type="number" data-tf="scaleXY" step="1" min="10" max="400" value="${Math.round(o.transform.scaleXY * 100)}"${dis}></label>
-    <label>Scale Z % <input type="number" data-tf="scaleZ" step="1" min="10" max="400" value="${Math.round(o.transform.scaleZ * 100)}"${dis}></label>
-    <label>Rotate Z ° <input type="number" data-tf="rotation" step="5" value="${o.transform.rotation}"${dis}></label>
+// ---------- toast / dev line ----------
+let toastMsg = "";
+const stats = { fps: 0 };
+function renderToast() {
+  const msg = toastMsg || (ui.developer ? `${stats.fps.toFixed(0)} fps${activeView()?.result ? ` · ${activeView().result!.mps.reduce((a, m) => a + m.count, 0).toLocaleString()} moves` : ""}` : "");
+  statsEl.textContent = msg; statsEl.classList.toggle("show", !!msg);
+}
+function toast(msg: string) { toastMsg = msg; renderToast(); }
 
-    <h2>Wall pattern</h2>
-    <label>Target <select id="target">${opt("-1", "Base wall", ui.target < 0)}${o.mask.regions.map((_, k) => opt(String(k), `Region ${k + 1}`, k === ui.target)).join("")}</select></label>
-    <label>Pattern <select id="pattern"${dis}>${Object.entries(patterns).map(([k, x]) => opt(k, x.label, k === pat)).join("")}</select></label>
-    ${PARAM_UI.map(([k, l, mn, mx, st]) => `<label>${l} <input type="range" data-param="${k}" min="${mn}" max="${mx}" step="${st}" value="${P[k]}"${dis}><span class="v">${P[k]}</span></label>`).join("")}
+// ---------- popover ----------
+let popKey = "";
+function openPop(anchor: HTMLElement, html: string) {
+  const key = anchor.dataset.act ?? "";
+  if (pop.classList.contains("show") && popKey === key) return closePop();
+  pop.innerHTML = html; pop.classList.add("show"); popKey = key;
+  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8)}px`;
+  pop.style.top = `${r.bottom + 10 + h > innerHeight - 8 ? Math.max(8, r.top - h - 10) : r.bottom + 10}px`;
+}
+function closePop() { pop.classList.remove("show"); popKey = ""; }
+document.addEventListener("pointerdown", (e) => {
+  if (pop.classList.contains("show") && !(e.target as Element).closest("#pop, [data-act='plateMenu'], [data-act='exportMenu']")) closePop();
+}, true);
 
-    <h2>Paint regions</h2>
-    ${o.mask.regions.map((r, k) => `<div><span class="swatch" style="background:#${REGION_COLORS[k % REGION_COLORS.length].toString(16).padStart(6, "0")}"></span>Region ${k + 1} · ${patterns[r.pattern].label}</div>`).join("") || '<div class="muted">No regions. The whole wall uses the base pattern.</div>'}
-    <button id="addRegion"${dis}>+ Add region</button>
-    <label>Brush size <input type="range" id="brush" min="1" max="40" step="1" value="${ui.brush}"><span class="v">${ui.brush}</span></label>
-    <label>Show paint surface <input type="checkbox" id="showSurface"${ui.showSurface ? " checked" : ""}></label>`;
+// ======================= top capsule =======================
+const MODES: SegItem[] = [
+  { value: "prepare", label: "Prepare", icon: "cube" }, { value: "preview", label: "Preview", icon: "layers" }, { value: "print", label: "Print", icon: "printer" },
+];
+function isFresh(v: PlateView) { return v.status === "done" && v.result?.key === sliceKey(v); }
+function renderTopbar() {
+  const v = activeView(); if (!v) return;
+  const badge = statusBadge(v.status, isFresh(v), v.result?.issues ?? []), nl = proc().nonLinear.enabled, busy = v.status === "slicing";
+  setHtml(topbar, `
+    <div class="brand" title="NexSpiro by Studio Nexify">${icon("spiral")}</div>
+    <div class="titleblock"><button class="name" data-act="renameProject" title="Rename project">${esc(ui.projectName)}</button><span class="badge ${badge.tone}">${badge.text}</span></div>
+    <span class="vr"></span>
+    ${seg("setMode", MODES, ui.mode)}
+    <span class="vr"></span>
+    <button class="btn plate-btn" data-act="plateMenu" aria-haspopup="menu">${icon("layers")}<span class="nowrap">${esc(v.plate.name)}</span>${icon("chevdown")}</button>
+    <button class="btn primary slice${busy ? " busy" : ""}" data-act="sliceNow"${v.plate.objects.length ? "" : " disabled"} title="${nl ? "Slice this plate with non-linear surface toolpaths" : "Slice this plate (planar spiral)"}"><span class="spin"></span>${icon("bolt")}<span class="tx">${nl ? "Slice &amp; Non-Linear Path" : "Slice plate"}</span></button>
+    <button class="icon-btn" data-act="exportMenu" title="Export & project" aria-label="Export and project" aria-haspopup="menu">${icon("export")}</button>
+    <button class="icon-btn" data-act="toggleDrawer" title="${ui.drawerOpen ? "Hide" : "Show"} process panel" aria-label="Toggle process panel" aria-pressed="${ui.drawerOpen}">${icon("panel")}</button>
+    <button class="icon-btn" data-act="toggleTheme" title="Switch to ${ui.theme === "dark" ? "light" : "dark"} mode" aria-label="Toggle theme">${icon(ui.theme === "dark" ? "sun" : "moon")}</button>`);
+}
+
+// ======================= left dock =======================
+type DockItem = { id: Dock | "layflat" | "cut" | "text"; tip: string; icon: string; soon?: boolean };
+const DOCK: DockItem[][] = [
+  [{ id: "select", tip: "Select (V)", icon: "select" }, { id: "move", tip: "Move (M)", icon: "move" }, { id: "rotate", tip: "Rotate (R)", icon: "rotate" }, { id: "scale", tip: "Scale (S)", icon: "scale" }],
+  [{ id: "texture", tip: "Wall texture (T)", icon: "texture" }, { id: "paint", tip: "Paint regions (P)", icon: "paint" }],
+  [{ id: "arrange", tip: "Auto-arrange (A)", icon: "arrange" }],
+  [{ id: "layflat", tip: "Lay flat · needs mesh pipeline", icon: "layflat", soon: true }, { id: "cut", tip: "Cut · needs mesh pipeline", icon: "cut", soon: true }, { id: "text", tip: "Text · needs mesh pipeline", icon: "text", soon: true }],
+];
+const DOCK_KEYS: Record<string, Dock> = { v: "select", m: "move", r: "rotate", s: "scale", t: "texture", p: "paint" };
+const DOCK_TITLES: Record<Dock, [string, string]> = {
+  select: ["cube", "Objects"], move: ["move", "Move"], rotate: ["rotate", "Rotate"], scale: ["scale", "Scale"], texture: ["texture", "Wall texture"], paint: ["paint", "Paint"], arrange: ["arrange", "Auto-arrange"],
+};
+function renderDock() {
+  setHtml(dock, DOCK.map((g) => `<div class="grp">${g.map((t) =>
+    `<button class="tool${ui.dock === t.id ? " on" : ""}" data-act="setDock" data-arg="${t.id}" data-tip="${t.tip}" aria-label="${t.tip}" aria-pressed="${ui.dock === t.id}"${t.soon ? " disabled" : ""}>${icon(t.icon)}</button>`).join("")}</div>`).join(""));
+}
+const toolFor = (d: Dock | null): typeof ui.tool => (d === "move" ? "move" : d === "paint" ? (ui.paintErase ? "erase" : "paint") : "orbit");
+function setDock(d: Dock | null, _fromKey = false) {
+  ui.dock = d === ui.dock ? null : d;
+  ui.tool = ui.mode === "prepare" ? toolFor(ui.dock) : "orbit";
+  renderDock(); renderToolCard(); updateViewInsets();
+}
+
+// ---------- slide-out tool card ----------
+function renderToolCard() {
+  const d = ui.dock, open = !!d && ui.mode === "prepare" && !!activeView();
+  toolcard.classList.toggle("open", open);
+  if (!d || !activeView()) return; // keep the last content while the card slides away
+  const v = activeView(), p = v.plate, o = p.objects[ui.activeObj], dis = p.locked ? " disabled" : "";
+  const [ic, title] = DOCK_TITLES[d];
+  const head = `<header class="card-head">${icon(ic)}<h3>${title}${p.locked ? ` <span class="sub">· plate locked</span>` : ""}</h3><button class="icon-btn sm flat" data-act="closeCard" aria-label="Close panel">${icon("close")}</button></header>`;
+  const needObj = `<div class="empty">No object selected.<br><label class="btn sm primary file-btn" for="fileImport">${icon("import")}Import model…</label></div>`;
+  let body = "";
+  switch (d) {
+    case "select": {
+      body = `<div class="objlist">${p.objects.map((ob, k) => `<div class="list-item${k === ui.activeObj ? " on" : ""}" role="button" tabindex="0" data-act="selectObj" data-arg="${k}">
+          <span class="obj-name">${icon(ob.source.kind === "mesh" ? "cube" : "cylinder")}<span class="nowrap">${esc(ob.name)}</span></span>
+          <span class="acts"><button class="icon-btn sm flat" data-act="dupObj" data-arg="${k}" title="Duplicate (Ctrl+D)" aria-label="Duplicate"${dis}>${icon("copy")}</button><button class="icon-btn sm flat" data-act="delObj" data-arg="${k}" title="Delete (Del)" aria-label="Delete"${dis}>${icon("trash")}</button></span></div>`).join("") || `<div class="muted" style="padding:6px 4px">Empty plate</div>`}</div>
+        <div class="actions"><label class="btn sm primary file-btn${p.locked ? " disabled" : ""}" for="fileImport" title="STL, OBJ, PLY, 3MF, STEP/STP, .nexspiro, Bambu/Orca JSON or PrusaSlicer INI">${icon("import")}Import…</label></div>
+        <div class="row" style="margin-top:10px"><select data-in="addPrim" aria-label="Add primitive"${dis}><option value="">+ Add primitive…</option>${Object.keys(primitives).map((k) => opt(k, k, false)).join("")}</select></div>
+        <p class="hint">Click a footprint in the viewport to select. Drop files anywhere to import.</p>`;
+      break;
+    }
+    case "move": body = !o ? needObj : `<div class="pair">${numRow("X", `data-in="tf" data-key="x"`, o.transform.x, { unit: "mm", step: 1, disabled: !!p.locked })}${numRow("Y", `data-in="tf" data-key="y"`, o.transform.y, { unit: "mm", step: 1, disabled: !!p.locked })}</div>
+        <div class="actions"><button class="btn sm" data-act="centerObj"${dis}>${icon("arrange")}Center on bed</button></div><p class="hint">Or drag the selected object across the bed.</p>`; break;
+    case "rotate": body = !o ? needObj : `${rangeRow("Rotate Z", `data-in="tf" data-key="rotation"`, o.transform.rotation, -180, 180, 1, { unit: "°", disabled: !!p.locked })}
+        <div class="actions"><button class="btn sm" data-act="rotateBy" data-arg="-90"${dis}>−90°</button><button class="btn sm" data-act="rotateBy" data-arg="90"${dis}>+90°</button><button class="btn sm ghost" data-act="rotateBy" data-arg="0"${dis}>Reset</button></div>
+        <p class="hint">The seam stays aligned on +X, so rotating changes where the seam faces.</p>`; break;
+    case "scale": body = !o ? needObj : `${switchRow("Uniform scale", `data-in="uniform"`, ui.uniform)}
+        ${rangeRow("Scale XY", `data-in="tf" data-key="scaleXY"`, Math.round(o.transform.scaleXY * 100), 10, 400, 1, { unit: "%", disabled: !!p.locked })}
+        ${rangeRow("Scale Z", `data-in="tf" data-key="scaleZ"`, Math.round(o.transform.scaleZ * 100), 10, 400, 1, { unit: "%", disabled: !!p.locked })}`; break;
+    case "texture": {
+      if (!o) { body = needObj; break; }
+      const P = ui.target < 0 ? o.base.params : o.regionParams[ui.target], pat = ui.target < 0 ? o.base.pattern : o.mask.regions[ui.target].pattern;
+      body = `${selectRow("Target", `data-in="target"`, opt("-1", "Base wall", ui.target < 0) + o.mask.regions.map((_, k) => opt(String(k), `Region ${k + 1}`, k === ui.target)).join(""))}
+        ${selectRow("Pattern", `data-in="pattern"${dis}`, Object.entries(patterns).map(([k, x]) => opt(k, x.label, k === pat)).join(""))}
+        <div class="sep"></div>
+        ${PARAM_UI.map(([k, l, mn, mx, st]) => rangeRow(l, `data-in="param" data-key="${k}"`, P[k], mn, mx, st, { unit: PARAM_UNIT[k], disabled: !!p.locked })).join("")}`;
+      break;
+    }
+    case "paint": {
+      if (!o) { body = needObj; break; }
+      body = `${seg("noop", [{ value: "color", label: "Color", icon: "paint" }, { value: "support", label: "Support", icon: "support", disabled: true, title: "Support enforce/block needs a support engine" }, { value: "seam", label: "Seam", icon: "seam", disabled: true, title: "Seam painting is not supported yet" }], "color", { cls: "sm block" })}
+        <div style="margin-top:10px">${seg("paintMode", [{ value: "paint", label: "Paint", icon: "paint" }, { value: "erase", label: "Erase", icon: "erase" }], ui.paintErase ? "erase" : "paint", { cls: "block" })}</div>
+        <div class="sep"></div>
+        <div class="objlist">${o.mask.regions.map((r, k) => `<div class="list-item${k === ui.target ? " on" : ""}" role="button" tabindex="0" data-act="selTarget" data-arg="${k}"><span class="obj-name"><span class="swatch" style="background:${hex(REGION_COLORS[k % REGION_COLORS.length])}"></span><span class="nowrap">Region ${k + 1} · ${patterns[r.pattern].label}</span></span></div>`).join("") || `<div class="muted" style="padding:4px">No regions yet. The whole wall uses the base pattern.</div>`}</div>
+        <div class="actions"><button class="btn sm" data-act="addRegion"${dis}>${icon("plus")}Add region</button></div>
+        ${ui.target < 0 && o.mask.regions.length ? `<p class="hint">Pick a region to start painting.</p>` : ""}
+        ${rangeRow("Brush size", `data-in="brush"`, ui.brush, 1, 40, 1)}
+        ${switchRow("Show paint surface", `data-in="showSurface"`, ui.showSurface)}`;
+      break;
+    }
+    case "arrange": body = `<p class="hint" style="margin-top:0">Packs objects with toolhead-clearance spacing and checks they fit the bed.</p>
+        <div class="actions"><button class="btn primary" data-act="arrange" data-arg="plate"${dis}>This plate</button><button class="btn" data-act="arrange" data-arg="all">All plates</button></div>`; break;
   }
-  html += `
-    <h2>Preview</h2>
-    <label>Color by <select id="previewMode">${(Object.keys(PREVIEW_LABELS) as PreviewMode[]).map((m) => opt(m, PREVIEW_LABELS[m], m === ui.preview)).join("")}</select></label>
-    <label>Layer from <input type="range" id="layerMin" min="0" max="1" step="0.001" value="${ui.layerMin}"></label>
-    <label>Layer to <input type="range" id="layerMax" min="0" max="1" step="0.001" value="${ui.layerMax}"></label>`;
-  return html;
+  setHtml(toolcard, head + body);
 }
+
+// ======================= right drawer =======================
+const PREVIEW_SHORT: Record<PreviewMode, string> = { feature: "Feature", speed: "Speed", height: "Height", layerTime: "Layer time", curvature: "Curvature" };
+const TIERS = [
+  { id: "quality", label: "Quality", path: "layerHeight", min: 0.05, max: 0.8, step: 0.01, unit: "mm", sub: "Layer height", fmt: (n: number) => n.toFixed(2) },
+  { id: "strength", label: "Strength", path: "lineWidth", min: 0.2, max: 1.6, step: 0.05, unit: "mm", sub: "Wall line width", fmt: (n: number) => n.toFixed(2) },
+  { id: "speed", label: "Speed", path: "wallSpeed", min: 5, max: 150, step: 1, unit: "mm/s", sub: "Wall speed", fmt: (n: number) => String(n) },
+] as const;
+const tile = (k: string, n: string) => `<div class="tile"><div class="k">${k}</div><div class="n">${n}</div></div>`;
+
+function cardSetup() {
+  const M = machine(), F = filament(), mn = registry.get(ui.selected.machine)!.name, fn = registry.get(ui.selected.filament)!.name;
+  const dot = (k: PresetKind) => (ui.edited[k] ? `<span class="dot" title="Modified"></span>` : "");
+  return `<section class="card"><header class="card-head">${icon("gear")}<h3>Printer &amp; material</h3></header>
+    <button class="chip" data-act="openModal" data-arg="machine"><span class="glyph">${icon("printer")}</span><span class="grow"><b class="nowrap">${esc(mn)}</b><small>⌀ ${M.nozzle} mm nozzle · ${M.bed[0]}×${M.bed[1]} mm</small></span>${dot("machine")}${icon("chevright", "end")}</button>
+    <button class="chip" data-act="openModal" data-arg="filament"><span class="glyph sage">${icon("spool")}</span><span class="grow"><b class="nowrap">${esc(fn)}</b><small>${materialOf(fn)} · ${F.nozzleTemp} °C nozzle · ${F.bedTemp} °C bed</small></span>${dot("filament")}${icon("chevright", "end")}</button></section>`;
+}
+function cardProcess() {
+  const P = proc() as unknown as Record<string, number>, list = registry.list("process");
+  const row = (pr: Preset<"process">, cur: boolean) => {
+    const r = registry.resolve<"process">(pr.id);
+    return `<button class="preset${cur ? " on" : ""}" data-act="${cur ? "presetsMore" : "pickProcess"}" data-arg="${esc(pr.id)}"${cur ? ` aria-expanded="${ui.presetsOpen}"` : ""}>${icon(r.nonLinear.enabled ? "nonlinear" : "planar")}
+      <span class="grow"><b class="nowrap">${pr.system ? "" : "★ "}${esc(pr.name)}</b><small>${r.layerHeight.toFixed(2)} mm · ${r.wallSpeed} mm/s${r.nonLinear.enabled ? " · non-linear" : " · planar"}</small></span>${cur ? icon("chevdown", "disclose" + (ui.presetsOpen ? " open" : "")) : ""}</button>`;
+  };
+  const cur = list.find((p) => p.id === ui.selected.process) ?? list[0], others = list.filter((p) => p !== cur);
+  const tiers = TIERS.map((t) => `<button class="tile${ui.tier === t.id ? " on" : ""}" data-act="tier" data-arg="${t.id}" aria-expanded="${ui.tier === t.id}"><div class="k">${t.label}</div><div class="n">${t.fmt(P[t.path])} <span class="unit">${t.unit}</span></div></button>`).join("")
+    + `<button class="tile" disabled title="Supports are not generated in single-wall spiral mode"><div class="k">Supports</div><div class="n" style="font-size:12.5px;font-weight:500;color:var(--text-3)">Not needed</div></button>`;
+  const sliders = TIERS.map((t) => `<div class="collapse${ui.tier === t.id ? " open" : ""}"><div class="inner">${rangeRow(t.sub, `data-in="path" data-kind="process" data-path="${t.path}"`, P[t.path], t.min, t.max, t.step, { unit: t.unit, cls: "sky" })}</div></div>`).join("");
+  const mod = ui.edited.process ? `<div class="mod-row"><span class="grow"><span class="dot"></span>Modified</span><button class="btn sm" data-act="presetRevert" data-arg="process">Revert</button><button class="btn sm primary" data-act="presetSave" data-arg="process">Save as…</button></div>` : "";
+  return `<section class="card"><header class="card-head">${icon("layers")}<h3>Process presets</h3></header>${row(cur, true)}
+    <div class="collapse${ui.presetsOpen ? " open" : ""}"><div class="inner"><div class="preset-list">${others.map((p) => row(p, false)).join("")}</div></div></div>
+    <div class="tier-grid">${tiers}</div>${sliders}${mod}</section>`;
+}
+function cardNonLinear() {
+  const N = proc().nonLinear, r = activeView().result, viol = r ? r.mps.reduce((a, m) => a + m.inclinationViolations, 0) : -1, on = N.enabled;
+  const health = viol < 0 ? `<span class="dot mute"></span>Slice to verify the limits` : viol === 0 ? `<span class="dot sage"></span>All segments within limits` : `<span class="dot coral"></span>${viol.toLocaleString()} segments exceed the tilt limit`;
+  const k = `data-in="path" data-kind="process"`;
+  return `<section class="card nl${on ? "" : " off"}">
+    <header class="card-head"><span class="glyph">${icon("nonlinear")}</span><span class="titles grow"><b>NexSpiro Non-Linear</b><small>Enable non-linear surface toolpaths</small></span>
+      <input type="checkbox" ${k} data-path="nonLinear.enabled"${on ? " checked" : ""} aria-label="Enable Non-Linear Surface Toolpaths"></header>
+    <div class="summary">${tile("Tilt limit", `${N.maxInclination}°`)}${tile("Clearance", `+${N.collisionMargin} mm`)}${tile("Tolerance", `${N.deviationTol} mm`)}</div>
+    <div class="health">${health}</div>
+    <div class="collapse${on && ui.nlOpen ? " open" : ""}"><div class="inner" style="padding-top:6px">
+      ${rangeRow("Spline deviation", `${k} data-path="nonLinear.deviationTol"`, N.deviationTol, 0.001, 0.2, 0.001, { unit: "mm", cls: "violet" })}
+      ${rangeRow("Max toolhead tilt", `${k} data-path="nonLinear.maxInclination"`, N.maxInclination, 5, 80, 1, { unit: "°", cls: "violet" })}
+      ${rangeRow("Collision clearance", `${k} data-path="nonLinear.collisionMargin"`, N.collisionMargin, 0, 10, 0.5, { unit: "mm", cls: "violet" })}
+      ${rangeRow("Z-axis smoothing", `${k} data-path="nonLinear.zSmoothing"`, N.zSmoothing, 0, 1, 0.05, { cls: "violet" })}</div></div>
+    <button class="btn sm ghost toggle-more" data-act="nlMore" aria-expanded="${ui.nlOpen}">${ui.nlOpen ? "Hide" : "Fine-tune"} ${icon("chevdown", "disclose" + (ui.nlOpen ? " open" : ""))}</button>
+    <p class="off-note">Planar spiral: layers stay flat and pattern Z motion is suppressed.</p></section>`;
+}
+function cardView() {
+  const v = activeView(), r = v.result, o = v.plate.objects[ui.activeObj];
+  let legend = "";
+  if (ui.preview === "feature") {
+    legend = `<div class="legend-ends" style="flex-wrap:wrap;gap:6px 14px;margin-top:12px"><span><span class="swatch" style="background:${hex(P3().pathBase)}"></span>Base wall</span>${(o?.mask.regions ?? []).map((_, k) => `<span><span class="swatch" style="background:${hex(REGION_COLORS[k % REGION_COLORS.length])}"></span>Region ${k + 1}</span>`).join("")}</div>`;
+  } else if (r) {
+    const [lo, hi, unit] = legendRange(r.mps, ui.preview);
+    legend = `<div class="legend-bar" style="background:${rampGradient()}"></div><div class="legend-ends"><span>${lo.toFixed(1)} ${unit}</span><span>${PREVIEW_LABELS[ui.preview]}</span><span>${hi.toFixed(1)} ${unit}</span></div>${ui.preview === "curvature" ? `<p class="hint">Hue = feedrate, lightness = curvature peaks.</p>` : ""}`;
+  }
+  return `<section class="card"><header class="card-head">${icon("layers")}<h3>Color by</h3></header>
+    <div class="pills">${(Object.keys(PREVIEW_SHORT) as PreviewMode[]).map((m) => `<button class="btn sm${m === ui.preview ? " on" : ""}" data-act="previewMode" data-arg="${m}">${PREVIEW_SHORT[m]}</button>`).join("")}</div>${legend}</section>`;
+}
+function cardSummary() {
+  const v = activeView(), r = v.result;
+  if (!r || v.status !== "done") {
+    const msg = v.status === "slicing" ? "Slicing…" : v.status === "error" ? `<span class="err">${esc(v.error ?? "Slicing failed")}</span>` : v.plate.objects.length ? "Slice the plate to see time, weight and the toolpath." : "Add or import an object to begin.";
+    return `<section class="card"><header class="card-head">${icon("clock")}<h3>Estimate</h3></header><div class="empty">${msg}${v.plate.objects.length && v.status !== "slicing" ? `<br><button class="btn primary sm" data-act="sliceNow">${icon("bolt")}Slice now</button>` : ""}</div></section>`;
+  }
+  const S = r.stats, moves = r.mps.reduce((a, m) => a + m.count, 0), dec = r.mps.reduce((a, m) => a + m.decimated, 0), inc = r.mps.reduce((a, m) => a + m.inclinationViolations, 0);
+  const stale = isFresh(v) ? "" : `<span class="badge amber plain" style="margin-left:6px">stale</span>`;
+  const issues = [...r.issues.map((i) => ({ level: i.level, text: i.message })),
+    ...(r.zClipped ? [{ level: "warn", text: `Z wobble capped at ±${machine().zWobbleMax} mm on ${r.zClipped.toLocaleString()} points` }] : []),
+    ...(inc ? [{ level: "warn", text: `${inc.toLocaleString()} segments exceed max inclination ${proc().nonLinear.maxInclination}°` }] : [])];
+  return `<section class="card"><header class="card-head">${icon("clock")}<h3>Estimate${stale}</h3></header>
+    <div class="tiles">${tile("Print time", formatDuration(S.timeS))}${tile("Weight", `${S.grams.toFixed(1)} g`)}${tile("Filament", `${(S.filamentMm / 1000).toFixed(2)} m`)}${tile("Layers", String(S.layers))}${tile("Cost", S.cost.toFixed(2))}${tile("Non-linear path", `${(S.nonLinearMm / 1000).toFixed(2)} m`)}</div>
+    <p class="hint">${r.mps.length} object${r.mps.length > 1 ? `s (sequential: ${r.order.map((k) => esc(v.plate.objects[k]?.name ?? "?")).join(" → ")})` : ""} · ${moves.toLocaleString()} moves (${dec.toLocaleString()} decimated) · ${r.ms.toFixed(0)} ms</p>
+    ${issues.map((i) => `<div class="issue ${i.level === "error" ? "error" : "warn"}">${icon("warn")}<span>${esc(i.text)}</span></div>`).join("")}</section>`;
+}
+function cardExport() {
+  const fmts = (Object.keys(EXPORT_LABELS) as ExportFormat[]).filter((f) => ui.developer || (f !== "csv" && f !== "json"));
+  return `<section class="card"><header class="card-head">${icon("export")}<h3>Export</h3></header>
+    <div class="format-list">${fmts.map((f) => `<div class="list-item${f === ui.exportFormat ? " on" : ""}" role="button" tabindex="0" data-act="pickFormat" data-arg="${f}"><span class="grow">${EXPORT_LABELS[f]}</span>${f === ui.exportFormat ? icon("check") : ""}</div>`).join("")}</div>
+    <button class="btn primary block" data-act="doExport" data-arg="${ui.exportFormat}">${icon("export")}Export</button>
+    <div class="actions"><button class="btn sm" data-act="saveProject">${icon("save")}Save project</button><button class="btn sm" data-act="openProject">${icon("folder")}Open…</button></div>
+    ${switchRow("Developer mode", `data-in="developer"`, ui.developer)}</section>`;
+}
+function renderDrawer() {
+  if (!activeView()) return;
+  const html = ui.mode === "prepare" ? cardSetup() + cardProcess() + cardNonLinear() : ui.mode === "preview" ? cardView() + cardSummary() + cardNonLinear() : cardSummary() + cardExport();
+  // never swap the DOM under a slider that is being dragged; it refreshes on release
+  if (drawer.contains(document.activeElement) && (document.activeElement as HTMLInputElement).type === "range" && ui.dragSlider) return;
+  const top = drawer.scrollTop; setHtml(drawer, html); drawer.scrollTop = top;
+}
+
+// ======================= bottom tray =======================
+function plateCard(v: PlateView, i: number) {
+  const r = v.result, kind = slicingKind(v.status === "done" ? r?.stats.nonLinearMm : undefined), fresh = isFresh(v);
+  const badge = v.status === "slicing" ? `<span class="badge amber">Slicing…</span>` : v.status === "error" ? `<span class="badge coral">Error</span>`
+    : kind === "nonlinear" ? `<span class="badge violet">${icon("nonlinear")}Non-linear</span>` : kind === "planar" ? `<span class="badge sky">${icon("planar")}Planar</span>` : `<span class="badge">Not sliced</span>`;
+  const est = r && v.status === "done" ? `${formatDuration(r.stats.timeS)} · ${r.stats.grams.toFixed(1)} g${fresh ? "" : " · stale"}` : `${v.plate.objects.length} object${v.plate.objects.length === 1 ? "" : "s"}`;
+  return `<div class="plate-card${i === ui.active ? " on" : ""}" role="button" tabindex="0" data-act="selectPlate" data-arg="${i}" aria-label="${esc(v.plate.name)}">
+    <div class="thumb">${v.thumb ? `<img src="${v.thumb}" alt="" draggable="false">` : icon("cylinder")}</div>
+    <div class="meta"><div class="nm"><span>${esc(v.plate.name)}</span>${v.plate.locked ? icon("lock") : ""}</div><div class="est">${est}</div><div class="row2">${badge}</div></div>
+    <div class="acts"><button class="icon-btn sm" data-act="lockPlate" data-arg="${i}" title="${v.plate.locked ? "Unlock" : "Lock"} plate" aria-label="Lock plate">${icon(v.plate.locked ? "lock" : "unlock")}</button>
+      <button class="icon-btn sm" data-act="dupPlate" data-arg="${i}" title="Duplicate plate" aria-label="Duplicate plate">${icon("copy")}</button>
+      <button class="icon-btn sm" data-act="delPlate" data-arg="${i}" title="Delete plate" aria-label="Delete plate"${views.length < 2 || v.plate.locked ? " disabled" : ""}>${icon("trash")}</button></div></div>`;
+}
+let lastScrolledPlate = -1;
+function renderTray() {
+  setHtml(carousel, views.map(plateCard).join("") + `<button class="add-plate" data-act="addPlate" title="Add plate" aria-label="Add plate">${icon("plus")}</button>`);
+  const on = carousel.querySelector<HTMLElement>(".plate-card.on");
+  if (on && lastScrolledPlate !== ui.active) { // keep the active plate in view without scrolling any ancestor
+    lastScrolledPlate = ui.active;
+    const a = on.getBoundingClientRect(), c = carousel.getBoundingClientRect();
+    if (a.left < c.left) carousel.scrollLeft -= c.left - a.left + 8; else if (a.right > c.right) carousel.scrollLeft += a.right - c.right + 8;
+  }
+  updateReadout();
+}
+// ---------- preview scrubbing controls (static DOM, built once) ----------
+timeline.innerHTML = `<button class="icon-btn" id="playBtn" data-act="play" aria-label="Play toolpath">${icon("play")}</button>
+  <div class="scrub"><input type="range" id="scrub" class="violet" min="0" max="1" step="0.001" value="1" aria-label="Toolpath step" style="--p:100%"></div><div class="readout" id="readout"></div>`;
+vlayerEl.innerHTML = `<span class="cap">Top</span><span class="lbl" id="vTop">–</span><div id="vDual"></div><span class="lbl" id="vBot">–</span><span class="cap">Layer</span>`;
+const layerSlider = new DualSlider(byId("vDual"), true, (lo, hi) => { ui.layerMin = lo; ui.layerMax = hi; views.forEach(applyLayerRange); updateReadout(); }, ["Lowest layer", "Highest layer"]);
+const scrubEl = byId<HTMLInputElement>("scrub");
+scrubEl.addEventListener("input", () => { ui.scrub = Number(scrubEl.value); ui.playing = false; scrubEl.style.setProperty("--p", `${ui.scrub * 100}%`); views.forEach(applyLayerRange); updateReadout(); syncPlay(); });
+function syncPlay() { const b = byId("playBtn"); b.innerHTML = icon(ui.playing ? "pause" : "play"); b.setAttribute("aria-label", ui.playing ? "Pause" : "Play toolpath"); }
+function updateReadout() {
+  const v = activeView(), r = v?.result; if (!v) return;
+  const layers = r ? Math.max(...r.mps.map((m) => m.layer[m.count - 1] + 1)) : 0;
+  const L = (f: number) => Math.round(f * Math.max(0, layers - 1)) + 1;
+  byId("vTop").textContent = layers ? String(L(ui.layerMax)) : "–"; byId("vBot").textContent = layers ? String(L(ui.layerMin)) : "–";
+  layerSlider.set(ui.layerMin, ui.layerMax);
+  let total = 0; for (const l of v.lines) if (l.userData.lod !== "far") { const [a, b] = layerSpan(l); total += b - a; }
+  const shown = Math.ceil(total * ui.scrub);
+  byId("readout").innerHTML = layers ? `Layers <b>${L(ui.layerMin)}–${L(ui.layerMax)}</b> / ${layers}<br>Step <b>${shown.toLocaleString()}</b> / ${total.toLocaleString()}` : "Slice the plate to preview";
+}
+
+// ======================= modal preset editor =======================
+const MODAL_TITLES: Record<PresetKind, [string, string]> = { machine: ["printer", "Printer"], filament: ["spool", "Filament"], process: ["layers", "Process"] };
 function machineGeometryUI(m: MachinePreset) {
-  return `<h2>Machine geometry</h2>
-    <label class="file-btn" title="Hotend + carriage mesh, nozzle tip lowest">Toolhead mesh (STL/STEP)…<input type="file" id="toolheadFile" accept=".stl,.step,.stp,.obj,.3mf" hidden></label>
-    <label class="file-btn" title="Polygons/rects/straight paths in mm, origin top-left">Bed exclusion SVG…<input type="file" id="excludeFile" accept=".svg" hidden></label>
-    <label class="file-btn">Bed texture PNG…<input type="file" id="bedPng" accept="image/png,image/jpeg" hidden></label>
-    <div class="muted">${(m.bedExclude ?? []).length} exclusion zone(s)${(m.bedExclude ?? []).length ? ' <button id="clearExclude">Clear</button>' : ""}</div>`;
+  const n = (m.bedExclude ?? []).length;
+  return `<h2>Machine geometry</h2><div class="actions" style="margin-top:6px">
+    <label class="btn sm file-btn" for="fileToolhead" title="Hotend + carriage mesh, nozzle tip lowest">${icon("import")}Toolhead mesh…</label>
+    <label class="btn sm file-btn" for="fileExclude" title="Polygons/rects/straight paths in mm, origin top-left">${icon("import")}Bed exclusion SVG…</label>
+    <label class="btn sm file-btn" for="fileBedPng">${icon("import")}Bed texture…</label></div>
+    <div class="muted" style="margin-top:8px">${n} exclusion zone(s)${n ? ` <button class="btn sm ghost" data-act="clearExclude">Clear</button>` : ""}</div>`;
 }
+function renderPresetBody(kind: PresetKind) {
+  const vals = presetValues(kind) as unknown as Record<string, unknown>, dirty = !!ui.edited[kind], cur = registry.get(ui.selected[kind])!;
+  return `${selectRow("Preset", `data-in="presetSel"`, registry.list(kind).map((p) => opt(p.id, `${p.system ? "" : "★ "}${p.name}`, p.id === ui.selected[kind])).join(""))}
+    <div class="muted">${cur.inherits ? `inherits ${esc(registry.get(cur.inherits)?.name ?? cur.inherits)}` : "root preset"}${dirty ? ' · <span style="color:var(--amber-deep)">modified</span>' : ""}</div>
+    <div class="actions"><button class="btn sm primary" data-act="presetSave" data-arg="${kind}">Save as…</button>${dirty ? `<button class="btn sm" data-act="presetRevert" data-arg="${kind}">Revert</button>` : ""}${!cur.system ? `<button class="btn sm danger" data-act="presetDelete" data-arg="${kind}">Delete</button>` : ""}
+      <label class="btn sm file-btn" for="fileProfile" title="Bambu Studio / OrcaSlicer .json or PrusaSlicer .ini">${icon("import")}Import profile…</label></div>
+    ${kind === "machine" ? machineGeometryUI(vals as unknown as MachinePreset) : ""}
+    ${GROUPS[kind].map(([g, keys]) => `<h2>${g}</h2>${keys.map((k) => field(k, getPath(vals, k))).join("")}`).join("")}`;
+}
+function renderModal() {
+  const kind = ui.modal;
+  modal.classList.toggle("show", !!kind);
+  if (!kind) return;
+  const body = sheet.querySelector<HTMLElement>(".body"), top = body?.scrollTop ?? 0, [ic, title] = MODAL_TITLES[kind];
+  setHtml(sheet, `<div class="head"><span class="glyph-s">${icon(ic)}</span><h1>${title} preset</h1><button class="icon-btn sm" data-act="closeModal" aria-label="Close">${icon("close")}</button></div><div class="body">${renderPresetBody(kind)}</div>`);
+  const nb = sheet.querySelector<HTMLElement>(".body"); if (nb) nb.scrollTop = top;
+}
+const closeModal = () => { ui.modal = null; renderModal(); };
+modal.addEventListener("pointerdown", (e) => { if (e.target === modal) closeModal(); });
+
+// ======================= status, layout, theme =======================
+function renderStatus() { renderTopbar(); renderToast(); }
+function renderPlateBar() { renderTray(); renderTopbar(); }
+function renderPanel() { renderToolCard(); renderTray(); }
+function renderAll() {
+  hud.dataset.mode = ui.mode; hud.dataset.drawer = ui.drawerOpen ? "open" : "closed";
+  renderTopbar(); renderDock(); renderToolCard(); renderDrawer(); renderTray(); renderModal(); renderToast(); updateViewInsets();
+}
+function setMode(m: typeof ui.mode) {
+  ui.mode = m; ui.playing = false; ui.tool = m === "prepare" ? toolFor(ui.dock) : "orbit"; syncPlay();
+  closePop(); renderAll();
+}
+function applyTheme(mode: ThemeMode) {
+  ui.theme = mode; setThemeAttr(mode);
+  layoutPlates();
+  views.forEach((v) => v.objs.forEach((ov) => { if (ov.shadow) { (ov.shadow.material as THREE.MeshBasicMaterial).map = blobTexture(); (ov.shadow.material as THREE.Material).needsUpdate = true; } }));
+  updateSurfaceVisibility(); views.forEach(redrawPaths); renderAll();
+}
+/** Shift the 3D view centre so the bed sits in the free area between the floating layers (eased in the render loop). */
+const viewShift = { x: 0, y: 0, tx: 0, ty: 0, dirty: true };
+function updateViewInsets() {
+  const W = view.clientWidth, H = view.clientHeight;
+  let l = 0, r = 0;
+  if (ui.mode === "prepare") l = 14 + 56 + (toolcard.classList.contains("open") ? 10 + 288 : 0);
+  if (ui.drawerOpen) r = 14 + 316;
+  if (ui.mode === "preview") r += 72; // vertical layer slider
+  const t = topbar.getBoundingClientRect().bottom + 8, b = H - tray.getBoundingClientRect().top + 8;
+  const narrow = W - l - r < 420; // too little free width: don't shift, nothing useful fits
+  viewShift.tx = narrow ? 0 : (l - r) / 2; viewShift.ty = narrow ? 0 : (t - b) / 2;
+}
+function stepViewShift() {
+  const dx = viewShift.tx - viewShift.x, dy = viewShift.ty - viewShift.y;
+  if (!viewShift.dirty && Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) return;
+  viewShift.dirty = false;
+  viewShift.x = Math.abs(dx) < 0.3 ? viewShift.tx : viewShift.x + dx * 0.16; viewShift.y = Math.abs(dy) < 0.3 ? viewShift.ty : viewShift.y + dy * 0.16;
+  const W = view.clientWidth, H = view.clientHeight;
+  if (viewShift.x === 0 && viewShift.y === 0) camera.clearViewOffset(); else camera.setViewOffset(W, H, -viewShift.x, -viewShift.y, W, H);
+}
+hud.addEventListener("transitionend", (e) => { if (e.target === toolcard || e.target === drawer || e.target === tray) updateViewInsets(); });
+
+// ======================= actions (clicks) =======================
+function afterPresetEdit(kind: PresetKind) {
+  views.forEach((v) => v.objs.forEach(buildSurface));
+  if (kind === "machine") { layoutPlates(); focusActive(); }
+  renderAll(); sliceActiveSoon();
+}
+function onPresetsChanged() { afterPresetEdit("machine"); }
+function setPresetValue(kind: PresetKind, path: string, val: unknown) {
+  const edited = structuredClone(presetValues(kind)) as unknown as Record<string, unknown>;
+  setPath(edited, path, val); ui.edited[kind] = edited as never;
+}
+function sliceNow() {
+  const v = activeView(); if (!v.plate.objects.length) return;
+  if (isFresh(v)) { setMode("preview"); return; }
+  ui.goPreview = true; slice(v); renderTopbar();
+}
+const pickPlateMenu = (anchor: HTMLElement) => openPop(anchor, `<div class="menu-head">Plates</div>${views.map((v, i) => `<div class="list-item${i === ui.active ? " on" : ""}" role="menuitem" tabindex="0" data-act="selectPlate" data-arg="${i}"><span class="obj-name">${icon(v.plate.locked ? "lock" : "layers")}<span class="nowrap">${esc(v.plate.name)}</span></span><span class="muted">${v.plate.objects.length} obj</span></div>`).join("")}
+  <div class="sep"></div><div class="list-item" role="menuitem" tabindex="0" data-act="addPlate"><span class="obj-name">${icon("plus")}New plate</span></div>`);
+const exportMenu = (anchor: HTMLElement) => openPop(anchor, `<div class="menu-head">Export</div>${(Object.keys(EXPORT_LABELS) as ExportFormat[]).filter((f) => ui.developer || (f !== "csv" && f !== "json")).map((f) =>
+  `<div class="list-item" role="menuitem" tabindex="0" data-act="doExport" data-arg="${f}"><span class="obj-name">${icon("export")}<span>${EXPORT_LABELS[f]}</span></span></div>`).join("")}
+  <div class="sep"></div><div class="menu-head">Project</div>
+  <div class="list-item" role="menuitem" tabindex="0" data-act="saveProject"><span class="obj-name">${icon("save")}Save project</span></div>
+  <div class="list-item" role="menuitem" tabindex="0" data-act="openProject"><span class="obj-name">${icon("folder")}Open project…</span></div>
+  <div class="list-item" role="menuitem" tabindex="0" data-act="importProfile"><span class="obj-name">${icon("import")}Import profile…</span></div>`);
+const ACT: Record<string, (arg: string, el: HTMLElement) => void> = {
+  noop: () => {},
+  setMode: (a) => setMode(a as typeof ui.mode),
+  toggleTheme: () => applyTheme(ui.theme === "dark" ? "light" : "dark"),
+  toggleDrawer: () => { ui.drawerOpen = !ui.drawerOpen; renderAll(); },
+  renameProject: () => { const n = prompt("Project name", ui.projectName); if (n?.trim()) { ui.projectName = n.trim(); renderTopbar(); } },
+  plateMenu: (_, el) => pickPlateMenu(el), exportMenu: (_, el) => exportMenu(el),
+  sliceNow,
+  setDock: (a) => setDock(a as Dock), closeCard: () => setDock(null),
+  selectObj: (a) => selectObject(Number(a)),
+  dupObj: (a) => addObject(cloneObject(activeView().plate.objects[Number(a)])),
+  delObj: (a) => deleteObject(Number(a)),
+  centerObj: () => { const ov = activeObjView(); if (!ov || activeView().plate.locked) return; ov.obj.transform.x = 0; ov.obj.transform.y = 0; placeObj(ov); renderToolCard(); sliceActiveSoon(0); },
+  rotateBy: (a) => { const ov = activeObjView(); if (!ov || activeView().plate.locked) return; const t = ov.obj.transform; t.rotation = a === "0" ? 0 : ((t.rotation + Number(a) + 540) % 360) - 180; buildSurface(ov); renderToolCard(); sliceActiveSoon(0); },
+  arrange: (a) => arrangeAndReport(a === "all" ? views : [activeView()]),
+  paintMode: (a) => { ui.paintErase = a === "erase"; ui.tool = toolFor(ui.dock); renderToolCard(); },
+  selTarget: (a) => { ui.target = Number(a); ui.tool = toolFor(ui.dock); renderToolCard(); },
+  addRegion: () => { const o = activeObjView()?.obj; if (!o) return; const k = addRegion(o.mask, "sine"); o.regionParams[k] = { ...patterns.sine.defaults }; ui.target = k; ui.paintErase = false; ui.tool = toolFor(ui.dock); renderToolCard(); },
+  openModal: (a) => { ui.modal = a as PresetKind; renderModal(); },
+  closeModal,
+  pickProcess: (a) => { ui.selected.process = a; delete ui.edited.process; ui.presetsOpen = false; afterPresetEdit("process"); },
+  tier: (a) => { ui.tier = ui.tier === a ? null : (a as typeof ui.tier); renderDrawer(); },
+  presetsMore: () => { ui.presetsOpen = !ui.presetsOpen; renderDrawer(); },
+  nlMore: () => { ui.nlOpen = !ui.nlOpen; renderDrawer(); },
+  presetSave: (kind) => {
+    const k = kind as PresetKind, name = prompt("Preset name", `${registry.get(ui.selected[k])!.name} (custom)`); if (!name) return;
+    const cur = registry.get(ui.selected[k])!, parent = cur.system ? cur.id : cur.inherits ?? cur.id, id = `user/${k}/${name.toLowerCase().replace(/\W+/g, "-")}`;
+    registry.saveDelta(id, name, k, parent, presetValues(k) as never);
+    ui.selected[k] = id; delete ui.edited[k]; persistUserPresets(); afterPresetEdit(k);
+  },
+  presetRevert: (kind) => { delete ui.edited[kind as PresetKind]; afterPresetEdit(kind as PresetKind); },
+  presetDelete: (kind) => { const k = kind as PresetKind, cur = registry.get(ui.selected[k])!; registry.remove(cur.id); ui.selected[k] = cur.inherits ?? registry.list(k)[0].id; delete ui.edited[k]; persistUserPresets(); afterPresetEdit(k); },
+  clearExclude: () => editMachine({ bedExclude: [] }),
+  previewMode: (a) => { ui.preview = a as PreviewMode; views.forEach(redrawPaths); renderDrawer(); renderTray(); },
+  play: () => { ui.playing = !ui.playing; if (ui.playing && ui.scrub >= 1) { ui.scrub = 0; } syncPlay(); },
+  pickFormat: (a) => { ui.exportFormat = a as ExportFormat; renderDrawer(); },
+  doExport: (a) => { ui.exportFormat = (a || ui.exportFormat) as ExportFormat; doExport(); },
+  saveProject, openProject: () => byId("fileProject").click(), importProfile: () => byId("fileProfile").click(),
+  selectPlate: (a) => selectPlate(Number(a)),
+  lockPlate: (a) => { const v = views[Number(a)]; v.plate.locked = !v.plate.locked; layoutPlates(); renderAll(); },
+  dupPlate: (a) => addPlate(clonePlate(views[Number(a)].plate)),
+  delPlate: (a) => deletePlate(Number(a)),
+  addPlate: () => addPlate(),
+};
+document.addEventListener("click", (e) => {
+  const t = (e.target as Element).closest<HTMLElement>("[data-act]");
+  if (!t || (t as HTMLButtonElement).disabled) return;
+  const act = t.dataset.act!;
+  if (t.closest("#pop") && act !== "plateMenu" && act !== "exportMenu") closePop();
+  ACT[act]?.(t.dataset.arg ?? "", t);
+});
+document.addEventListener("keydown", (e) => { // keyboard activation for role="button" rows
+  const t = e.target as HTMLElement, role = t.getAttribute?.("role");
+  if ((e.key !== "Enter" && e.key !== " ") || (role !== "button" && role !== "menuitem") || !t.dataset.act) return;
+  e.preventDefault(); t.click();
+});
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && ui.modal) closeModal(); });
+
+// ======================= inputs =======================
+type Phase = "input" | "change";
+const syncRange = (el: HTMLInputElement) => {
+  const out = el.closest(".row")?.querySelector(".v"), unit = out?.querySelector(".unit");
+  if (out) { out.textContent = el.value; if (unit) out.append(unit); }
+  el.style.setProperty("--p", `${pct(Number(el.value), Number(el.min), Number(el.max)).toFixed(1)}%`);
+};
+const objLocked = () => !!activeView()?.plate.locked;
+const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
+  tf(el, phase) {
+    const ov = activeObjView(); if (!ov || objLocked()) return;
+    const t = ov.obj.transform, k = el.dataset.key as keyof typeof t, n = Number(el.value);
+    if (k === "scaleXY" || k === "scaleZ") {
+      t[k] = Math.max(0.1, n / 100);
+      if (ui.uniform) {
+        const other = k === "scaleXY" ? "scaleZ" : "scaleXY"; t[other] = t[k];
+        const o2 = toolcard.querySelector<HTMLInputElement>(`[data-key="${other}"]`); if (o2) { o2.value = String(n); syncRange(o2); }
+      }
+    } else t[k] = n;
+    if (el.type === "range") syncRange(el);
+    if (el.type === "range" && phase === "input") applyObjTransform(ov); else buildSurface(ov);
+    placeObj(ov); renderStatus(); sliceActiveSoon();
+  },
+  uniform: (el) => { ui.uniform = el.checked; },
+  target: (el) => { ui.target = Number(el.value); ui.tool = toolFor(ui.dock); renderToolCard(); },
+  pattern(el) {
+    const ov = activeObjView(); if (!ov || objLocked()) return;
+    const o = ov.obj, defs = { ...patterns[el.value].defaults };
+    if (ui.target < 0) o.base = { pattern: el.value, params: defs }; else { o.mask.regions[ui.target].pattern = el.value; o.regionParams[ui.target] = defs; }
+    buildSurface(ov); renderToolCard(); renderStatus(); sliceActiveSoon();
+  },
+  param(el) {
+    const ov = activeObjView(); if (!ov || objLocked()) return;
+    (ui.target < 0 ? ov.obj.base.params : ov.obj.regionParams[ui.target])[el.dataset.key as keyof PatternParams] = Number(el.value);
+    syncRange(el); renderStatus(); sliceActiveSoon();
+  },
+  brush: (el) => { ui.brush = Number(el.value); syncRange(el); },
+  showSurface: (el) => { ui.showSurface = el.checked; updateSurfaceVisibility(); },
+  addPrim(el) { const k = el.value as PrimitiveName; if (k) addObject(newObject({ kind: "primitive", primitive: k })); el.value = ""; },
+  developer: (el) => { ui.developer = el.checked; if (!ui.developer && (ui.exportFormat === "csv" || ui.exportFormat === "json")) ui.exportFormat = "gcode"; renderAll(); },
+  presetSel(el) { const kind = ui.modal!; ui.selected[kind] = el.value; delete ui.edited[kind]; afterPresetEdit(kind); },
+  path(el, phase) {
+    const kind = (el.dataset.kind as PresetKind | undefined) ?? ui.modal; if (!kind) return;
+    const val = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.dataset.array ? el.value.split(",").map(Number) : el.value;
+    setPresetValue(kind, el.dataset.path!, val);
+    if (el.type === "range" && phase === "input") { syncRange(el); ui.dragSlider = true; renderStatus(); sliceActiveSoon(); return; }
+    ui.dragSlider = false; afterPresetEdit(kind);
+  },
+};
+for (const phase of ["input", "change"] as const) document.addEventListener(phase, (e) => {
+  const el = e.target as HTMLInputElement, name = el.dataset?.in; if (!name) return;
+  if (phase === "input" && el.type !== "range") return; // text/number/select commit on change; sliders are live
+  IN[name]?.(el, phase);
+});
+document.addEventListener("pointerup", () => { ui.dragSlider = false; });
+
+// ---------- hidden file inputs ----------
+const fileHandler = (id: string, fn: (files: FileList) => void) => { const el = byId<HTMLInputElement>(id); el.onchange = () => { if (el.files?.length) fn(el.files); el.value = ""; }; };
+byId<HTMLInputElement>("fileImport").accept = ACCEPT;
+fileHandler("fileImport", (f) => importFiles(f)); fileHandler("fileProject", (f) => importFiles([f[0]])); fileHandler("fileProfile", (f) => importFiles(f));
+fileHandler("fileToolhead", async (fl) => {
+  try {
+    const r = await parseInWorker(fl[0]);
+    const mesh = r.kind === "meshes" ? r.meshes[0] : r.kind === "3mf" ? r.data.objects[0]?.mesh : undefined;
+    if (!mesh) throw new Error("No geometry in file");
+    const g = prompt("Gantry height above nozzle tip (mm). Geometry above it is treated as gantry, not toolhead:", String(machine().clearanceHeight));
+    if (g === null) return;
+    const env = toolheadEnvelope(mesh, Number(g) > 0 ? Number(g) : undefined);
+    editMachine({ clearanceRadius: env.clearanceRadius, clearanceHeight: env.clearanceHeight });
+    alert(`Toolhead envelope: radius ${env.clearanceRadius} mm, gantry ${env.clearanceHeight} mm.\nRadius by height: ${env.profile.map((b) => `${b.z}mm:${b.r.toFixed(0)}`).join(" ")}\nSave the printer preset to keep it.`);
+  } catch (err) { alert(`Toolhead import failed: ${err instanceof Error ? err.message : err}`); }
+});
+fileHandler("fileExclude", async (fl) => {
+  try { const r = parseBedExclusionSVG(await fl[0].text()); editMachine({ bedExclude: r.polygons }); if (r.warnings.length) alert(r.warnings.join("\n")); }
+  catch (err) { alert(`Bed exclusion import failed: ${err instanceof Error ? err.message : err}`); }
+});
+fileHandler("fileBedPng", (fl) => {
+  const url = URL.createObjectURL(fl[0]);
+  new THREE.TextureLoader().load(url, (t) => { bedTexture = t; layoutPlates(); }, undefined, () => alert("Could not read image"));
+});
 function editMachine(patch: Partial<MachinePreset>) {
   ui.edited.machine = { ...structuredClone(machine()), ...patch };
   onPresetsChanged();
 }
-function renderPresetTab(kind: PresetKind) {
-  const vals = presetValues(kind) as unknown as Record<string, unknown>, dirty = !!ui.edited[kind];
-  const cur = registry.get(ui.selected[kind])!;
-  const list = registry.list(kind);
-  return `
-    <label>Preset <select id="presetSel">${list.map((p) => opt(p.id, `${p.system ? "" : "★ "}${p.name}`, p.id === ui.selected[kind])).join("")}</select></label>
-    <div class="muted">${cur.inherits ? `inherits ${registry.get(cur.inherits)?.name ?? cur.inherits}` : "root preset"}${dirty ? ' · <span class="warn">modified</span>' : ""}</div>
-    <button id="presetSave" class="primary">Save as…</button>${dirty ? '<button id="presetRevert">Revert</button>' : ""}${!cur.system ? '<button id="presetDelete">Delete</button>' : ""}
-    <label class="file-btn" title="Bambu Studio / OrcaSlicer .json or PrusaSlicer .ini">Import profile…<input type="file" id="profileFile" accept=".json,.ini" multiple hidden></label>
-    ${kind === "machine" ? machineGeometryUI(vals as unknown as MachinePreset) : ""}
-    ${GROUPS[kind].map(([g, keys]) => `<h2>${g}</h2>${keys.map((k) => field(k, getPath(vals, k))).join("")}`).join("")}`;
-}
 
-
-function renderPanel() {
-  const tabs: [typeof ui.tab, string][] = [["prepare", "Prepare"], ["machine", "Printer"], ["filament", "Filament"], ["process", "Process"]];
-  panel.innerHTML = `
-    <div class="tabs">${tabs.map(([t, l]) => `<button data-tab="${t}" class="${ui.tab === t ? "on" : ""}">${l}</button>`).join("")}</div>
-    <div class="summary">
-      <div>🖨 ${esc(registry.get(ui.selected.machine)!.name)}${ui.edited.machine ? "*" : ""}</div>
-      <div>🧵 ${esc(registry.get(ui.selected.filament)!.name)}${ui.edited.filament ? "*" : ""}</div>
-      <div>⚙ ${esc(registry.get(ui.selected.process)!.name)}${ui.edited.process ? "*" : ""}</div>
-    </div>
-    ${ui.tab === "prepare" ? renderPrepareTab() : renderPresetTab(ui.tab)}
-    <h2>Project</h2>
-    <button id="slicePlate" class="primary">Slice plate</button><button id="sliceAll">Slice all</button>
-    <h2>Export</h2>
-    <label>Format <select id="exportFormat">${(Object.keys(EXPORT_LABELS) as ExportFormat[]).filter((f) => ui.developer || (f !== "csv" && f !== "json")).map((f) => opt(f, EXPORT_LABELS[f], f === ui.exportFormat)).join("")}</select></label>
-    <button id="export" class="primary">Export</button>
-    <button id="saveProject">Save project</button><button id="openProject">Open…</button>
-    <label>Developer mode <input type="checkbox" id="developer"${ui.developer ? " checked" : ""}></label>
-    <input type="file" id="projectFile" accept=".nexspiro,.3mf,application/json" hidden>`;
-  bindPanel();
-}
-
-function renderPlateBar() {
-  let bar = document.getElementById("plates");
-  if (!bar) { bar = document.createElement("div"); bar.id = "plates"; view.append(bar); }
-  bar.innerHTML = views.map((v, i) => {
-    const st = v.status === "done" ? (v.result!.issues.some((x) => x.level === "error") ? "⚠" : "✓") : v.status === "slicing" ? "…" : v.status === "error" ? "✕" : "";
-    return `<div class="plate${i === ui.active ? " on" : ""}" data-plate="${i}">
-      <span>${esc(v.plate.name)} (${v.plate.objects.length}) ${st}</span>
-      <button data-lock="${i}" title="Lock plate">${v.plate.locked ? "🔒" : "🔓"}</button>
-      <button data-dup="${i}" title="Duplicate plate">⧉</button>
-      <button data-del="${i}" title="Delete plate"${views.length < 2 || v.plate.locked ? " disabled" : ""}>✕</button></div>`;
-  }).join("") + `<button id="addPlate">+ Plate</button>`;
-  bar.querySelectorAll<HTMLElement>("[data-plate]").forEach((el) => el.onclick = (e) => { if (!(e.target as HTMLElement).closest("button")) selectPlate(Number(el.dataset.plate)); });
-  bar.querySelectorAll<HTMLElement>("[data-lock]").forEach((el) => el.onclick = () => { const v = views[Number(el.dataset.lock)]; v.plate.locked = !v.plate.locked; layoutPlates(); renderAll(); });
-  bar.querySelectorAll<HTMLElement>("[data-dup]").forEach((el) => el.onclick = () => addPlate(clonePlate(views[Number(el.dataset.dup)].plate)));
-  bar.querySelectorAll<HTMLElement>("[data-del]").forEach((el) => el.onclick = () => deletePlate(Number(el.dataset.del)));
-  document.getElementById("addPlate")!.onclick = () => addPlate();
-}
-
-const stats = { fps: 0 };
-function renderStatus() {
-  const v = activeView(); if (!v) return;
-  const r = v.result, M = machine();
-  let s = `${v.plate.name} · ${v.status}${v.status === "error" ? ": " + esc(v.error ?? "") : ""} · ${stats.fps.toFixed(0)} fps\n`;
-  if (r && v.status !== "error") {
-    s += `${formatDuration(r.stats.timeS)} · ${r.stats.grams.toFixed(1)} g · ${(r.stats.filamentMm / 1000).toFixed(2)} m · ${r.stats.layers} layers · cost ${r.stats.cost.toFixed(2)}\n`;
-    const moves = r.mps.reduce((a, m) => a + m.count, 0), dec = r.mps.reduce((a, m) => a + m.decimated, 0);
-    s += `${r.mps.length} object${r.mps.length > 1 ? "s (sequential: " + r.order.map((k) => esc(v.plate.objects[k]?.name ?? "?")).join(" → ") + ")" : ""} · ${moves.toLocaleString()} moves (${dec.toLocaleString()} decimated) · ${r.ms.toFixed(0)} ms\n`;
-    if (ui.preview !== "feature") { const [lo, hi, unit] = legendRange(r.mps, ui.preview); s += `${PREVIEW_LABELS[ui.preview]}: <span style="color:hsl(240,85%,60%)">${lo.toFixed(1)}</span> → <span style="color:hsl(0,85%,60%)">${hi.toFixed(1)}</span> ${unit}\n`; }
-    if (r.zClipped) s += `<span class="warn">Z wobble capped at ±${M.zWobbleMax} mm on ${r.zClipped.toLocaleString()} points</span>\n`;
-    const inc = r.mps.reduce((a, m) => a + m.inclinationViolations, 0);
-    if (inc) s += `<span class="warn">${inc.toLocaleString()} segments exceed max inclination ${proc().nonLinear.maxInclination}°</span>\n`;
-    for (const i of r.issues) s += `<span class="${i.level === "error" ? "err" : "warn"}">${esc(i.message)}</span>\n`;
-  }
-  statsEl.innerHTML = s;
-}
-function renderAll() { renderPanel(); renderPlateBar(); renderStatus(); }
-
-function bindPanel() {
-  const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T | null;
-  panel.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => b.onclick = () => { ui.tab = b.dataset.tab as typeof ui.tab; renderPanel(); });
-  const v = activeView();
-  const changed = () => { renderStatus(); sliceActiveSoon(); };
-
-  if (ui.tab === "prepare") {
-    panel.querySelectorAll<HTMLElement>("[data-obj]").forEach((el) => el.onclick = (e) => { if (!(e.target as HTMLElement).closest("button")) selectObject(Number(el.dataset.obj)); });
-    panel.querySelectorAll<HTMLElement>("[data-objdup]").forEach((el) => el.onclick = () => addObject(cloneObject(v.plate.objects[Number(el.dataset.objdup)])));
-    panel.querySelectorAll<HTMLElement>("[data-objdel]").forEach((el) => el.onclick = () => deleteObject(Number(el.dataset.objdel)));
-    $("importFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importFiles(fl); };
-    $<HTMLSelectElement>("addPrim")!.onchange = (e) => { const k = (e.target as HTMLSelectElement).value as PrimitiveName; if (k) addObject(newObject({ kind: "primitive", primitive: k })); };
-    $("arrange")!.onclick = () => arrangeAndReport([v]);
-    $("arrangeAll")!.onclick = () => arrangeAndReport(views);
-    panel.querySelectorAll<HTMLElement>("[data-tool]").forEach((b) => b.onclick = () => {
-      ui.tool = b.dataset.tool as typeof ui.tool;
-      if ((ui.tool === "paint" || ui.tool === "erase") && ui.target < 0) alert("Add or select a paint region first (Wall pattern → Target).");
-      renderPanel();
-    });
-    const ov = activeObjView();
-    if (ov) {
-      const o = ov.obj;
-      panel.querySelectorAll<HTMLInputElement>("[data-tf]").forEach((el) => el.onchange = () => {
-        const k = el.dataset.tf as keyof typeof o.transform, n = Number(el.value);
-        o.transform[k] = k === "scaleXY" || k === "scaleZ" ? Math.max(0.1, n / 100) : n;
-        buildSurface(ov); placeObj(ov); changed();
-      });
-      $<HTMLSelectElement>("target")!.onchange = (e) => { ui.target = Number((e.target as HTMLSelectElement).value); renderPanel(); };
-      $<HTMLSelectElement>("pattern")!.onchange = (e) => {
-        const name = (e.target as HTMLSelectElement).value, defs = { ...patterns[name].defaults };
-        if (ui.target < 0) o.base = { pattern: name, params: defs }; else { o.mask.regions[ui.target].pattern = name; o.regionParams[ui.target] = defs; }
-        buildSurface(ov); renderPanel(); changed();
-      };
-      panel.querySelectorAll<HTMLInputElement>("input[data-param]").forEach((inp) => inp.oninput = () => {
-        (ui.target < 0 ? o.base.params : o.regionParams[ui.target])[inp.dataset.param as keyof PatternParams] = Number(inp.value);
-        (inp.nextElementSibling as HTMLElement).textContent = inp.value; changed();
-      });
-      $("addRegion")!.onclick = () => { const k = addRegion(o.mask, "sine"); o.regionParams[k] = { ...patterns.sine.defaults }; ui.target = k; ui.tool = "paint"; renderPanel(); };
-      $("brush")!.oninput = (e) => { const el = e.target as HTMLInputElement; ui.brush = Number(el.value); (el.nextElementSibling as HTMLElement).textContent = el.value; };
-      $("showSurface")!.onchange = (e) => { ui.showSurface = (e.target as HTMLInputElement).checked; updateSurfaceVisibility(); };
-    }
-    $<HTMLSelectElement>("previewMode")!.onchange = (e) => { ui.preview = (e.target as HTMLSelectElement).value as PreviewMode; views.forEach(redrawPaths); renderStatus(); };
-    $("layerMin")!.oninput = (e) => { ui.layerMin = Math.min(Number((e.target as HTMLInputElement).value), ui.layerMax); views.forEach(applyLayerRange); };
-    $("layerMax")!.oninput = (e) => { ui.layerMax = Math.max(Number((e.target as HTMLInputElement).value), ui.layerMin); views.forEach(applyLayerRange); };
-  } else {
-    const kind = ui.tab;
-    $<HTMLSelectElement>("presetSel")!.onchange = (e) => { ui.selected[kind] = (e.target as HTMLSelectElement).value; delete ui.edited[kind]; onPresetsChanged(); };
-    panel.querySelectorAll<HTMLInputElement>("[data-path]").forEach((el) => el.onchange = () => {
-      const edited = structuredClone(presetValues(kind)) as unknown as Record<string, unknown>;
-      const val = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.dataset.array ? el.value.split(",").map(Number) : el.value;
-      setPath(edited, el.dataset.path!, val);
-      ui.edited[kind] = edited as never;
-      onPresetsChanged();
-    });
-    $("presetSave")!.onclick = () => {
-      const name = prompt("Preset name", `${registry.get(ui.selected[kind])!.name} (custom)`); if (!name) return;
-      const cur = registry.get(ui.selected[kind])!, parent = cur.system ? cur.id : cur.inherits ?? cur.id;
-      const id = `user/${kind}/${name.toLowerCase().replace(/\W+/g, "-")}`;
-      registry.saveDelta(id, name, kind, parent, presetValues(kind) as never);
-      ui.selected[kind] = id; delete ui.edited[kind]; persistUserPresets(); onPresetsChanged();
-    };
-    $("profileFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importFiles(fl); };
-    const th = $("toolheadFile"); if (th) th.onchange = async (e) => {
-      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
-      try {
-        const r = await parseInWorker(f);
-        const mesh = r.kind === "meshes" ? r.meshes[0] : r.kind === "3mf" ? r.data.objects[0]?.mesh : undefined;
-        if (!mesh) throw new Error("No geometry in file");
-        const g = prompt("Gantry height above nozzle tip (mm). Geometry above it is treated as gantry, not toolhead:", String(machine().clearanceHeight));
-        if (g === null) return;
-        const env = toolheadEnvelope(mesh, Number(g) > 0 ? Number(g) : undefined);
-        editMachine({ clearanceRadius: env.clearanceRadius, clearanceHeight: env.clearanceHeight });
-        alert(`Toolhead envelope: radius ${env.clearanceRadius} mm, gantry ${env.clearanceHeight} mm.\nRadius by height: ${env.profile.map((b) => `${b.z}mm:${b.r.toFixed(0)}`).join(" ")}\nSave the printer preset to keep it.`);
-      } catch (err) { alert(`Toolhead import failed: ${err instanceof Error ? err.message : err}`); }
-    };
-    const ex = $("excludeFile"); if (ex) ex.onchange = async (e) => {
-      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
-      try { const r = parseBedExclusionSVG(await f.text()); editMachine({ bedExclude: r.polygons }); if (r.warnings.length) alert(r.warnings.join("\n")); }
-      catch (err) { alert(`Bed exclusion import failed: ${err instanceof Error ? err.message : err}`); }
-    };
-    const ce = $("clearExclude"); if (ce) ce.onclick = () => editMachine({ bedExclude: [] });
-    const bp = $("bedPng"); if (bp) bp.onchange = (e) => {
-      const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
-      const url = URL.createObjectURL(f);
-      new THREE.TextureLoader().load(url, (t) => { bedTexture = t; layoutPlates(); }, undefined, () => alert("Could not read image"));
-    };
-    const rev = $("presetRevert"); if (rev) rev.onclick = () => { delete ui.edited[kind]; onPresetsChanged(); };
-    const del = $("presetDelete"); if (del) del.onclick = () => {
-      const cur = registry.get(ui.selected[kind])!; registry.remove(cur.id); ui.selected[kind] = cur.inherits ?? registry.list(kind)[0].id;
-      delete ui.edited[kind]; persistUserPresets(); onPresetsChanged();
-    };
-  }
-  $("slicePlate")!.onclick = () => slice(activeView());
-  $("sliceAll")!.onclick = sliceAll;
-  $("export")!.onclick = doExport;
-  $<HTMLSelectElement>("exportFormat")!.onchange = (e) => { ui.exportFormat = (e.target as HTMLSelectElement).value as ExportFormat; };
-  $("developer")!.onchange = (e) => { ui.developer = (e.target as HTMLInputElement).checked; if (!ui.developer && (ui.exportFormat === "csv" || ui.exportFormat === "json")) ui.exportFormat = "gcode"; renderPanel(); };
-  $("saveProject")!.onclick = saveProject;
-  $("openProject")!.onclick = () => $("projectFile")!.click();
-  $("projectFile")!.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) importFiles([f]); };
-}
-function onPresetsChanged() { views.forEach((v) => v.objs.forEach(buildSurface)); layoutPlates(); focusActive(); renderAll(); sliceActiveSoon(); }
 
 // drag & drop STL onto the viewport
 view.addEventListener("dragover", (e) => e.preventDefault());
 view.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer?.files.length) importFiles(e.dataTransfer.files); });
 
 // ======================= loop =======================
-function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+  viewShift.dirty = true; // re-apply the view offset for the new size
+  updateViewInsets();
+}
 new ResizeObserver(resize).observe(view);
-let frames = 0, last = performance.now();
+let frames = 0, last = performance.now(), lastFrame = last;
 renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  stepViewShift();
   controls.update();
+  if (ui.playing) { // toolpath playback: a full pass takes ~10 s
+    ui.scrub = Math.min(1, ui.scrub + dt / 10); if (ui.scrub >= 1) { ui.playing = false; syncPlay(); }
+    scrubEl.value = String(ui.scrub); scrubEl.style.setProperty("--p", `${ui.scrub * 100}%`); views.forEach(applyLayerRange); updateReadout();
+  }
   for (const v of views) {
     const far = camera.position.distanceTo(v.group.position) > 450, hasLod = v.lines.some((l) => l.userData.lod === "far");
     if (!dragging) for (const l of v.lines) l.visible = !hasLod || (l.userData.lod === "far") === far;
   }
   renderer.render(scene, camera);
   frames++;
-  const now = performance.now();
-  if (now - last > 1000) { stats.fps = (frames * 1000) / (now - last); frames = 0; last = now; renderStatus(); }
+  if (now - last > 1000) { stats.fps = (frames * 1000) / (now - last); frames = 0; last = now; if (ui.developer) renderToast(); }
 });
 
+applyThemeBoot();
 addPlate(newPlate("Plate 1"));
 resize();
+function applyThemeBoot() { setThemeAttr(ui.theme); }
