@@ -4,6 +4,7 @@ import { createMask, type PaintMask } from "./mask.ts";
 import { profileBody, meshBody, type Body } from "./body.ts";
 import type { Mesh } from "./mesh.ts";
 import type { MachinePreset, ProcessPreset, Preset } from "./presets.ts";
+import { getSetting, type SettingMap } from "./settings.ts";
 
 // Multi-plate, multi-object project model + .nexspiro (JSON) container.
 export type ObjectTransform = { x: number; y: number; scaleXY: number; scaleZ: number; rotation: number }; // x,y: mm from bed centre
@@ -13,6 +14,10 @@ export type PlateObject = {
   base: { pattern: string; params: PatternParams };
   regionParams: PatternParams[];
   mask: PaintMask;
+  /** Per-object process overrides (Bambu "Objects" tab): only the keys that differ from the global process. */
+  settings?: SettingMap;
+  /** Primitives only: wall thickness (mm) of a hollowed shape for planar slicing; 0/undefined = solid. */
+  hollow?: number;
 };
 export type Plate = { id: string; name: string; locked: boolean; objects: PlateObject[] };
 export type Project = {
@@ -28,13 +33,14 @@ const uid = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 export function newObject(source: ObjectSource = { kind: "primitive", primitive: "bowl" }, name?: string): PlateObject {
   return {
     id: uid("obj"), name: name ?? (source.kind === "primitive" ? (primitiveDefs[source.primitive]?.label ?? source.primitive) : "mesh"), source,
+    ...(source.kind === "primitive" && primitiveDefs[source.primitive]?.group === "Revolved vessels" ? { hollow: 2.4 } : {}),
     transform: { x: 0, y: 0, scaleXY: 1, scaleZ: 1, rotation: 0 },
     base: { pattern: "knit", params: { ...patterns.knit.defaults } }, regionParams: [], mask: createMask(256, 256),
   };
 }
 export function cloneObject(o: PlateObject): PlateObject {
   return {
-    ...o, id: uid("obj"), name: `${o.name} copy`, source: { ...o.source, ...(o.source.kind === "primitive" && o.source.params ? { params: { ...o.source.params } } : {}) } as typeof o.source, transform: { ...o.transform },
+    ...o, id: uid("obj"), name: `${o.name} copy`, source: { ...o.source, ...(o.source.kind === "primitive" && o.source.params ? { params: { ...o.source.params } } : {}) } as typeof o.source, transform: { ...o.transform }, ...(o.hollow !== undefined ? { hollow: o.hollow } : {}), ...(o.settings ? { settings: { ...o.settings } } : {}),
     base: { pattern: o.base.pattern, params: { ...o.base.params } }, regionParams: o.regionParams.map((r) => ({ ...r })),
     mask: { cols: o.mask.cols, rows: o.mask.rows, regions: o.mask.regions.map((r) => ({ ...r, params: r.params && { ...r.params }, weight: r.weight.slice() })) },
   };
@@ -58,8 +64,22 @@ export const footprint = (o: PlateObject, b: Body, process: ProcessPreset) =>
   b.footprintRadius * o.transform.scaleXY + maxAmp(o) + process.nonLinear.collisionMargin;
 export const objectHeight = (o: PlateObject, b: Body, machine: MachinePreset, process: ProcessPreset) =>
   b.height * o.transform.scaleZ + (process.nonLinear.enabled ? Math.min(machine.zWobbleMax, maxZAmp(o)) : 0);
-/** Gap between footprints: sequential (by-object) printing needs the toolhead clearance radius. */
-const spacing = (n: number, machine: MachinePreset) => (n > 1 ? machine.clearanceRadius : 0);
+/** Spiral vase and "by object" printing are sequential: the toolhead must clear the finished objects. */
+export const isSequential = (process: ProcessPreset) => getSetting(process, "spiral_mode") === true || getSetting(process, "print_sequence") === "by object";
+/** Gap between footprints: sequential printing needs the toolhead clearance radius, layer-by-layer printing just room for brim and skirt. */
+const spacing = (n: number, machine: MachinePreset, process?: ProcessPreset) => (n < 2 ? 0 : !process || isSequential(process) ? machine.clearanceRadius : Math.max(4, Number(getSetting(process, "brim_width")) * 2 + 1));
+/** Axis-aligned extent [minX, minY, maxX, maxY] of an object relative to its origin (scale and Z rotation applied). */
+export function objectRect(o: PlateObject, b: Body): [number, number, number, number] {
+  const t = o.transform, a = (t.rotation * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a), [x0, y0, x1, y1] = b.bbox;
+  const r: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) {
+    const X = (x * c - y * s) * t.scaleXY, Y = (x * s + y * c) * t.scaleXY;
+    r[0] = Math.min(r[0], X); r[1] = Math.min(r[1], Y); r[2] = Math.max(r[2], X); r[3] = Math.max(r[3], Y);
+  }
+  return r;
+}
+const rectsHit = (a: [number, number, number, number], b: [number, number, number, number], gap: number) => a[0] < b[2] + gap && b[0] < a[2] + gap && a[1] < b[3] + gap && b[1] < a[3] + gap;
+const placedRect = (o: PlateObject, b: Body, x = o.transform.x, y = o.transform.y): [number, number, number, number] => { const r = objectRect(o, b); return [r[0] + x, r[1] + y, r[2] + x, r[3] + y]; };
 
 /** Does a footprint circle (bed-centre coordinates) touch any bed keep-out polygon? */
 export function hitsExclusion(x: number, y: number, r: number, machine: MachinePreset): boolean {
@@ -80,7 +100,20 @@ export function hitsExclusion(x: number, y: number, r: number, machine: MachineP
 
 /** Greedy circle packing on the bed, largest first, nearest-to-centre placement. Mutates transforms. */
 export function arrangePlate(plate: Plate, bodies: Body[], machine: MachinePreset, process: ProcessPreset): string[] {
-  const [bx, by] = machine.bed, gap = spacing(plate.objects.length, machine);
+  const [bx, by] = machine.bed, gap = spacing(plate.objects.length, machine, process);
+  if (!isSequential(process)) { // layer-by-layer printing: pack bounding rectangles (largest first, nearest the bed centre)
+    const items = plate.objects.map((o, i) => ({ o, b: bodies[i], r: objectRect(o, bodies[i]) })).sort((a, c) => (c.r[2] - c.r[0]) * (c.r[3] - c.r[1]) - (a.r[2] - a.r[0]) * (a.r[3] - a.r[1]));
+    const out: string[] = [], done: [number, number, number, number][] = [], cand: [number, number][] = [], step = 2;
+    for (let x = -bx / 2; x <= bx / 2; x += step) for (let y = -by / 2; y <= by / 2; y += step) cand.push([x, y]);
+    cand.sort((a, c) => Math.hypot(...a) - Math.hypot(...c));
+    for (const { o, b, r } of items) {
+      const spot = cand.find(([x, y]) => x + r[0] >= -bx / 2 && x + r[2] <= bx / 2 && y + r[1] >= -by / 2 && y + r[3] <= by / 2 &&
+        !hitsExclusion(x + (r[0] + r[2]) / 2, y + (r[1] + r[3]) / 2, Math.hypot(r[2] - r[0], r[3] - r[1]) / 2, machine) && done.every((d) => !rectsHit([r[0] + x, r[1] + y, r[2] + x, r[3] + y], d, gap)));
+      if (!spot) { out.push(o.name); continue; }
+      o.transform.x = spot[0]; o.transform.y = spot[1]; done.push(placedRect(o, b));
+    }
+    return out;
+  }
   const items = plate.objects.map((o, i) => ({ o, r: footprint(o, bodies[i], process) })).sort((a, b) => b.r - a.r);
   const placed: { x: number; y: number; r: number }[] = [], failed: string[] = [];
   const step = 2, cand: [number, number][] = [];
@@ -106,7 +139,19 @@ export function printOrder(plate: Plate, bodies: Body[], machine: MachinePreset,
 export type PlateIssue = { level: "error" | "warn"; message: string };
 export function checkPlate(plate: Plate, bodies: Body[], machine: MachinePreset, process: ProcessPreset): PlateIssue[] {
   const issues: PlateIssue[] = [], [bx, by] = machine.bed, objs = plate.objects;
-  const gap = spacing(objs.length, machine);
+  const gap = spacing(objs.length, machine, process), seq = isSequential(process);
+  if (!seq) {
+    objs.forEach((o, i) => {
+      const r = placedRect(o, bodies[i]), h = bodies[i].height * o.transform.scaleZ;
+      if (r[0] < -bx / 2 || r[2] > bx / 2 || r[1] < -by / 2 || r[3] > by / 2) issues.push({ level: "error", message: `${o.name}: outside the bed (${(r[2] - r[0]).toFixed(0)} × ${(r[3] - r[1]).toFixed(0)} mm)` });
+      if (hitsExclusion((r[0] + r[2]) / 2, (r[1] + r[3]) / 2, Math.hypot(r[2] - r[0], r[3] - r[1]) / 2, machine)) issues.push({ level: "error", message: `${o.name}: overlaps a bed exclusion zone` });
+      if (h > machine.maxHeight) issues.push({ level: "error", message: `${o.name}: height ${h.toFixed(0)} mm exceeds ${machine.maxHeight} mm` });
+      for (const w of bodies[i].warnings) issues.push({ level: "warn", message: `${o.name}: ${w}` });
+      for (let j = i + 1; j < objs.length; j++) if (rectsHit(r, placedRect(objs[j], bodies[j]), 0)) issues.push({ level: "error", message: `${o.name} ↔ ${objs[j].name}: objects overlap` });
+    });
+    if (!objs.length) issues.push({ level: "warn", message: "Plate is empty" });
+    return issues;
+  }
   objs.forEach((o, i) => {
     const r = footprint(o, bodies[i], process), h = objectHeight(o, bodies[i], machine, process) + process.nonLinear.collisionMargin;
     if (Math.abs(o.transform.x) + r > bx / 2 || Math.abs(o.transform.y) + r > by / 2)

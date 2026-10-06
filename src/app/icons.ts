@@ -1,5 +1,12 @@
 // Single-weight 24-grid line icons (SF Symbols style), rendered at 20px with currentColor.
 const P: Record<string, string> = {
+  info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>',
+  settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  orient: '<path d="M12 4v5M12 15v5M4 12h5M15 12h5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/>',
+  split: '<rect x="3.5" y="4" width="7" height="16" rx="1.5"/><rect x="13.5" y="4" width="7" height="16" rx="1.5"/>',
+  mirror: '<path d="M12 3v18" stroke-dasharray="2.5 2.5"/><path d="M9 7L4 17h5zM15 7l5 10h-5z"/>',
+  measure: '<path d="M3.5 15.5l12-12 5 5-12 12z"/><path d="M7 12l2 2M10 9l1.5 1.5M13 6l2 2"/>',
   select: '<path d="M6 3.5l12 6.3-5.2 1.6-1.8 5.4z"/>',
   move: '<path d="M12 3v18M3 12h18M12 3l-2.6 2.6M12 3l2.6 2.6M12 21l-2.6-2.6M12 21l2.6-2.6M3 12l2.6-2.6M3 12l2.6 2.6M21 12l-2.6-2.6M21 12l-2.6 2.6"/>',
   rotate: '<path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.5 4.5v4h-4"/>',

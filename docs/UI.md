@@ -39,5 +39,14 @@ V select, M move, R rotate, S scale, T texture, F faces & edges, P paint, A arra
 - **Preview**: toolhead marker follows the scrub position through the objects in print order; the readout shows speed and Z wobble. The drawer carries the full non-linear settings and *Motion tuning* (zone texture, speed, segments/rev, fade-in) and re-slices live.
 - **Print → network**: add printers (Moonraker, OctoPrint, PrusaLink directly; Bambu LAN via `bridge/`), see live temperatures/progress, *Send* or *Send & print*, pause/resume/stop. The page must be served over **http** (e.g. `npm run dev`) to reach LAN printers; https pages cannot call plain-http devices.
 
-## Not implemented (the engine does not support it)
-Cut, Lay flat, Text, support/seam paint, supports presets, undo/redo, spool colour, printer discovery (browsers cannot scan the network — enter the IP), Bambu cloud (only LAN mode).
+## Slicer (planar) + NexSpiro extras
+NexSpiro is a full layer-by-layer slicer first; wall texture and non-linear motion are extras on top.
+- **Engine**: `src/core/planar/` — mesh slicing, walls (classic, seams, overhang slow-down, fuzzy skin), top/bottom shells, bridges, sparse infill patterns (grid, gyroid, cubic, honeycomb, triangles, lines…), ironing, skirt/brim, normal & tree supports, raft, retraction/z-hop/wipe, pressure advance, acceleration/jerk, cooling, `;TYPE:` annotated G-code and a look-ahead time estimate. *Spiral vase* (Special mode) switches to the single-wall NexSpiro spiral engine.
+- **Settings**: `src/core/settings.ts` is the schema for ~165 Bambu/Orca-named process settings (Quality / Strength / Speed / Support / Others, Advanced switch, search, Global vs per-object overrides). Settings tagged *stored* are saved and exported but not acted on by the engine yet.
+- **Right-click** an object (or double-click) for the object menu and **Properties** (name, position, rotation, size, scale). Right-click empty space to add shapes or import. Per-object process overrides live under *Process → Objects*.
+- **Toolbar** (left dock): select/move/rotate/scale, wall texture, faces & edges, paint, arrange, properties, place on face, auto-orient, cut (with capped faces), split, mirror, measure, text.
+- **Wall texture / non-linear** apply to the outer wall only, in the zones you select (faces/edges/paint); everything else prints like Bambu Studio.
+- Preview colours by feature type (with time share), speed, height, width, layer time or texture zone; optional travel moves; scrub follows print time.
+
+## Not implemented
+Support/seam *painting*, multi-material (AMS) and prime tower, adaptive/variable layer height, modifiers, undo/redo, arc fitting in planar G-code, Bambu cloud (LAN mode only).

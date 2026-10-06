@@ -9,3 +9,5 @@ export * from "./project.ts";
 export * from "./mesh.ts";
 export * from "./body.ts";
 export * from "./select.ts";
+export * from "./settings.ts";
+export * from "./orient.ts";

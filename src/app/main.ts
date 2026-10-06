@@ -2,16 +2,21 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   patterns, primitiveDefs, primitiveDefaults, buildPrimitive, PRIMITIVE_GROUPS, buildSelMesh, fillFaces, pickEdge, trianglesNearSegments, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, newObject, clonePlate, cloneObject,
-  objectBody, arrangePlate, footprint, normalizeMesh, bounds,
+  objectBody, arrangePlate, footprint, normalizeMesh, bounds, createMask, transformMeshBy, rotationAxis as rotationAxisMat, mirrorMesh, autoOrientRotation, layFlatRotation, largestFaceNormal, splitComponents, triNormal,
   type PatternParams, type PrimitiveName, type SelMesh, type FillMode, type Seg, type MotionPath, type SliceStats, type PlateIssue, type Plate, type PlateObject,
   type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail, type Mesh, type Body, type Project,
 } from "../core/index.ts";
-import type { SliceRequest, SliceResponse } from "./worker.ts";
+import type { SliceRequest, SliceResponse, GcodeRequest, GcodeResponse } from "./worker.ts";
+import { buildPlanar, windowPlanar, disposePlanar, FEATURE_HEX, type PlanarGeo, type PlanarColorMode } from "./planarView.ts";
+import { FEATURE_LABEL } from "../core/planar/types.ts";
 import type { IORequest, IOResponse } from "./ioWorker.ts";
 import { ACCEPT, type ImportResult } from "../io/importers/index.ts";
 import type { Imported3MF } from "../io/importers/threemf.ts";
 import { toolheadEnvelope, parseBedExclusionSVG } from "../io/importers/machineGeometry.ts";
 import { toBambuSettings } from "../io/importers/profiles.ts";
+import { cutMesh } from "../io/cut.ts";
+import { textMesh } from "../io/textMesh.ts";
+import { solidMesh } from "../io/planarAdapter.ts";
 import { paintMeshToMask, paintTriangles, surfaceProjector } from "../io/paintmap.ts";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { PLATE_TYPES, bedLook, bedCanvasSize, BED_PAD, drawBed, defaultPlateType, type PlateType } from "./bed.ts";
@@ -23,15 +28,16 @@ import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
 import { icon } from "./icons.ts";
 import { rangeRow, numRow, switchRow, selectRow, textRow, seg, pct, materialOf, statusBadge, slicingKind, rampGradient, slug, DualSlider, type SegItem } from "./components.ts";
 import { connectorFor, validatePrinter, mixedContentProblem, scanNetwork, PRINTER_KINDS, PRINTER_MODELS, type Found, type PrinterConfig, type PrinterStatus, type PrinterKind } from "../net/printers.ts";
+import { SETTING_DEFS, SETTING_TABS, SETTING_BY_KEY, getSetting, visible as settingVisible, type SettingDef, type SettingTab, type SettingValue } from "../core/settings.ts";
 import { initialTheme, setThemeAttr, PALETTE_3D, REGION_COLORS, hex, type ThemeMode } from "./theme/theme.ts";
 
 
 // ======================= state =======================
-type Dock = "select" | "move" | "rotate" | "scale" | "texture" | "faces" | "paint" | "arrange";
-type PreviewMode = "feature" | "speed" | "height" | "layerTime" | "curvature";
+type Dock = "select" | "text" | "props" | "layflat" | "cut" | "mirror" | "measure" | "move" | "rotate" | "scale" | "texture" | "faces" | "paint" | "arrange";
+type PreviewMode = "feature" | "speed" | "height" | "layerTime" | "curvature" | "width" | "zone";
 const PREVIEW_LABELS: Record<PreviewMode, string> = {
   feature: "Feature type (paint region)", speed: "Speed", height: "Height", layerTime: "Layer time",
-  curvature: "Curvature & Non-Linear Feedrate",
+  curvature: "Curvature & Non-Linear Feedrate", width: "Line width", zone: "Texture zones",
 };
 type SliceResult = Extract<SliceResponse, { ok: true }> & { key: string };
 type ObjView = {
@@ -43,6 +49,7 @@ type PlateView = {
   lines: THREE.Line[]; status: "idle" | "slicing" | "done" | "error"; error?: string;
   result?: SliceResult; pendingKey?: string; worker: Worker; reqId: number; thumb?: string;
   marker: THREE.Mesh; head?: { k: number; idx: number };
+  planar?: PlanarGeo; planarHead?: number; gseq: number; gpend: Map<number, { ok: (t: string) => void; err: (e: Error) => void }>;
 };
 
 const USER_PRESETS_KEY = "nexspiro.userPresets";
@@ -74,13 +81,13 @@ const ui = {
   dock: "select" as Dock | null, modal: null as PresetKind | "printer" | null, tier: null as "quality" | "strength" | "speed" | null,
   livePaths: false, plateType: "textured-pei" as PlateType, plateTouched: false,
   faceKind: "face" as "face" | "edge", faceOp: "add" as "add" | "remove", faceFill: "flat" as FillMode, faceAngle: 25, edgeAngle: 35, edgeBand: 3, edgeChain: true,
-  dragSlider: false, presetsOpen: false, nlOpen: false, drawerOpen: window.innerWidth >= 1100, uniform: true, paintErase: false,
+  procScope: "global" as "global" | "objects", setTab: "quality" as SettingTab, advanced: false, setSearch: "", searchOpen: false, dragSlider: false, presetsOpen: false, nlOpen: false, drawerOpen: window.innerWidth >= 1100, uniform: true, paintErase: false,
   scrub: 1, playing: false, goPreview: false, theme: initialTheme() as ThemeMode, projectName: "Untitled project",
-  selected: { machine: "machine/bambu-x1", filament: "filament/pla", process: "process/vase-0.4" } as Record<PresetKind, string>,
+  selected: { machine: "machine/bambu-x1", filament: "filament/pla", process: "process/std-0.20" } as Record<PresetKind, string>,
   edited: {} as Partial<Record<PresetKind, MachinePreset | FilamentPreset | ProcessPreset>>,
   active: 0, activeObj: 0, target: -1,
-  tool: "orbit" as "orbit" | "move" | "paint" | "erase" | "faces", brush: 8, showSurface: true,
-  preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
+  tool: "orbit" as "orbit" | "move" | "paint" | "erase" | "faces" | "layflat" | "measure", textSpec: { text: "NexSpiro", sizeMm: 14, heightMm: 3, bold: true, family: "sans-serif" }, cutH: 0, cutKeep: "both" as "both" | "upper" | "lower", cutFlip: true, measure: [] as THREE.Vector3[], brush: 8, showSurface: true,
+  showTravel: false, preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
   exportFormat: "gcode" as ExportFormat, developer: false,
   printerId: "", confirmPrint: false, netBusy: "", netMsg: null as null | { tone: "ok" | "err"; text: string },
   draft: null as null | (Partial<PrinterConfig> & { editing?: boolean; found?: Found[]; scanning?: boolean; msg?: { tone: "ok" | "err"; text: string } }),
@@ -195,9 +202,13 @@ function makeView(plate: Plate): PlateView {
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
   const marker = new THREE.Mesh(new THREE.ConeGeometry(2.4, 8, 20).rotateX(-Math.PI / 2).translate(0, 0, 4), new THREE.MeshStandardMaterial({ color: 0xE2856E, roughness: 0.4, emissive: 0xE2856E, emissiveIntensity: 0.25 }));
   marker.visible = false; marker.renderOrder = 6;
-  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false, views.length + 1), objs: [], lines: [], status: "idle", worker, reqId: 0, marker };
+  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false, views.length + 1), objs: [], lines: [], status: "idle", worker, reqId: 0, marker, gseq: 0, gpend: new Map() };
   v.group.add(marker);
-  worker.onmessage = (ev: MessageEvent<SliceResponse>) => onSliced(v, ev.data);
+  worker.onmessage = (ev: MessageEvent<SliceResponse | GcodeResponse>) => {
+    const d = ev.data;
+    if ("type" in d) { const w = v.gpend.get(d.id); v.gpend.delete(d.id); if (w) (d.ok ? w.ok(d.text) : w.err(new Error(d.error))); return; }
+    onSliced(v, d);
+  };
   v.group.add(v.bed); scene.add(v.group);
   v.objs = plate.objects.map((o) => makeObjView(v, o));
   return v;
@@ -346,8 +357,9 @@ function makeLine(mp: MotionPath, stride: number, mode: PreviewMode, range: [num
 }
 function redrawPaths(v: PlateView) {
   for (const l of v.lines) { v.group.remove(l); l.geometry.dispose(); }
-  v.lines = [];
+  v.lines = []; disposePlanar(v.planar); v.planar = undefined;
   if (!v.result) return;
+  if (v.result.planar) { redrawPlanar(v); return; }
   const range = legendRange(v.result.mps, ui.preview), total = v.result.mps.reduce((s, m) => s + m.count, 0);
   v.result.mps.forEach((mp, k) => {
     const sel = views.indexOf(v) === ui.active && k === ui.activeObj;
@@ -358,6 +370,22 @@ function redrawPaths(v: PlateView) {
   applyLayerRange(v);
   v.thumb = trayThumb(v); // tray preview follows tint, colour mode and theme
 }
+const planarMode = (m: PreviewMode): PlanarColorMode => (m === "curvature" ? "feature" : m);
+function redrawPlanar(v: PlateView) {
+  const prev = v.result!.planar!.prev;
+  v.planar = buildPlanar(prev, planarMode(ui.preview), REGION_COLORS, P3().pathBase);
+  v.group.add(v.planar.extrude.mesh, v.planar.travel.mesh);
+  applyLayerRange(v);
+  v.thumb = trayThumb(v);
+}
+function applyPlanarRange(v: PlateView) {
+  const g = v.planar!, prev = v.result!.planar!.prev, layers = g.layers;
+  const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
+  const head = windowPlanar(g, lo, hi, ui.scrub >= 1 ? Infinity : ui.scrub * g.totalTime);
+  v.planarHead = head;
+  v.marker.visible = head >= 0 && ui.scrub < 1 && showPaths();
+  if (head >= 0) v.marker.position.set(prev.b[head * 3], prev.b[head * 3 + 1], prev.b[head * 3 + 2]);
+}
 function layerSpan(l: THREE.Line): [number, number] {
   const mp = l.userData.mp as MotionPath, { layer, count } = mp, layers = layer[count - 1] + 1;
   const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
@@ -366,6 +394,7 @@ function layerSpan(l: THREE.Line): [number, number] {
 }
 /** Draw range per object in print order: the scrub position sweeps through objects one after another, like the machine does. */
 function applyLayerRange(v: PlateView) {
+  if (v.planar) { applyPlanarRange(v); return; }
   const order = v.result?.order ?? [], seq = order.map((k) => v.lines.find((l) => l.userData.k === k && l.userData.lod === "full")).filter((l): l is THREE.Line => !!l);
   const spans = seq.map((l) => layerSpan(l)), total = spans.reduce((a, [x, y]) => a + (y - x), 0);
   let remaining = Math.ceil(total * ui.scrub); const draw = new Map<number, number>(); let head: PlateView["head"];
@@ -385,7 +414,7 @@ function applyLayerRange(v: PlateView) {
 
 // ======================= slicing (worker per plate, cached) =======================
 function sliceKey(v: PlateView) {
-  return JSON.stringify([v.plate.objects.map((o) => [o.source, o.transform, o.base, o.regionParams, o.mask.regions.map((r) => r.pattern)]),
+  return JSON.stringify([v.plate.objects.map((o) => [o.source, o.transform, o.base, o.regionParams, o.mask.regions.map((r) => r.pattern), o.settings]),
     v.objs.map((o) => o.maskVersion), machine(), filament(), proc()]);
 }
 function slice(v: PlateView) {
@@ -418,7 +447,7 @@ const sliceAll = () => views.forEach(slice);
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), nrm = new THREE.Vector3();
 const bedPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 let dragging: null | "paint" | "faces" | { dx: number; dy: number } = null;
-function setRay(ev: PointerEvent) {
+function setRay(ev: MouseEvent) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -452,6 +481,7 @@ type Pick = { tris: number[]; segs: Seg[] | null };
 function computePick(ov: ObjView, hit: THREE.Intersection): Pick | null {
   if (hit.faceIndex == null || !ov.solid) return null;
   const sm = selMeshOf(ov);
+  if (ui.tool === "layflat") return { tris: fillFaces(sm, hit.faceIndex, "flat", 8), segs: null };
   if (ui.faceKind === "face") return { tris: fillFaces(sm, hit.faceIndex, ui.faceFill, ui.faceAngle), segs: null };
   const local = ov.solid.worldToLocal(hit.point.clone()), pt: [number, number, number] = [local.x, local.y, local.z];
   const sc = ov.obj.transform.scaleXY || 1, segs = pickEdge(sm, hit.faceIndex, pt, ui.edgeAngle, Math.max(2.5, ui.edgeBand * 0.9) / sc, ui.edgeChain);
@@ -494,7 +524,7 @@ let hoverRaf = 0, hoverEv: PointerEvent | null = null;
 function hoverSelect(ev: PointerEvent) {
   hoverEv = ev; if (hoverRaf) return;
   hoverRaf = requestAnimationFrame(() => {
-    hoverRaf = 0; const e = hoverEv; if (!e || ui.tool !== "faces" || !activeView()) return;
+    hoverRaf = 0; const e = hoverEv; if (!e || (ui.tool !== "faces" && ui.tool !== "layflat") || !activeView()) return;
     setRay(e); const hit = pickSolid(), ov = activeObjView();
     views.forEach((v) => v.objs.forEach((o) => { if (o !== ov || !hit) clearHover(o); }));
     if (!hit || !ov || hit.k !== ui.activeObj) { renderer.domElement.style.cursor = hit ? "pointer" : ""; return; }
@@ -521,6 +551,17 @@ renderer.domElement.addEventListener("pointerdown", (ev) => {
     }
     return;
   }
+  if (ui.tool === "layflat" && !activeView().plate.locked) {
+    const hit = pickSolid(); if (!hit) return; if (hit.k !== ui.activeObj) { selectObject(hit.k); return; }
+    const ov = activeObjView()!, mesh = displayMesh(ov.obj), tri = hit.hit.faceIndex ?? -1; if (tri < 0) return;
+    const reg = fillFaces(selMeshOf(ov), tri, "flat", 8), sum: [number, number, number] = [0, 0, 0];
+    for (const t of reg) { const { n, area } = triNormal(mesh.tris, t); sum[0] += n[0] * area; sum[1] += n[1] * area; sum[2] += n[2] * area; }
+    const l = Math.hypot(...sum) || 1; clearHover(ov); layFlatAt(ov, [sum[0] / l, sum[1] / l, sum[2] / l]); return;
+  }
+  if (ui.tool === "measure") {
+    const hit = pickSolid(); if (!hit) return;
+    ui.measure = ui.measure.length >= 2 ? [hit.hit.point.clone()] : [...ui.measure, hit.hit.point.clone()]; drawMeasure(); renderToolCard(); return;
+  }
   const solidHit = pickSolid(), p = bedPoint(); if (!p && !solidHit) return;
   const k = solidHit ? solidHit.k : pickObject(p!);
   if (k >= 0 && k !== ui.activeObj) selectObject(k);
@@ -530,7 +571,7 @@ renderer.domElement.addEventListener("pointerdown", (ev) => {
   }
 });
 renderer.domElement.addEventListener("pointermove", (ev) => {
-  if (!dragging) { if (ui.tool === "faces" && ev.buttons === 0) hoverSelect(ev); return; }
+  if (!dragging) { if ((ui.tool === "faces" || ui.tool === "layflat") && ev.buttons === 0) hoverSelect(ev); return; }
   setRay(ev);
   if (dragging === "paint") { paintAt(); return; }
   if (dragging === "faces") { const h = pickSolid(), ov = activeObjView(); if (h && ov && h.k === ui.activeObj) commitPick(ov, h.hit); return; }
@@ -538,6 +579,7 @@ renderer.domElement.addEventListener("pointermove", (ev) => {
   ov.obj.transform.x = Math.round((p.x + dragging.dx) * 10) / 10; ov.obj.transform.y = Math.round((p.y + dragging.dy) * 10) / 10;
   placeObj(ov);
   for (const l of activeView().lines) l.visible = false; // stale until re-slice
+  if (activeView().planar) { activeView().planar!.extrude.mesh.visible = false; activeView().planar!.travel.mesh.visible = false; }
 });
 window.addEventListener("pointerup", () => {
   if (!dragging) return;
@@ -546,7 +588,10 @@ window.addEventListener("pointerup", () => {
 });
 
 // ======================= plates & objects =======================
-function addPlate(p = newPlate(`Plate ${views.length + 1}`)) {
+function starterObject(): PlateObject {
+  const o = newObject({ kind: "primitive", primitive: "cube", params: primitiveDefaults("cube") }); o.base = { pattern: "none", params: { ...patterns.none.defaults } }; return o;
+}
+function addPlate(p = newPlate(`Plate ${views.length + 1}`, [starterObject()])) {
   const v = makeView(p); views.push(v);
   ui.active = views.length - 1; ui.activeObj = 0; ui.target = -1;
   layoutPlates(); views.forEach(redrawPaths); focusActive(); slice(v); renderAll();
@@ -746,10 +791,10 @@ function doExport() {
 }
 /** Run `fn` with only plate `v`'s full-detail toolpath visible and a camera framing it (used for G-code and tray thumbnails). */
 function isolatePlate<T>(v: PlateView, fn: (cam: THREE.PerspectiveCamera) => T): T | undefined {
-  const full = v.lines.filter((l) => l.userData.lod === "full");
+  const full: THREE.Object3D[] = v.planar ? [v.planar.extrude.mesh] : v.lines.filter((l) => l.userData.lod === "full");
   if (!full.length) return undefined;
   const hidden = views.filter((o) => o !== v).map((o) => { const was = o.group.visible; o.group.visible = false; return [o, was] as const; });
-  const extras: THREE.Object3D[] = [v.bed, v.marker, ...v.objs.flatMap((o) => [o.surface, o.solid, o.footprintRing, o.shadow].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
+  const extras: THREE.Object3D[] = [v.bed, v.marker, ...v.objs.flatMap((o) => [o.surface, o.solid, o.footprintRing, o.shadow].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far"), ...(v.planar ? [v.planar.travel.mesh] : [])];
   const vis = extras.map((o) => o.visible), fullVis = full.map((l) => l.visible);
   extras.forEach((o) => (o.visible = false)); full.forEach((l) => (l.visible = true));
   const prevBg = scene.background; scene.background = null;
@@ -790,18 +835,23 @@ function trayThumb(v: PlateView): string | undefined {
   });
 }
 /** G-code text for plate `i`, or null (with an alert/notice) when it can't be produced. `interactive` shows dialogs. */
-function buildGcode(i = ui.active, interactive = true): { name: string; text: string } | null {
+async function buildGcode(i = ui.active, interactive = true): Promise<{ name: string; text: string } | null> {
   const v = views[i], fail = (m: string) => { if (interactive) alert(m); else throw new Error(m); return null; };
   if (!v.result || v.status !== "done") return fail("Slice the plate first.");
   if (v.result.issues.some((x) => x.level === "error") && (!interactive || !confirm("This plate has errors. Export anyway?"))) return interactive ? null : fail("The plate has errors (see the estimate card) — fix them before printing.");
-  const M = machine();
+  const M = machine(), name = `${v.plate.name.replace(/\W+/g, "_")}.gcode`;
   try {
-    return { name: `${v.plate.name.replace(/\W+/g, "_")}.gcode`, text: toGcode(v.result.order.map((k) => v.result!.mps[k]), {
+    if (v.result.planar) {
+      const id = ++v.gseq, opts = { offset: [M.bed[0] / 2, M.bed[1] / 2] as [number, number], thumbnails: thumbnails(v), presetNames: presetNames(), plateName: v.plate.name, inputName: ui.projectName };
+      const text = await new Promise<string>((ok, err) => { v.gpend.set(id, { ok, err }); v.worker.postMessage({ type: "gcode", id, opts } satisfies GcodeRequest); });
+      return { name, text };
+    }
+    return { name, text: toGcode(v.result.order.map((k) => v.result!.mps[k]), {
       machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v), presetNames: presetNames(),
     }) };
   } catch (e) { return fail(`G-code export refused: ${e instanceof Error ? e.message : e}`); }
 }
-function exportGcode(i = ui.active) { const g = buildGcode(i); if (g) download(g.name, g.text, "text/plain"); }
+async function exportGcode(i = ui.active) { const g = await buildGcode(i); if (g) download(g.name, g.text, "text/plain"); }
 
 // ======================= UI: "Soft Clay & Pill" workspace =======================
 // Four decoupled floating layers over the canvas: top capsule, left tool dock (+ slide-out card), right drawer, bottom tray.
@@ -845,6 +895,150 @@ document.addEventListener("pointerdown", (e) => {
   if (pop.classList.contains("show") && !(e.target as Element).closest("#pop, [data-act='plateMenu'], [data-act='exportMenu']")) closePop();
 }, true);
 
+
+
+// ======================= mesh editing tools =======================
+function ensureMesh(o: PlateObject): Mesh { return o.source.kind === "mesh" ? meshes[o.source.meshId] : solidMesh(o, meshes); }
+/** Replace an object's geometry with an edited mesh (baked); zones are reset because they were tied to the old surface. */
+function commitMeshEdit(ov: ObjView, m: Mesh) {
+  const o = ov.obj, id = newMeshId(); meshes[id] = m;
+  const had = o.mask.regions.length; o.source = { kind: "mesh", meshId: id }; delete o.hollow;
+  o.mask = createMask(256, 256); o.regionParams = []; ov.maskVersion++; refreshMaskTexture(ov); ui.target = -1;
+  buildSurface(ov); placeObj(ov); renderAll(); sliceActiveSoon(0);
+  if (had) toast("Texture zones were reset for the edited geometry");
+}
+function withObject(fn: (ov: ObjView) => void) { const ov = activeObjView(); if (!ov || objLocked()) return; fn(ov); }
+function autoOrientObj() {
+  withObject((ov) => {
+    const m = ensureMesh(ov.obj), R = autoOrientRotation(m);
+    if (R[0] === 1 && R[4] === 1 && R[8] === 1) { toast("Already in the best orientation"); return; }
+    commitMeshEdit(ov, transformMeshBy(m, R, m.name)); toast("Orientation optimised: less overhang, more bed contact");
+  });
+}
+function layFlatAt(ov: ObjView, n: [number, number, number]) { const m = ensureMesh(ov.obj); commitMeshEdit(ov, transformMeshBy(m, layFlatRotation(n), m.name)); }
+function splitObj() {
+  withObject((ov) => {
+    const parts = splitComponents(ensureMesh(ov.obj));
+    if (parts.length < 2) { toast("Nothing to split: the model is one connected piece"); return; }
+    const v = activeView(), keepName = ov.obj.name; commitMeshEdit(ov, parts[0]); ov.obj.name = `${keepName} 1`;
+    for (let k = 1; k < parts.length; k++) { const o = meshObject(parts[k]); o.name = `${keepName} ${k + 1}`; o.transform = { ...ov.obj.transform }; v.plate.objects.push(o); v.objs.push(makeObjView(v, o)); }
+    arrange_(v); updateSurfaceVisibility(); slice(v); renderAll(); toast(`Split into ${parts.length} objects`);
+  });
+}
+function cutApply() {
+  withObject((ov) => {
+    const o = ov.obj, m = ensureMesh(o), h = ui.cutH / o.transform.scaleZ, r = cutMesh(m, h, ui.cutFlip);
+    if (!r.upper || !r.lower) { toast("The cut plane is outside the model"); return; }
+    const v = activeView(), base = o.name, tr = { ...o.transform };
+    if (ui.cutKeep === "upper") { commitMeshEdit(ov, r.upper); o.name = `${base} (upper)`; }
+    else if (ui.cutKeep === "lower") { commitMeshEdit(ov, r.lower); o.name = `${base} (lower)`; }
+    else {
+      commitMeshEdit(ov, r.lower); o.name = `${base} (lower)`;
+      const up = meshObject(r.upper); up.name = `${base} (upper)`; up.transform = { ...tr }; v.plate.objects.push(up); v.objs.push(makeObjView(v, up)); arrange_(v);
+    }
+    hideCutPlane(); updateSurfaceVisibility(); slice(v); renderAll();
+  });
+}
+let cutPlane: THREE.Mesh | null = null;
+function hideCutPlane() { if (cutPlane) { cutPlane.parent?.remove(cutPlane); cutPlane.geometry.dispose(); cutPlane = null; } }
+function updateCutPlane() {
+  const ov = activeObjView();
+  if (ui.dock !== "cut" || ui.mode !== "prepare" || !ov) { hideCutPlane(); return; }
+  const r = footprint(ov.obj, bodyOf(ov.obj), proc()) * 1.25 + 4;
+  if (!cutPlane) { cutPlane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: 0x4f8fd9, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })); cutPlane.renderOrder = 4; }
+  if (cutPlane.parent !== ov.group) ov.group.add(cutPlane);
+  cutPlane.scale.set(r, r, 1); cutPlane.position.set(0, 0, ui.cutH);
+}
+let measureObjs: THREE.Object3D[] = [];
+function drawMeasure() {
+  for (const m of measureObjs) { m.parent?.remove(m); (m as THREE.Mesh).geometry?.dispose(); } measureObjs = [];
+  const root = activeView()?.group; if (!root) return;
+  const o = plateOrigin(ui.active);
+  const pts = ui.measure.map((p) => p.clone().sub(o));
+  for (const p of pts) { const s = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xE2856E, depthTest: false })); s.position.copy(p); s.renderOrder = 9; root.add(s); measureObjs.push(s); }
+  if (pts.length === 2) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xE2856E, depthTest: false })); l.renderOrder = 9; root.add(l); measureObjs.push(l); }
+}
+
+// ======================= right-click context menu =======================
+const ctxEl = byId("ctx");
+type CtxItem = { label?: string; icon?: string; act?: string; arg?: string; key?: string; disabled?: boolean; danger?: boolean; head?: string } | "-";
+function openCtx(x: number, y: number, items: CtxItem[]) {
+  ctxEl.innerHTML = items.map((i) => i === "-" ? `<div class="msep"></div>` : i.head ? `<div class="menu-head">${esc(i.head)}</div>`
+    : `<button class="mi${i.danger ? " danger" : ""}" role="menuitem" data-act="${i.act}" data-arg="${esc(i.arg ?? "")}"${i.disabled ? " disabled" : ""}>${i.icon ? icon(i.icon) : `<span style="width:20px"></span>`}<span>${esc(i.label ?? "")}</span>${i.key ? `<span class="k">${i.key}</span>` : ""}</button>`).join("");
+  ctxEl.classList.add("show");
+  const w = ctxEl.offsetWidth, h = ctxEl.offsetHeight;
+  ctxEl.style.left = `${clamp(x, 8, innerWidth - w - 8)}px`; ctxEl.style.top = `${clamp(y, 8, innerHeight - h - 8)}px`;
+  closePop();
+}
+const closeCtx = () => ctxEl.classList.remove("show");
+function objectMenu(k: number): CtxItem[] {
+  const locked = !!activeView().plate.locked, o = activeView().plate.objects[k], mesh = o.source.kind === "mesh";
+  return [
+    { head: o.name },
+    { label: "Properties", icon: "info", act: "openDock", arg: "props", key: "O" },
+    { label: "Wall texture…", icon: "texture", act: "openDock", arg: "texture", key: "T", disabled: locked },
+    { label: "Select faces & edges…", icon: "faces", act: "openDock", arg: "faces", key: "F", disabled: locked },
+    { label: "Process settings for this object", icon: "settings", act: "objSettings" },
+    "-",
+    { label: "Move", icon: "move", act: "openDock", arg: "move", key: "M", disabled: locked },
+    { label: "Rotate", icon: "rotate", act: "openDock", arg: "rotate", key: "R", disabled: locked },
+    { label: "Scale", icon: "scale", act: "openDock", arg: "scale", key: "S", disabled: locked },
+    { label: "Center on bed", icon: "arrange", act: "centerObj", disabled: locked },
+    { label: "Reset transform", act: "resetXform", disabled: locked },
+    "-",
+    { label: "Place on face…", icon: "layflat", act: "openDock", arg: "layflat", key: "L", disabled: locked },
+    { label: "Auto-orient", icon: "orient", act: "autoOrient", disabled: locked },
+    { label: "Cut…", icon: "cut", act: "openDock", arg: "cut", key: "C", disabled: locked },
+    { label: "Split into objects", icon: "split", act: "splitObj", disabled: locked || !mesh },
+    { label: "Mirror…", icon: "mirror", act: "openDock", arg: "mirror", disabled: locked },
+    "-",
+    { label: "Duplicate", icon: "copy", act: "dupObj", arg: String(k), key: "Ctrl D", disabled: locked },
+    { label: "Copy", act: "ctxCopy", key: "Ctrl C" },
+    { label: "Paste", act: "ctxPaste", key: "Ctrl V", disabled: locked || !clipboard },
+    { label: mesh ? "Export as STL" : "Export shape as STL", icon: "export", act: "ctxExportObj" },
+    "-",
+    { label: "Delete", icon: "trash", act: "delObj", arg: String(k), key: "Del", danger: true, disabled: locked },
+  ];
+}
+function plateMenu_(): CtxItem[] {
+  const locked = !!activeView().plate.locked;
+  const quick: PrimitiveName[] = ["cube", "cylinder", "sphere", "cone", "hemisphere", "capsule", "box", "pentagon"].filter((q) => q in primitiveDefs) as PrimitiveName[];
+  return [
+    { head: "Plate" },
+    ...quick.map((q): CtxItem => ({ label: `Add ${primitiveDefs[q].label}`, icon: "cube", act: "ctxAddPrim", arg: q, disabled: locked })),
+    { label: "More shapes…", icon: "plus", act: "openDock", arg: "select" },
+    { label: "Import model…", icon: "import", act: "ctxImport", disabled: locked },
+    "-",
+    { label: "Paste", act: "ctxPaste", key: "Ctrl V", disabled: locked || !clipboard },
+    { label: "Auto-arrange", icon: "arrange", act: "arrange", arg: "plate", key: "A", disabled: locked },
+    { label: "Slice plate", icon: "bolt", act: "sliceNow" },
+  ];
+}
+let ctxDown: { x: number; y: number } | null = null;
+renderer.domElement.addEventListener("pointerdown", (ev) => { if (ev.button === 2) ctxDown = { x: ev.clientX, y: ev.clientY }; else closeCtx(); });
+renderer.domElement.addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  const dragged = ctxDown && Math.hypot(ev.clientX - ctxDown.x, ev.clientY - ctxDown.y) > 5; ctxDown = null;
+  if (dragged || !activeView() || ui.mode !== "prepare") return; // right-drag pans; only a plain click opens the menu
+  setRay(ev);
+  const solid = pickSolid(), p = bedPoint(), k = solid ? solid.k : p ? pickObject(p) : -1;
+  if (k >= 0) { if (k !== ui.activeObj) selectObject(k); openCtx(ev.clientX, ev.clientY, objectMenu(k)); }
+  else openCtx(ev.clientX, ev.clientY, plateMenu_());
+});
+renderer.domElement.addEventListener("dblclick", (ev) => {
+  if (ui.mode !== "prepare" || !activeView()) return;
+  setRay(ev); const solid = pickSolid(); if (!solid) return;
+  if (solid.k !== ui.activeObj) selectObject(solid.k);
+  ui.dock = null; setDock("props");
+});
+document.addEventListener("contextmenu", (e) => { // object rows in the Objects list
+  const row = (e.target as Element).closest<HTMLElement>('[data-act="selectObj"]'); if (!row || !activeView()) return;
+  e.preventDefault(); const k = Number(row.dataset.arg); selectObject(k); openCtx(e.clientX, e.clientY, objectMenu(k));
+});
+document.addEventListener("pointerdown", (e) => { if (ctxEl.classList.contains("show") && !(e.target as Element).closest("#ctx")) closeCtx(); }, true);
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCtx(); });
+window.addEventListener("wheel", closeCtx, { passive: true }); window.addEventListener("resize", closeCtx);
+
 // ======================= top capsule =======================
 const MODES: SegItem[] = [
   { value: "prepare", label: "Prepare", icon: "cube" }, { value: "preview", label: "Preview", icon: "layers" }, { value: "print", label: "Print", icon: "printer" },
@@ -868,26 +1062,28 @@ function renderTopbar() {
 }
 
 // ======================= left dock =======================
-type DockItem = { id: Dock | "layflat" | "cut" | "text"; tip: string; icon: string; soon?: boolean };
+type DockItem = { id: string; tip: string; icon: string; soon?: boolean; act?: string };
 const DOCK: DockItem[][] = [
   [{ id: "select", tip: "Select (V)", icon: "select" }, { id: "move", tip: "Move (M)", icon: "move" }, { id: "rotate", tip: "Rotate (R)", icon: "rotate" }, { id: "scale", tip: "Scale (S)", icon: "scale" }],
   [{ id: "texture", tip: "Wall texture (T)", icon: "texture" }, { id: "faces", tip: "Select faces & edges (F)", icon: "faces" }, { id: "paint", tip: "Paint zones with a brush (P)", icon: "paint" }],
-  [{ id: "arrange", tip: "Auto-arrange (A)", icon: "arrange" }],
-  [{ id: "layflat", tip: "Lay flat · needs mesh pipeline", icon: "layflat", soon: true }, { id: "cut", tip: "Cut · needs mesh pipeline", icon: "cut", soon: true }, { id: "text", tip: "Text · needs mesh pipeline", icon: "text", soon: true }],
+  [{ id: "arrange", tip: "Auto-arrange (A)", icon: "arrange" }, { id: "props", tip: "Object properties (O · right-click an object)", icon: "info" }],
+  [{ id: "layflat", tip: "Place on face (L)", icon: "layflat" }, { id: "orient", tip: "Auto-orient", icon: "orient", act: "autoOrient" }, { id: "cut", tip: "Cut (C)", icon: "cut" },
+    { id: "split", tip: "Split into separate objects", icon: "split", act: "splitObj" }, { id: "mirror", tip: "Mirror", icon: "mirror" }, { id: "measure", tip: "Measure (D)", icon: "measure" }, { id: "text", tip: "Add text (X)", icon: "text" }],
 ];
-const DOCK_KEYS: Record<string, Dock> = { v: "select", m: "move", r: "rotate", s: "scale", t: "texture", f: "faces", p: "paint" };
+const DOCK_KEYS: Record<string, Dock> = { x: "text", l: "layflat", c: "cut", d: "measure", o: "props", v: "select", m: "move", r: "rotate", s: "scale", t: "texture", f: "faces", p: "paint" };
 const DOCK_TITLES: Record<Dock, [string, string]> = {
-  select: ["cube", "Objects"], move: ["move", "Move"], rotate: ["rotate", "Rotate"], scale: ["scale", "Scale"], texture: ["texture", "Wall texture"], faces: ["faces", "Faces & edges"], paint: ["paint", "Paint"], arrange: ["arrange", "Auto-arrange"],
+  select: ["cube", "Objects"], props: ["info", "Object properties"], text: ["text", "Text"], layflat: ["layflat", "Place on face"], cut: ["cut", "Cut"], mirror: ["mirror", "Mirror"], measure: ["measure", "Measure"], move: ["move", "Move"], rotate: ["rotate", "Rotate"], scale: ["scale", "Scale"], texture: ["texture", "Wall texture"], faces: ["faces", "Faces & edges"], paint: ["paint", "Paint"], arrange: ["arrange", "Auto-arrange"],
 };
 function renderDock() {
   setHtml(dock, DOCK.map((g) => `<div class="grp">${g.map((t) =>
-    `<button class="tool${ui.dock === t.id ? " on" : ""}" data-act="setDock" data-arg="${t.id}" data-tip="${t.tip}" aria-label="${t.tip}" aria-pressed="${ui.dock === t.id}"${t.soon ? " disabled" : ""}>${icon(t.icon)}</button>`).join("")}</div>`).join(""));
+    `<button class="tool${ui.dock === t.id ? " on" : ""}" data-act="${t.act ?? "setDock"}" data-arg="${t.id}" data-tip="${t.tip}" aria-label="${t.tip}" aria-pressed="${ui.dock === t.id}"${t.soon ? " disabled" : ""}>${icon(t.icon)}</button>`).join("")}</div>`).join(""));
 }
-const toolFor = (d: Dock | null): typeof ui.tool => (d === "move" ? "move" : d === "faces" ? "faces" : d === "paint" ? (ui.paintErase ? "erase" : "paint") : "orbit");
+const toolFor = (d: Dock | null): typeof ui.tool => (d === "move" ? "move" : d === "layflat" ? "layflat" : d === "measure" ? "measure" : d === "faces" ? "faces" : d === "paint" ? (ui.paintErase ? "erase" : "paint") : "orbit");
 function setDock(d: Dock | null, _fromKey = false) {
   ui.dock = d === ui.dock ? null : d;
   ui.tool = ui.mode === "prepare" ? toolFor(ui.dock) : "orbit";
-  renderDock(); renderToolCard(); updateViewInsets();
+  if (ui.dock !== "measure") { ui.measure = []; drawMeasure(); }
+  renderDock(); renderToolCard(); updateCutPlane(); updateViewInsets();
 }
 
 function shapeParams(o: PlateObject | undefined, dis: string) {
@@ -921,6 +1117,35 @@ function facesCard(o: PlateObject, dis: string) {
     <p class="hint">Hover to preview, click or drag to ${ui.faceOp === "add" ? "add to" : "remove from"} the active zone. Only surfaces that become printed wall can carry a texture; unselected walls print plain, like Bambu Studio.</p>`;
 }
 
+/** World size of an object in mm (after scale and Z rotation). */
+function objectSize(o: PlateObject): { w: number; d: number; h: number } {
+  const m = displayMesh(o).tris, t = o.transform, c = Math.cos((t.rotation * Math.PI) / 180), sn = Math.sin((t.rotation * Math.PI) / 180);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < m.length; i += 3) {
+    const x = m[i] * t.scaleXY, y = m[i + 1] * t.scaleXY, rx = x * c - y * sn, ry = x * sn + y * c, z = m[i + 2] * t.scaleZ;
+    if (rx < x0) x0 = rx; if (rx > x1) x1 = rx; if (ry < y0) y0 = ry; if (ry > y1) y1 = ry; if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  return m.length ? { w: x1 - x0, d: y1 - y0, h: z1 - z0 } : { w: 0, d: 0, h: 0 };
+}
+function propsCard(o: PlateObject, dis: string) {
+  const sz = objectSize(o), t = o.transform, nOver = Object.keys(o.settings ?? {}).length, lock = !!dis;
+  return `<input class="props-name" type="text" data-in="objName" value="${esc(o.name)}" aria-label="Object name"${dis}>
+    <div class="sizeline"><span>${o.source.kind === "mesh" ? "Imported mesh" : "Shape"}</span><span>${sz.w.toFixed(1)} × ${sz.d.toFixed(1)} × ${sz.h.toFixed(1)} mm</span></div>
+    <h2 class="mini">Position</h2>
+    <div class="triple">${numRow("X", `data-in="tf" data-key="x"`, t.x, { unit: "mm", step: 0.5, disabled: lock })}${numRow("Y", `data-in="tf" data-key="y"`, t.y, { unit: "mm", step: 0.5, disabled: lock })}${numRow("Z", `data-in="noop"`, 0, { unit: "mm", disabled: true })}</div>
+    <h2 class="mini">Rotation</h2>
+    ${rangeRow("Around Z", `data-in="tf" data-key="rotation"`, t.rotation, -180, 180, 1, { unit: "°", disabled: lock })}
+    <h2 class="mini">Scale &amp; size</h2>
+    ${switchRow("Keep proportions", `data-in="uniform"`, ui.uniform)}
+    <div class="triple">${numRow("Width", `data-in="size" data-key="w"`, +sz.w.toFixed(2), { unit: "mm", step: 0.5, min: 0.5, disabled: lock })}${numRow("Depth", `data-in="size" data-key="d"`, +sz.d.toFixed(2), { unit: "mm", step: 0.5, min: 0.5, disabled: lock })}${numRow("Height", `data-in="size" data-key="h"`, +sz.h.toFixed(2), { unit: "mm", step: 0.5, min: 0.5, disabled: lock })}</div>
+    <div class="triple two">${numRow("Scale XY %", `data-in="tf" data-key="scaleXY" data-pct="1"`, Math.round(t.scaleXY * 100), { step: 1, min: 1, max: 2000, disabled: lock })}${numRow("Scale Z %", `data-in="tf" data-key="scaleZ" data-pct="1"`, Math.round(t.scaleZ * 100), { step: 1, min: 1, max: 2000, disabled: lock })}</div>
+    <div class="chipbar"><button class="btn sm" data-act="centerObj"${dis}>${icon("arrange")}Center</button><button class="btn sm" data-act="resetXform"${dis}>Reset transform</button></div>
+    <div class="sep"></div>
+    <div class="chipbar"><button class="btn sm" data-act="openDock" data-arg="texture">${icon("texture")}Wall texture</button><button class="btn sm" data-act="openDock" data-arg="faces">${icon("faces")}Faces &amp; edges</button>
+      <button class="btn sm" data-act="objSettings">${icon("settings")}Object settings${nOver ? ` (${nOver})` : ""}</button></div>
+    <p class="hint">Right-click an object in the viewport for the quick menu. Object settings override the global process only for this object.</p>`;
+}
+
 // ---------- slide-out tool card ----------
 function renderToolCard() {
   const d = ui.dock, open = !!d && ui.mode === "prepare" && !!activeView();
@@ -941,6 +1166,33 @@ function renderToolCard() {
         ${shapeParams(o, dis)}
         <p class="hint">Click a footprint in the viewport to select. Drop files anywhere to import.</p>`;
       break;
+    }
+    case "props": body = !o ? needObj : propsCard(o, dis); break;
+    case "layflat": body = !o ? needObj : `<p class="hint" style="margin-top:0">Click a flat face of the model and it is placed on the build plate. Hover to preview the face.</p>
+        <div class="actions"><button class="btn sm primary" data-act="autoOrient"${dis}>${icon("orient")}Auto-orient</button><button class="btn sm" data-act="layBig"${dis}>Largest face down</button></div>
+        <div class="sep"></div><h2 class="mini">Rotate in 90° steps</h2>
+        <div class="chipbar">${(["x", "y", "z"] as const).map((ax) => `<button class="btn sm" data-act="rotAxis" data-arg="${ax}:-90"${dis}>${ax.toUpperCase()} −90°</button><button class="btn sm" data-act="rotAxis" data-arg="${ax}:90"${dis}>${ax.toUpperCase()} +90°</button>`).join("")}</div>
+        <p class="hint">Rotation is baked into the mesh. A parametric shape becomes a plain mesh (its dimension sliders and zones are reset).</p>`; break;
+    case "text": body = `<input class="props-name" type="text" data-in="textField" data-key="text" value="${esc(ui.textSpec.text)}" placeholder="Your text" aria-label="Text"${dis}>
+        ${selectRow("Font", `data-in="textField" data-key="family"`, [["sans-serif", "Sans-serif"], ["serif", "Serif"], ["monospace", "Monospace"], ["cursive", "Handwriting"], ["fantasy", "Display"]].map(([v, l]) => opt(v, l, ui.textSpec.family === v)).join(""))}
+        ${rangeRow("Letter height", `data-in="textField" data-key="sizeMm"`, ui.textSpec.sizeMm, 3, 80, 0.5, { unit: "mm" })}
+        ${rangeRow("Thickness", `data-in="textField" data-key="heightMm"`, ui.textSpec.heightMm, 0.4, 30, 0.2, { unit: "mm" })}
+        ${switchRow("Bold", `data-in="textField" data-key="bold"`, ui.textSpec.bold)}
+        <div class="actions"><button class="btn primary" data-act="textAdd"${dis}>${icon("plus")}Add text object</button></div>
+        <p class="hint">Creates a solid text object from any font installed on this device. Place it on a plate or merge it into a print by arranging it next to your model.</p>`; break;
+    case "mirror": body = !o ? needObj : `<div class="chipbar" style="margin-top:0">${(["x", "y", "z"] as const).map((ax) => `<button class="btn sm" data-act="mirrorAxis" data-arg="${ax}"${dis}>${icon("mirror")}Mirror ${ax.toUpperCase()}</button>`).join("")}</div>
+        <p class="hint">Mirrors the geometry (winding stays outward-facing). Zones and parametric sliders reset.</p>`; break;
+    case "measure": body = `<p class="hint" style="margin-top:0">Click two points on the model. Click again to start over.</p>
+        <div class="tiles">${tile("Distance", ui.measure.length === 2 ? `${ui.measure[0].distanceTo(ui.measure[1]).toFixed(2)} mm` : "–")}${tile("Δ X / Y / Z", ui.measure.length === 2 ? [0, 1, 2].map((k) => Math.abs([ui.measure[1].x - ui.measure[0].x, ui.measure[1].y - ui.measure[0].y, ui.measure[1].z - ui.measure[0].z][k]).toFixed(1)).join(" / ") : "–")}</div>
+        <div class="actions"><button class="btn sm" data-act="measureClear">Clear</button></div>`; break;
+    case "cut": {
+      if (!o) { body = needObj; break; }
+      const H = objectSize(o).h; if (!(ui.cutH > 0 && ui.cutH < H)) ui.cutH = H / 2;
+      body = `${rangeRow("Cut height", `data-in="cutH"`, +ui.cutH.toFixed(2), 0.5, Math.max(1, +(H - 0.5).toFixed(2)), 0.1, { unit: "mm", disabled: !!p.locked })}
+        ${selectRow("Keep", `data-in="cutKeep"`, opt("both", "Both parts", ui.cutKeep === "both") + opt("upper", "Upper part only", ui.cutKeep === "upper") + opt("lower", "Lower part only", ui.cutKeep === "lower"))}
+        ${switchRow("Flip upper part (cut face down)", `data-in="cutFlip"`, ui.cutFlip)}
+        <div class="actions"><button class="btn primary" data-act="cutApply"${dis}>${icon("cut")}Cut</button></div>
+        <p class="hint">The cut faces are closed so each part prints solid. A parametric shape becomes a plain mesh.</p>`; break;
     }
     case "move": body = !o ? needObj : `<div class="pair">${numRow("X", `data-in="tf" data-key="x"`, o.transform.x, { unit: "mm", step: 1, disabled: !!p.locked })}${numRow("Y", `data-in="tf" data-key="y"`, o.transform.y, { unit: "mm", step: 1, disabled: !!p.locked })}</div>
         <div class="actions"><button class="btn sm" data-act="centerObj"${dis}>${icon("arrange")}Center on bed</button></div><p class="hint">Or drag the selected object across the bed.</p>`; break;
@@ -979,7 +1231,7 @@ function renderToolCard() {
 }
 
 // ======================= right drawer =======================
-const PREVIEW_SHORT: Record<PreviewMode, string> = { feature: "Feature", speed: "Speed", height: "Height", layerTime: "Layer time", curvature: "Curvature" };
+const PREVIEW_SHORT: Record<PreviewMode, string> = { feature: "Feature", speed: "Speed", height: "Height", layerTime: "Layer time", curvature: "Curvature", width: "Width", zone: "Zones" };
 const TIERS = [
   { id: "quality", label: "Quality", path: "layerHeight", min: 0.05, max: 0.8, step: 0.01, unit: "mm", sub: "Layer height", fmt: (n: number) => n.toFixed(2) },
   { id: "strength", label: "Strength", path: "lineWidth", min: 0.2, max: 1.6, step: 0.05, unit: "mm", sub: "Wall line width", fmt: (n: number) => n.toFixed(2) },
@@ -1003,13 +1255,44 @@ function cardProcess() {
       <span class="grow"><b class="nowrap">${pr.system ? "" : "★ "}${esc(pr.name)}</b><small>${r.layerHeight.toFixed(2)} mm · ${r.wallSpeed} mm/s${r.nonLinear.enabled ? " · non-linear" : " · planar"}</small></span>${cur ? icon("chevdown", "disclose" + (ui.presetsOpen ? " open" : "")) : ""}</button>`;
   };
   const cur = list.find((p) => p.id === ui.selected.process) ?? list[0], others = list.filter((p) => p !== cur);
-  const tiers = TIERS.map((t) => `<button class="tile${ui.tier === t.id ? " on" : ""}" data-act="tier" data-arg="${t.id}" aria-expanded="${ui.tier === t.id}"><div class="k">${t.label}</div><div class="n">${t.fmt(P[t.path])} <span class="unit">${t.unit}</span></div></button>`).join("")
-    + `<button class="tile" disabled title="Supports are not generated in single-wall spiral mode"><div class="k">Supports</div><div class="n" style="font-size:12.5px;font-weight:500;color:var(--text-3)">Not needed</div></button>`;
-  const sliders = TIERS.map((t) => `<div class="collapse${ui.tier === t.id ? " open" : ""}"><div class="inner">${rangeRow(t.sub, `data-in="path" data-kind="process" data-path="${t.path}"`, P[t.path], t.min, t.max, t.step, { unit: t.unit, cls: "sky" })}</div></div>`).join("");
   const mod = ui.edited.process ? `<div class="mod-row"><span class="grow"><span class="dot"></span>Modified</span><button class="btn sm" data-act="presetRevert" data-arg="process">Revert</button><button class="btn sm primary" data-act="presetSave" data-arg="process">Save as…</button></div>` : "";
   return `<section class="card"><header class="card-head">${icon("layers")}<h3>Process presets</h3></header>${row(cur, true)}
     <div class="collapse${ui.presetsOpen ? " open" : ""}"><div class="inner"><div class="preset-list">${others.map((p) => row(p, false)).join("")}</div></div></div>
-    <div class="tier-grid">${tiers}</div>${sliders}${mod}</section>`;
+    ${mod}</section>`;
+}
+const PLATE_LEVEL = new Set(["skirt_loops", "skirt_distance", "skirt_height", "draft_shield", "print_sequence", "enable_prime_tower", "prime_tower_skip_points", "prime_tower_width", "prime_volume", "prime_tower_brim_width", "timelapse_type", "gcode_add_line_number", "gcode_comments", "gcode_label_objects", "filename_format", "post_process", "process_notes", "spiral_mode", "spiral_mode_smooth", "raft_layers", "raft_contact_distance", "raft_expansion", "raft_first_layer_density", "enable_support", "support_type", "support_style"]);
+const overrides = (): Record<string, SettingValue> | undefined => (ui.procScope === "objects" ? activeView().plate.objects[ui.activeObj]?.settings : undefined);
+const settingValue = (key: string): SettingValue => getSetting(proc(), key, overrides());
+function settingRow(d: SettingDef): string {
+  const v = settingValue(key_(d)), a = `data-in="set" data-key="${d.key}"`, scopeObj = ui.procScope === "objects";
+  const base = registry.resolve<"process">(ui.selected.process), changed = scopeObj ? !!overrides() && d.key in overrides()! : JSON.stringify(getSetting(base, d.key)) !== JSON.stringify(getSetting(proc(), d.key));
+  const dis = !scopeObj && activeView().plate.locked ? " disabled" : "";
+  const label = `${esc(d.label)}${d.wired === false ? ` <span class="stored" title="Saved in your profile and exports, but the NexSpiro engine does not act on it yet">stored</span>` : ""}`;
+  const reset = changed ? `<button class="icon-btn sm flat rst" data-act="resetSetting" data-arg="${d.key}" title="${scopeObj ? "Use the global value" : "Reset to preset value"}" aria-label="Reset ${esc(d.label)}">${icon("rotate")}</button>` : "";
+  let ctl: string;
+  if (d.kind === "bool") ctl = `<input type="checkbox" ${a}${v ? " checked" : ""}${dis}>`;
+  else if (d.kind === "enum") ctl = `<select ${a}${dis}>${(d.options ?? []).map(([val, lab]) => opt(val, lab, String(v) === val)).join("")}</select>`;
+  else if (d.kind === "text") ctl = `<input type="text" ${a} value="${esc(String(v))}"${dis}>`;
+  else ctl = `<span class="numwrap"><input type="number" ${a} step="${d.step ?? "any"}"${d.min !== undefined ? ` min="${d.min}"` : ""}${d.max !== undefined ? ` max="${d.max}"` : ""} value="${v}"${dis}>${d.unit ? `<span class="unit">${esc(d.unit)}</span>` : ""}</span>`;
+  return `<label class="row setrow${changed ? " chg" : ""}"${d.tip ? ` title="${esc(d.tip)}"` : ""}><span class="lbl">${label}</span>${ctl}${reset}</label>`;
+}
+const key_ = (d: SettingDef) => d.key;
+function cardSettings() {
+  const v = activeView(), o = v.plate.objects[ui.activeObj], scopeObj = ui.procScope === "objects", q = ui.setSearch.trim().toLowerCase();
+  const get = (k: string) => settingValue(k);
+  let defs = SETTING_DEFS.filter((d) => (ui.advanced || (d.level ?? 0) === 0 || !!q) && settingVisible(d, get) && (!scopeObj || !PLATE_LEVEL.has(d.key)));
+  defs = q ? defs.filter((d) => `${d.label} ${d.key} ${d.group} ${d.tip ?? ""}`.toLowerCase().includes(q)) : defs.filter((d) => d.tab === ui.setTab);
+  const groups = [...new Set(defs.map((d) => (q ? `${SETTING_TABS.find((t) => t.id === d.tab)!.label} · ${d.group}` : d.group)))];
+  const body = groups.map((g) => `<h2 class="mini">${esc(g)}</h2>${defs.filter((d) => (q ? `${SETTING_TABS.find((t) => t.id === d.tab)!.label} · ${d.group}` : d.group) === g).map(settingRow).join("")}`).join("")
+    || `<div class="empty">${q ? "No setting matches." : "Nothing in this tab."}</div>`;
+  const nOver = Object.keys(o?.settings ?? {}).length;
+  const objPick = scopeObj ? (o ? `<div class="objlist" style="margin-bottom:8px">${v.plate.objects.map((ob, k) => `<div class="list-item${k === ui.activeObj ? " on" : ""}" role="button" tabindex="0" data-act="selectObj" data-arg="${k}"><span class="obj-name">${icon(ob.source.kind === "mesh" ? "cube" : "cylinder")}<span class="nowrap">${esc(ob.name)}</span></span><span class="muted">${Object.keys(ob.settings ?? {}).length ? `${Object.keys(ob.settings!).length} custom` : ""}</span></div>`).join("")}</div>
+      ${nOver ? `<div class="actions" style="margin:0 0 8px"><button class="btn sm" data-act="clearOverrides">Clear ${nOver} override${nOver > 1 ? "s" : ""}</button></div>` : ""}` : `<div class="empty">Select an object first.</div>`) : "";
+  return `<section class="card settings"><header class="card-head">${icon("settings")}<h3>Process</h3><span class="grow"></span>${seg("procScope", [{ value: "global", label: "Global" }, { value: "objects", label: "Objects" }], ui.procScope, { cls: "sm" })}</header>
+    <div class="setbar"><label class="adv"><span>Advanced</span><input type="checkbox" data-in="advanced"${ui.advanced ? " checked" : ""}></label><button class="icon-btn sm flat" data-act="searchToggle" aria-label="Search settings" aria-pressed="${ui.searchOpen}">${icon("search")}</button></div>
+    ${ui.searchOpen ? `<input class="setsearch" type="search" data-in="setSearch" value="${esc(ui.setSearch)}" placeholder="Search all settings…" aria-label="Search settings" autofocus>` : ""}
+    ${q ? "" : seg("setTab", SETTING_TABS.map((t) => ({ value: t.id, label: t.label })), ui.setTab, { cls: "sm block tabs5" })}
+    ${objPick}${scopeObj && !o ? "" : `<div class="setbody">${body}</div>`}</section>`;
 }
 function cardNonLinear(forceOpen = false) {
   const N = proc().nonLinear, r = activeView().result, viol = r ? r.mps.reduce((a, m) => a + m.inclinationViolations, 0) : -1, on = N.enabled;
@@ -1042,16 +1325,27 @@ function cardMotion() {
     <p class="hint">Changes re-slice automatically; scrub or press play to watch the nozzle follow the new motion.</p></section>`;
 }
 function cardView() {
-  const v = activeView(), r = v.result, o = v.plate.objects[ui.activeObj];
+  const v = activeView(), r = v.result, o = v.plate.objects[ui.activeObj], pl = r?.planar;
+  const modes: PreviewMode[] = pl ? ["feature", "speed", "height", "width", "layerTime", "zone"] : ["feature", "speed", "height", "layerTime", "curvature"];
+  if (!modes.includes(ui.preview)) ui.preview = "feature";
   let legend = "";
-  if (ui.preview === "feature") {
+  if (pl && v.planar && ui.preview === "feature") {
+    const tot = Object.values(pl.byFeature).reduce((a, x) => a + x.timeS, 0) || 1;
+    legend = `<div class="featlist">${v.planar.featuresPresent.map((f) => { const x = pl.byFeature[f]; return `<div class="feat"><span class="swatch" style="background:${hex(FEATURE_HEX[f])}"></span><span class="grow">${FEATURE_LABEL[f]}</span><span class="muted">${x ? `${((x.timeS / tot) * 100).toFixed(1)}% · ${formatDuration(x.timeS)}` : ""}</span></div>`; }).join("")}</div>`;
+  } else if (ui.preview === "feature") {
     legend = `<div class="legend-ends" style="flex-wrap:wrap;gap:6px 14px;margin-top:12px"><span><span class="swatch" style="background:${hex(P3().pathBase)}"></span>Base wall</span>${(o?.mask.regions ?? []).map((_, k) => `<span><span class="swatch" style="background:${hex(REGION_COLORS[k % REGION_COLORS.length])}"></span>Region ${k + 1}</span>`).join("")}</div>`;
+  } else if (ui.preview === "zone" && pl) {
+    legend = `<div class="legend-ends" style="flex-wrap:wrap;gap:6px 14px;margin-top:12px"><span><span class="swatch" style="background:${hex(P3().pathBase)}"></span>Plain outer wall</span>${(o?.mask.regions ?? []).map((_, k) => `<span><span class="swatch" style="background:${hex(REGION_COLORS[k % REGION_COLORS.length])}"></span>Zone ${k + 1}</span>`).join("")}</div>`;
+  } else if (pl && v.planar) {
+    const [lo, hi, unit] = v.planar.range;
+    legend = `<div class="legend-bar" style="background:${rampGradient()}"></div><div class="legend-ends"><span>${lo.toFixed(1)} ${unit}</span><span>${PREVIEW_LABELS[ui.preview]}</span><span>${hi.toFixed(1)} ${unit}</span></div>`;
   } else if (r) {
     const [lo, hi, unit] = legendRange(r.mps, ui.preview);
     legend = `<div class="legend-bar" style="background:${rampGradient()}"></div><div class="legend-ends"><span>${lo.toFixed(1)} ${unit}</span><span>${PREVIEW_LABELS[ui.preview]}</span><span>${hi.toFixed(1)} ${unit}</span></div>${ui.preview === "curvature" ? `<p class="hint">Hue = feedrate, lightness = curvature peaks.</p>` : ""}`;
   }
   return `<section class="card"><header class="card-head">${icon("layers")}<h3>Color by</h3></header>
-    <div class="pills">${(Object.keys(PREVIEW_SHORT) as PreviewMode[]).map((m) => `<button class="btn sm${m === ui.preview ? " on" : ""}" data-act="previewMode" data-arg="${m}">${PREVIEW_SHORT[m]}</button>`).join("")}</div>${legend}</section>`;
+    <div class="pills">${modes.map((m) => `<button class="btn sm${m === ui.preview ? " on" : ""}" data-act="previewMode" data-arg="${m}">${PREVIEW_SHORT[m]}</button>`).join("")}</div>${legend}
+    ${pl ? switchRow("Show travel moves", `data-in="showTravel"`, ui.showTravel) : ""}</section>`;
 }
 function cardSummary() {
   const v = activeView(), r = v.result;
@@ -1059,14 +1353,14 @@ function cardSummary() {
     const msg = v.status === "slicing" ? "Slicing…" : v.status === "error" ? `<span class="err">${esc(v.error ?? "Slicing failed")}</span>` : v.plate.objects.length ? "Slice the plate to see time, weight and the toolpath." : "Add or import an object to begin.";
     return `<section class="card"><header class="card-head">${icon("clock")}<h3>Estimate</h3></header><div class="empty">${msg}${v.plate.objects.length && v.status !== "slicing" ? `<br><button class="btn primary sm" data-act="sliceNow">${icon("bolt")}Slice now</button>` : ""}</div></section>`;
   }
-  const S = r.stats, moves = r.mps.reduce((a, m) => a + m.count, 0), dec = r.mps.reduce((a, m) => a + m.decimated, 0), inc = r.mps.reduce((a, m) => a + m.inclinationViolations, 0);
+  const S = r.stats, moves = r.planar ? r.planar.prev.count : r.mps.reduce((a, m) => a + m.count, 0), dec = r.mps.reduce((a, m) => a + m.decimated, 0), inc = r.mps.reduce((a, m) => a + m.inclinationViolations, 0);
   const stale = isFresh(v) ? "" : `<span class="badge amber plain" style="margin-left:6px">stale</span>`;
   const issues = [...r.issues.map((i) => ({ level: i.level, text: i.message })),
     ...(r.zClipped ? [{ level: "warn", text: `Z wobble capped at ±${machine().zWobbleMax} mm on ${r.zClipped.toLocaleString()} points` }] : []),
     ...(inc ? [{ level: "warn", text: `${inc.toLocaleString()} segments exceed max inclination ${proc().nonLinear.maxInclination}°` }] : [])];
   return `<section class="card"><header class="card-head">${icon("clock")}<h3>Estimate${stale}</h3></header>
     <div class="tiles">${tile("Print time", formatDuration(S.timeS))}${tile("Weight", `${S.grams.toFixed(1)} g`)}${tile("Filament", `${(S.filamentMm / 1000).toFixed(2)} m`)}${tile("Layers", String(S.layers))}${tile("Cost", S.cost.toFixed(2))}${tile("Non-linear path", `${(S.nonLinearMm / 1000).toFixed(2)} m`)}</div>
-    <p class="hint">${r.mps.length} object${r.mps.length > 1 ? `s (sequential: ${r.order.map((k) => esc(v.plate.objects[k]?.name ?? "?")).join(" → ")})` : ""} · ${moves.toLocaleString()} moves (${dec.toLocaleString()} decimated) · ${r.ms.toFixed(0)} ms</p>
+    <p class="hint">${v.plate.objects.length} object${v.plate.objects.length > 1 ? `s${r.planar ? (r.planar.sequence === "object" ? " (by object)" : " (by layer)") : ` (sequential: ${r.order.map((k) => esc(v.plate.objects[k]?.name ?? "?")).join(" → ")})`}` : ""} · ${moves.toLocaleString()} moves${r.planar ? "" : ` (${dec.toLocaleString()} decimated)`} · ${r.ms.toFixed(0)} ms</p>
     ${issues.map((i) => `<div class="issue ${i.level === "error" ? "error" : "warn"}">${icon("warn")}<span>${esc(i.text)}</span></div>`).join("")}</section>`;
 }
 function cardExport() {
@@ -1079,7 +1373,7 @@ function cardExport() {
 }
 function renderDrawer() {
   if (!activeView()) return;
-  const html = ui.mode === "prepare" ? cardSetup() + cardProcess() + cardNonLinear() : ui.mode === "preview" ? cardView() + cardSummary() + cardNonLinear(true) + cardMotion() : cardPrinters() + cardSend() + cardSummary() + cardExport();
+  const html = ui.mode === "prepare" ? cardSetup() + (ui.procScope === "global" ? cardProcess() : "") + cardSettings() + cardNonLinear() : ui.mode === "preview" ? cardView() + cardSummary() + cardNonLinear(true) + cardMotion() : cardPrinters() + cardSend() + cardSummary() + cardExport();
   // never swap the DOM under a slider that is being dragged; it refreshes on release
   if (drawer.contains(document.activeElement) && (document.activeElement as HTMLInputElement).type === "range" && ui.dragSlider) return;
   const top = drawer.scrollTop; setHtml(drawer, html); drawer.scrollTop = top;
@@ -1169,7 +1463,7 @@ async function sendToPrinter(print: boolean) {
         slice(v); check();
       });
     }
-    const g = buildGcode(ui.active, false)!;
+    const g = (await buildGcode(ui.active, false))!;
     ui.netBusy = `Uploading ${g.name} (${(g.text.length / 1048576).toFixed(1)} MB)…`; renderDrawer();
     await connectorFor(p).upload(g.name, g.text, print);
     ui.netMsg = { tone: "ok", text: print ? `Sent “${g.name}” — ${p.name} is starting the print.` : `Sent “${g.name}” to ${p.name}. Start it from the printer.` };
@@ -1252,7 +1546,14 @@ scrubEl.addEventListener("input", () => { ui.scrub = Number(scrubEl.value); ui.p
 function syncPlay() { const b = byId("playBtn"); b.innerHTML = icon(ui.playing ? "pause" : "play"); b.setAttribute("aria-label", ui.playing ? "Pause" : "Play toolpath"); }
 function updateReadout() {
   const v = activeView(), r = v?.result; if (!v) return;
-  const layers = r ? Math.max(...r.mps.map((m) => m.layer[m.count - 1] + 1)) : 0;
+  if (v.planar && r?.planar) {
+    const g = v.planar, layers = g.layers, L = (f: number) => Math.round(f * Math.max(0, layers - 1)) + 1, prev = r.planar.prev, h = v.planarHead ?? -1;
+    byId("vTop").textContent = String(L(ui.layerMax)); byId("vBot").textContent = String(L(ui.layerMin)); layerSlider.set(ui.layerMin, ui.layerMax);
+    const motion = h >= 0 && ui.scrub < 1 ? `<br>${FEATURE_LABEL[prev.feature[h]] ?? ""} · <b>${prev.speed[h].toFixed(0)}</b> mm/s · Z <b>${prev.b[h * 3 + 2].toFixed(2)}</b> mm · ${formatDuration(prev.order[h])}` : "";
+    byId("readout").innerHTML = `Layers <b>${L(ui.layerMin)}–${L(ui.layerMax)}</b> / ${layers} · ${formatDuration(g.totalTime)}${motion}`;
+    return;
+  }
+  const layers = r && r.mps.length ? Math.max(...r.mps.map((m) => m.layer[m.count - 1] + 1)) : 0;
   const L = (f: number) => Math.round(f * Math.max(0, layers - 1)) + 1;
   byId("vTop").textContent = layers ? String(L(ui.layerMax)) : "–"; byId("vBot").textContent = layers ? String(L(ui.layerMin)) : "–";
   layerSlider.set(ui.layerMin, ui.layerMax);
@@ -1343,6 +1644,7 @@ function afterPresetEdit(kind: PresetKind) {
 function onPresetsChanged() { afterPresetEdit("machine"); }
 function setPresetValue(kind: PresetKind, path: string, val: unknown) {
   const edited = structuredClone(presetValues(kind)) as unknown as Record<string, unknown>;
+  if (path.startsWith("settings.")) edited.settings ??= {};
   setPath(edited, path, val); ui.edited[kind] = edited as never;
 }
 function sliceNow() {
@@ -1379,7 +1681,30 @@ const ACT: Record<string, (arg: string, el: HTMLElement) => void> = {
   plateMenu: (_, el) => pickPlateMenu(el), exportMenu: (_, el) => exportMenu(el),
   sliceNow,
   setDock: (a) => setDock(a as Dock), closeCard: () => setDock(null),
+  procScope: (a) => { ui.procScope = a as typeof ui.procScope; renderDrawer(); },
+  setTab: (a) => { ui.setTab = a as SettingTab; renderDrawer(); },
+  searchToggle: () => { ui.searchOpen = !ui.searchOpen; if (!ui.searchOpen) ui.setSearch = ""; renderDrawer(); },
+  clearOverrides: () => { const o = activeView().plate.objects[ui.activeObj]; if (o) { delete o.settings; renderDrawer(); sliceActiveSoon(0); } },
+  resetSetting: (a) => {
+    const d = SETTING_BY_KEY[a]; if (!d) return;
+    if (ui.procScope === "objects") { const o = activeView().plate.objects[ui.activeObj]; if (o?.settings) { delete o.settings[a]; if (!Object.keys(o.settings).length) delete o.settings; } renderDrawer(); sliceActiveSoon(0); return; }
+    setPresetValue("process", d.alias ?? `settings.${a}`, getSetting(registry.resolve<"process">(ui.selected.process), a)); afterPresetEdit("process");
+  },
+  textAdd: () => { try { const o = meshObject(textMesh(ui.textSpec)); o.name = `Text "${ui.textSpec.text.slice(0, 16)}"`; addObject(o); } catch (e) { toast(e instanceof Error ? e.message : String(e)); } },
+  autoOrient: autoOrientObj, splitObj, cutApply,
+  layBig: () => withObject((ov) => { const n = largestFaceNormal(ensureMesh(ov.obj)); if (n) layFlatAt(ov, n); }),
+  rotAxis: (a) => withObject((ov) => { const [ax, d] = a.split(":"); const m = ensureMesh(ov.obj); if (ax === "z") { const t = ov.obj.transform; t.rotation = ((t.rotation + Number(d) + 540) % 360) - 180; buildSurface(ov); renderToolCard(); sliceActiveSoon(0); return; } commitMeshEdit(ov, transformMeshBy(m, rotationAxisMat(ax as "x" | "y", Number(d)), m.name)); }),
+  mirrorAxis: (a) => withObject((ov) => { const m = ensureMesh(ov.obj); commitMeshEdit(ov, mirrorMesh(m, a as "x" | "y" | "z")); }),
+  measureClear: () => { ui.measure = []; drawMeasure(); renderToolCard(); },
+  openDock: (a) => { ui.dock = null; setDock(a as Dock); },
   selectObj: (a) => selectObject(Number(a)),
+  resetXform: () => { const ov = activeObjView(); if (!ov || objLocked()) return; Object.assign(ov.obj.transform, { scaleXY: 1, scaleZ: 1, rotation: 0 }); buildSurface(ov); placeObj(ov); renderToolCard(); renderStatus(); sliceActiveSoon(0); },
+  objSettings: () => { ui.procScope = "objects"; ui.drawerOpen = true; ui.mode === "prepare" || setMode("prepare"); renderTopbar(); renderDrawer(); updateViewInsets(); },
+  ctxCopy: () => { const ov = activeObjView(); if (ov) { clipboard = cloneObject(ov.obj); toast(`Copied ${ov.obj.name}`); } },
+  ctxPaste: () => { if (clipboard && !objLocked()) addObject(cloneObject(clipboard)); },
+  ctxAddPrim: (a) => { const k = a as PrimitiveName; const o = newObject({ kind: "primitive", primitive: k, params: primitiveDefaults(k) }); o.base = { pattern: "none", params: { ...patterns.none.defaults } }; addObject(o); },
+  ctxImport: () => byId("fileImport").click(),
+  ctxExportObj: () => { ui.exportFormat = "stl"; doExport(); },
   dupObj: (a) => addObject(cloneObject(activeView().plate.objects[Number(a)])),
   delObj: (a) => deleteObject(Number(a)),
   centerObj: () => { const ov = activeObjView(); if (!ov || activeView().plate.locked) return; ov.obj.transform.x = 0; ov.obj.transform.y = 0; placeObj(ov); renderToolCard(); sliceActiveSoon(0); },
@@ -1439,6 +1764,7 @@ document.addEventListener("click", (e) => {
   if (!t || (t as HTMLButtonElement).disabled) return;
   const act = t.dataset.act!;
   if (t.closest("#pop") && act !== "plateMenu" && act !== "exportMenu") closePop();
+  if (t.closest("#ctx")) closeCtx();
   ACT[act]?.(t.dataset.arg ?? "", t);
 });
 document.addEventListener("keydown", (e) => { // keyboard activation for role="button" rows
@@ -1461,7 +1787,7 @@ const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
     const ov = activeObjView(); if (!ov || objLocked()) return;
     const t = ov.obj.transform, k = el.dataset.key as keyof typeof t, n = Number(el.value);
     if (k === "scaleXY" || k === "scaleZ") {
-      t[k] = Math.max(0.1, n / 100);
+      t[k] = Math.max(0.01, n / 100);
       if (ui.uniform) {
         const other = k === "scaleXY" ? "scaleZ" : "scaleXY"; t[other] = t[k];
         const o2 = toolcard.querySelector<HTMLInputElement>(`[data-key="${other}"]`); if (o2) { o2.value = String(n); syncRange(o2); }
@@ -1469,9 +1795,36 @@ const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
     } else t[k] = n;
     if (el.type === "range") syncRange(el);
     if (el.type === "range" && phase === "input") applyObjTransform(ov); else buildSurface(ov);
-    placeObj(ov); renderStatus(); sliceActiveSoon();
+    placeObj(ov); renderStatus(); sliceActiveSoon(); if (el.type === "number" && ui.dock === "props") renderToolCard();
   },
   uniform: (el) => { ui.uniform = el.checked; },
+  textField(el) { const k = el.dataset.key as keyof typeof ui.textSpec; (ui.textSpec as Record<string, unknown>)[k] = k === "bold" ? el.checked : k === "sizeMm" || k === "heightMm" ? Number(el.value) : el.value; if (el.type === "range") syncRange(el); },
+  cutH: (el) => { ui.cutH = Number(el.value); syncRange(el); updateCutPlane(); },
+  cutKeep: (el) => { ui.cutKeep = el.value as typeof ui.cutKeep; },
+  cutFlip: (el) => { ui.cutFlip = el.checked; },
+  showTravel: (el) => { ui.showTravel = el.checked; },
+  advanced: (el) => { ui.advanced = el.checked; renderDrawer(); },
+  setSearch: (el) => { ui.setSearch = el.value; renderDrawer(); const i = drawer.querySelector<HTMLInputElement>(".setsearch"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } },
+  set(el) {
+    const key = el.dataset.key!, d = SETTING_BY_KEY[key]; if (!d) return;
+    const val: SettingValue = d.kind === "bool" ? el.checked : d.kind === "num" ? (Number.isFinite(Number(el.value)) && el.value !== "" ? Number(el.value) : d.def) : el.value;
+    if (ui.procScope === "objects") {
+      const o = activeView().plate.objects[ui.activeObj]; if (!o || activeView().plate.locked) return;
+      o.settings = { ...(o.settings ?? {}), [key]: val }; renderDrawer(); renderStatus(); sliceActiveSoon(); return;
+    }
+    setPresetValue("process", d.alias ?? `settings.${key}`, val); afterPresetEdit("process");
+  },
+  noop: () => {},
+  objName(el) { const ov = activeObjView(); if (!ov || objLocked()) return; ov.obj.name = el.value.trim() || ov.obj.name; renderToolCard(); renderTray(); },
+  size(el) {
+    const ov = activeObjView(); if (!ov || objLocked()) return;
+    const o = ov.obj, t = o.transform, sz = objectSize(o), n = Number(el.value), key = el.dataset.key;
+    if (!(n > 0)) { renderToolCard(); return; }
+    if (key === "h") { const f = n / sz.h; t.scaleZ *= f; if (ui.uniform) t.scaleXY *= f; }
+    else { const f = n / (key === "w" ? sz.w : sz.d); t.scaleXY *= f; if (ui.uniform) t.scaleZ *= f; }
+    t.scaleXY = clamp(t.scaleXY, 0.01, 20); t.scaleZ = clamp(t.scaleZ, 0.01, 20);
+    buildSurface(ov); placeObj(ov); renderToolCard(); renderStatus(); sliceActiveSoon();
+  },
   target: (el) => { ui.target = Number(el.value); ui.tool = toolFor(ui.dock); renderToolCard(); renderDrawer(); },
   pattern(el) {
     const ov = activeObjView(); if (!ov || objLocked()) return;
@@ -1519,7 +1872,7 @@ const IN: Record<string, (el: HTMLInputElement, phase: Phase) => void> = {
 };
 for (const phase of ["input", "change"] as const) document.addEventListener(phase, (e) => {
   const el = e.target as HTMLInputElement, name = el.dataset?.in; if (!name) return;
-  if (phase === "input" && el.type !== "range") return; // text/number/select commit on change; sliders are live
+  if (phase === "input" && el.type !== "range" && name !== "setSearch") return; // text/number/select commit on change; sliders are live
   IN[name]?.(el, phase);
 });
 document.addEventListener("pointerup", () => { if (ui.dragSlider) { ui.dragSlider = false; renderDrawer(); } });
@@ -1577,6 +1930,7 @@ renderer.setAnimationLoop(() => {
   for (const v of views) {
     const far = camera.position.distanceTo(v.group.position) > 450, hasLod = v.lines.some((l) => l.userData.lod === "far");
     if (!dragging) for (const l of v.lines) l.visible = showPaths() && (!hasLod || (l.userData.lod === "far") === far);
+    if (v.planar && !dragging) { v.planar.extrude.mesh.visible = showPaths(); v.planar.travel.mesh.visible = showPaths() && ui.showTravel; }
   }
   renderer.render(scene, camera);
   frames++;
@@ -1584,7 +1938,7 @@ renderer.setAnimationLoop(() => {
 });
 
 applyThemeBoot();
-addPlate(newPlate("Plate 1"));
+addPlate(newPlate("Plate 1", [starterObject()]));
 resize();
 function applyThemeBoot() { setThemeAttr(ui.theme); }
 if (import.meta.env?.DEV) (window as unknown as Record<string, unknown>).__ns = { ui, views, scene, camera, THREE };
