@@ -37,3 +37,26 @@ test("gcode flavors emit header and moves", () => {
     assert.equal(g.split("\n").filter((l) => l.startsWith("G1 X")).length, tp.count - 1);
   }
 });
+
+import { createMask, addRegion, stamp } from "../src/core/index.ts";
+
+test("zCap clamps in-layer Z excursion", () => {
+  const tp = buildSpiral(primitives.cylinder(5, 20), { ...base, pattern: "knit", params: { zAmplitude: 2 }, zCap: 0.5 });
+  assert.ok(tp.zClipped > 0);
+  for (let i = 0; i < tp.count; i++) {
+    const zBase = 0.4 * (1 + i / 360);
+    assert.ok(tp.xyz[i * 3 + 2] - zBase <= 0.5 + 1e-4);
+  }
+});
+
+test("painted region applies pattern only where painted", () => {
+  const mask = createMask(64, 64);
+  const r = addRegion(mask, "ribbed", { amplitude: 3 });
+  stamp(mask, r, 0.0, 0.5, 6);
+  const tp = buildSpiral(primitives.cylinder(20, 20), { ...base, pattern: "none", paint: mask });
+  const radiusAt = (i: number) => Math.hypot(tp.xyz[i * 3], tp.xyz[i * 3 + 1]);
+  const mid = 25 * 360; // layer 25 = t≈0.5, u=0
+  assert.equal(tp.tag[mid], 1);
+  assert.ok(Math.abs(radiusAt(2 * 360 + 180) - 20) < 1e-3); // unpainted bottom, far side
+  assert.equal(tp.tag[2 * 360 + 180], 0);
+});

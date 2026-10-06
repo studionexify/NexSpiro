@@ -1,45 +1,72 @@
 import type { Profile } from "./primitives.ts";
-import { patterns, type PatternParams } from "./patterns.ts";
+import { patterns, type PatternParams, type Sample } from "./patterns.ts";
+import { sample, type PaintMask } from "./mask.ts";
 
 export type PathSettings = {
   layerHeight: number;    // mm
   lineWidth: number;      // mm
   filamentDiameter: number;
   segmentsPerRev: number; // must be ≥ ~4× wavesPerRev to resolve the pattern
-  pattern: string;
+  pattern: string;        // base wall pattern (unpainted surface)
   params?: Partial<PatternParams>;
   fadeHeight: number;     // mm: pattern ramps from 0 at bottom to full over this height
   center: [number, number];
+  zCap?: number;          // max |dz| allowed by printer (mm)
+  paint?: PaintMask;
 };
-// Flat typed arrays: x,y,z per point; e = absolute E at each point.
-export type Toolpath = { xyz: Float32Array; e: Float64Array; count: number };
+// Flat typed arrays: x,y,z per point; e = absolute E; tag = dominant region (0 = base, i+1 = paint region i).
+export type Toolpath = { xyz: Float32Array; e: Float64Array; tag: Uint8Array; count: number; zClipped: number };
+
+const resolve = (name: string, over?: Partial<PatternParams>) => {
+  const pat = patterns[name];
+  if (!pat) throw new Error(`Unknown pattern: ${name}`);
+  return { fn: pat.fn, p: { ...pat.defaults, ...over } as PatternParams };
+};
 
 export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
-  const pat = patterns[s.pattern];
-  if (!pat) throw new Error(`Unknown pattern: ${s.pattern}`);
-  const p: PatternParams = { ...pat.defaults, ...s.params };
+  const base = resolve(s.pattern, s.params);
+  const regions = (s.paint?.regions ?? []).map((r) => resolve(r.pattern, r.params));
   const layers = Math.floor(profile.height / s.layerHeight);
   const n = layers * s.segmentsPerRev + 1;
-  const xyz = new Float32Array(n * 3);
-  const e = new Float64Array(n);
+  const xyz = new Float32Array(n * 3), e = new Float64Array(n), tag = new Uint8Array(n);
   const filArea = Math.PI * (s.filamentDiameter / 2) ** 2;
   const beadArea = s.lineWidth * s.layerHeight;
-  let E = 0, px = 0, py = 0, pz = 0;
+  const cap = s.zCap ?? Infinity;
+  let E = 0, px = 0, py = 0, pz = 0, zClipped = 0;
   for (let i = 0; i < n; i++) {
     const layer = i / s.segmentsPerRev;            // continuous (spiral)
-    const theta = (i % s.segmentsPerRev) / s.segmentsPerRev * 2 * Math.PI;
-    const zBase = s.layerHeight * (1 + layer);     // first layer at 1×layerHeight
+    const u = (i % s.segmentsPerRev) / s.segmentsPerRev, theta = u * 2 * Math.PI;
+    const zBase = s.layerHeight * (1 + layer);
+    const t = Math.min(1, zBase / profile.height);
     const fade = s.fadeHeight > 0 ? Math.min(1, (zBase - s.layerHeight) / s.fadeHeight) : 1;
-    const m = pat.fn(theta, Math.floor(layer), p);
-    const r = profile.radius(Math.min(1, zBase / profile.height)) + fade * m.dr;
-    const x = s.center[0] + r * Math.cos(theta), y = s.center[1] + r * Math.sin(theta);
-    const z = zBase + fade * m.dz;
-    if (i > 0) {
-      const len = Math.hypot(x - px, y - py, z - pz);
-      E += (len * beadArea * (1 + fade * (m.e - 1))) / filArea;
+    const L = Math.floor(layer);
+
+    // Blend base + painted regions by mask weight.
+    let m: Sample = base.fn(theta, L, base.p);
+    if (regions.length) {
+      let wSum = 0, dr = 0, dz = 0, em = 0, best = 0, bestW = 0;
+      for (let k = 0; k < regions.length; k++) {
+        const w = sample(s.paint!, k, u, t);
+        if (w <= 0) continue;
+        const r = regions[k].fn(theta, L, regions[k].p);
+        dr += w * r.dr; dz += w * r.dz; em += w * r.e; wSum += w;
+        if (w > bestW) { bestW = w; best = k + 1; }
+      }
+      if (wSum > 0) {
+        const wb = Math.max(0, 1 - wSum), tot = wb + wSum;
+        m = { dr: (dr + wb * m.dr) / tot, dz: (dz + wb * m.dz) / tot, e: (em + wb * m.e) / tot };
+        if (bestW > 0.5) tag[i] = best;
+      }
     }
+    let dz = fade * m.dz;
+    if (Math.abs(dz) > cap) { dz = Math.sign(dz) * cap; zClipped++; }
+
+    const r = profile.radius(t) + fade * m.dr;
+    const x = s.center[0] + r * Math.cos(theta), y = s.center[1] + r * Math.sin(theta);
+    const z = zBase + dz;
+    if (i > 0) E += (Math.hypot(x - px, y - py, z - pz) * beadArea * (1 + fade * (m.e - 1))) / filArea;
     xyz[i * 3] = x; xyz[i * 3 + 1] = y; xyz[i * 3 + 2] = z; e[i] = E;
     px = x; py = y; pz = z;
   }
-  return { xyz, e, count: n };
+  return { xyz, e, tag, count: n, zClipped };
 }
