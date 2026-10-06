@@ -1,5 +1,6 @@
-import type { Body } from "../../core/body.ts";
-import type { Mesh, Ring } from "../../core/mesh.ts";
+import { profileBody, type Body } from "../../core/body.ts";
+import { loopArea, type Mesh, type Ring } from "../../core/mesh.ts";
+import type { Profile } from "../../core/primitives.ts";
 import type { MotionPath } from "../../core/motion.ts";
 import type { ObjectTransform } from "../../core/project.ts";
 
@@ -124,3 +125,25 @@ export function bakeToolpath(mp: MotionPath, lineWidth: number, layerHeight: num
   else { t.push(...s0[0], ...s0[1], ...s0[2], ...s0[0], ...s0[2], ...s0[3], ...s1[0], ...s1[2], ...s1[1], ...s1[0], ...s1[3], ...s1[2]); }
   return { name, tris: new Float32Array(t) };
 }
+
+/** Exact display / export mesh of a primitive: prisms keep their true corners (no ring resampling), vessels use rings. */
+export function profileMesh(p: Profile, name = p.name): Mesh {
+  if (!p.contour) return tessellateBody(profileBody(p), name);
+  const rows = p.rows ?? 2, loops: Float64Array[] = [];
+  for (let j = 0; j < rows; j++) { let l = p.contour(j / (rows - 1)); if (loopArea(l) < 0) l = reverseLoop(l); loops.push(l); }
+  const n = loops[0].length / 2, t: number[] = [];
+  const V = (j: number, k: number) => [loops[j][(k % n) * 2], loops[j][(k % n) * 2 + 1], (j / (rows - 1)) * p.height];
+  for (let j = 0; j < rows - 1; j++) for (let k = 0; k < n; k++) {
+    const a = V(j, k), b = V(j, k + 1), c = V(j + 1, k + 1), d = V(j + 1, k);
+    t.push(...a, ...b, ...c, ...a, ...c, ...d);
+  }
+  for (const [j, up] of [[0, false], [rows - 1, true]] as const) {
+    const cx = [...Array(n).keys()].reduce((s, k) => s + loops[j][k * 2], 0) / n, cy = [...Array(n).keys()].reduce((s, k) => s + loops[j][k * 2 + 1], 0) / n, z = up ? p.height : 0;
+    for (let k = 0; k < n; k++) {
+      const a = [loops[j][k * 2], loops[j][k * 2 + 1], z], b = [loops[j][((k + 1) % n) * 2], loops[j][((k + 1) % n) * 2 + 1], z];
+      t.push(cx, cy, z, ...(up ? a : b), ...(up ? b : a));
+    }
+  }
+  return { name, tris: new Float32Array(t) };
+}
+const reverseLoop = (l: Float64Array) => { const n = l.length / 2, r = new Float64Array(l.length); for (let i = 0; i < n; i++) { r[i * 2] = l[(n - 1 - i) * 2]; r[i * 2 + 1] = l[(n - 1 - i) * 2 + 1]; } return r; };

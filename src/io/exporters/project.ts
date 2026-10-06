@@ -2,7 +2,7 @@ import { zipSync, unzipSync, strToU8, strFromU8 } from "fflate";
 import { deserializeProject, type Project } from "../../core/project.ts";
 import type { Mesh } from "../../core/mesh.ts";
 import { patterns } from "../../core/patterns.ts";
-import { primitives } from "../../core/primitives.ts";
+import { primitiveDefs } from "../../core/primitives.ts";
 
 // .nexspiro v3: zip archive. project.json holds structure; binary payloads are stored raw (little-endian Float32).
 const f32 = (a: Float32Array) => new Uint8Array(a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength));
@@ -57,7 +57,7 @@ export function readProjectArchive(bytes: Uint8Array): Project {
   const p: Project = { version: 2, presets: raw.presets, userPresets: raw.userPresets ?? [], plates: raw.plates, meshes };
   for (const pl of p.plates) for (const o of pl.objects) {
     if (o.source.kind === "mesh" && !meshes[o.source.meshId]) throw new Error(`Missing mesh ${o.source.meshId}`);
-    if (o.source.kind === "primitive" && !(o.source.primitive in primitives)) throw new Error(`Unknown primitive ${o.source.primitive}`);
+    if (o.source.kind === "primitive" && !(o.source.primitive in primitiveDefs)) throw new Error(`Unknown primitive ${o.source.primitive}`);
     if (!(o.base.pattern in patterns)) throw new Error(`Unknown pattern ${o.base.pattern}`);
     for (const r of o.mask.regions) if (!(r.pattern in patterns)) throw new Error(`Unknown pattern ${r.pattern}`);
     for (const r of o.mask.regions) if (r.weight.length !== o.mask.cols * o.mask.rows) throw new Error("Paint mask size mismatch");
