@@ -1,27 +1,29 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
-  patterns, primitives, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, clonePlate,
-  serializeProject, deserializeProject,
-  type PatternParams, type PrimitiveName, type MotionPath, type SliceStats, type PlateIssue, type Plate,
-  type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail,
+  patterns, primitives, addRegion, stamp, toGcode, formatDuration, PresetRegistry, newPlate, newObject, clonePlate, cloneObject,
+  serializeProject, deserializeProject, objectBody, arrangePlate, footprint, parseSTL, normalizeMesh, bounds,
+  type PatternParams, type PrimitiveName, type MotionPath, type SliceStats, type PlateIssue, type Plate, type PlateObject,
+  type MachinePreset, type FilamentPreset, type ProcessPreset, type PresetKind, type Preset, type Thumbnail, type Mesh, type Body,
 } from "../core/index.ts";
-import type { SliceRequest } from "./worker.ts";
+import type { SliceRequest, SliceResponse } from "./worker.ts";
+import { opt, esc, GROUPS, field, getPath, setPath } from "./ui.ts";
+
 
 // ======================= state =======================
 const REGION_COLORS = [0x4c8dff, 0xff6b5b, 0x3ccf91, 0xffb454, 0xc77dff, 0x2fd3e0, 0xf7768e];
-const BASE_COLOR = new THREE.Color(0xd8dce4);
+const BASE_COLOR = new THREE.Color(0xd8dce4), SELECTED_TINT = new THREE.Color(0xfff2c0);
 type PreviewMode = "feature" | "speed" | "height" | "layerTime" | "curvature";
 const PREVIEW_LABELS: Record<PreviewMode, string> = {
   feature: "Feature type (paint region)", speed: "Speed", height: "Height", layerTime: "Layer time",
   curvature: "Curvature & Non-Linear Feedrate",
 };
-type SliceResult = { mp: MotionPath; stats: SliceStats; issues: PlateIssue[]; zClipped: number; ms: number; key: string };
+type SliceResult = Extract<SliceResponse, { ok: true }> & { key: string };
+type ObjView = { obj: PlateObject; group: THREE.Group; surface: THREE.Mesh | null; maskTex: THREE.DataTexture; maskVersion: number; footprintRing: THREE.Line | null };
 type PlateView = {
-  plate: Plate; group: THREE.Group; bed: THREE.LineSegments; surface: THREE.Mesh | null;
-  line: THREE.Line | null; lod: THREE.Line | null;
-  maskTex: THREE.DataTexture; status: "idle" | "slicing" | "done" | "error"; error?: string;
-  result?: SliceResult; maskVersion: number; worker: Worker; reqId: number;
+  plate: Plate; group: THREE.Group; bed: THREE.LineSegments; objs: ObjView[];
+  lines: THREE.Line[]; status: "idle" | "slicing" | "done" | "error"; error?: string;
+  result?: SliceResult; pendingKey?: string; worker: Worker; reqId: number;
 };
 
 const USER_PRESETS_KEY = "nexspiro.userPresets";
@@ -29,16 +31,28 @@ const registry = new PresetRegistry();
 try { for (const p of JSON.parse(localStorage.getItem(USER_PRESETS_KEY) ?? "[]") as Preset[]) registry.add(p); } catch { /* storage unavailable */ }
 const persistUserPresets = () => { try { localStorage.setItem(USER_PRESETS_KEY, JSON.stringify(registry.user())); } catch { /* ignore */ } };
 
+const meshes: Record<string, Mesh> = {};
+const bodyCache = new Map<string, Body>();
+function bodyOf(o: PlateObject): Body {
+  const key = o.source.kind === "mesh" ? `m:${o.source.meshId}` : `p:${o.source.primitive}`;
+  let b = bodyCache.get(key);
+  if (!b) { b = objectBody(o, meshes); bodyCache.set(key, b); }
+  return b;
+}
+
 const ui = {
   tab: "prepare" as "prepare" | PresetKind,
   selected: { machine: "machine/bambu-x1", filament: "filament/pla", process: "process/vase-0.4" } as Record<PresetKind, string>,
-  edited: {} as Partial<Record<PresetKind, MachinePreset | FilamentPreset | ProcessPreset>>, // unsaved edits
-  active: 0, target: -1, painting: false, erase: false, brush: 8, showSurface: true,
+  edited: {} as Partial<Record<PresetKind, MachinePreset | FilamentPreset | ProcessPreset>>,
+  active: 0, activeObj: 0, target: -1,
+  tool: "orbit" as "orbit" | "move" | "paint" | "erase", brush: 8, showSurface: true,
   preview: "feature" as PreviewMode, layerMin: 0, layerMax: 1,
 };
 const presetValues = <K extends PresetKind>(k: K) =>
   (ui.edited[k] ?? registry.resolve<K>(ui.selected[k])) as K extends "machine" ? MachinePreset : K extends "filament" ? FilamentPreset : ProcessPreset;
 const machine = () => presetValues("machine"), filament = () => presetValues("filament"), proc = () => presetValues("process");
+const activeView = () => views[ui.active];
+const activeObjView = (): ObjView | undefined => activeView()?.objs[ui.activeObj];
 
 // ======================= scene =======================
 const view = document.getElementById("view")!;
@@ -60,8 +74,7 @@ const PLATE_GAP = 60;
 const plateOrigin = (i: number) => { const b = machine().bed; return new THREE.Vector3(i * (b[0] + PLATE_GAP) + b[0] / 2, b[1] / 2, 0); };
 
 function bedLines(active: boolean, locked: boolean) {
-  const [bx, by] = machine().bed, pts: number[] = [], step = 32;
-  const hx = bx / 2, hy = by / 2;
+  const [bx, by] = machine().bed, pts: number[] = [], step = 32, hx = bx / 2, hy = by / 2;
   for (let x = -hx; x <= hx + 1e-6; x += step) pts.push(x, -hy, 0, x, hy, 0);
   for (let y = -hy; y <= hy + 1e-6; y += step) pts.push(-hx, y, 0, hx, y, 0);
   pts.push(-hx, -hy, 0, hx, -hy, 0, hx, -hy, 0, hx, hy, 0, hx, hy, 0, -hx, hy, 0, -hx, hy, 0, -hx, -hy, 0);
@@ -69,57 +82,84 @@ function bedLines(active: boolean, locked: boolean) {
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: locked ? 0x7a5c2e : active ? 0x4c8dff : 0x2e3440 }));
 }
 
-function makeView(plate: Plate): PlateView {
-  const maskTex = new THREE.DataTexture(new Uint8Array(plate.mask.cols * plate.mask.rows * 4), plate.mask.cols, plate.mask.rows);
+function makeObjView(pv: PlateView, obj: PlateObject): ObjView {
+  const maskTex = new THREE.DataTexture(new Uint8Array(obj.mask.cols * obj.mask.rows * 4), obj.mask.cols, obj.mask.rows);
   maskTex.wrapS = THREE.RepeatWrapping; maskTex.magFilter = THREE.LinearFilter;
+  const ov: ObjView = { obj, group: new THREE.Group(), surface: null, maskTex, maskVersion: 0, footprintRing: null };
+  pv.group.add(ov.group);
+  refreshMaskTexture(ov); buildSurface(ov);
+  return ov;
+}
+function disposeObjView(pv: PlateView, ov: ObjView) {
+  pv.group.remove(ov.group); ov.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose()); ov.maskTex.dispose();
+}
+function makeView(plate: Plate): PlateView {
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false), surface: null, line: null, lod: null, maskTex, status: "idle", maskVersion: 0, worker, reqId: 0 };
-  worker.onmessage = (ev) => onSliced(v, ev.data);
-  v.group.add(v.bed);
-  scene.add(v.group);
-  refreshMaskTexture(v);
+  const v: PlateView = { plate, group: new THREE.Group(), bed: bedLines(false, false), objs: [], lines: [], status: "idle", worker, reqId: 0 };
+  worker.onmessage = (ev: MessageEvent<SliceResponse>) => onSliced(v, ev.data);
+  v.group.add(v.bed); scene.add(v.group);
+  v.objs = plate.objects.map((o) => makeObjView(v, o));
   return v;
 }
 function disposeView(v: PlateView) {
   v.worker.terminate(); scene.remove(v.group);
-  v.group.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); });
+  v.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
 }
 function layoutPlates() {
   views.forEach((v, i) => {
     v.group.position.copy(plateOrigin(i));
     v.group.remove(v.bed); v.bed.geometry.dispose();
     v.bed = bedLines(i === ui.active, v.plate.locked); v.group.add(v.bed);
+    v.objs.forEach(placeObj);
   });
+  updateSurfaceVisibility();
 }
+function placeObj(ov: ObjView) { ov.group.position.set(ov.obj.transform.x, ov.obj.transform.y, 0); }
 
-function buildSurface(v: PlateView) {
-  const prof = primitives[v.plate.primitive](), C = 128, R = 64, pos: number[] = [], uv: number[] = [], idx: number[] = [];
-  for (let j = 0; j <= R; j++) for (let i = 0; i <= C; i++) {
-    const u = i / C, t = j / R, r = prof.radius(t), a = u * Math.PI * 2;
-    pos.push(r * Math.cos(a), r * Math.sin(a), t * prof.height); uv.push(u, t);
+/** Paint surface: rings of the body (primitive or sliced mesh) with (u, t) UVs matching the mask. */
+function buildSurface(ov: ObjView) {
+  const body = bodyOf(ov.obj), C = 128, R = 64, pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (let j = 0; j <= R; j++) {
+    const t = j / R, ring = body.ring(Math.min(body.height - 1e-3, Math.max(1e-3, t * body.height)), C);
+    for (let i = 0; i <= C; i++) {
+      const k = i % C;
+      pos.push(ring ? ring.x[k] : 0, ring ? ring.y[k] : 0, t * body.height); uv.push(i / C, t);
+    }
   }
   for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
     const a = j * (C + 1) + i, b = a + 1, c = a + C + 1, d = c + 1;
-    idx.push(a, b, d, a, d, c); // winding → outward normals
+    idx.push(a, b, d, a, d, c); // CCW rings → outward normals
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
-  if (v.surface) { v.group.remove(v.surface); v.surface.geometry.dispose(); }
-  v.surface = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: v.maskTex, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
-  const t = v.plate.transform;
-  v.surface.scale.set(t.scaleXY, t.scaleXY, t.scaleZ);
-  v.surface.rotation.z = (t.rotation * Math.PI) / 180;
-  v.group.add(v.surface);
+  if (ov.surface) { ov.group.remove(ov.surface); ov.surface.geometry.dispose(); }
+  ov.surface = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: ov.maskTex, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+  const t = ov.obj.transform;
+  ov.surface.scale.set(t.scaleXY, t.scaleXY, t.scaleZ);
+  ov.surface.rotation.z = (t.rotation * Math.PI) / 180;
+  ov.group.add(ov.surface);
+  // footprint circle (arrange / clearance envelope)
+  if (ov.footprintRing) { ov.group.remove(ov.footprintRing); ov.footprintRing.geometry.dispose(); }
+  const r = footprint(ov.obj, body, proc()), fp: number[] = [];
+  for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; fp.push(r * Math.cos(a), r * Math.sin(a), 0.05); }
+  const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3));
+  ov.footprintRing = new THREE.Line(fg, new THREE.LineBasicMaterial({ color: 0x5a6375 }));
+  ov.group.add(ov.footprintRing);
   updateSurfaceVisibility();
 }
-const updateSurfaceVisibility = () => views.forEach((v, i) => { if (v.surface) v.surface.visible = ui.showSurface && i === ui.active; });
-
-function refreshMaskTexture(v: PlateView) {
-  const d = v.maskTex.image.data as Uint8Array, c = new THREE.Color();
+function updateSurfaceVisibility() {
+  views.forEach((v, i) => v.objs.forEach((ov, k) => {
+    const sel = i === ui.active && k === ui.activeObj;
+    if (ov.surface) ov.surface.visible = ui.showSurface && sel;
+    if (ov.footprintRing) (ov.footprintRing.material as THREE.LineBasicMaterial).color.set(sel ? 0xffd479 : 0x5a6375);
+  }));
+}
+function refreshMaskTexture(ov: ObjView) {
+  const d = ov.maskTex.image.data as Uint8Array, c = new THREE.Color();
   d.fill(0);
-  v.plate.mask.regions.forEach((reg, k) => {
+  ov.obj.mask.regions.forEach((reg, k) => {
     c.set(REGION_COLORS[k % REGION_COLORS.length]);
     for (let i = 0; i < reg.weight.length; i++) {
       const w = reg.weight[i]; if (w <= 0) continue;
@@ -128,26 +168,31 @@ function refreshMaskTexture(v: PlateView) {
       d[o + 2] = Math.max(d[o + 2], c.b * 255 * w); d[o + 3] = Math.max(d[o + 3], 220 * w);
     }
   });
-  v.maskTex.needsUpdate = true;
+  ov.maskTex.needsUpdate = true;
 }
 
 // ======================= preview colouring =======================
-const ramp = (t: number, c: THREE.Color) => c.setHSL((1 - Math.min(1, Math.max(0, t))) * 0.66, 0.85, 0.55); // blue→red
-function legendRange(mp: MotionPath, mode: PreviewMode): [number, number, string] {
-  if (mode === "speed" || mode === "curvature") { let lo = Infinity, hi = 0; for (let i = 1; i < mp.count; i++) { lo = Math.min(lo, mp.feed[i]); hi = Math.max(hi, mp.feed[i]); } return [lo, hi, "mm/s"]; }
-  if (mode === "height") { let hi = 0; for (let i = 0; i < mp.count; i++) hi = Math.max(hi, mp.xyz[i * 3 + 2]); return [0, hi, "mm"]; }
-  if (mode === "layerTime") { let lo = Infinity, hi = 0; for (const t of mp.layerTime) { lo = Math.min(lo, t); hi = Math.max(hi, t); } return [lo, hi, "s"]; }
-  return [0, 0, ""];
+const ramp = (t: number, c: THREE.Color) => c.setHSL((1 - Math.min(1, Math.max(0, t))) * 0.66, 0.85, 0.55);
+function legendRange(mps: MotionPath[], mode: PreviewMode): [number, number, string] {
+  let lo = Infinity, hi = -Infinity;
+  for (const mp of mps) {
+    if (mode === "speed" || mode === "curvature") for (let i = 1; i < mp.count; i++) { lo = Math.min(lo, mp.feed[i]); hi = Math.max(hi, mp.feed[i]); }
+    else if (mode === "height") for (let i = 0; i < mp.count; i++) { lo = 0; hi = Math.max(hi, mp.xyz[i * 3 + 2]); }
+    else if (mode === "layerTime") for (const t of mp.layerTime) { lo = Math.min(lo, t); hi = Math.max(hi, t); }
+  }
+  return Number.isFinite(lo) ? [lo, hi, mode === "height" ? "mm" : mode === "layerTime" ? "s" : "mm/s"] : [0, 0, ""];
 }
-function makeLine(mp: MotionPath, stride: number, mode: PreviewMode): THREE.Line {
+function makeLine(mp: MotionPath, stride: number, mode: PreviewMode, range: [number, number, string], selected: boolean): THREE.Line {
   const n = Math.floor((mp.count - 1) / stride) + 1, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  const c = new THREE.Color(), [lo, hi] = legendRange(mp, mode), span = hi - lo || 1;
+  const c = new THREE.Color(), [lo, hi] = range, span = hi - lo || 1;
   let kMax = 0; if (mode === "curvature") for (let i = 0; i < mp.count; i++) kMax = Math.max(kMax, mp.curvature[i]);
   for (let k = 0; k < n; k++) {
     const i = k * stride;
     pos[k * 3] = mp.xyz[i * 3]; pos[k * 3 + 1] = mp.xyz[i * 3 + 1]; pos[k * 3 + 2] = mp.xyz[i * 3 + 2];
     switch (mode) {
-      case "feature": if (mp.tag[i] === 0) c.copy(BASE_COLOR); else c.set(REGION_COLORS[(mp.tag[i] - 1) % REGION_COLORS.length]); break;
+      case "feature":
+        if (mp.tag[i] === 0) c.copy(selected ? SELECTED_TINT : BASE_COLOR); else c.set(REGION_COLORS[(mp.tag[i] - 1) % REGION_COLORS.length]);
+        break;
       case "speed": ramp((mp.feed[Math.max(1, i)] - lo) / span, c); break;
       case "height": ramp((mp.xyz[i * 3 + 2] - lo) / span, c); break;
       case "layerTime": ramp((mp.layerTime[mp.layer[i]] - lo) / span, c); break;
@@ -161,100 +206,187 @@ function makeLine(mp: MotionPath, stride: number, mode: PreviewMode): THREE.Line
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
   const line = new THREE.Line(g, pathMat);
-  line.userData.stride = stride; line.frustumCulled = false;
+  line.userData.stride = stride; line.userData.mp = mp; line.frustumCulled = false;
   return line;
 }
 function redrawPaths(v: PlateView) {
-  for (const l of [v.line, v.lod]) if (l) { v.group.remove(l); l.geometry.dispose(); }
-  v.line = v.lod = null;
+  for (const l of v.lines) { v.group.remove(l); l.geometry.dispose(); }
+  v.lines = [];
   if (!v.result) return;
-  v.line = makeLine(v.result.mp, 1, ui.preview); v.group.add(v.line);
-  if (v.result.mp.count > 400_000) { v.lod = makeLine(v.result.mp, 4, ui.preview); v.group.add(v.lod); }
+  const range = legendRange(v.result.mps, ui.preview), total = v.result.mps.reduce((s, m) => s + m.count, 0);
+  v.result.mps.forEach((mp, k) => {
+    const sel = views.indexOf(v) === ui.active && k === ui.activeObj;
+    const full = makeLine(mp, 1, ui.preview, range, sel); full.userData.lod = "full"; v.lines.push(full);
+    if (total > 400_000) { const lod = makeLine(mp, 4, ui.preview, range, sel); lod.userData.lod = "far"; v.lines.push(lod); }
+  });
+  v.lines.forEach((l) => v.group.add(l));
   applyLayerRange(v);
 }
 function applyLayerRange(v: PlateView) {
-  if (!v.result) return;
-  const { layer, count } = v.result.mp, layers = layer[count - 1] + 1;
-  const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
-  const first = (L: number) => { let a = 0, b = count; while (a < b) { const m = (a + b) >> 1; if (layer[m] < L) a = m + 1; else b = m; } return a; };
-  const a = first(lo), b = first(hi + 1);
-  for (const l of [v.line, v.lod]) if (l) { const s = l.userData.stride as number; l.geometry.setDrawRange(Math.floor(a / s), Math.max(0, Math.ceil((b - a) / s))); }
+  for (const l of v.lines) {
+    const mp = l.userData.mp as MotionPath, { layer, count } = mp, layers = layer[count - 1] + 1;
+    const lo = Math.floor(ui.layerMin * (layers - 1)), hi = Math.ceil(ui.layerMax * (layers - 1));
+    const first = (L: number) => { let a = 0, b = count; while (a < b) { const m = (a + b) >> 1; if (layer[m] < L) a = m + 1; else b = m; } return a; };
+    const a = first(lo), b = first(hi + 1), s = l.userData.stride as number;
+    l.geometry.setDrawRange(Math.floor(a / s), Math.max(0, Math.ceil((b - a) / s)));
+  }
 }
 
 // ======================= slicing (worker per plate, cached) =======================
 function sliceKey(v: PlateView) {
-  const p = v.plate;
-  return JSON.stringify([p.primitive, p.transform, p.base, p.regionParams, p.mask.regions.map((r) => r.pattern), v.maskVersion, machine(), filament(), proc()]);
+  return JSON.stringify([v.plate.objects.map((o) => [o.source, o.transform, o.base, o.regionParams, o.mask.regions.map((r) => r.pattern)]),
+    v.objs.map((o) => o.maskVersion), machine(), filament(), proc()]);
 }
 function slice(v: PlateView) {
   const key = sliceKey(v);
-  if (v.result?.key === key && v.status === "done") return; // cached
-  v.status = "slicing"; v.reqId++;
-  const plate: Plate = { ...v.plate, mask: { ...v.plate.mask, regions: v.plate.mask.regions.map((r) => ({ ...r, weight: r.weight.slice() })) } };
-  const req: SliceRequest = { id: v.reqId, plateId: v.plate.id, plate, machine: machine(), filament: filament(), process: proc() };
-  (v as PlateView & { pendingKey?: string }).pendingKey = key;
+  if (v.result?.key === key && v.status === "done") return;
+  if (!v.plate.objects.length) { v.result = undefined; v.status = "idle"; redrawPaths(v); renderStatus(); renderPlateBar(); return; }
+  v.status = "slicing"; v.reqId++; v.pendingKey = key;
+  const used = new Set(v.plate.objects.flatMap((o) => (o.source.kind === "mesh" ? [o.source.meshId] : [])));
+  const req: SliceRequest = {
+    id: v.reqId, machine: machine(), filament: filament(), process: proc(),
+    plate: { ...v.plate, objects: v.plate.objects.map((o) => ({ ...o, mask: { ...o.mask, regions: o.mask.regions.map((r) => ({ ...r, weight: r.weight.slice() })) } })) },
+    meshes: Object.fromEntries([...used].map((id) => [id, meshes[id]])),
+  };
   v.worker.postMessage(req);
-  renderStatus();
+  renderStatus(); renderPlateBar();
 }
-function onSliced(v: PlateView, d: { id: number; ok: boolean; error?: string } & Omit<SliceResult, "key">) {
-  if (d.id !== v.reqId) return; // superseded
-  if (!d.ok) { v.status = "error"; v.error = d.error; renderStatus(); return; }
-  v.result = { mp: d.mp, stats: d.stats, issues: d.issues, zClipped: d.zClipped, ms: d.ms, key: (v as PlateView & { pendingKey?: string }).pendingKey! };
-  v.status = "done";
+function onSliced(v: PlateView, d: SliceResponse) {
+  if (d.id !== v.reqId) return;
+  if (!d.ok) { v.status = "error"; v.error = d.error; renderStatus(); renderPlateBar(); return; }
+  v.result = { ...d, key: v.pendingKey! }; v.status = "done";
   redrawPaths(v); renderStatus(); renderPlateBar();
 }
 let sliceTimer = 0;
-const sliceActiveSoon = (ms = 150) => { clearTimeout(sliceTimer); sliceTimer = window.setTimeout(() => slice(views[ui.active]), ms); };
+const sliceActiveSoon = (ms = 150) => { clearTimeout(sliceTimer); sliceTimer = window.setTimeout(() => slice(activeView()), ms); };
 const sliceAll = () => views.forEach(slice);
 
-// ======================= painting (outer surface only) =======================
+// ======================= pointer tools: select / move / paint =======================
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), nrm = new THREE.Vector3();
-let stroking = false;
-function paintAt(ev: PointerEvent) {
-  const v = views[ui.active];
-  if (!v.surface || ui.target < 0 || v.plate.locked) return;
+const bedPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+let dragging: null | "paint" | { dx: number; dy: number } = null;
+function setRay(ev: PointerEvent) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hit = ray.intersectObject(v.surface).find((h) => h.face && nrm.copy(h.face.normal).transformDirection(v.surface!.matrixWorld).dot(ray.ray.direction) < 0);
+}
+function bedPoint(): THREE.Vector2 | null { // in active plate coordinates (mm from bed centre)
+  const p = ray.ray.intersectPlane(bedPlane, new THREE.Vector3());
+  if (!p) return null;
+  const o = plateOrigin(ui.active);
+  return new THREE.Vector2(p.x - o.x, p.y - o.y);
+}
+function pickObject(p: THREE.Vector2): number {
+  let best = -1, bestD = Infinity;
+  activeView().plate.objects.forEach((o, k) => {
+    const d = Math.hypot(o.transform.x - p.x, o.transform.y - p.y);
+    if (d <= footprint(o, bodyOf(o), proc()) && d < bestD) { best = k; bestD = d; }
+  });
+  return best;
+}
+function paintAt() {
+  const ov = activeObjView();
+  if (!ov?.surface || ui.target < 0 || activeView().plate.locked) return;
+  const hit = ray.intersectObject(ov.surface).find((h) => h.face && nrm.copy(h.face.normal).transformDirection(ov.surface!.matrixWorld).dot(ray.ray.direction) < 0);
   if (!hit?.uv) return;
-  stamp(v.plate.mask, ui.target, hit.uv.x, hit.uv.y, ui.brush, ui.erase);
-  v.maskVersion++; refreshMaskTexture(v);
+  stamp(ov.obj.mask, ui.target, hit.uv.x, hit.uv.y, ui.brush, ui.tool === "erase");
+  ov.maskVersion++; refreshMaskTexture(ov);
 }
 renderer.domElement.addEventListener("pointerdown", (ev) => {
-  if (!ui.painting || ev.button !== 0 || ui.target < 0) return;
-  stroking = true; controls.enabled = false; paintAt(ev);
+  if (ev.button !== 0 || !activeView()) return;
+  setRay(ev);
+  if ((ui.tool === "paint" || ui.tool === "erase") && ui.target >= 0) { dragging = "paint"; controls.enabled = false; paintAt(); return; }
+  const p = bedPoint(); if (!p) return;
+  const k = pickObject(p);
+  if (k >= 0 && k !== ui.activeObj) selectObject(k);
+  if (ui.tool === "move" && k >= 0 && !activeView().plate.locked) {
+    const t = activeView().plate.objects[k].transform;
+    dragging = { dx: t.x - p.x, dy: t.y - p.y }; controls.enabled = false;
+  }
 });
-renderer.domElement.addEventListener("pointermove", (ev) => { if (stroking) paintAt(ev); });
-window.addEventListener("pointerup", () => { if (stroking) { stroking = false; controls.enabled = true; sliceActiveSoon(0); } });
+renderer.domElement.addEventListener("pointermove", (ev) => {
+  if (!dragging) return;
+  setRay(ev);
+  if (dragging === "paint") { paintAt(); return; }
+  const p = bedPoint(), ov = activeObjView(); if (!p || !ov) return;
+  ov.obj.transform.x = Math.round((p.x + dragging.dx) * 10) / 10; ov.obj.transform.y = Math.round((p.y + dragging.dy) * 10) / 10;
+  placeObj(ov);
+  for (const l of activeView().lines) l.visible = false; // stale until re-slice
+});
+window.addEventListener("pointerup", () => {
+  if (!dragging) return;
+  dragging = null; controls.enabled = true; renderPanel(); sliceActiveSoon(0);
+});
 
-// ======================= plates =======================
+// ======================= plates & objects =======================
 function addPlate(p = newPlate(`Plate ${views.length + 1}`)) {
-  const v = makeView(p); views.push(v); buildSurface(v);
-  ui.active = views.length - 1; ui.target = -1;
+  const v = makeView(p); views.push(v);
+  ui.active = views.length - 1; ui.activeObj = 0; ui.target = -1;
   layoutPlates(); focusActive(); slice(v); renderAll();
 }
 function deletePlate(i: number) {
   if (views.length <= 1 || views[i].plate.locked) return;
   disposeView(views[i]); views.splice(i, 1);
-  ui.active = Math.min(ui.active, views.length - 1); ui.target = -1;
+  ui.active = Math.min(ui.active, views.length - 1); ui.activeObj = 0; ui.target = -1;
   layoutPlates(); focusActive(); renderAll();
 }
-function selectPlate(i: number) { ui.active = i; ui.target = -1; layoutPlates(); updateSurfaceVisibility(); focusActive(); renderAll(); }
+function selectPlate(i: number) { ui.active = i; ui.activeObj = 0; ui.target = -1; layoutPlates(); views.forEach(redrawPaths); focusActive(); renderAll(); }
+function selectObject(k: number) { ui.activeObj = k; ui.target = -1; updateSurfaceVisibility(); redrawPaths(activeView()); renderAll(); }
+function addObject(o: PlateObject, arrange = true) {
+  const v = activeView(); if (v.plate.locked) return;
+  v.plate.objects.push(o); v.objs.push(makeObjView(v, o));
+  ui.activeObj = v.plate.objects.length - 1; ui.target = -1;
+  if (arrange) arrange_(v); else layoutPlates();
+  updateSurfaceVisibility(); slice(v); renderAll();
+}
+function deleteObject(k: number) {
+  const v = activeView(); if (v.plate.locked) return;
+  disposeObjView(v, v.objs[k]); v.objs.splice(k, 1); v.plate.objects.splice(k, 1);
+  ui.activeObj = Math.max(0, Math.min(ui.activeObj, v.objs.length - 1)); ui.target = -1;
+  updateSurfaceVisibility(); slice(v); renderAll();
+}
+function arrange_(v: PlateView): string[] {
+  if (v.plate.locked) return [];
+  const failed = arrangePlate(v.plate, v.plate.objects.map(bodyOf), machine(), proc());
+  v.objs.forEach(placeObj);
+  return failed;
+}
+function arrangeAndReport(vs: PlateView[]) {
+  const failed = vs.flatMap((v) => arrange_(v).map((n) => `${v.plate.name}: ${n}`));
+  vs.forEach(slice); renderAll();
+  if (failed.length) alert(`Could not fit on the bed (with toolhead clearance):\n${failed.join("\n")}`);
+}
 function focusActive() {
-  const o = plateOrigin(ui.active), v = views[ui.active];
-  const h = primitives[v.plate.primitive]().height * v.plate.transform.scaleZ;
+  const o = plateOrigin(ui.active), v = activeView();
+  const h = Math.max(20, ...v.plate.objects.map((ob) => bodyOf(ob).height * ob.transform.scaleZ));
   const delta = camera.position.clone().sub(controls.target);
   controls.target.set(o.x, o.y, h / 2); camera.position.copy(controls.target).add(delta);
 }
-let clipboard: Plate | null = null;
+async function importSTL(files: FileList) {
+  for (const f of Array.from(files)) {
+    try {
+      const m = normalizeMesh(parseSTL(await f.arrayBuffer(), f.name.replace(/\.stl$/i, "")));
+      const id = `mesh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      meshes[id] = m;
+      const b = bounds(m.tris);
+      const o = newObject({ kind: "mesh", meshId: id }, m.name);
+      o.base = { pattern: "none", params: { ...patterns.none.defaults } };
+      addObject(o);
+      console.info(`Imported ${f.name}: ${m.tris.length / 9} triangles, ${(b.max[0] - b.min[0]).toFixed(1)}×${(b.max[1] - b.min[1]).toFixed(1)}×${(b.max[2] - b.min[2]).toFixed(1)} mm`);
+    } catch (e) { alert(`${f.name}: ${e instanceof Error ? e.message : e}`); }
+  }
+}
+
+let clipboard: PlateObject | null = null;
 window.addEventListener("keydown", (ev) => {
   if ((ev.target as HTMLElement).closest("input, textarea, select")) return;
-  const mod = ev.ctrlKey || ev.metaKey;
-  if (mod && ev.key === "c") clipboard = clonePlate(views[ui.active].plate);
-  else if (mod && ev.key === "v" && clipboard) addPlate(clonePlate(clipboard));
-  else if (mod && ev.key === "d") addPlate(clonePlate(views[ui.active].plate));
-  else if (ev.key === "Delete") deletePlate(ui.active);
+  const mod = ev.ctrlKey || ev.metaKey, ov = activeObjView();
+  if (mod && ev.key === "c" && ov) clipboard = cloneObject(ov.obj);
+  else if (mod && ev.key === "v" && clipboard) addObject(cloneObject(clipboard));
+  else if (mod && ev.key === "d" && ov) addObject(cloneObject(ov.obj));
+  else if ((ev.key === "Delete" || ev.key === "Backspace") && ov) deleteObject(ui.activeObj);
+  else if (ev.key === "a" && !mod) arrangeAndReport([activeView()]);
+  else if (ev.key === "m" && !mod) { ui.tool = ui.tool === "move" ? "orbit" : "move"; renderPanel(); }
   else return;
   ev.preventDefault();
 });
@@ -265,8 +397,9 @@ function download(name: string, data: BlobPart, type = "application/octet-stream
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function saveProject() {
-  const userPresets = registry.user();
-  download("project.nexspiro", serializeProject({ version: 1, presets: { ...ui.selected } as never, userPresets, plates: views.map((v) => v.plate) }), "application/json");
+  download("project.nexspiro", serializeProject({
+    version: 2, presets: { ...ui.selected } as never, userPresets: registry.user(), plates: views.map((v) => v.plate), meshes,
+  }), "application/json");
 }
 async function loadProject(file: File) {
   try {
@@ -275,88 +408,93 @@ async function loadProject(file: File) {
     persistUserPresets();
     for (const k of ["machine", "filament", "process"] as const) if (registry.get(proj.presets[k])) ui.selected[k] = proj.presets[k];
     ui.edited = {};
+    Object.assign(meshes, proj.meshes);
     views.splice(0).forEach(disposeView);
-    for (const p of proj.plates) { const v = makeView(p); views.push(v); buildSurface(v); }
-    ui.active = 0; ui.target = -1; layoutPlates(); focusActive(); sliceAll(); renderAll();
-  } catch (e) { alert(`Could not open project: ${e}`); }
+    for (const p of proj.plates) views.push(makeView(p));
+    ui.active = 0; ui.activeObj = 0; ui.target = -1; layoutPlates(); focusActive(); sliceAll(); renderAll();
+  } catch (e) { alert(`Could not open project: ${e instanceof Error ? e.message : e}`); }
 }
 function thumbnails(v: PlateView): Thumbnail[] {
-  // Render the plate alone from a fixed 3/4 view into an offscreen renderer at each size.
   const sizes = [[300, 300], [96, 96]] as const, out: Thumbnail[] = [];
   const hidden = views.filter((o) => o !== v).map((o) => { const was = o.group.visible; o.group.visible = false; return [o, was] as const; });
-  const surfVis = v.surface?.visible; if (v.surface) v.surface.visible = false;
+  const extras: THREE.Object3D[] = [v.bed, ...v.objs.flatMap((o) => [o.surface, o.footprintRing].filter(Boolean) as THREE.Object3D[]), ...v.lines.filter((l) => l.userData.lod === "far")];
+  const vis = extras.map((o) => o.visible); extras.forEach((o) => (o.visible = false));
+  const full = v.lines.filter((l) => l.userData.lod === "full"), fullVis = full.map((l) => l.visible); full.forEach((l) => (l.visible = true));
   const prevBg = scene.background; scene.background = null;
-  const box = new THREE.Box3().setFromObject(v.line ?? v.group), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+  const box = new THREE.Box3(); full.forEach((l) => box.expandByObject(l));
+  const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2 || 50;
   const cam = new THREE.PerspectiveCamera(35, 1, 0.5, 5000); cam.up.set(0, 0, 1);
   cam.position.copy(c).add(new THREE.Vector3(1, -1, 0.8).normalize().multiplyScalar(r / Math.sin((17.5 * Math.PI) / 180))); cam.lookAt(c);
-  v.bed.visible = false;
   const tr = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   for (const [w, h] of sizes) { tr.setSize(w, h, false); tr.render(scene, cam); out.push({ width: w, height: h, pngBase64: tr.domElement.toDataURL("image/png").split(",")[1] }); }
   tr.dispose();
-  v.bed.visible = true; scene.background = prevBg; if (v.surface) v.surface.visible = !!surfVis;
+  scene.background = prevBg; extras.forEach((o, i) => (o.visible = vis[i])); full.forEach((l, i) => (l.visible = fullVis[i]));
   hidden.forEach(([o, was]) => (o.group.visible = was));
   return out;
 }
 function exportGcode(i = ui.active) {
   const v = views[i];
   if (!v.result || v.status !== "done") { alert("Slice the plate first."); return; }
-  if (v.result.issues.some((x) => x.level === "error")) { if (!confirm("This plate has errors. Export anyway?")) return; }
+  if (v.result.issues.some((x) => x.level === "error") && !confirm("This plate has errors. Export anyway?")) return;
   const M = machine();
-  const g = toGcode(v.result.mp, {
+  const g = toGcode(v.result.order.map((k) => v.result!.mps[k]), {
     machine: M, filament: filament(), process: proc(), offset: [M.bed[0] / 2, M.bed[1] / 2], thumbnails: thumbnails(v),
     presetNames: { machine: registry.get(ui.selected.machine)!.name, filament: registry.get(ui.selected.filament)!.name, process: registry.get(ui.selected.process)!.name },
   });
-  download(`${v.plate.name.replace(/\W+/g, "_")}-${v.plate.primitive}.gcode`, g, "text/plain");
+  download(`${v.plate.name.replace(/\W+/g, "_")}.gcode`, g, "text/plain");
 }
 
 // ======================= UI =======================
 const panel = document.getElementById("panel")!, statsEl = document.getElementById("stats")!;
-const opt = (v: string, label: string, sel: boolean) => `<option value="${v}"${sel ? " selected" : ""}>${label}</option>`;
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const PARAM_UI: [keyof PatternParams, string, number, number, number][] = [
   ["amplitude", "Amplitude mm", 0, 4, 0.05], ["wavesPerRev", "Waves / rev", 0, 200, 1],
   ["phasePerLayer", "Phase / layer °", 0, 360, 1], ["zAmplitude", "Z wobble mm", 0, 1.5, 0.01],
   ["extrusionPulse", "Extrusion pulse", 0, 1, 0.01],
 ];
-const LABELS: Record<string, string> = {
-  flavor: "G-code flavor", bed: "Bed size X,Y (mm)", maxHeight: "Max height (mm)", nozzle: "Nozzle Ø (mm)",
-  zWobbleMax: "Max Z wobble / clearance (mm)", maxZSpeed: "Max Z speed (mm/s)", maxAccel: "Max acceleration (mm/s²)",
-  travelSpeed: "Travel speed (mm/s)", retractLength: "Retraction length (mm)", retractSpeed: "Retraction speed (mm/s)",
-  clearanceRadius: "Toolhead clearance radius (mm)", clearanceHeight: "Toolhead clearance height (mm)",
-  startGcode: "Start G-code", endGcode: "End G-code", layerChangeGcode: "Layer change G-code",
-  diameter: "Diameter (mm)", flowRatio: "Flow ratio", density: "Density (g/cm³)", costPerKg: "Cost per kg",
-  nozzleTempFirst: "Nozzle temp, first layer (°C)", nozzleTemp: "Nozzle temp, other layers (°C)",
-  bedTempFirst: "Bed temp, first layer (°C)", bedTemp: "Bed temp, other layers (°C)", maxVolumetric: "Max volumetric speed (mm³/s)",
-  fanMin: "Fan min (%)", fanMax: "Fan max (%)", fanOffFirstLayers: "No cooling for first N layers",
-  fanMaxBelowLayerTime: "Full fan if layer time below (s)", slowdownLayerTime: "Slow down if layer time below (s)", minSpeed: "Min print speed (mm/s)",
-  layerHeight: "Layer height (mm)", firstLayerHeight: "First layer height (mm)", lineWidth: "Line width (mm)",
-  wallSpeed: "Wall speed (mm/s)", firstLayerSpeed: "First layer speed (mm/s)", segmentsPerRev: "Segments per revolution", fadeHeight: "Pattern fade-in height (mm)",
-  enabled: "Enable non-linear motion (off = planar)", deviationTol: "Curve deviation tolerance (mm)", maxInclination: "Max surface inclination (°)",
-  collisionMargin: "Toolhead collision margin (mm)", zSmoothing: "Z feedrate / jerk smoothing (0–1)",
-};
-const GROUPS: Record<PresetKind, [string, string[]][]> = {
-  machine: [["Basic", ["flavor", "bed", "maxHeight", "nozzle"]], ["Motion", ["maxZSpeed", "maxAccel", "travelSpeed", "retractLength", "retractSpeed"]],
-    ["Toolhead clearance", ["zWobbleMax", "clearanceRadius", "clearanceHeight"]], ["Machine G-code", ["startGcode", "layerChangeGcode", "endGcode"]]],
-  filament: [["Basic", ["diameter", "flowRatio", "density", "costPerKg"]], ["Temperature", ["nozzleTempFirst", "nozzleTemp", "bedTempFirst", "bedTemp"]],
-    ["Volumetric speed", ["maxVolumetric"]], ["Cooling", ["fanMin", "fanMax", "fanOffFirstLayers", "fanMaxBelowLayerTime", "slowdownLayerTime", "minSpeed"]]],
-  process: [["Quality", ["layerHeight", "firstLayerHeight", "lineWidth", "segmentsPerRev", "fadeHeight"]], ["Speed", ["wallSpeed", "firstLayerSpeed"]],
-    ["NexSpiro Non-Linear Motion", ["nonLinear.enabled", "nonLinear.deviationTol", "nonLinear.maxInclination", "nonLinear.collisionMargin", "nonLinear.zSmoothing"]]],
-};
+const TOOLS: [typeof ui.tool, string, string][] = [["orbit", "Select", "Click an object's footprint to select"], ["move", "Move (M)", "Drag objects on the bed"], ["paint", "Paint", "Paint the selected region"], ["erase", "Erase", "Erase the selected region"]];
 
-function field(path: string, value: unknown): string {
-  const key = path.split(".").pop()!, label = LABELS[key] ?? key;
-  if (typeof value === "boolean") return `<label>${label} <input type="checkbox" data-path="${path}"${value ? " checked" : ""}></label>`;
-  if (typeof value === "number") return `<label>${label} <input type="number" step="any" data-path="${path}" value="${value}"></label>`;
-  if (key === "flavor") return `<label>${label} <select data-path="${path}">${["marlin", "klipper", "bambu"].map((f) => opt(f, f, f === value)).join("")}</select></label>`;
-  if (Array.isArray(value)) return `<label>${label} <input type="text" data-path="${path}" data-array="1" value="${value.join(",")}"></label>`;
-  return `<div class="field-block">${label}<textarea data-path="${path}" rows="5">${esc(String(value))}</textarea></div>`;
-}
-const getPath = (o: Record<string, unknown>, path: string) => path.split(".").reduce<unknown>((a, k) => (a as Record<string, unknown>)?.[k], o);
-function setPath(o: Record<string, unknown>, path: string, v: unknown) {
-  const ks = path.split("."), last = ks.pop()!;
-  (ks.reduce<Record<string, unknown>>((a, k) => a[k] as Record<string, unknown>, o))[last] = v;
-}
+function renderPrepareTab() {
+  const v = activeView(), p = v.plate, dis = p.locked ? " disabled" : "";
+  const objList = p.objects.map((o, k) => `<div class="obj${k === ui.activeObj ? " on" : ""}" data-obj="${k}">
+      <span>${o.source.kind === "mesh" ? "▲" : "●"} ${esc(o.name)}</span>
+      <span><button data-objdup="${k}" title="Duplicate"${dis}>⧉</button><button data-objdel="${k}" title="Delete"${dis}>✕</button></span></div>`).join("");
+  let html = `
+    <h2>Plate · ${esc(p.name)}${p.locked ? " 🔒" : ""}</h2>
+    <div class="objlist">${objList || '<div class="muted">Empty plate</div>'}</div>
+    <label class="file-btn${p.locked ? " disabled" : ""}">Import STL…<input type="file" id="stlFile" accept=".stl" multiple hidden${dis}></label>
+    <select id="addPrim"${dis}><option value="">+ Add primitive…</option>${Object.keys(primitives).map((k) => opt(k, k, false)).join("")}</select>
+    <div><button id="arrange"${dis}>Arrange plate (A)</button><button id="arrangeAll">Arrange all</button></div>
+    <div class="tools">${TOOLS.map(([t, l, title]) => `<button data-tool="${t}" title="${title}" class="${ui.tool === t ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  const o = p.objects[ui.activeObj];
+  if (o) {
+    const P = ui.target < 0 ? o.base.params : o.regionParams[ui.target];
+    const pat = ui.target < 0 ? o.base.pattern : o.mask.regions[ui.target].pattern;
+    html += `
+    <h2>Object · ${esc(o.name)}</h2>
+    <label>X mm <input type="number" data-tf="x" step="1" value="${o.transform.x}"${dis}></label>
+    <label>Y mm <input type="number" data-tf="y" step="1" value="${o.transform.y}"${dis}></label>
+    <label>Scale XY % <input type="number" data-tf="scaleXY" step="1" min="10" max="400" value="${Math.round(o.transform.scaleXY * 100)}"${dis}></label>
+    <label>Scale Z % <input type="number" data-tf="scaleZ" step="1" min="10" max="400" value="${Math.round(o.transform.scaleZ * 100)}"${dis}></label>
+    <label>Rotate Z ° <input type="number" data-tf="rotation" step="5" value="${o.transform.rotation}"${dis}></label>
 
+    <h2>Wall pattern</h2>
+    <label>Target <select id="target">${opt("-1", "Base wall", ui.target < 0)}${o.mask.regions.map((_, k) => opt(String(k), `Region ${k + 1}`, k === ui.target)).join("")}</select></label>
+    <label>Pattern <select id="pattern"${dis}>${Object.entries(patterns).map(([k, x]) => opt(k, x.label, k === pat)).join("")}</select></label>
+    ${PARAM_UI.map(([k, l, mn, mx, st]) => `<label>${l} <input type="range" data-param="${k}" min="${mn}" max="${mx}" step="${st}" value="${P[k]}"${dis}><span class="v">${P[k]}</span></label>`).join("")}
+
+    <h2>Paint regions</h2>
+    ${o.mask.regions.map((r, k) => `<div><span class="swatch" style="background:#${REGION_COLORS[k % REGION_COLORS.length].toString(16).padStart(6, "0")}"></span>Region ${k + 1} · ${patterns[r.pattern].label}</div>`).join("") || '<div class="muted">No regions. The whole wall uses the base pattern.</div>'}
+    <button id="addRegion"${dis}>+ Add region</button>
+    <label>Brush size <input type="range" id="brush" min="1" max="40" step="1" value="${ui.brush}"><span class="v">${ui.brush}</span></label>
+    <label>Show paint surface <input type="checkbox" id="showSurface"${ui.showSurface ? " checked" : ""}></label>`;
+  }
+  html += `
+    <h2>Preview</h2>
+    <label>Color by <select id="previewMode">${(Object.keys(PREVIEW_LABELS) as PreviewMode[]).map((m) => opt(m, PREVIEW_LABELS[m], m === ui.preview)).join("")}</select></label>
+    <label>Layer from <input type="range" id="layerMin" min="0" max="1" step="0.001" value="${ui.layerMin}"></label>
+    <label>Layer to <input type="range" id="layerMax" min="0" max="1" step="0.001" value="${ui.layerMax}"></label>`;
+  return html;
+}
 function renderPresetTab(kind: PresetKind) {
   const vals = presetValues(kind) as unknown as Record<string, unknown>, dirty = !!ui.edited[kind];
   const cur = registry.get(ui.selected[kind])!;
@@ -368,34 +506,6 @@ function renderPresetTab(kind: PresetKind) {
     ${GROUPS[kind].map(([g, keys]) => `<h2>${g}</h2>${keys.map((k) => field(k, getPath(vals, k))).join("")}`).join("")}`;
 }
 
-function renderPrepareTab() {
-  const v = views[ui.active], p = v.plate, P = ui.target < 0 ? p.base.params : p.regionParams[ui.target];
-  const pat = ui.target < 0 ? p.base.pattern : p.mask.regions[ui.target].pattern, dis = p.locked ? " disabled" : "";
-  return `
-    <h2>Object · ${esc(p.name)}${p.locked ? " 🔒" : ""}</h2>
-    <label>Model <select id="primitive"${dis}>${Object.keys(primitives).map((k) => opt(k, k, k === p.primitive)).join("")}</select></label>
-    <label>Scale XY % <input type="number" id="scaleXY" step="1" min="10" max="400" value="${Math.round(p.transform.scaleXY * 100)}"${dis}></label>
-    <label>Scale Z % <input type="number" id="scaleZ" step="1" min="10" max="400" value="${Math.round(p.transform.scaleZ * 100)}"${dis}></label>
-    <label>Rotate Z ° <input type="number" id="rotation" step="5" value="${p.transform.rotation}"${dis}></label>
-
-    <h2>Wall pattern</h2>
-    <label>Target <select id="target">${opt("-1", "Base wall", ui.target < 0)}${p.mask.regions.map((_, k) => opt(String(k), `Region ${k + 1}`, k === ui.target)).join("")}</select></label>
-    <label>Pattern <select id="pattern"${dis}>${Object.entries(patterns).map(([k, x]) => opt(k, x.label, k === pat)).join("")}</select></label>
-    ${PARAM_UI.map(([k, l, mn, mx, st]) => `<label>${l} <input type="range" data-param="${k}" min="${mn}" max="${mx}" step="${st}" value="${P[k]}"${dis}><span class="v">${P[k]}</span></label>`).join("")}
-
-    <h2>Paint regions</h2>
-    ${p.mask.regions.map((r, k) => `<div><span class="swatch" style="background:#${REGION_COLORS[k % REGION_COLORS.length].toString(16).padStart(6, "0")}"></span>Region ${k + 1} · ${patterns[r.pattern].label}</div>`).join("") || '<div class="muted">No regions. The whole wall uses the base pattern.</div>'}
-    <button id="addRegion"${dis}>+ Add region</button>
-    <button id="paint" class="${ui.painting && !ui.erase ? "on" : ""}"${dis}>Paint</button>
-    <button id="erase" class="${ui.painting && ui.erase ? "on" : ""}"${dis}>Erase</button>
-    <label>Brush size <input type="range" id="brush" min="1" max="40" step="1" value="${ui.brush}"><span class="v">${ui.brush}</span></label>
-    <label>Show paint surface <input type="checkbox" id="showSurface"${ui.showSurface ? " checked" : ""}></label>
-
-    <h2>Preview</h2>
-    <label>Color by <select id="previewMode">${(Object.keys(PREVIEW_LABELS) as PreviewMode[]).map((m) => opt(m, PREVIEW_LABELS[m], m === ui.preview)).join("")}</select></label>
-    <label>Layer from <input type="range" id="layerMin" min="0" max="1" step="0.001" value="${ui.layerMin}"></label>
-    <label>Layer to <input type="range" id="layerMax" min="0" max="1" step="0.001" value="${ui.layerMax}"></label>`;
-}
 
 function renderPanel() {
   const tabs: [typeof ui.tab, string][] = [["prepare", "Prepare"], ["machine", "Printer"], ["filament", "Filament"], ["process", "Process"]];
@@ -421,9 +531,9 @@ function renderPlateBar() {
   bar.innerHTML = views.map((v, i) => {
     const st = v.status === "done" ? (v.result!.issues.some((x) => x.level === "error") ? "⚠" : "✓") : v.status === "slicing" ? "…" : v.status === "error" ? "✕" : "";
     return `<div class="plate${i === ui.active ? " on" : ""}" data-plate="${i}">
-      <span>${esc(v.plate.name)} ${st}</span>
+      <span>${esc(v.plate.name)} (${v.plate.objects.length}) ${st}</span>
       <button data-lock="${i}" title="Lock plate">${v.plate.locked ? "🔒" : "🔓"}</button>
-      <button data-dup="${i}" title="Duplicate (Ctrl+D)">⧉</button>
+      <button data-dup="${i}" title="Duplicate plate">⧉</button>
       <button data-del="${i}" title="Delete plate"${views.length < 2 || v.plate.locked ? " disabled" : ""}>✕</button></div>`;
   }).join("") + `<button id="addPlate">+ Plate</button>`;
   bar.querySelectorAll<HTMLElement>("[data-plate]").forEach((el) => el.onclick = (e) => { if (!(e.target as HTMLElement).closest("button")) selectPlate(Number(el.dataset.plate)); });
@@ -435,15 +545,17 @@ function renderPlateBar() {
 
 const stats = { fps: 0 };
 function renderStatus() {
-  const v = views[ui.active]; if (!v) return;
+  const v = activeView(); if (!v) return;
   const r = v.result, M = machine();
-  let s = `${v.plate.name} · ${v.status}${v.status === "error" ? ": " + v.error : ""} · ${stats.fps.toFixed(0)} fps\n`;
-  if (r) {
+  let s = `${v.plate.name} · ${v.status}${v.status === "error" ? ": " + esc(v.error ?? "") : ""} · ${stats.fps.toFixed(0)} fps\n`;
+  if (r && v.status !== "error") {
     s += `${formatDuration(r.stats.timeS)} · ${r.stats.grams.toFixed(1)} g · ${(r.stats.filamentMm / 1000).toFixed(2)} m · ${r.stats.layers} layers · cost ${r.stats.cost.toFixed(2)}\n`;
-    s += `${r.mp.count.toLocaleString()} moves (${r.mp.decimated.toLocaleString()} decimated) · sliced in ${r.ms.toFixed(0)} ms\n`;
-    if (ui.preview !== "feature") { const [lo, hi, unit] = legendRange(r.mp, ui.preview); s += `${PREVIEW_LABELS[ui.preview]}: <span style="color:hsl(240,85%,60%)">${lo.toFixed(1)}</span> → <span style="color:hsl(0,85%,60%)">${hi.toFixed(1)}</span> ${unit}\n`; }
+    const moves = r.mps.reduce((a, m) => a + m.count, 0), dec = r.mps.reduce((a, m) => a + m.decimated, 0);
+    s += `${r.mps.length} object${r.mps.length > 1 ? "s (sequential: " + r.order.map((k) => esc(v.plate.objects[k]?.name ?? "?")).join(" → ") + ")" : ""} · ${moves.toLocaleString()} moves (${dec.toLocaleString()} decimated) · ${r.ms.toFixed(0)} ms\n`;
+    if (ui.preview !== "feature") { const [lo, hi, unit] = legendRange(r.mps, ui.preview); s += `${PREVIEW_LABELS[ui.preview]}: <span style="color:hsl(240,85%,60%)">${lo.toFixed(1)}</span> → <span style="color:hsl(0,85%,60%)">${hi.toFixed(1)}</span> ${unit}\n`; }
     if (r.zClipped) s += `<span class="warn">Z wobble capped at ±${M.zWobbleMax} mm on ${r.zClipped.toLocaleString()} points</span>\n`;
-    if (r.mp.inclinationViolations) s += `<span class="warn">${r.mp.inclinationViolations.toLocaleString()} segments exceed max inclination ${proc().nonLinear.maxInclination}°</span>\n`;
+    const inc = r.mps.reduce((a, m) => a + m.inclinationViolations, 0);
+    if (inc) s += `<span class="warn">${inc.toLocaleString()} segments exceed max inclination ${proc().nonLinear.maxInclination}°</span>\n`;
     for (const i of r.issues) s += `<span class="${i.level === "error" ? "err" : "warn"}">${esc(i.message)}</span>\n`;
   }
   statsEl.innerHTML = s;
@@ -453,29 +565,44 @@ function renderAll() { renderPanel(); renderPlateBar(); renderStatus(); }
 function bindPanel() {
   const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T | null;
   panel.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => b.onclick = () => { ui.tab = b.dataset.tab as typeof ui.tab; renderPanel(); });
-  const v = views[ui.active], p = v.plate;
+  const v = activeView();
   const changed = () => { renderStatus(); sliceActiveSoon(); };
 
   if (ui.tab === "prepare") {
-    $<HTMLSelectElement>("primitive")!.onchange = (e) => { p.primitive = (e.target as HTMLSelectElement).value as PrimitiveName; buildSurface(v); focusActive(); changed(); };
-    for (const k of ["scaleXY", "scaleZ", "rotation"] as const) $(k)!.onchange = (e) => {
-      const n = Number((e.target as HTMLInputElement).value); p.transform[k] = k === "rotation" ? n : Math.max(0.1, n / 100); buildSurface(v); changed();
-    };
-    $<HTMLSelectElement>("target")!.onchange = (e) => { ui.target = Number((e.target as HTMLSelectElement).value); renderPanel(); };
-    $<HTMLSelectElement>("pattern")!.onchange = (e) => {
-      const name = (e.target as HTMLSelectElement).value, defs = { ...patterns[name].defaults };
-      if (ui.target < 0) p.base = { pattern: name, params: defs }; else { p.mask.regions[ui.target].pattern = name; p.regionParams[ui.target] = defs; }
-      renderPanel(); changed();
-    };
-    panel.querySelectorAll<HTMLInputElement>("input[data-param]").forEach((inp) => inp.oninput = () => {
-      (ui.target < 0 ? p.base.params : p.regionParams[ui.target])[inp.dataset.param as keyof PatternParams] = Number(inp.value);
-      (inp.nextElementSibling as HTMLElement).textContent = inp.value; changed();
+    panel.querySelectorAll<HTMLElement>("[data-obj]").forEach((el) => el.onclick = (e) => { if (!(e.target as HTMLElement).closest("button")) selectObject(Number(el.dataset.obj)); });
+    panel.querySelectorAll<HTMLElement>("[data-objdup]").forEach((el) => el.onclick = () => addObject(cloneObject(v.plate.objects[Number(el.dataset.objdup)])));
+    panel.querySelectorAll<HTMLElement>("[data-objdel]").forEach((el) => el.onclick = () => deleteObject(Number(el.dataset.objdel)));
+    $("stlFile")!.onchange = (e) => { const fl = (e.target as HTMLInputElement).files; if (fl?.length) importSTL(fl); };
+    $<HTMLSelectElement>("addPrim")!.onchange = (e) => { const k = (e.target as HTMLSelectElement).value as PrimitiveName; if (k) addObject(newObject({ kind: "primitive", primitive: k })); };
+    $("arrange")!.onclick = () => arrangeAndReport([v]);
+    $("arrangeAll")!.onclick = () => arrangeAndReport(views);
+    panel.querySelectorAll<HTMLElement>("[data-tool]").forEach((b) => b.onclick = () => {
+      ui.tool = b.dataset.tool as typeof ui.tool;
+      if ((ui.tool === "paint" || ui.tool === "erase") && ui.target < 0) alert("Add or select a paint region first (Wall pattern → Target).");
+      renderPanel();
     });
-    $("addRegion")!.onclick = () => { const k = addRegion(p.mask, "sine"); p.regionParams[k] = { ...patterns.sine.defaults }; ui.target = k; ui.painting = true; ui.erase = false; renderPanel(); };
-    $("paint")!.onclick = () => { ui.painting = !(ui.painting && !ui.erase); ui.erase = false; renderPanel(); };
-    $("erase")!.onclick = () => { ui.painting = !(ui.painting && ui.erase); ui.erase = true; renderPanel(); };
-    $("brush")!.oninput = (e) => { const el = e.target as HTMLInputElement; ui.brush = Number(el.value); (el.nextElementSibling as HTMLElement).textContent = el.value; };
-    $("showSurface")!.onchange = (e) => { ui.showSurface = (e.target as HTMLInputElement).checked; updateSurfaceVisibility(); };
+    const ov = activeObjView();
+    if (ov) {
+      const o = ov.obj;
+      panel.querySelectorAll<HTMLInputElement>("[data-tf]").forEach((el) => el.onchange = () => {
+        const k = el.dataset.tf as keyof typeof o.transform, n = Number(el.value);
+        o.transform[k] = k === "scaleXY" || k === "scaleZ" ? Math.max(0.1, n / 100) : n;
+        buildSurface(ov); placeObj(ov); changed();
+      });
+      $<HTMLSelectElement>("target")!.onchange = (e) => { ui.target = Number((e.target as HTMLSelectElement).value); renderPanel(); };
+      $<HTMLSelectElement>("pattern")!.onchange = (e) => {
+        const name = (e.target as HTMLSelectElement).value, defs = { ...patterns[name].defaults };
+        if (ui.target < 0) o.base = { pattern: name, params: defs }; else { o.mask.regions[ui.target].pattern = name; o.regionParams[ui.target] = defs; }
+        buildSurface(ov); renderPanel(); changed();
+      };
+      panel.querySelectorAll<HTMLInputElement>("input[data-param]").forEach((inp) => inp.oninput = () => {
+        (ui.target < 0 ? o.base.params : o.regionParams[ui.target])[inp.dataset.param as keyof PatternParams] = Number(inp.value);
+        (inp.nextElementSibling as HTMLElement).textContent = inp.value; changed();
+      });
+      $("addRegion")!.onclick = () => { const k = addRegion(o.mask, "sine"); o.regionParams[k] = { ...patterns.sine.defaults }; ui.target = k; ui.tool = "paint"; renderPanel(); };
+      $("brush")!.oninput = (e) => { const el = e.target as HTMLInputElement; ui.brush = Number(el.value); (el.nextElementSibling as HTMLElement).textContent = el.value; };
+      $("showSurface")!.onchange = (e) => { ui.showSurface = (e.target as HTMLInputElement).checked; updateSurfaceVisibility(); };
+    }
     $<HTMLSelectElement>("previewMode")!.onchange = (e) => { ui.preview = (e.target as HTMLSelectElement).value as PreviewMode; views.forEach(redrawPaths); renderStatus(); };
     $("layerMin")!.oninput = (e) => { ui.layerMin = Math.min(Number((e.target as HTMLInputElement).value), ui.layerMax); views.forEach(applyLayerRange); };
     $("layerMax")!.oninput = (e) => { ui.layerMax = Math.max(Number((e.target as HTMLInputElement).value), ui.layerMin); views.forEach(applyLayerRange); };
@@ -484,10 +611,8 @@ function bindPanel() {
     $<HTMLSelectElement>("presetSel")!.onchange = (e) => { ui.selected[kind] = (e.target as HTMLSelectElement).value; delete ui.edited[kind]; onPresetsChanged(); };
     panel.querySelectorAll<HTMLInputElement>("[data-path]").forEach((el) => el.onchange = () => {
       const edited = structuredClone(presetValues(kind)) as unknown as Record<string, unknown>;
-      const path = el.dataset.path!;
-      const val = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value)
-        : el.dataset.array ? el.value.split(",").map(Number) : el.value;
-      setPath(edited, path, val);
+      const val = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.dataset.array ? el.value.split(",").map(Number) : el.value;
+      setPath(edited, el.dataset.path!, val);
       ui.edited[kind] = edited as never;
       onPresetsChanged();
     });
@@ -504,14 +629,18 @@ function bindPanel() {
       delete ui.edited[kind]; persistUserPresets(); onPresetsChanged();
     };
   }
-  $("slicePlate")!.onclick = () => slice(views[ui.active]);
+  $("slicePlate")!.onclick = () => slice(activeView());
   $("sliceAll")!.onclick = sliceAll;
   $("export")!.onclick = () => exportGcode();
   $("saveProject")!.onclick = saveProject;
   $("openProject")!.onclick = () => $("projectFile")!.click();
   $("projectFile")!.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) loadProject(f); };
 }
-function onPresetsChanged() { layoutPlates(); focusActive(); renderAll(); sliceActiveSoon(); }
+function onPresetsChanged() { views.forEach((v) => v.objs.forEach(buildSurface)); layoutPlates(); focusActive(); renderAll(); sliceActiveSoon(); }
+
+// drag & drop STL onto the viewport
+view.addEventListener("dragover", (e) => e.preventDefault());
+view.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer?.files.length) importSTL(e.dataTransfer.files); });
 
 // ======================= loop =======================
 function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
@@ -519,8 +648,9 @@ new ResizeObserver(resize).observe(view);
 let frames = 0, last = performance.now();
 renderer.setAnimationLoop(() => {
   controls.update();
-  for (const v of views) if (v.lod && v.line) {
-    const far = camera.position.distanceTo(v.group.position) > 450; v.lod.visible = far; v.line.visible = !far;
+  for (const v of views) {
+    const far = camera.position.distanceTo(v.group.position) > 450, hasLod = v.lines.some((l) => l.userData.lod === "far");
+    if (!dragging) for (const l of v.lines) l.visible = !hasLod || (l.userData.lod === "far") === far;
   }
   renderer.render(scene, camera);
   frames++;

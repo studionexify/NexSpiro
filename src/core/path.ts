@@ -1,4 +1,6 @@
 import type { Profile } from "./primitives.ts";
+import { profileBody, type Body } from "./body.ts";
+import type { Ring } from "./mesh.ts";
 import { patterns, type PatternParams, type Sample } from "./patterns.ts";
 import { sample, type PaintMask } from "./mask.ts";
 
@@ -26,36 +28,52 @@ const resolve = (name: string, over?: Partial<PatternParams>) => {
   return { fn: pat.fn, p: { ...pat.defaults, ...over } as PatternParams };
 };
 
-export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
+export function buildSpiral(shape: Profile | Body, s: PathSettings): Toolpath {
+  const body: Body = "radius" in shape ? profileBody(shape) : shape;
   const base = resolve(s.pattern, s.params);
   const regions = (s.paint?.regions ?? []).map((r) => resolve(r.pattern, r.params));
-  const sxy = s.scaleXY ?? 1, H = profile.height * (s.scaleZ ?? 1);
-  const rot = ((s.rotation ?? 0) * Math.PI) / 180, flh = s.firstLayerHeight ?? s.layerHeight;
+  const sxy = s.scaleXY ?? 1, sz = s.scaleZ ?? 1, H = body.height * sz;
+  const rot = ((s.rotation ?? 0) * Math.PI) / 180, cr = Math.cos(rot), sr = Math.sin(rot);
+  const flh = s.firstLayerHeight ?? s.layerHeight, M = s.segmentsPerRev;
   const layers = Math.max(1, Math.floor((H - flh) / s.layerHeight + 1e-9) + 1);
-  const n = layers * s.segmentsPerRev + 1;
+  const n = layers * M + 1;
   const xyz = new Float32Array(n * 3), e = new Float64Array(n), tag = new Uint8Array(n);
   const filArea = Math.PI * (s.filamentDiameter / 2) ** 2;
   const beadArea = s.lineWidth * s.layerHeight;
   const cap = s.zCap ?? Infinity;
+  // Rings are sampled in body space (unscaled Z) then scaled/rotated into object space.
+  const ringAt = (L: number): Ring => {
+    const z = Math.min(H, flh + s.layerHeight * L);
+    const r = body.ring(z / sz, M);
+    if (!r) throw new Error(`No contour at Z=${z.toFixed(2)} mm (open or non-manifold mesh?)`);
+    for (let k = 0; k < M; k++) {
+      const x = r.x[k] * sxy, y = r.y[k] * sxy, nx = r.nx[k], ny = r.ny[k];
+      r.x[k] = x * cr - y * sr; r.y[k] = x * sr + y * cr;
+      r.nx[k] = nx * cr - ny * sr; r.ny[k] = nx * sr + ny * cr;
+    }
+    return r;
+  };
+  let ringA = ringAt(0), ringB = ringAt(1), ringLayer = 0;
   let E = 0, px = 0, py = 0, pz = 0, zClipped = 0;
   for (let i = 0; i < n; i++) {
-    const layer = i / s.segmentsPerRev;            // continuous (spiral)
-    const u = (i % s.segmentsPerRev) / s.segmentsPerRev, theta = u * 2 * Math.PI;
+    const layer = i / M;                           // continuous (spiral)
+    const k = i % M, u = k / M, theta = u * 2 * Math.PI;
+    const L = Math.floor(layer);
+    if (L !== ringLayer) { ringA = ringB; ringB = ringAt(L + 1); ringLayer = L; }
     const zBase = flh + s.layerHeight * layer;
     const t = Math.min(1, zBase / H);
     const fade = s.fadeHeight > 0 ? Math.min(1, (zBase - flh) / s.fadeHeight) : 1;
-    const L = Math.floor(layer);
 
     // Blend base + painted regions by mask weight.
     let m: Sample = base.fn(theta, L, base.p);
     if (regions.length) {
       let wSum = 0, dr = 0, dz = 0, em = 0, best = 0, bestW = 0;
-      for (let k = 0; k < regions.length; k++) {
-        const w = sample(s.paint!, k, u, t);
+      for (let q = 0; q < regions.length; q++) {
+        const w = sample(s.paint!, q, u, t);
         if (w <= 0) continue;
-        const r = regions[k].fn(theta, L, regions[k].p);
+        const r = regions[q].fn(theta, L, regions[q].p);
         dr += w * r.dr; dz += w * r.dz; em += w * r.e; wSum += w;
-        if (w > bestW) { bestW = w; best = k + 1; }
+        if (w > bestW) { bestW = w; best = q + 1; }
       }
       if (wSum > 0) {
         const wb = Math.max(0, 1 - wSum), tot = wb + wSum;
@@ -66,8 +84,11 @@ export function buildSpiral(profile: Profile, s: PathSettings): Toolpath {
     let dz = s.planar ? 0 : fade * m.dz;
     if (Math.abs(dz) > cap) { dz = Math.sign(dz) * cap; zClipped++; }
 
-    const r = profile.radius(t) * sxy + fade * m.dr;
-    const x = s.center[0] + r * Math.cos(theta + rot), y = s.center[1] + r * Math.sin(theta + rot);
+    // Spiral: blend this layer's ring into the next one across the revolution.
+    const f = layer - L, g = 1 - f, off = fade * m.dr;
+    const nx = g * ringA.nx[k] + f * ringB.nx[k], ny = g * ringA.ny[k] + f * ringB.ny[k], nl = Math.hypot(nx, ny) || 1;
+    const x = s.center[0] + g * ringA.x[k] + f * ringB.x[k] + (off * nx) / nl;
+    const y = s.center[1] + g * ringA.y[k] + f * ringB.y[k] + (off * ny) / nl;
     const z = zBase + dz;
     if (i > 0) E += (Math.hypot(x - px, y - py, z - pz) * beadArea * (1 + fade * (m.e - 1))) / filArea;
     xyz[i * 3] = x; xyz[i * 3 + 1] = y; xyz[i * 3 + 2] = z; e[i] = E;

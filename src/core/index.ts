@@ -6,3 +6,5 @@ export * from "./mask.ts";
 export * from "./presets.ts";
 export * from "./motion.ts";
 export * from "./project.ts";
+export * from "./mesh.ts";
+export * from "./body.ts";

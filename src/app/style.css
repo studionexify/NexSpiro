@@ -31,3 +31,11 @@ input[type=text] { background:var(--bg); color:var(--text); border:1px solid var
 #plates .plate button { padding:2px 6px; margin:0; background:transparent; }
 #plates .plate button:disabled { opacity:.3; cursor:default; }
 #stats { background:rgba(22,24,29,.75); padding:6px 8px; border-radius:6px; }
+.objlist .obj { display:flex; justify-content:space-between; align-items:center; padding:3px 6px; border-radius:4px; cursor:pointer; }
+.objlist .obj.on { background:var(--line); outline:1px solid var(--accent); }
+.objlist .obj button { padding:1px 6px; margin:0 0 0 2px; background:transparent; }
+.file-btn { display:inline-block; background:var(--accent); border-radius:4px; padding:6px 10px; cursor:pointer; margin:6px 3px 3px 0; }
+.file-btn.disabled { opacity:.4; pointer-events:none; }
+#addPrim { width:auto; }
+.tools { display:flex; gap:3px; margin-top:6px; }
+.tools button { flex:1; margin:0; padding:6px 4px; }

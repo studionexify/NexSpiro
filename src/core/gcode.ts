@@ -16,11 +16,15 @@ export const formatDuration = (s: number) => {
   return `${h ? h + "h " : ""}${h || m ? m + "m " : ""}${sec}s`;
 };
 
-export function sliceStats(mp: MotionPath, filament: FilamentPreset): SliceStats {
-  const filamentMm = mp.e[mp.count - 1] * filament.flowRatio;
+export function sliceStats(mps: MotionPath | MotionPath[], filament: FilamentPreset): SliceStats {
+  const list = Array.isArray(mps) ? mps : [mps];
+  const filamentMm = list.reduce((s, mp) => s + mp.e[mp.count - 1], 0) * filament.flowRatio;
   const filamentCm3 = (filamentMm * Math.PI * (filament.diameter / 2) ** 2) / 1000;
   const grams = filamentCm3 * filament.density;
-  return { timeS: mp.time, filamentMm, filamentCm3, grams, cost: (grams / 1000) * filament.costPerKg, layers: mp.layer[mp.count - 1] + 1 };
+  return {
+    timeS: list.reduce((s, mp) => s + mp.time, 0), filamentMm, filamentCm3, grams, cost: (grams / 1000) * filament.costPerKg,
+    layers: list.reduce((s, mp) => s + mp.layer[mp.count - 1] + 1, 0), // sequential objects stack their layers
+  };
 }
 
 /** Thumbnail blocks in the PrusaSlicer/Orca/Bambu header format (base64 PNG, 78-col lines). */
@@ -31,11 +35,15 @@ function thumbnailBlock(t: Thumbnail): string[] {
   return out;
 }
 
-/** Relative-extrusion G-code with per-move feedrates, layer-change macros, temps and fan per layer. */
-export function toGcode(mp: MotionPath, g: GcodeInput): string {
+/**
+ * Relative-extrusion G-code with per-move feedrates, layer-change macros, temps and fan per layer.
+ * Several objects are printed sequentially (by object), with a safe Z hop between them.
+ */
+export function toGcode(mps: MotionPath | MotionPath[], g: GcodeInput): string {
+  const list = Array.isArray(mps) ? mps : [mps];
   const { machine: M, filament: F, process: P } = g;
   const [ox, oy] = g.offset ?? [0, 0];
-  const st = sliceStats(mp, F);
+  const st = sliceStats(list, F);
   const vars = {
     bed_temperature_initial_layer: F.bedTempFirst, bed_temperature: F.bedTemp,
     nozzle_temperature_initial_layer: F.nozzleTempFirst, nozzle_temperature: F.nozzleTemp,
@@ -52,7 +60,8 @@ export function toGcode(mp: MotionPath, g: GcodeInput): string {
     `; filament used [cm3] = ${st.filamentCm3.toFixed(2)}`,
     `; filament used [g] = ${st.grams.toFixed(2)}`,
     `; total filament cost = ${st.cost.toFixed(2)}`,
-    `; max_z_height: ${f(maxZ(mp), 2)}`,
+    `; max_z_height: ${f(Math.max(...list.map(maxZ)), 2)}`,
+    `; objects: ${list.length} (sequential)`,
     "; HEADER_BLOCK_END", ";",
   ];
   if (g.thumbnails?.length) {
@@ -63,29 +72,43 @@ export function toGcode(mp: MotionPath, g: GcodeInput): string {
   if (g.presetNames) out.push(`; printer_settings_id = ${g.presetNames.machine}`, `; filament_settings_id = ${g.presetNames.filament}`, `; print_settings_id = ${g.presetNames.process}`);
   out.push(`; flavor = ${M.flavor}`, `; nonlinear_motion = ${P.nonLinear.enabled ? 1 : 0}`, ";", "; EXECUTABLE_BLOCK_START");
   out.push(...fillTemplate(M.startGcode, vars).split("\n"));
-  out.push("M83", "G92 E0", `M106 S${Math.round((mp.layerFan[0] / 100) * 255)}`);
+  out.push("M83", "G92 E0");
 
-  const { xyz, e, feed, layer } = mp;
-  out.push(`G0 X${f(xyz[0] + ox)} Y${f(xyz[1] + oy)} Z${f(xyz[2])} F${Math.round(M.travelSpeed * 60)}`);
-  let lastF = -1, lastLayer = -1, fanPct = mp.layerFan[0];
-  for (let i = 1; i < mp.count; i++) {
-    const L = layer[i];
-    if (L !== lastLayer) {
-      out.push(";LAYER_CHANGE", `;Z:${f(xyz[i * 3 + 2], 3)}`);
-      out.push(...fillTemplate(M.layerChangeGcode, { ...vars, layer_num: L + 1, layer_z: f(xyz[i * 3 + 2], 3) }).split("\n"));
-      if (L === 1) out.push(`M104 S${F.nozzleTemp}`, `M140 S${F.bedTemp}`);
-      if (mp.layerFan[L] !== fanPct) { fanPct = mp.layerFan[L]; out.push(`M106 S${Math.round((fanPct / 100) * 255)}`); }
-      if (M.flavor !== "klipper") out.push(`M73 P${Math.round((L / st.layers) * 100)}`);
-      lastLayer = L;
+  const travel = Math.round(M.travelSpeed * 60), zTravel = Math.round(M.maxZSpeed * 60);
+  let printedTop = 0, layerBase = 0;
+  list.forEach((mp, obj) => {
+    const { xyz, e, feed, layer } = mp;
+    out.push(`; printing object ${obj + 1}/${list.length}`, `M106 S${Math.round((mp.layerFan[0] / 100) * 255)}`);
+    if (obj > 0) {
+      // hop above everything printed so far (+ wobble + margin), travel, descend, restore temps for first layer
+      const safeZ = printedTop + M.zWobbleMax + P.nonLinear.collisionMargin + 1;
+      out.push(`G1 E-${f(M.retractLength)} F${Math.round(M.retractSpeed * 60)}`, `G1 Z${f(safeZ)} F${zTravel}`,
+        `G0 X${f(xyz[0] + ox)} Y${f(xyz[1] + oy)} F${travel}`, `G1 Z${f(xyz[2])} F${zTravel}`,
+        `M104 S${F.nozzleTempFirst}`, `G1 E${f(M.retractLength)} F${Math.round(M.retractSpeed * 60)}`);
+    } else out.push(`G0 X${f(xyz[0] + ox)} Y${f(xyz[1] + oy)} Z${f(xyz[2])} F${travel}`);
+    let lastF = -1, lastLayer = -1, fanPct = mp.layerFan[0];
+    for (let i = 1; i < mp.count; i++) {
+      const L = layer[i];
+      if (L !== lastLayer) {
+        out.push(";LAYER_CHANGE", `;Z:${f(xyz[i * 3 + 2], 3)}`);
+        out.push(...fillTemplate(M.layerChangeGcode, { ...vars, layer_num: layerBase + L + 1, layer_z: f(xyz[i * 3 + 2], 3) }).split("\n"));
+        if (L === 1) out.push(`M104 S${F.nozzleTemp}`, ...(obj === 0 ? [`M140 S${F.bedTemp}`] : []));
+        if (mp.layerFan[L] !== fanPct) { fanPct = mp.layerFan[L]; out.push(`M106 S${Math.round((fanPct / 100) * 255)}`); }
+        if (M.flavor !== "klipper") out.push(`M73 P${Math.round(((layerBase + L) / Math.max(1, totalLayers(list))) * 100)}`);
+        lastLayer = L;
+      }
+      const F60 = Math.round(feed[i] * 60);
+      const fStr = Math.abs(F60 - lastF) > lastF * 0.01 ? ` F${F60}` : "";
+      if (fStr) lastF = F60;
+      out.push(`G1 X${f(xyz[i * 3] + ox)} Y${f(xyz[i * 3 + 1] + oy)} Z${f(xyz[i * 3 + 2])} E${f((e[i] - e[i - 1]) * F.flowRatio, 5)}${fStr}`);
     }
-    const F60 = Math.round(feed[i] * 60);
-    const fStr = Math.abs(F60 - lastF) > lastF * 0.01 ? ` F${F60}` : "";
-    if (fStr) lastF = F60;
-    out.push(`G1 X${f(xyz[i * 3] + ox)} Y${f(xyz[i * 3 + 1] + oy)} Z${f(xyz[i * 3 + 2])} E${f((e[i] - e[i - 1]) * F.flowRatio, 5)}${fStr}`);
-  }
+    printedTop = Math.max(printedTop, maxZ(mp));
+    layerBase += layer[mp.count - 1] + 1;
+  });
   out.push(`G1 E-${f(M.retractLength)} F${Math.round(M.retractSpeed * 60)}`);
   out.push(...fillTemplate(M.endGcode, vars).split("\n"), "; EXECUTABLE_BLOCK_END", "");
   return out.join("\n");
 }
 
+const totalLayers = (list: MotionPath[]) => list.reduce((s, mp) => s + mp.layer[mp.count - 1] + 1, 0);
 function maxZ(mp: MotionPath) { let z = 0; for (let i = 0; i < mp.count; i++) z = Math.max(z, mp.xyz[i * 3 + 2]); return z; }
