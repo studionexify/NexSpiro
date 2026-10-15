@@ -30,11 +30,43 @@ export function resample(points: ToolpathPoint[], step: number): Sample[] {
   return out;
 }
 
+/** Extra phase (degrees) for a layer, or null when the layer falls in an "off" band. */
+export function layerPhase(b: MotionBrush, layer: number): number | null {
+  const e = b.layers;
+  if (!e) return 0;
+  if (e.band_on > 0 && layer % (e.band_on + Math.max(0, e.band_off)) >= e.band_on) return null;
+  const every = Math.max(1, Math.round(e.every));
+  const k = Math.floor(layer / every);
+  switch (e.mode) {
+    case "steady": return k * e.shift_deg;
+    case "alternate": return (k % 2) * e.shift_deg;
+    case "back_and_forth": { const n = 2 * every, pos = layer % n; return (pos < every ? pos : n - pos) * e.shift_deg; }
+    case "shift_hold": {
+      // Rise for every layers, hold for every, fall for every, hold for every.
+      const n = 4 * every, pos = layer % n;
+      const steps = pos < every ? pos : pos < 2 * every ? every : pos < 3 * every ? 3 * every - pos : 0;
+      return steps * e.shift_deg;
+    }
+  }
+}
+
 /** Brush sample at arc length s along a path of total length L. Returns null where the brush does not apply. */
-export function brushAt(b: MotionBrush, s: number, L: number): { lat: number; along: number; flow: number; speed: number } | null {
+export function brushAt(b: MotionBrush, s: number, L: number, layer = 0): { lat: number; along: number; flow: number; speed: number } | null {
+  const lp = layerPhase(b, layer);
+  if (lp === null) return null;
+  if (b.layers?.cross && lp !== 0) {
+    const a = sampleAt(b, s, L, b.phase_deg + lp), c = sampleAt(b, s, L, b.phase_deg - lp);
+    if (!a || !c) return a ?? c;
+    // The higher of the two keeps both ridges at full height, including where they cross.
+    return { lat: Math.max(a.lat, c.lat), along: (a.along + c.along) / 2, flow: (a.flow + c.flow) / 2, speed: Math.min(a.speed, c.speed) };
+  }
+  return sampleAt(b, s, L, b.phase_deg + lp);
+}
+
+function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number): { lat: number; along: number; flow: number; speed: number } | null {
   let period = b.period_mm;
   if (b.repeat_mode === "stretch") period = L / Math.max(1, Math.round(L / b.period_mm));
-  const ph = (b.phase_deg / 360) * period;
+  const ph = (((phaseDeg % 360) + 360) % 360 / 360) * period;
   if (b.repeat_mode === "once" && s + ph > period) return null;
   const u = (((s + ph) / period) % 1 + 1) % 1;
   let lat = evalCurve(b.curves.lateral_offset, u);
@@ -48,7 +80,7 @@ export function brushAt(b: MotionBrush, s: number, L: number): { lat: number; al
 }
 
 /** Apply one brush to one path, in place semantics returning a new path. */
-export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, fade: (z: number, s: number) => number, warn: (w: SliceWarning) => void): Toolpath {
+export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, fade: (z: number, s: number) => number, warn: (w: SliceWarning) => void, layer = 0): Toolpath {
   const samples = resample(path.points, opt.resampleStep);
   const L = samples[samples.length - 1].s;
   if (L <= 0) return path;
@@ -66,7 +98,7 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
     const nx = ty, ny = -tx;
     const w = fade(c.z, c.s);
     const s = path.closed && i === samples.length - 1 ? 0 : c.s; // seam closes onto its own start
-    const m = w > 0 ? brushAt(b, s, L) : null;
+    const m = w > 0 ? brushAt(b, s, L, layer) : null;
     if (!m) { out.push({ x: c.x, y: c.y, z: c.z, f: c.f, flow: c.flow, e: 0 }); continue; }
     let flow = c.flow * (1 + (m.flow - 1) * w);
     const fc = clamp(flow, b.limits.min_flow_mult, b.limits.max_flow_mult);
@@ -101,7 +133,9 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const warn = (w: SliceWarning) => { if (!seen.has(w.code)) { seen.add(w.code); warnings.push(w); } };
   const sorted = apps.filter((a) => a.enabled).sort((a, b) => a.order - b.order);
   for (const app of sorted) {
-    const brush = brushes(app.brush_id);
+    const found = brushes(app.brush_id);
+    const k = app.scale ?? 1;
+    const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k } : found;
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Pattern ${app.brush_id} was not found` }); continue; }
     if (app.target.type === "patternex_region") { warn({ code: "motionex_patternex", message: "Region patterns are coming soon, so this one was skipped" }); continue; }
     if (brush.curves.z_offset.points.some((q) => Math.abs(q.v) > 1e-9)) warn({ code: "motionex_z_pending", message: `${brush.name}: the up-and-down part is coming soon and was skipped` });
@@ -114,7 +148,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
     };
     for (const layer of layers) {
       if (fade(layer.z) <= 0) continue;
-      layer.paths = layer.paths.map((path) => matchesTarget(app, path) ? applyBrushToPath(path, brush, p, opt, fade, warn) : path);
+      layer.paths = layer.paths.map((path) => matchesTarget(app, path) ? applyBrushToPath(path, brush, p, opt, fade, warn, layer.index) : path);
     }
   }
   return { layers, warnings };

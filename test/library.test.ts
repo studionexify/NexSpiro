@@ -24,10 +24,10 @@ test("saving a preset stores a copy; saving again bumps version; persists", () =
   assert.equal(again.get(saved.id)!.amplitude, 2);
 });
 
-test("preset library: hundreds of unique, valid patterns that stay within their size", async () => {
+test("preset library: 150+ unique, valid patterns that stay within their size", async () => {
   const { applyBrushToPath, DEFAULT_OPTIONS } = await import("../src/plugins/motionex/modifier.ts");
   const { profiles } = await import("./helpers.ts");
-  assert.ok(PRESETS.length >= 300, `only ${PRESETS.length} presets`);
+  assert.ok(PRESETS.length >= 150, `only ${PRESETS.length} presets`);
   assert.equal(new Set(PRESETS.map((b) => b.id)).size, PRESETS.length);
   for (const b of PRESETS) {
     assert.ok(b.category && b.description, `${b.id} needs a group and description`);

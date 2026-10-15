@@ -1,8 +1,8 @@
 // Motionex brush editor window: library, curve editor, live 2D preview, parameters.
 import { h, numInput, select, download, pickFile } from "./dom.ts";
 import { CurveEditor } from "./curveEditor.ts";
-import { CURVE_INFO, CURVE_KEYS, type CurveKey, type MotionBrush, type Interpolation, type RepeatMode } from "../plugins/motionex/model.ts";
-import { applyBrushToPath } from "../plugins/motionex/modifier.ts";
+import { CURVE_INFO, CURVE_KEYS, type CurveKey, type MotionBrush, type Interpolation, type RepeatMode, type LayerMode } from "../plugins/motionex/model.ts";
+import { applyBrushToPath, brushAt } from "../plugins/motionex/modifier.ts";
 import { parseBrush, serializeBrush } from "../plugins/motionex/library.ts";
 import type { MotionexState } from "../plugins/motionex/index.ts";
 import type { PrintProfiles } from "../core/profiles.ts";
@@ -20,6 +20,7 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
   const lib = h("div.wlib"), main = h("div.wmain"), side = h("div.wside");
   const previewCanvas = h<"canvas">("canvas", { style: "height:190px" });
   const previewCap = h("div.cap");
+  const wallCanvas = h<"canvas">("canvas", { style: "height:170px" });
   const pointBox = h("div");
   const saveBtn = h<"button">("button.primary", { onclick: save }, "Save pattern");
   const title = h("span.title");
@@ -89,6 +90,8 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
       pointBox,
       h("div.section", null, "Preview: a 40 mm piece of wall, seen from above"),
       h("div.canvas-box", null, previewCanvas, previewCap),
+      h("div.section", null, "Wall view: 40 mm wide, 80 layers tall, seen from the side"),
+      h("div.canvas-box", null, wallCanvas, h("div.cap", null, "orange = sticks out · blue = pressed in")),
     );
     requestAnimationFrame(() => { editor.draw(); drawPreview(); });
     renderPoint();
@@ -136,6 +139,18 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
         row("Detail", numInput(n.octaves, (v) => { n.octaves = Math.min(6, Math.max(1, Math.round(v))); touch(); }, { step: 1 })),
         row("Bumpiness", numInput(n.persistence, (v) => { n.persistence = v; touch(); }, { step: 0.05 })),
       ) : null,
+      h("div.section", null, "Layer by layer"),
+      row("Change each layer", select<LayerMode | "none">(brush.layers ? brush.layers.mode : "none",
+        [["none", "No change"], ["steady", "Twist (keep shifting)"], ["alternate", "Swap back and forth"], ["back_and_forth", "Shift, then shift back"], ["shift_hold", "Shift, pause, shift back"]],
+        (v) => { brush.layers = v === "none" ? (brush.layers && brush.layers.band_on > 0 ? { ...brush.layers, shift_deg: 0, mode: "steady" } : null) : { shift_deg: 15, every: 4, band_on: 0, band_off: 0, ...brush.layers, mode: v }; renderSide(); touch(); })),
+      brush.layers ? h("div", null,
+        row("Shift by (°)", numInput(brush.layers.shift_deg, (v) => { brush.layers!.shift_deg = v; touch(); }, { step: 5 })),
+        row("Every … layers", numInput(brush.layers.every, (v) => { brush.layers!.every = Math.max(1, Math.round(v)); touch(); }, { min: 1, step: 1 })),
+      ) : null,
+      row("Pattern on for … layers", numInput(brush.layers?.band_on ?? 0, (v) => { brush.layers = { shift_deg: 0, mode: "steady", every: 1, band_off: 0, ...brush.layers, band_on: Math.max(0, Math.round(v)) }; renderSide(); touch(); }, { min: 0, step: 1, title: "0 = on all the time" })),
+      brush.layers && brush.layers.band_on > 0 ? row("then plain for … layers", numInput(brush.layers.band_off, (v) => { brush.layers!.band_off = Math.max(0, Math.round(v)); touch(); }, { min: 0, step: 1 })) : null,
+      brush.layers && brush.layers.mode !== "alternate" ? h("label.inline", null, h<"input">("input", { type: "checkbox", checked: !!brush.layers.cross, onchange: (e: Event) => { brush.layers!.cross = (e.target as HTMLInputElement).checked; touch(); } }), "Slant both ways (makes diamonds and cells)") : null,
+      h("div.muted", null, "Shifting the pattern a little each layer makes twists, diamonds, bricks and honeycombs. On/off makes rings and stripes."),
       h("div.section", null, "Pauses and blobs"),
       h("div.muted", null, "Coming soon: pause the nozzle, add a blob, or lift off at chosen spots."),
       h("div.section", null, "About"),
@@ -169,7 +184,24 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
     g.fillText("plain wall", X(0), Y(0) - 6 - brush.amplitude * sy);
     g.fillText("10 mm", X(L - 10), H - 8); g.strokeStyle = "#8a93a0"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(X(L - 10), H - 18); g.lineTo(X(L), H - 18); g.stroke();
+    drawWall();
     previewCap.textContent = `colour and thickness show the amount of plastic · ${(performance.now() - t0).toFixed(0)} ms`;
+  }
+
+  function drawWall(): void {
+    const cv = wallCanvas, W = Math.max(1, cv.clientWidth), H = Math.max(1, cv.clientHeight);
+    cv.width = W; cv.height = H;
+    const g = cv.getContext("2d")!, img = g.createImageData(W, H), L = 40, rows = 80, A = Math.max(0.05, brush.amplitude * 1.2);
+    for (let r = 0; r < rows; r++) {
+      const layer = rows - 1 - r, y0 = Math.floor((r * H) / rows), y1 = Math.floor(((r + 1) * H) / rows);
+      for (let x = 0; x < W; x++) {
+        const m = brushAt(brush, (x / W) * L, L, layer);
+        const t = m ? Math.max(-1, Math.min(1, m.lat / A)) : 0;
+        const [cr, cg, cb] = t >= 0 ? [251 - 2 * t * 0, 250 - t * 110, 248 - t * 200] : [248 + t * 170, 250 + t * 110, 252];
+        for (let y = y0; y < y1; y++) { const i = (y * W + x) * 4; img.data[i] = cr; img.data[i + 1] = cg; img.data[i + 2] = cb; img.data[i + 3] = 255; }
+      }
+    }
+    g.putImageData(img, 0, 0);
   }
 
   function thumb(cv: HTMLCanvasElement, b: MotionBrush): void {

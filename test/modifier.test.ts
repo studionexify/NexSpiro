@@ -56,3 +56,26 @@ test("noise brush is deterministic for a stored seed", () => {
   assert.deepEqual(a, b);
   assert.ok(a.points.some((p) => Math.abs(p.y) > 0.05));
 });
+
+import { layerPhase, applyMotion } from "../src/plugins/motionex/modifier.ts";
+import type { MotionBrush } from "../src/plugins/motionex/model.ts";
+
+test("layer effects: twist, swap, shift-and-back and on/off bands", () => {
+  const withL = (layers: MotionBrush["layers"]) => ({ ...sine, layers });
+  assert.deepEqual([0, 1, 2, 3].map((l) => layerPhase(withL({ shift_deg: 10, mode: "steady", every: 1, band_on: 0, band_off: 0 }), l)), [0, 10, 20, 30]);
+  assert.deepEqual([0, 1, 2, 3, 4].map((l) => layerPhase(withL({ shift_deg: 180, mode: "alternate", every: 2, band_on: 0, band_off: 0 }), l)), [0, 0, 180, 180, 0]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map((l) => layerPhase(withL({ shift_deg: 5, mode: "back_and_forth", every: 3, band_on: 0, band_off: 0 }), l)), [0, 5, 10, 15, 10, 5, 0]);
+  assert.deepEqual([0, 1, 2, 3, 4].map((l) => layerPhase(withL({ shift_deg: 0, mode: "steady", every: 1, band_on: 2, band_off: 1 }), l)), [0, 0, null, 0, 0]);
+});
+
+test("size slider scales wave height and length together", () => {
+  const p = profiles();
+  const mk = () => [{ index: 3, z: 1, height: 0.2, paths: [line(16)] }];
+  const run = (scale: number) => applyMotion(mk(), [{ brush_id: "preset-sine", target: { type: "model" as const }, mask: { z_start: 0, z_end: 99, fade_in_mm: 0, fade_out_mm: 0 }, order: 0, blend: "add" as const, enabled: true, scale }],
+    (id) => PRESETS.find((b) => b.id === id), p).layers[0].paths[0].points;
+  const big = run(2), normal = run(1);
+  const maxY = (pts: { y: number }[]) => Math.max(...pts.map((q) => Math.abs(q.y)));
+  assert.ok(Math.abs(maxY(big) - 2 * maxY(normal)) < 0.02);
+  // Twice the wave length: the first peak moves from 1 mm to 2 mm along the line.
+  assert.ok(Math.abs(Math.abs(big.find((q) => Math.abs(q.x - 2) < 1e-9)!.y) - 1.2) < 0.02);
+});

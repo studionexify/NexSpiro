@@ -18,6 +18,24 @@ export interface MotionEvent {
 
 export interface NoiseSettings { enabled: boolean; type: "value"; seed: number; scale: number; octaves: number; persistence: number }
 
+export type LayerMode = "steady" | "alternate" | "back_and_forth" | "shift_hold";
+
+/** How the pattern changes from one layer to the next. Builds diamonds, bricks, twists and bands. */
+export interface LayerEffect {
+  /** Degrees of the repeat to shift by at each step. */
+  shift_deg: number;
+  /** steady: keep shifting (twist) · alternate: swap between 0 and shift · back_and_forth: shift up, then back down ·
+   *  shift_hold: like back_and_forth but pauses at both ends (with cross: six-sided cells). */
+  mode: LayerMode;
+  /** Layers per step. */
+  every: number;
+  /** Pattern is on for band_on layers then off for band_off layers; 0 = always on. */
+  band_on: number;
+  band_off: number;
+  /** Draw the pattern slanting both ways at once (average of +shift and −shift): diamond and lattice grids. */
+  cross?: boolean;
+}
+
 export interface MotionBrush {
   id: string;
   name: string;
@@ -33,6 +51,7 @@ export interface MotionBrush {
   events: MotionEvent[];
   noise: NoiseSettings | null;
   limits: { min_flow_mult: number; max_flow_mult: number };
+  layers?: LayerEffect | null;
   tags?: string[];
   /** Library group shown in the picker, e.g. "Waves". */
   category?: string;
@@ -49,6 +68,8 @@ export interface MotionApplication {
   order: number;
   blend: "add" | "override";
   enabled: boolean;
+  /** Size slider: scales wave height and wave length together (1 = as designed). */
+  scale?: number;
 }
 
 export const CURVE_KEYS: CurveKey[] = ["lateral_offset", "along_offset", "z_offset", "extrusion_mult", "speed_mult"];

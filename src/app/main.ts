@@ -115,6 +115,7 @@ function motionexCard(): HTMLElement {
         patternSelect(a.brush_id, (v) => upd(() => { a.brush_id = v; })),
         h("button.sm", { title: "Edit brush", onclick: () => edit(a.brush_id) }, "Edit"),
         h("button.ghost.sm", { title: "Remove", onclick: () => upd(() => { mx.state.applications.splice(i, 1); }) }, "✕")),
+      sizeRow(a, () => invalidate()),
       h("div.row", null, h("span.muted", null, "Apply to"), select(targetVal, [["feature:outer_wall", "Outer wall"], ["feature:inner_wall", "Inner walls"], ["model", "All walls"]],
         (v) => upd(() => { const [t, ref] = v.split(":"); a.target = { type: t as TargetType, ref }; }))),
       h("div.row.three", null,
@@ -130,6 +131,14 @@ function motionexCard(): HTMLElement {
     h("button.sm", { onclick: () => { mx.state.applications.push({ ...defaultApplication("preset-zigzag"), order: mx.state.applications.length }); invalidate(); renderRight(); } }, "+ Add pattern"),
     h("div.row", null, h("span.muted", { title: "Smaller numbers follow the pattern more closely but make bigger files" }, "Detail (mm)"), numInput(mx.state.options.resampleStep, (v) => { mx.state.options.resampleStep = Math.min(2, Math.max(0.05, v)); invalidate(); })),
   );
+}
+
+function sizeRow(a: MotionApplication, onChange: () => void): HTMLElement {
+  const label = h("span", { style: "min-width:44px;text-align:right" }, `×${(a.scale ?? 1).toFixed(2)}`);
+  const slider = h<"input">("input", { type: "range", min: "0.25", max: "3", step: "0.05", value: String(a.scale ?? 1), "aria-label": "Pattern size",
+    oninput: (e: Event) => { a.scale = +(e.target as HTMLInputElement).value; label.textContent = `×${a.scale.toFixed(2)}`; },
+    onchange: onChange });
+  return h("div.row", { style: "grid-template-columns:auto 1fr auto" }, h("span.muted", { title: "Makes the whole pattern bigger or smaller" }, "Size"), slider, label);
 }
 
 function patternSelect(value: string, onChange: (v: string) => void): HTMLSelectElement {
