@@ -33,11 +33,13 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="nexspiro-plugin")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
+    sub.add_parser("printers")
     i = sub.add_parser("info"); i.add_argument("plugin")
     r = sub.add_parser("run")
     r.add_argument("plugin")
     r.add_argument("--param", "-p", action="append", default=[], metavar="KEY=VALUE")
     r.add_argument("--timeout", type=float, default=120.0)
+    r.add_argument("--printer", help="Printer id (P1S, A1, ...); auto-detected from G-code if omitted")
     r.add_argument("file")
     a = ap.parse_args(argv)
 
@@ -45,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
                         handlers=[logging.StreamHandler(),
                                   logging.FileHandler(_log_dir() / "plugins.log", encoding="utf-8")])
     plugins = discover()
+    if a.cmd == "printers":
+        from ..core.printers import printers
+        for p in printers().values():
+            print(f"{p.id:5} {p.name:24} {'primary' if p.tier == 1 else ''}")
+        return 0
     if a.cmd == "list":
         for p in plugins.values():
             print(f"{p.id:24} {p.kind:6} v{p.version}  {p.name}")
@@ -59,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         params = dict(kv.split("=", 1) for kv in a.param)
-        run_plugin(a.plugin, a.file, params, a.timeout)
+        run_plugin(a.plugin, a.file, params, a.timeout, printer_id=a.printer)
         logging.info("applied %s to %s", a.plugin, a.file)
         return 0
     except (PluginError, ValueError) as e:

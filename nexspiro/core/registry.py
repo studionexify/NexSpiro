@@ -18,6 +18,11 @@ class PluginSpec:
     description: str
     params: dict[str, Param]
     path: Path
+    printers: tuple[str, ...] = ()  # empty = all printers
+    category: str = "General"
+
+    def supports(self, printer_id: str) -> bool:
+        return not self.printers or printer_id in self.printers
 
     def load(self) -> NexPlugin:
         mod_name = f"nexspiro_plugin_{self.id}"
@@ -58,5 +63,7 @@ def discover() -> dict[str, PluginSpec]:
             sid = data["id"]
             found.setdefault(sid, PluginSpec(sid, data.get("name", sid), data.get("version", "0"),
                                              data["kind"], data.get("description", ""), params,
-                                             manifest.parent))
+                                             manifest.parent,
+                                             tuple(data.get("printers", ())),
+                                             data.get("category", "General")))
     return found

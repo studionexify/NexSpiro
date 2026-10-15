@@ -3,6 +3,8 @@ name = "Feature Speed Scale"
 version = "0.1.0"
 kind = "gcode"
 api_version = 1
+printers = []  # empty = all Bambu printers
+category = "Motion"
 description = "Scales feedrate (F) of moves belonging to one feature, e.g. 'Outer wall'."
 
 [params.feature]

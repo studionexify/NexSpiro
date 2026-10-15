@@ -41,6 +41,7 @@ class PluginContext:
     gcode: Any = None   # GCode for kind=gcode
     mesh: Any = None    # trimesh.Trimesh for kind=mesh
     config: dict = field(default_factory=dict)
+    printer: Any = None  # core.printers.Printer, if known
 
 
 class NexPlugin:

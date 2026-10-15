@@ -9,10 +9,11 @@ from pathlib import Path
 
 from ..core import gcode as gc
 from ..core.plugin_api import PluginContext, PluginError
+from ..core.printers import detect, printers
 from ..core.registry import discover
 
 
-def _worker(plugin_id: str, path: str, raw_params: dict, q) -> None:
+def _worker(plugin_id: str, path: str, raw_params: dict, q, printer_id: str | None = None) -> None:
     try:
         spec = discover()[plugin_id]
         params = spec.resolve_params(raw_params)
@@ -24,12 +25,15 @@ def _worker(plugin_id: str, path: str, raw_params: dict, q) -> None:
             if spec.kind == "gcode":
                 text = p.read_bytes().decode("utf-8")
                 g = gc.GCode.parse(text)
-                spec.load().run(PluginContext(path, log, gcode=g, config=g.config), params)
+                printer = printers().get(printer_id) if printer_id else detect(g.config)
+                if printer and not spec.supports(printer.id):
+                    raise PluginError(f"{spec.id} does not support {printer.name}")
+                spec.load().run(PluginContext(path, log, gcode=g, config=g.config, printer=printer), params)
                 Path(tmp).write_bytes(g.render().encode("utf-8"))
             elif spec.kind == "mesh":
                 from ..core import mesh
                 m = mesh.load(p)
-                ctx = PluginContext(path, log, mesh=m)
+                ctx = PluginContext(path, log, mesh=m, printer=printers().get(printer_id or ""))
                 spec.load().run(ctx, params)
                 mesh.save(ctx.mesh, tmp + p.suffix)
                 os.replace(tmp + p.suffix, tmp)
@@ -44,12 +48,13 @@ def _worker(plugin_id: str, path: str, raw_params: dict, q) -> None:
         q.put(traceback.format_exc())
 
 
-def run_plugin(plugin_id: str, path: str, params: dict, timeout: float = 120.0) -> None:
+def run_plugin(plugin_id: str, path: str, params: dict, timeout: float = 120.0,
+               printer_id: str | None = None) -> None:
     if plugin_id not in discover():
         raise PluginError(f"plugin '{plugin_id}' not found")
     ctx = mp.get_context("spawn")
     q = ctx.Queue()
-    proc = ctx.Process(target=_worker, args=(plugin_id, str(path), params, q), daemon=True)
+    proc = ctx.Process(target=_worker, args=(plugin_id, str(path), params, q, printer_id), daemon=True)
     proc.start()
     proc.join(timeout)
     if proc.is_alive():
