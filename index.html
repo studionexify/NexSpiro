@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nexspiro</title>
+  <link rel="stylesheet" href="/src/app/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand"><span class="logo">N</span><span>Nexspiro</span></div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="prepare" class="on">Prepare</button>
+      <button data-tab="preview">Preview</button>
+      <button data-tab="device">Device</button>
+    </nav>
+    <div class="spacer"></div>
+    <button id="sliceBtn" class="primary">Slice plate</button>
+    <button id="exportBtn" disabled>Export G-code</button>
+  </header>
+  <aside id="left"></aside>
+  <main id="view">
+    <div id="viewTools"></div>
+    <div id="stats"></div>
+  </main>
+  <aside id="right"></aside>
+  <div id="modal" hidden></div>
+  <script type="module" src="/src/app/main.ts"></script>
+</body>
+</html>
