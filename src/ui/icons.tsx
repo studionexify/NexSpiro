@@ -1,0 +1,62 @@
+// Minimal stroke icon set (24px grid, currentColor).
+import type { SVGProps } from 'react';
+
+const paths: Record<string, string> = {
+  add: 'M12 5v14M5 12h14',
+  file: 'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zM14 3v5h5',
+  open: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  save: 'M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 3v6h9V3M7 21v-7h10v7',
+  undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
+  redo: 'm15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
+  orient: 'M12 3v4M12 17v4M3 12h4M17 12h4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  arrange: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  move: 'M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3',
+  rotate: 'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',
+  scale: 'M4 14v6h6M20 10V4h-6M4 20 20 4',
+  face: 'M3 17l9 4 9-4M3 12l9 4 9-4M12 3 3 7l9 4 9-4z',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+  copy: 'M8 8h12v12H8zM4 16V4h12',
+  slice: 'M3 6h18M3 12h18M3 18h18',
+  print: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  eyeOff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.9 8.3 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 4.2-.9',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  sun: 'M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z',
+  moon: 'M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z',
+  home: 'M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  cube: 'M12 2 3 7v10l9 5 9-5V7zM3 7l9 5 9-5M12 12v10',
+  layers: 'M12 3 2 8l10 5 10-5zM2 13l10 5 10-5M2 18l10 5 10-5',
+  device: 'M4 4h16v12H4zM8 20h8M12 16v4',
+  folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  gauge: 'M12 14l4-4M3.5 17a9 9 0 1 1 17 0',
+  quality: 'M4 6h16M4 10h16M4 14h16M4 18h16',
+  strength: 'M12 3 4 7.5v9L12 21l8-4.5v-9zM12 12 4 7.5M12 12l8-4.5M12 12v9',
+  speed: 'M12 14l4-4M3.5 17a9 9 0 1 1 17 0',
+  support: 'M4 4h16M6 4v16M12 4v16M18 4v16',
+  others: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
+  lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
+  overhang: 'M4 20h16M7 20V10l10-6v6',
+  chevron: 'M9 6l6 6-6 6',
+  chevronDown: 'M6 9l6 6 6-6',
+  close: 'M6 6l12 12M18 6 6 18',
+  info: 'M12 8h.01M11 12h1v5h1M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  warn: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  download: 'M12 3v12M7 10l5 5 5-5M4 21h16',
+  calib: 'M4 20 20 4M7 20v-3M11 20v-5M15 20v-7M19 20v-9',
+  wifi: 'M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01',
+  filament: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  printer: 'M5 3h14v4H5zM3 7h18v10H3zM7 17v4h10v-4M7 12h4',
+  plate: 'M3 17l9 4 9-4-9-4zM12 13V3',
+  view: 'M12 2 3 7v10l9 5 9-5V7z',
+};
+
+export function Icon({ name, size = 18, ...rest }: { name: keyof typeof paths | string; size?: number } & SVGProps<SVGSVGElement>) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>
+      <path d={paths[name] ?? paths.info} />
+    </svg>
+  );
+}

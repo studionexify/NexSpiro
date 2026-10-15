@@ -2,7 +2,7 @@
   "name": "nexspiro",
   "productName": "NexSpiro",
   "version": "0.1.0",
-  "description": "NexSpiro — 3D printing slicer",
+  "description": "NexSpiro \u2014 3D printing slicer",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -38,15 +38,33 @@
         "deb"
       ],
       "icon": "build/icon.png",
-      "category": "Graphics"
-    }
+      "category": "Graphics",
+      "maintainer": "NexSpiro"
+    },
+    "asar": true,
+    "publish": null
   },
-  "dependencies": {
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "clipper-lib": "^6.4.2",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "jszip": "^3.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1",
     "zustand": "^4.5.5"
-  }
+  },
+  "author": "NexSpiro",
+  "homepage": "https://github.com/studionexify/NexSpiro",
+  "dependencies": {}
 }
