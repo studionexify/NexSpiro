@@ -7,8 +7,9 @@
 
 ---
 
-## What works today (Phase 1)
+## Features
 
+### Phase 1 — core slicer
 | Area | Features |
 | --- | --- |
 | **Import** | STL (binary + ASCII), OBJ, 3MF (multi-object, components & transforms). Drag-and-drop or File → Import. |
@@ -16,12 +17,24 @@
 | **Printers** | Bambu Lab A1, A1 mini, P1S, P1P, X1 Carbon, X1E · Creality Ender-3 V3 KE · Elegoo Neptune 4 Max. Editable retraction and start/end/layer G-code. |
 | **Filaments** | PLA, PLA Matte, PETG, ABS, ASA, TPU with per-plate bed temperatures, cooling and max volumetric speed. |
 | **Process** | 0.08–0.28 mm presets; Quality / Strength / Speed / Support / Others tabs; modified values in amber with one-click reset; search (Ctrl+F); hover tooltips with internal keys. |
-| **Slicing engine** | Mesh slicing with topological loop chaining, XY hole/contour + elephant-foot compensation, classic perimeters, top/bottom/solid/sparse/bridge classification, infill patterns (grid, gyroid, rectilinear, aligned, triangles, concentric), monotonic top skins, ironing, overhang-wall detection, normal supports with interface layers, skirt & brim (auto/outer/inner), spiral vase, fuzzy skin, seam placement (aligned/nearest/back/random), cooling slowdown, volumetric-speed limiting, retraction + Z-hop, object labelling (Klipper `EXCLUDE_OBJECT`, `M486`). |
-| **Preview** | GPU-instanced toolpath rendering; colour by line type, speed, layer height, line width, flow or layer time; per-feature visibility; dual-handle layer slider and move scrubber with nozzle marker; time / filament / cost summary. |
-| **Output** | G-code with progress (`M73`), per-printer start/end macros, estimated time & filament comments. |
+| **Slicing engine** | Mesh slicing with topological loop chaining, XY hole/contour + elephant-foot compensation, classic perimeters, top/bottom/solid/sparse/bridge classification, infill patterns (grid, gyroid, rectilinear, aligned, triangles, concentric), monotonic top skins, ironing, overhang-wall detection, skirt & brim, spiral vase, fuzzy skin, seam placement, cooling slowdown, volumetric-speed limiting, retraction + Z-hop, object labelling (Klipper `EXCLUDE_OBJECT`, `M486`). |
+| **Preview** | GPU-instanced toolpaths; colour by line type, filament, speed, layer height, line width, flow or layer time; per-feature visibility; layer and move sliders; time / filament / cost summary. |
 
-Planned: **Phase 2** — painting (supports/seams), modifiers, multi-plate, AMS multi-colour + prime tower, tree supports, variable layer height, Arachne walls.
-**Phase 3** — Device (Bambu LAN, Klipper/Moonraker, OctoPrint, USB), Project and Calibration workspaces. The connection interface is already defined in `src/connect/types.ts`.
+### Phase 2 — advanced preparation
+| Area | Features |
+| --- | --- |
+| **Multi-material** | Up to 16 filament slots, filament per object, colour painting (brush, palette, keys 1–9), automatic filament changes with the Bambu AMS sequence (`M620`/`T`/`M621` + flush) or `M600` pauses on manual printers, prime tower sized from the prime volume, per-filament weight & cost, change-time estimate. |
+| **Painting** | Support enforcer/blocker painting (with "on overhangs only"), seam enforcer/blocker painting, colour painting. Left drag = enforce/paint, right drag = block/reset, Shift = erase, middle drag = orbit. |
+| **Supports** | Normal and tree supports, auto or manual (painted areas / enforcer volumes only), support filament choice, blockers. |
+| **Parts** | Negative volumes (cut-outs), infill modifiers, support enforcer and blocker volumes — box, cylinder or sphere, positioned with the same gizmos. |
+| **Per-object settings** | Objects tab with the plate/object/part tree; override walls, shells, infill, seam, ironing and fuzzy skin per object. |
+| **Variable layer height** | Adaptive profile from surface slope (quality ↔ speed), Gaussian smoothing, fixed-height ranges, profile chart. |
+| **Multi-plate** | Add / delete / switch plates, move objects between plates, slice the active plate. |
+| **Layer actions** | Pause, filament change or custom G-code at any layer from the Preview slider. |
+
+Planned: **Phase 3** — Device (Bambu LAN, Klipper/Moonraker, OctoPrint, USB), Project and Calibration workspaces, `.gcode.3mf` export for Bambu network printing, Arachne variable-width walls. The connection interface is already defined in `src/connect/types.ts`.
+
+> Painting resolution follows the model's triangles; very coarse meshes paint in large facets.
 
 ## Download & run
 
@@ -49,7 +62,9 @@ src/
   engine/      slicing pipeline (pure TypeScript, runs in a Web Worker)
     slice.ts     mesh ∩ Z-planes → closed loops
     slicer.ts    perimeters, region classification, infill, ordering
-    support.ts   overhang detection & support projection
+    support.ts   overhang detection, normal & tree supports
+    paint.ts     painted triangles → per-layer regions
+    layers.ts    variable layer height profiles
     fill.ts      infill pattern generators
     gcode.ts     timing, cooling, G-code emission
   io/          STL / OBJ / 3MF readers

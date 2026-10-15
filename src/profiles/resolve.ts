@@ -1,4 +1,5 @@
 // Resolve the flat engine config: system defaults ← printer ← preset ← user overrides, plus machine & filament.
+import type { FilamentSlot } from '../engine/types';
 import { filamentById } from './filaments';
 import { printerById, type PlateType } from './printers';
 import { PROCESS_DEFAULTS, PROCESS_PRESETS, type Config } from './settings';
@@ -68,4 +69,15 @@ export function validate(sel: ProfileSelection): string[] {
   const c = resolveConfig(sel);
   if ((c.layer_height as number) > (c.nozzle_diameter as number) * 0.8) w.push('Layer height exceeds 80% of the nozzle diameter.');
   return w;
+}
+
+/** Engine filament slots from the UI slot list (preset + colour). */
+export function filamentSlots(slots: { presetId: string; color: string }[]): FilamentSlot[] {
+  return slots.map((s) => {
+    const f = filamentById(s.presetId);
+    return {
+      name: f.name, type: f.type, color: s.color, diameter: f.diameter, density: f.density, cost: f.cost,
+      nozzleTemp: f.nozzleTemp, nozzleTempInitial: f.nozzleTempInitial, flowRatio: f.flowRatio, maxVolumetricSpeed: f.maxVolumetricSpeed,
+    };
+  });
 }

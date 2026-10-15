@@ -2,26 +2,49 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { IndexedMesh } from '../engine/mesh';
-import type { SliceOutput } from '../engine/types';
+import type { LayerAction, PartType, SliceOutput } from '../engine/types';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
 import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'vlh';
 export type Theme = 'dark' | 'light';
-export type ColorScheme = 'feature' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
+export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
+
+export type Vec3 = [number, number, number];
+
+export interface ScenePart {
+  id: string;
+  name: string;
+  type: PartType;
+  mesh: IndexedMesh; // local, centred
+  position: Vec3; // relative to the object origin (object frame)
+  rotation: Vec3;
+  scale: Vec3;
+  overrides: Config; // modifier settings
+}
+
+export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array }
 
 export interface SceneObject {
   id: string;
   name: string;
   mesh: IndexedMesh; // local coordinates, centred, min z = 0
-  position: [number, number, number];
-  rotation: [number, number, number]; // degrees, XYZ euler
-  scale: [number, number, number];
+  position: Vec3; // world (scene) coordinates — plate origin included
+  rotation: Vec3; // degrees, XYZ euler
+  scale: Vec3;
   openEdges: number;
+  filament?: number; // 0-based slot
+  overrides?: Config;
+  parts?: ScenePart[];
+  paint?: ObjectPaint;
+  layerHeights?: number[];
 }
+
+export interface FilamentSlotState { presetId: string; color: string }
+export interface Plate { id: string; name: string; layerActions: LayerAction[] }
 
 export interface SliceState {
   status: 'idle' | 'slicing' | 'done' | 'error';
@@ -30,6 +53,7 @@ export interface SliceState {
   result: SliceOutput | null;
   error: string | null;
   dirty: boolean; // scene/settings changed since last slice
+  plate: number; // plate index the result belongs to
 }
 
 interface State {
@@ -38,13 +62,16 @@ interface State {
   tool: Tool;
   objects: SceneObject[];
   selected: string[];
+  selectedPart: string | null;
   undoStack: SceneObject[][];
   redoStack: SceneObject[][];
 
+  plates: Plate[];
+  activePlate: number;
+
   printerId: string;
   plate: PlateType;
-  filamentId: string;
-  filamentColor: string;
+  filaments: FilamentSlotState[];
   presetId: string;
   overrides: Config;
   machineOverrides: Config;
@@ -53,6 +80,10 @@ interface State {
   showAdvanced: boolean;
   search: string;
   showOverhangs: boolean;
+
+  brushSize: number; // mm
+  paintColor: number; // 1-based slot for colour painting
+  overhangOnly: boolean;
 
   slice: SliceState;
   colorScheme: ColorScheme;
@@ -76,14 +107,19 @@ interface State {
 }
 
 let idSeq = 0;
-export const newId = () => `obj${Date.now().toString(36)}${(idSeq++).toString(36)}`;
+export const newId = (p = 'obj') => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 
 const LS = 'nexspiro.prefs.v1';
-const loadPrefs = (): Partial<State> => {
+const loadPrefs = (): any => {
   try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; }
 };
 const prefs = typeof localStorage !== 'undefined' ? loadPrefs() : {};
 const systemTheme: Theme = typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+const defaultFilaments = (): FilamentSlotState[] => {
+  if (Array.isArray(prefs.filaments) && prefs.filaments.length) return prefs.filaments;
+  const id = prefs.filamentId ?? 'generic-pla';
+  return [{ presetId: id, color: prefs.filamentColor ?? filamentById(id).color }];
+};
 
 export const useStore = create<State>((set, get) => ({
   theme: (prefs.theme as Theme) ?? systemTheme,
@@ -91,13 +127,16 @@ export const useStore = create<State>((set, get) => ({
   tool: 'select',
   objects: [],
   selected: [],
+  selectedPart: null,
   undoStack: [],
   redoStack: [],
 
+  plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }],
+  activePlate: 0,
+
   printerId: prefs.printerId ?? 'bbl-p1s',
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
-  filamentId: prefs.filamentId ?? 'generic-pla',
-  filamentColor: prefs.filamentColor ?? filamentById(prefs.filamentId ?? 'generic-pla').color,
+  filaments: defaultFilaments(),
   presetId: prefs.presetId ?? '0.20',
   overrides: prefs.overrides ?? {},
   machineOverrides: prefs.machineOverrides ?? {},
@@ -107,7 +146,11 @@ export const useStore = create<State>((set, get) => ({
   search: '',
   showOverhangs: false,
 
-  slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true },
+  brushSize: 4,
+  paintColor: 2,
+  overhangOnly: false,
+
+  slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
   colorScheme: 'feature',
   hiddenFeatures: [],
   showTravel: false,
@@ -119,7 +162,7 @@ export const useStore = create<State>((set, get) => ({
   checkpoint: () => set((s) => ({ undoStack: [...s.undoStack.slice(-49), s.objects], redoStack: [] })),
   addObjects: (o) => {
     get().checkpoint();
-    set((s) => ({ objects: [...s.objects, ...o], selected: o.map((x) => x.id) }));
+    set((s) => ({ objects: [...s.objects, ...o], selected: o.map((x) => x.id), selectedPart: null }));
     get().markDirty();
   },
   updateObjects: (fn, ids, record = true) => {
@@ -129,16 +172,24 @@ export const useStore = create<State>((set, get) => ({
     get().markDirty();
   },
   removeSelected: () => {
-    const sel = new Set(get().selected);
+    const s = get();
+    if (s.selectedPart) {
+      s.checkpoint();
+      const pid = s.selectedPart;
+      set((st) => ({ objects: st.objects.map((o) => (o.parts?.some((p) => p.id === pid) ? { ...o, parts: o.parts.filter((p) => p.id !== pid) } : o)), selectedPart: null }));
+      s.markDirty();
+      return;
+    }
+    const sel = new Set(s.selected);
     if (!sel.size) return;
-    get().checkpoint();
-    set((s) => ({ objects: s.objects.filter((o) => !sel.has(o.id)), selected: [] }));
-    get().markDirty();
+    s.checkpoint();
+    set((st) => ({ objects: st.objects.filter((o) => !sel.has(o.id)), selected: [] }));
+    s.markDirty();
   },
   duplicateSelected: () => {
     const sel = get().objects.filter((o) => get().selected.includes(o.id));
     if (!sel.length) return;
-    const copies = sel.map((o) => ({ ...o, id: newId(), name: `${o.name} (copy)`, position: [o.position[0] + 10, o.position[1] + 10, o.position[2]] as [number, number, number] }));
+    const copies = sel.map((o) => ({ ...o, id: newId(), name: `${o.name} (copy)`, position: [o.position[0] + 10, o.position[1] + 10, o.position[2]] as Vec3 }));
     get().addObjects(copies);
   },
   undo: () => {
@@ -176,14 +227,38 @@ export const useStore = create<State>((set, get) => ({
 useStore.subscribe((s) => {
   try {
     localStorage.setItem(LS, JSON.stringify({
-      theme: s.theme, printerId: s.printerId, plate: s.plate, filamentId: s.filamentId, filamentColor: s.filamentColor,
+      theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
     }));
   } catch { /* storage unavailable */ }
 });
 
+// ----- plates
+export const PLATE_GAP = 40;
+export const PLATE_COLS = 4;
+export function plateOrigin(index: number, printerId: string): [number, number] {
+  const p = printerById(printerId);
+  return [(index % PLATE_COLS) * (p.bed.x + PLATE_GAP), -Math.floor(index / PLATE_COLS) * (p.bed.y + PLATE_GAP)];
+}
+/** Plate index containing a world XY point (nearest plate cell). */
+export function plateAt(x: number, y: number, printerId: string, plateCount: number): number {
+  const p = printerById(printerId);
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < plateCount; i++) {
+    const [ox, oy] = plateOrigin(i, printerId);
+    const cx = ox + p.bed.x / 2, cy = oy + p.bed.y / 2;
+    const d = Math.max(Math.abs(x - cx) - p.bed.x / 2, 0) ** 2 + Math.max(Math.abs(y - cy) - p.bed.y / 2, 0) ** 2 + ((x - cx) ** 2 + (y - cy) ** 2) * 1e-6;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+export function objectPlate(o: SceneObject, printerId: string, plateCount: number): number {
+  const b = worldBounds(o);
+  return plateAt((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, printerId, plateCount);
+}
+
 // ----- geometry helpers on scene objects
-export function objectMatrix(o: Pick<SceneObject, 'position' | 'rotation' | 'scale'>): THREE.Matrix4 {
+export function trsMatrix(o: { position: Vec3; rotation: Vec3; scale: Vec3 }): THREE.Matrix4 {
   const d = Math.PI / 180;
   return new THREE.Matrix4().compose(
     new THREE.Vector3(...o.position),
@@ -191,6 +266,8 @@ export function objectMatrix(o: Pick<SceneObject, 'position' | 'rotation' | 'sca
     new THREE.Vector3(...o.scale),
   );
 }
+export const objectMatrix = (o: Pick<SceneObject, 'position' | 'rotation' | 'scale'>) => trsMatrix(o);
+export const partWorldMatrix = (o: SceneObject, p: ScenePart) => trsMatrix(o).multiply(trsMatrix(p));
 
 export function worldBounds(o: SceneObject) {
   const m = objectMatrix(o).elements;
@@ -210,9 +287,12 @@ export function dropToBed(o: SceneObject): SceneObject {
   return { ...o, position: [o.position[0], o.position[1], o.position[2] - b.min[2]] };
 }
 
-export function isOutOfBounds(o: SceneObject, printerId: string): boolean {
+export function isOutOfBounds(o: SceneObject, printerId: string, plateCount = 1): boolean {
   const p = printerById(printerId);
   const b = worldBounds(o);
+  const [ox, oy] = plateOrigin(objectPlate(o, printerId, plateCount), printerId);
   const e = 0.01;
-  return b.min[0] < -e || b.min[1] < -e || b.max[0] > p.bed.x + e || b.max[1] > p.bed.y + e || b.max[2] > p.bed.z + e;
+  return b.min[0] - ox < -e || b.min[1] - oy < -e || b.max[0] - ox > p.bed.x + e || b.max[1] - oy > p.bed.y + e || b.max[2] > p.bed.z + e;
 }
+
+export const slotColor = (s: State | ReturnType<typeof useStore.getState>, k: number) => s.filaments[Math.min(k, s.filaments.length - 1)]?.color ?? '#5DBE7A';

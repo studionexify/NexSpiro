@@ -75,7 +75,7 @@ export function DevicePage() {
 }
 
 export function ProjectPage() {
-  const { objects, printerId, filamentId, presetId } = useStore();
+  const { objects, printerId, filaments, presetId, plates } = useStore();
   return (
     <div className="page">
       <h1>Project</h1>
@@ -83,7 +83,8 @@ export function ProjectPage() {
       <div className="tile" style={{ maxWidth: 640 }}>
         <div className="summary" style={{ marginTop: 0, border: 0, paddingTop: 0 }}>
           <span className="k">Printer</span><span className="v">{printerName(PRINTERS.find((p) => p.id === printerId)!)}</span>
-          <span className="k">Filament</span><span className="v">{FILAMENTS.find((f) => f.id === filamentId)?.name}</span>
+          <span className="k">Filaments</span><span className="v">{filaments.map((f, i) => `${i + 1}: ${FILAMENTS.find((x) => x.id === f.presetId)?.name}`).join(' · ')}</span>
+          <span className="k">Plates</span><span className="v">{plates.length}</span>
           <span className="k">Process</span><span className="v">{presetId} mm</span>
           <span className="k">Objects</span><span className="v">{objects.length}</span>
         </div>

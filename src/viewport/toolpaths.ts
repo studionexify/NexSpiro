@@ -189,7 +189,7 @@ export class ToolpathView {
   }
 
   /** Recolour by scheme; returns legend range for continuous schemes. */
-  colorize(scheme: ColorScheme, hidden: Set<string>, override?: string): { min: number; max: number; unit: string } | null {
+  colorize(scheme: ColorScheme, hidden: Set<string>, slotColors: string[] = []): { min: number; max: number; unit: string } | null {
     const r = this.result;
     if (!r || !this.colorAttr) return null;
     const m = r.moves, f = r.moveFeatures, S = MOVE_STRIDE;
@@ -214,23 +214,23 @@ export class ToolpathView {
       }
     };
     let min = Infinity, max = -Infinity;
-    if (scheme !== 'feature') {
+    if (scheme !== 'feature' && scheme !== 'filament') {
       for (const i of this.extrIdx) { const v = val(i); if (v < min) min = v; if (v > max) max = v; }
     }
     const span = max - min || 1;
-    const ov = override ? new THREE.Color(override) : null;
+    const slots = slotColors.map((c) => new THREE.Color(c));
     for (let k = 0; k < this.extrIdx.length; k++) {
       const i = this.extrIdx[k];
       const feat = FEATURE_ORDER[f[i]];
-      if (ov) c.copy(ov);
+      if (scheme === 'filament') c.copy(feat === 'prime_tower' ? feats[f[i]] : slots[Math.min(m[i * S + 7], slots.length - 1)] ?? feats[f[i]]);
       else if (scheme === 'feature') c.copy(feats[f[i]]);
       else ramp((val(i) - min) / span, c);
       arr[k * 4] = c.r; arr[k * 4 + 1] = c.g; arr[k * 4 + 2] = c.b;
       arr[k * 4 + 3] = hidden.has(feat) ? 0 : 1;
     }
     this.colorAttr.needsUpdate = true;
-    if (scheme === 'feature') return null;
-    const unit = { speed: 'mm/s', height: 'mm', width: 'mm', flow: 'mm³/s', layer_time: 's', feature: '' }[scheme];
+    if (scheme === 'feature' || scheme === 'filament') return null;
+    const unit = { speed: 'mm/s', height: 'mm', width: 'mm', flow: 'mm³/s', layer_time: 's' }[scheme];
     return { min, max, unit };
   }
 

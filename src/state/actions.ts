@@ -38,7 +38,7 @@ export async function importDialog() {
 export function newProject() {
   const s = useStore.getState();
   if (s.objects.length && !confirm('Start a new project? Unsaved changes on the plate will be lost.')) return;
-  s.set({ objects: [], selected: [], undoStack: [], redoStack: [], workspace: 'prepare', slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true } });
+  s.set({ objects: [], selected: [], selectedPart: null, undoStack: [], redoStack: [], workspace: 'prepare', plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0, slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 } });
 }
 
 export async function sliceAndPreview() {

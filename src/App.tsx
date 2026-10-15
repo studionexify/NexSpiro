@@ -3,7 +3,7 @@ import { arrange, autoOrient, exportGcode, importBuffers, importDialog, newProje
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
 import { CalibrationPage, DevicePage, HomePage, ProjectPage } from './ui/Pages';
-import { ActionBar, EmptyHint, Toolbar, TransformPanel, ViewCube } from './ui/PrepareOverlays';
+import { ActionBar, EmptyHint, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { Viewport, viewApi } from './viewport/Viewport';
@@ -110,7 +110,12 @@ function useShortcuts() {
       if (mod && k === 'd') { s.duplicateSelected(); e.preventDefault(); return; }
       if (mod) return;
       if (k === 'delete' || k === 'backspace') s.removeSelected();
-      else if (k === 'escape') s.set({ selected: [], tool: 'select' });
+      else if (k === 'escape') s.set({ selected: [], selectedPart: null, tool: 'select' });
+      else if (k === 'l') s.set({ tool: s.tool === 'paint_support' ? 'select' : 'paint_support' });
+      else if (k === 'p') s.set({ tool: s.tool === 'paint_seam' ? 'select' : 'paint_seam' });
+      else if (k === 'n') s.set({ tool: s.tool === 'paint_color' ? 'select' : 'paint_color' });
+      else if (k === 'h') s.set({ tool: s.tool === 'vlh' ? 'select' : 'vlh' });
+      else if (s.tool === 'paint_color' && k >= '1' && k <= '9' && +k <= s.filaments.length) s.set({ paintColor: +k });
       else if (k === 'm') s.set({ tool: s.tool === 'move' ? 'select' : 'move' });
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
       else if (k === 's') s.set({ tool: s.tool === 'scale' ? 'select' : 'scale' });
@@ -147,7 +152,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><EmptyHint /><ActionBar /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><PlateBar /><EmptyHint /><ActionBar /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />

@@ -80,9 +80,9 @@ function MachineNumber({ label, unit, value, modified, onChange }: { label: stri
   );
 }
 
-export function FilamentModal({ onClose }: { onClose: () => void }) {
-  const { filamentId, plate } = useStore();
-  const f = filamentById(filamentId);
+export function FilamentModal({ slot, onClose }: { slot: number; onClose: () => void }) {
+  const { filaments, plate } = useStore();
+  const f = filamentById(filaments[slot]?.presetId ?? filaments[0].presetId);
   const rows: [string, string][] = [
     ['Type', f.type],
     ['Diameter', `${f.diameter} mm`],
@@ -96,11 +96,10 @@ export function FilamentModal({ onClose }: { onClose: () => void }) {
     ['Flow ratio', String(f.flowRatio)],
   ];
   return (
-    <Modal title={`Filament — ${f.name}`} onClose={onClose}>
+    <Modal title={`Filament ${slot + 1} — ${f.name}`} onClose={onClose}>
       <div className="summary" style={{ marginTop: 0, border: 0 }}>
         {rows.map(([k, v]) => <Fragment key={k}><span className="k">{k}</span><span className="v">{v}</span></Fragment>)}
       </div>
-      <p style={{ color: 'var(--text-muted)', marginTop: 14 }}>Custom filament presets and multi-filament (AMS) slots arrive in Phase 2.</p>
     </Modal>
   );
 }

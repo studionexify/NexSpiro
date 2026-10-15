@@ -50,6 +50,10 @@ const paths: Record<string, string> = {
   printer: 'M5 3h14v4H5zM3 7h18v10H3zM7 17v4h10v-4M7 12h4',
   plate: 'M3 17l9 4 9-4-9-4zM12 13V3',
   view: 'M12 2 3 7v10l9 5 9-5V7z',
+  brushSupport: 'M4 20h16M7 20v-6M12 20v-9M17 20v-6M4 9l8-6 8 6',
+  brushSeam: 'M12 3v18M8 7l4-4 4 4M6 21h12',
+  brushColor: 'M18 3a3 3 0 0 1 3 3c0 4-9 11-9 11l-3-3S14 3 18 3zM9 14l-3 3a3 3 0 0 0-3 4 3 3 0 0 0 4-3l3-3',
+  vlh: 'M4 4h16M4 8h16M4 11h16M4 13h16M4 15h16M4 18h16M4 21h16',
 };
 
 export function Icon({ name, size = 18, ...rest }: { name: keyof typeof paths | string; size?: number } & SVGProps<SVGSVGElement>) {

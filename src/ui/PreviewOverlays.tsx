@@ -12,6 +12,7 @@ export const fmtTime = (s: number) => {
 
 const SCHEMES: { id: ColorScheme; label: string }[] = [
   { id: 'feature', label: 'Line type' },
+  { id: 'filament', label: 'Filament' },
   { id: 'speed', label: 'Speed' },
   { id: 'height', label: 'Layer height' },
   { id: 'width', label: 'Line width' },
@@ -20,7 +21,7 @@ const SCHEMES: { id: ColorScheme; label: string }[] = [
 ];
 
 export function Legend() {
-  const { slice, colorScheme, hiddenFeatures, showTravel, set } = useStore();
+  const { slice, colorScheme, hiddenFeatures, showTravel, set, filaments } = useStore();
   const [range, setRange] = useState<{ min: number; max: number; unit: string } | null>(null);
   useEffect(() => {
     const f = () => setRange((window as any).__nxLegend ?? null);
@@ -74,6 +75,18 @@ export function Legend() {
           <span className="num">{(((st.byFeature.travel?.time ?? 0) / st.timeSeconds) * 100).toFixed(1)}%</span>
         </div>
       </div>
+      {st.perFilament.length > 1 && (
+        <div className="summary">
+          {st.perFilament.map((f, k) => f.mm > 0.01 && (
+            <span key={k} style={{ display: 'contents' }}>
+              <span className="k row" style={{ margin: 0 }}><span className="swatch" style={{ background: filaments[k]?.color ?? '#888' }} />Filament {k + 1}</span>
+              <span className="v">{(f.mm / 1000).toFixed(2)} m · {f.grams.toFixed(2)} g</span>
+            </span>
+          ))}
+          <span className="k">Filament changes</span><span className="v">{st.toolChanges}</span>
+          {st.towerGrams > 0 && <><span className="k">Prime tower</span><span className="v">{st.towerGrams.toFixed(2)} g</span></>}
+        </div>
+      )}
       <div className="summary">
         <span className="k">Estimated time</span><span className="v">{fmtTime(st.timeSeconds)}</span>
         <span className="k">Filament</span><span className="v">{(st.filamentMm / 1000).toFixed(2)} m · {st.filamentGrams.toFixed(2)} g</span>
@@ -112,6 +125,10 @@ export function LayerSlider() {
   if (!n) return null;
   const [lo, hi] = layerRange;
   const pos = (i: number) => `${100 - (i / Math.max(1, n - 1)) * 100}%`;
+  const plates = useStore.getState().plates;
+  const plateIdx = slice.plate;
+  const actions = plates[plateIdx]?.layerActions ?? [];
+  const layerOf = (z: number) => Math.max(0, layers.findIndex((L) => L.z >= z - 1e-6));
   const drag = (which: 0 | 1) => (e: React.PointerEvent) => {
     e.preventDefault();
     const el = track.current!;
@@ -133,7 +150,12 @@ export function LayerSlider() {
         <div className="fill" style={{ top: pos(hi), bottom: `${100 - parseFloat(pos(lo))}%` }} />
         <div className="handle" style={{ top: pos(hi) }} onPointerDown={drag(1)} title="Top layer (↑/↓)" />
         <div className="handle" style={{ top: pos(lo), background: 'var(--surface-secondary)' }} onPointerDown={drag(0)} title="Bottom layer" />
+        {actions.map((a, k) => (
+          <div key={k} className={`marker ${a.type}`} style={{ top: pos(layerOf(a.z)) }} title={`${a.type === 'pause' ? 'Pause' : a.type === 'color' ? `Change to filament ${(a.filament ?? 0) + 1}` : 'Custom G-code'} at layer ${layerOf(a.z) + 1} — click to remove`}
+            onClick={() => removeAction(plateIdx, k)} />
+        ))}
       </div>
+      <LayerActionMenu z={layers[hi].z} layer={hi} plate={plateIdx} />
       <div className="lbl">{lo + 1}<small>{layers[lo].z.toFixed(2)}</small></div>
     </div>
   );
@@ -177,6 +199,47 @@ export function PreviewEmpty() {
         <b>Nothing sliced yet</b>
         {objects.length ? <button className="btn-primary" style={{ marginTop: 8 }} onClick={sliceAndPreview}><Icon name="slice" />Slice plate</button> : 'Add a model in Prepare, then slice.'}
       </div>
+    </div>
+  );
+}
+
+function removeAction(plate: number, k: number) {
+  const s = useStore.getState();
+  s.set({ plates: s.plates.map((p, i) => (i === plate ? { ...p, layerActions: p.layerActions.filter((_, j) => j !== k) } : p)) });
+  s.markDirty();
+}
+
+function LayerActionMenu({ z, layer, plate }: { z: number; layer: number; plate: number }) {
+  const { filaments, set } = useStore();
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState('');
+  const [fil, setFil] = useState(1);
+  const add = (a: { type: 'pause' | 'color' | 'custom'; filament?: number; gcode?: string }) => {
+    const s = useStore.getState();
+    set({ plates: s.plates.map((p, i) => (i === plate ? { ...p, layerActions: [...p.layerActions, { z, ...a }] } : p)) });
+    s.markDirty();
+    setOpen(false);
+  };
+  return (
+    <div className="menu" style={{ marginTop: 4 }}>
+      <button className="icon-btn" title={`Add action at layer ${layer + 1}`} aria-label="Add layer action" onClick={() => setOpen(!open)}><Icon name="add" /></button>
+      {open && (
+        <div className="menu-pop" style={{ right: 40, left: 'auto', top: -120, width: 260 }}>
+          <div className="menu-label">At layer {layer + 1} ({z.toFixed(2)} mm)</div>
+          <button className="menu-item" onClick={() => add({ type: 'pause' })}><span>Add pause</span><kbd>M400 U1 / PAUSE</kbd></button>
+          <div className="row" style={{ padding: '4px 10px' }}>
+            <span style={{ flex: 1 }}>Change filament to</span>
+            <select className="select" style={{ flex: 'none', width: 60 }} value={fil} onChange={(e) => setFil(+e.target.value)}>
+              {filaments.map((_, k) => <option key={k} value={k}>{k + 1}</option>)}
+            </select>
+            <button className="btn-secondary btn-small" onClick={() => add({ type: 'color', filament: fil })}>Add</button>
+          </div>
+          <div style={{ padding: '4px 10px' }}>
+            <textarea className="input mono" style={{ width: '100%', height: 54, padding: 6 }} placeholder="Custom G-code, e.g. M104 S215" value={custom} onChange={(e) => setCustom(e.target.value)} />
+            <button className="btn-secondary btn-small" style={{ marginTop: 4 }} disabled={!custom.trim()} onClick={() => add({ type: 'custom', gcode: custom.trim() })}>Add custom G-code</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

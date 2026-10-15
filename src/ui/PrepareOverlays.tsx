@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { arrange, autoOrient, exportGcode, importDialog, sliceAndPreview } from '../state/actions';
-import { dropToBed, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
+import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
+import { addPlate, currentProfile, deletePlate, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
+import { plateObjects } from '../state/slicing';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
 export function Toolbar() {
-  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs } = useStore();
-  const has = selected.length > 0;
+  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart } = useStore();
+  const has = selected.length > 0 || !!selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string) => (
     <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label}
       onClick={() => set({ tool: tool === t ? 'select' : t })}><Icon name={icon} /></button>
@@ -23,6 +25,11 @@ export function Toolbar() {
       {T('rotate', 'rotate', 'Rotate', 'R')}
       {T('scale', 'scale', 'Scale', 'S')}
       {T('face', 'face', 'Lay on face', 'F')}
+      <span className="sep" />
+      {T('paint_support', 'brushSupport', 'Support painting', 'L')}
+      {T('paint_seam', 'brushSeam', 'Seam painting', 'P')}
+      {T('paint_color', 'brushColor', 'Colour painting', 'N')}
+      {T('vlh', 'vlh', 'Variable layer height', 'H')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
     </div>
@@ -55,10 +62,10 @@ export function ActionBar() {
 
 /** Numeric transform panel for the active tool. */
 export function TransformPanel() {
-  const { tool, objects, selected, updateObjects } = useStore();
+  const { tool, objects, selected, updateObjects, selectedPart } = useStore();
   const o = objects.find((x) => x.id === selected[0]);
   const [uniform, setUniform] = useState(true);
-  if (!o || !['move', 'rotate', 'scale'].includes(tool)) return null;
+  if (!o || selectedPart || !['move', 'rotate', 'scale'].includes(tool)) return null;
   const b = worldBounds(o);
   const size = [0, 1, 2].map((k) => b.max[k] - b.min[k]);
   const commit = (fn: (o: SceneObject) => SceneObject, drop = true) => updateObjects((x) => (drop ? dropToBed(fn(x)) : fn(x)), [o.id]);
@@ -132,3 +139,120 @@ export function EmptyHint() {
     </div>
   );
 }
+
+/** Painting panel: brush size, modes and colour palette. */
+export function PaintPanel() {
+  const s = useStore();
+  if (!['paint_support', 'paint_seam', 'paint_color'].includes(s.tool)) return null;
+  const sel = s.objects.find((o) => o.id === s.selected[0]);
+  const layer = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : 'color';
+  const title = { paint_support: 'Support painting', paint_seam: 'Seam painting', paint_color: 'Colour painting' }[s.tool as 'paint_support'];
+  const clear = () => {
+    const ids = sel ? [sel.id] : s.objects.map((o) => o.id);
+    s.updateObjects((o) => ({ ...o, paint: { ...(o.paint ?? {}), [layer]: undefined } }), ids);
+  };
+  return (
+    <div className="float panel">
+      <h4>{title}</h4>
+      <div className="row"><span style={{ flex: 1 }}>Pen size</span><span className="mono">{s.brushSize.toFixed(1)} mm</span></div>
+      <input type="range" min={0.4} max={20} step={0.2} value={s.brushSize} onChange={(e) => s.set({ brushSize: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      {s.tool === 'paint_support' && (
+        <label className="row"><span style={{ flex: 1 }}>On overhangs only</span><button className={`toggle ${s.overhangOnly ? 'on' : ''}`} onClick={() => s.set({ overhangOnly: !s.overhangOnly })} aria-label="On overhangs only" /></label>
+      )}
+      {s.tool === 'paint_color' && (
+        <div className="palette">
+          {s.filaments.map((f, k) => (
+            <button key={k} className={`pal ${s.paintColor === k + 1 ? 'on' : ''}`} style={{ background: f.color }} onClick={() => s.set({ paintColor: k + 1 })} title={`Filament ${k + 1}`}>{k + 1}</button>
+          ))}
+          {s.filaments.length < 2 && <div style={{ color: 'var(--text-muted)' }}>Add a second filament in the Filament panel to paint colours.</div>}
+        </div>
+      )}
+      <div className="hint-list">
+        {s.tool === 'paint_color'
+          ? <><span><kbd>Left drag</kbd> paint</span><span><kbd>Right drag</kbd> reset to object filament</span></>
+          : <><span><kbd>Left drag</kbd> {s.tool === 'paint_support' ? 'enforce support' : 'enforce seam'}</span><span><kbd>Right drag</kbd> block</span></>}
+        <span><kbd>Shift + drag</kbd> erase</span><span><kbd>Middle drag</kbd> orbit · <kbd>Wheel</kbd> zoom</span>
+      </div>
+      <button className="btn-secondary btn-small" onClick={clear}>{sel ? 'Clear on selected object' : 'Clear on all objects'}</button>
+    </div>
+  );
+}
+
+/** Variable layer height panel with profile chart. */
+export function VlhPanel() {
+  const s = useStore();
+  const [quality, setQuality] = useState(0.5);
+  const [radius, setRadius] = useState(5);
+  const [keepMin, setKeepMin] = useState(false);
+  const [range, setRange] = useState({ z0: 2, z1: 6, h: 0.1 });
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const o = s.objects.find((x) => x.id === s.selected[0]);
+  const prof = useMemo(() => (o ? currentProfile(o) : []), [o, s.printerId, s.presetId, s.overrides]);
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c || !prof.length) return;
+    const g = c.getContext('2d')!;
+    const W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    const pb = profileBounds();
+    const total = prof.reduce((a, b) => a + b, 0);
+    let z = 0;
+    for (const h of prof) {
+      const y0 = H - (z / total) * H, y1 = H - ((z + h) / total) * H;
+      const t = (h - pb.minHeight) / Math.max(1e-6, pb.maxHeight - pb.minHeight);
+      g.fillStyle = t < 0.5 ? `rgb(${Math.round(93 + 300 * t)}, 190, 122)` : `rgb(255, ${Math.round(255 - (t - 0.5) * 300)}, ${Math.round(141 - (t - 0.5) * 200)})`;
+      g.fillRect(0, y1, (h / pb.maxHeight) * W, Math.max(1, y0 - y1));
+      z += h;
+    }
+  }, [prof]);
+  if (s.tool !== 'vlh') return null;
+  if (!o) return <div className="float panel"><h4>Variable layer height</h4><div style={{ color: 'var(--text-muted)' }}>Select an object to edit its layer heights.</div></div>;
+  const pb = profileBounds();
+  const height = objectHeight(o);
+  return (
+    <div className="float panel vlh">
+      <h4>Variable layer height · {o.name}</h4>
+      <div className="vlh-body">
+        <canvas ref={canvas} width={60} height={220} className="vlh-chart" title="Layer height along Z (green = thin, red = thick)" />
+        <div style={{ flex: 1 }}>
+          <div className="row"><span style={{ flex: 1 }}>Quality ↔ Speed</span><span className="mono">{quality.toFixed(2)}</span></div>
+          <input type="range" min={0} max={1} step={0.05} value={quality} onChange={(e) => setQuality(+e.target.value)} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+          <button className="btn-secondary btn-small" style={{ width: '100%' }} onClick={() => vlhAdaptive(o.id, quality)}>Adaptive</button>
+          <div className="row"><span style={{ flex: 1 }}>Smooth radius</span><span className="mono">{radius}</span></div>
+          <input type="range" min={1} max={10} step={1} value={radius} onChange={(e) => setRadius(+e.target.value)} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+          <label className="row"><span style={{ flex: 1 }}>Keep min</span><button className={`toggle ${keepMin ? 'on' : ''}`} onClick={() => setKeepMin(!keepMin)} aria-label="Keep min" /></label>
+          <button className="btn-secondary btn-small" style={{ width: '100%' }} onClick={() => vlhSmooth(o.id, radius, keepMin)}>Smooth</button>
+        </div>
+      </div>
+      <h4 style={{ marginTop: 10 }}>Height range</h4>
+      <div className="xyz" style={{ gridTemplateColumns: '40px 1fr 26px' }}><span>From</span><NumField value={range.z0} onSet={(v) => setRange({ ...range, z0: v })} /><span className="unit">mm</span></div>
+      <div className="xyz" style={{ gridTemplateColumns: '40px 1fr 26px' }}><span>To</span><NumField value={range.z1} onSet={(v) => setRange({ ...range, z1: v })} /><span className="unit">mm</span></div>
+      <div className="xyz" style={{ gridTemplateColumns: '40px 1fr 26px' }}><span>Layer</span><NumField value={range.h} onSet={(v) => setRange({ ...range, h: Math.min(pb.maxHeight, Math.max(pb.minHeight, v)) })} /><span className="unit">mm</span></div>
+      <div className="row">
+        <button className="btn-secondary btn-small" onClick={() => vlhRange(o.id, Math.max(0, range.z0), Math.min(height, range.z1), range.h)}>Apply range</button>
+        <button className="btn-secondary btn-small" disabled={!o.layerHeights} onClick={() => vlhReset(o.id)}>Reset</button>
+      </div>
+      <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{prof.length} layers · {pb.minHeight}–{pb.maxHeight} mm allowed{o.layerHeights ? '' : ' · uniform'}</div>
+    </div>
+  );
+}
+
+/** Plate selector and plate actions. */
+export function PlateBar() {
+  const s = useStore();
+  const count = plateObjects(s.activePlate).length;
+  void objectPlate;
+  return (
+    <div className="float platebar">
+      <button className="icon-btn" disabled={s.activePlate === 0} onClick={() => s.set({ activePlate: s.activePlate - 1 })} aria-label="Previous plate"><Icon name="chevron" style={{ transform: 'rotate(180deg)' }} /></button>
+      <span className="mono" style={{ minWidth: 90, textAlign: 'center' }}>{s.plates[s.activePlate].name} · {count}</span>
+      <button className="icon-btn" disabled={s.activePlate >= s.plates.length - 1} onClick={() => s.set({ activePlate: s.activePlate + 1 })} aria-label="Next plate"><Icon name="chevron" /></button>
+      <span className="sep" />
+      <button className="icon-btn" title="Add plate" onClick={addPlate}><Icon name="add" /></button>
+      <button className="icon-btn" title="Delete plate" disabled={s.plates.length < 2} onClick={() => deletePlate()}><Icon name="trash" /></button>
+      <button className="icon-btn" title="Arrange this plate" onClick={() => arrange()} disabled={!count}><Icon name="arrange" /></button>
+    </div>
+  );
+}
+
+export { slotColor };
