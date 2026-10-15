@@ -13,19 +13,22 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
   let curveKey: CurveKey = "lateral_offset";
   let dirty = false, changed = false;
   let editor: CurveEditor;
+  let query = "";
+  const openGroups = new Set<string>([brushGroup(brush)]);
 
-  const win = h("div.window", { role: "dialog", "aria-label": "Motionex brush editor" });
+  const win = h("div.window", { role: "dialog", "aria-label": "Motionex pattern library" });
   const lib = h("div.wlib"), main = h("div.wmain"), side = h("div.wside");
   const previewCanvas = h<"canvas">("canvas", { style: "height:190px" });
   const previewCap = h("div.cap");
   const pointBox = h("div");
-  const saveBtn = h<"button">("button.primary", { onclick: save }, "Save brush");
+  const saveBtn = h<"button">("button.primary", { onclick: save }, "Save pattern");
   const title = h("span.title");
+  const desc = h("div.wdesc");
 
   win.append(
-    h("div.whead", null, h("span.plugin-badge", null, "M"), title, h("span.tag", null, "Motionex 0.1"), h("div.spacer"),
-      h("button", { onclick: async () => { try { const b = parseBrush(await pickFile(".json,application/json")); brush = mx.library.save(b); changed = true; dirty = false; renderAll(); } catch (e) { alert(`Import failed: ${(e as Error).message}`); } } }, "Import…"),
-      h("button", { onclick: () => download(`${brush.name.replace(/\W+/g, "-").toLowerCase()}.motionex.json`, serializeBrush(brush), "application/json") }, "Export"),
+    h("div.whead", null, h("span.plugin-badge", null, "M"), h("div", null, title, desc), h("div.spacer"),
+      h("button", { onclick: async () => { try { const b = parseBrush(await pickFile(".json,application/json")); brush = mx.library.save(b); changed = true; dirty = false; renderAll(); } catch (e) { alert(`That file could not be opened: ${(e as Error).message}`); } } }, "Open file…"),
+      h("button", { onclick: () => download(`${brush.name.replace(/\W+/g, "-").toLowerCase()}.motionex.json`, serializeBrush(brush), "application/json") }, "Save to file"),
       saveBtn, h("button.ghost", { onclick: close, "aria-label": "Close" }, "✕")),
     lib, main, side);
   root.replaceChildren(win); root.hidden = false;
@@ -33,7 +36,7 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
   document.addEventListener("keydown", onKey);
 
   function close(): void {
-    if (dirty && !confirm("Discard unsaved brush changes?")) return;
+    if (dirty && !confirm("You have unsaved changes to this pattern. Close anyway?")) return;
     document.removeEventListener("keydown", onKey);
     root.hidden = true; root.replaceChildren(); onClose(changed);
   }
@@ -45,28 +48,46 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
   function touch(): void { dirty = true; title.textContent = `${brush.name} •`; drawPreview(); }
 
   function renderLib(): void {
-    const item = (b: MotionBrush) => h("div.item" + (b.id === brush.id ? ".sel" : ""), {
-      onclick: () => { if (dirty && !confirm("Discard unsaved changes?")) return; brush = structuredClone(b); dirty = false; renderAll(); },
-    }, h("canvas", { width: 44, height: 18, style: "width:44px;height:18px", "data-thumb": b.id }), h("span.name", null, b.name),
-      !mx.library.isPreset(b.id) ? h("button.ghost.sm", { title: "Delete", onclick: (e: Event) => { e.stopPropagation(); if (confirm(`Delete ${b.name}?`)) { mx.library.remove(b.id); changed = true; renderLib(); } } }, "✕") : null);
-    const user = mx.library.user_brushes();
-    lib.replaceChildren(
-      h("div.section", null, "Presets"), h("div.list", null, ...mx.library.all().filter((b) => mx.library.isPreset(b.id)).map(item)),
-      h("div.section", null, "My brushes"), user.length ? h("div.list", null, ...user.map(item)) : h("div.muted", null, "Save a preset to make it yours."),
-    );
-    lib.querySelectorAll<HTMLCanvasElement>("canvas[data-thumb]").forEach((cv) => thumb(cv, mx.library.get(cv.dataset.thumb!)!));
+    const q = query.trim().toLowerCase();
+    const match = (b: MotionBrush) => !q || `${b.name} ${b.category ?? ""} ${b.description ?? ""}`.toLowerCase().includes(q);
+    const groups = new Map<string, MotionBrush[]>();
+    for (const b of mx.library.all()) if (match(b)) { const g = brushGroup(b); groups.set(g, [...(groups.get(g) ?? []), b]); }
+    const total = [...groups.values()].reduce((n, bs) => n + bs.length, 0);
+    const search = h<"input">("input.lib-search", { type: "search", placeholder: `Search ${mx.library.all().length} patterns…`, value: query,
+      oninput: (e: Event) => { query = (e.target as HTMLInputElement).value; renderLib(); const s = lib.querySelector<HTMLInputElement>("input"); s?.focus(); s?.setSelectionRange(query.length, query.length); } });
+    lib.replaceChildren(search, ...(total ? [] : [h("div.muted", null, "No patterns match.")]),
+      ...[...groups].map(([g, bs]) => {
+        const d = h<"details">("details.lib-group", { open: q !== "" || openGroups.has(g) }, h("summary", null, h("span", null, `${g} (${bs.length})`)), h("div.list"));
+        d.addEventListener("toggle", () => { if (d.open) fillGroup(d, bs); if (!q) { if (d.open) openGroups.add(g); else openGroups.delete(g); } });
+        if (d.open) fillGroup(d, bs);
+        return d;
+      }),
+      h("div.muted", { style: "margin-top:10px" }, "Change any pattern and press Save to keep your own version under My patterns."));
+  }
+
+  function fillGroup(d: HTMLDetailsElement, bs: MotionBrush[]): void {
+    const list = d.querySelector(".list")!;
+    if (list.childElementCount) return;
+    list.append(...bs.map((b) => {
+      const el = h("div.item" + (b.id === brush.id ? ".sel" : ""), { title: b.description ?? "",
+        onclick: () => { if (dirty && !confirm("You have unsaved changes. Switch pattern anyway?")) return; brush = structuredClone(b); dirty = false; renderAll(); } },
+        h("canvas", { width: 44, height: 18, style: "width:44px;height:18px" }), h("span.name", null, b.name),
+        !mx.library.isPreset(b.id) ? h("button.ghost.sm", { title: "Delete", onclick: (e: Event) => { e.stopPropagation(); if (confirm(`Delete ${b.name}?`)) { mx.library.remove(b.id); changed = true; renderLib(); } } }, "✕") : null);
+      thumb(el.querySelector("canvas")!, b);
+      return el;
+    }));
   }
 
   function renderMain(): void {
     const info = CURVE_INFO[curveKey];
     editor = new CurveEditor(brush.curves[curveKey], { min: info.min, max: info.max, disabled: !info.enabled, onChange: () => { renderPoint(); touch(); }, onSelect: () => renderPoint() });
     const tabs = h("div.ctabs", null, ...CURVE_KEYS.map((k) => h("button.sm" + (k === curveKey ? ".on" : ""), { onclick: () => { curveKey = k; renderMain(); } }, CURVE_INFO[k].label)));
-    const interp = select<Interpolation>(brush.curves[curveKey].interpolation, [["bezier", "Bezier"], ["linear", "Linear"], ["step", "Step"]], (v) => { brush.curves[curveKey].interpolation = v; editor.draw(); touch(); }, { style: "width:auto", disabled: !info.enabled });
+    const interp = select<Interpolation>(brush.curves[curveKey].interpolation, [["bezier", "Smooth curves"], ["linear", "Straight lines"], ["step", "Sudden jumps"]], (v) => { brush.curves[curveKey].interpolation = v; editor.draw(); touch(); }, { style: "width:auto", disabled: !info.enabled });
     main.replaceChildren(
       h("div", { style: "display:flex;gap:8px;align-items:center;justify-content:space-between" }, tabs, interp),
-      h("div.canvas-box", null, editor.canvas, h("div.cap", null, `${info.label} · ${info.unit} · double-click adds a point`)),
+      h("div.canvas-box", null, editor.canvas, h("div.cap", null, `${info.label} · ${info.unit} · double-click to add a dot`)),
       pointBox,
-      h("div.section", null, "Live preview — 40 mm sample wall, top view"),
+      h("div.section", null, "Preview: a 40 mm piece of wall, seen from above"),
       h("div.canvas-box", null, previewCanvas, previewCap),
     );
     requestAnimationFrame(() => { editor.draw(); drawPreview(); });
@@ -75,17 +96,17 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
 
   function renderPoint(): void {
     const i = editor.selected;
-    if (i === null) { pointBox.replaceChildren(h("div.muted", null, "Select a point to edit its numbers. Drag points or handles; Delete removes a point.")); return; }
+    if (i === null) { pointBox.replaceChildren(h("div.muted", null, "Drag the dots to reshape the pattern. Click a dot to type exact numbers or drag its handles. Press Delete to remove a dot.")); return; }
     const p = brush.curves[curveKey].points[i];
     const set = (fn: () => void) => () => { fn(); editor.draw(); touch(); };
     const last = brush.curves[curveKey].points.length - 1;
     pointBox.replaceChildren(h("div.row.three", { style: "grid-template-columns:repeat(6,1fr)" },
-      h("label", null, "t ", numInput(p.t, (v) => set(() => { if (i > 0 && i < last) p.t = Math.min(1, Math.max(0, v)); })())),
-      h("label", null, "value ", numInput(p.v, (v) => set(() => { p.v = v; })())),
-      h("label", null, "in dt ", numInput(p.in_handle[0], (v) => set(() => { p.in_handle[0] = Math.min(0, v); })())),
-      h("label", null, "in dv ", numInput(p.in_handle[1], (v) => set(() => { p.in_handle[1] = v; })())),
-      h("label", null, "out dt ", numInput(p.out_handle[0], (v) => set(() => { p.out_handle[0] = Math.max(0, v); })())),
-      h("label", null, "out dv ", numInput(p.out_handle[1], (v) => set(() => { p.out_handle[1] = v; })())),
+      h("label", null, "Position % ", numInput(Math.round(p.t * 1000) / 10, (v) => set(() => { if (i > 0 && i < last) p.t = Math.min(1, Math.max(0, v / 100)); })())),
+      h("label", null, "Amount ", numInput(p.v, (v) => set(() => { p.v = v; })())),
+      h("label", null, "Left handle ↔ ", numInput(p.in_handle[0], (v) => set(() => { p.in_handle[0] = Math.min(0, v); })())),
+      h("label", null, "Left handle ↕ ", numInput(p.in_handle[1], (v) => set(() => { p.in_handle[1] = v; })())),
+      h("label", null, "Right handle ↔ ", numInput(p.out_handle[0], (v) => set(() => { p.out_handle[0] = Math.max(0, v); })())),
+      h("label", null, "Right handle ↕ ", numInput(p.out_handle[1], (v) => set(() => { p.out_handle[1] = v; })())),
     ));
   }
 
@@ -93,32 +114,32 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
     const row = (label: string, input: HTMLElement) => h("div.row", null, h("label", null, label), input);
     const n = brush.noise;
     side.replaceChildren(h("div", null,
-      h("div.section", { style: "margin-top:0" }, "Brush"),
-      row("Name", h<"input">("input", { value: brush.name, oninput: (e: Event) => { brush.name = (e.target as HTMLInputElement).value; touch(); } })),
-      row("Amplitude (mm)", numInput(brush.amplitude, (v) => { brush.amplitude = Math.max(0, v); touch(); }, { min: 0, step: 0.05 })),
-      row("Period (mm)", numInput(brush.period_mm, (v) => { brush.period_mm = Math.max(0.2, v); touch(); }, { min: 0.2, step: 0.1 })),
-      row("Phase (°)", numInput(brush.phase_deg, (v) => { brush.phase_deg = ((v % 360) + 360) % 360; touch(); }, { step: 15 })),
-      row("Repeat", select<RepeatMode>(brush.repeat_mode, [["tile", "Tile"], ["once", "Once"], ["stretch", "Stretch to fit"]], (v) => { brush.repeat_mode = v; touch(); })),
-      h("div.section", null, "Flow limits"),
-      row("Min flow ×", numInput(brush.limits.min_flow_mult, (v) => { brush.limits.min_flow_mult = v; touch(); }, { step: 0.05 })),
-      row("Max flow ×", numInput(brush.limits.max_flow_mult, (v) => { brush.limits.max_flow_mult = v; touch(); }, { step: 0.05 })),
-      h("div.muted", null, `Also capped at ${Math.min(profiles().machine.maxVolumetricFlow, profiles().filament.maxVolumetricFlow)} mm³/s from the machine + filament profiles.`),
-      h("div.section", null, "Noise"),
+      h("div.section", { style: "margin-top:0" }, "Pattern"),
+      row("Name", h<"input">("input", { value: brush.name, "aria-label": "Pattern name", oninput: (e: Event) => { brush.name = (e.target as HTMLInputElement).value; touch(); } })),
+      row("Wave height (mm)", numInput(brush.amplitude, (v) => { brush.amplitude = Math.max(0, v); touch(); }, { min: 0, step: 0.05 })),
+      row("Wave length (mm)", numInput(brush.period_mm, (v) => { brush.period_mm = Math.max(0.2, v); touch(); }, { min: 0.2, step: 0.1 })),
+      row("Start shift (°)", numInput(brush.phase_deg, (v) => { brush.phase_deg = ((v % 360) + 360) % 360; touch(); }, { step: 15 })),
+      row("Repeat", select<RepeatMode>(brush.repeat_mode, [["tile", "All the way round"], ["once", "Only once"], ["stretch", "Fit evenly (no seam)"]], (v) => { brush.repeat_mode = v; touch(); })),
+      h("div.section", null, "Plastic limits"),
+      row("Least plastic", numInput(brush.limits.min_flow_mult, (v) => { brush.limits.min_flow_mult = v; touch(); }, { step: 0.05 })),
+      row("Most plastic", numInput(brush.limits.max_flow_mult, (v) => { brush.limits.max_flow_mult = v; touch(); }, { step: 0.05 })),
+      h("div.muted", null, "1 is the normal amount. Nexspiro also slows down automatically if your printer can't melt plastic fast enough."),
+      h("div.section", null, "Roughness"),
       h("label.inline", null, h<"input">("input", { type: "checkbox", checked: !!n?.enabled, onchange: (e: Event) => {
         const on = (e.target as HTMLInputElement).checked;
         brush.noise = on ? (n ?? { enabled: true, type: "value", seed: 1337, scale: 1, octaves: 3, persistence: 0.5 }) : n ? { ...n, enabled: false } : null;
         if (brush.noise) brush.noise.enabled = on; renderSide(); touch();
-      } }), "Add seeded noise"),
+      } }), "Add random roughness"),
       n?.enabled ? h("div", null,
-        row("Seed", numInput(n.seed, (v) => { n.seed = Math.round(v); touch(); }, { step: 1 })),
-        row("Scale", numInput(n.scale, (v) => { n.scale = Math.max(0.05, v); touch(); }, { step: 0.1 })),
-        row("Octaves", numInput(n.octaves, (v) => { n.octaves = Math.min(6, Math.max(1, Math.round(v))); touch(); }, { step: 1 })),
-        row("Persistence", numInput(n.persistence, (v) => { n.persistence = v; touch(); }, { step: 0.05 })),
+        row("Pattern number", numInput(n.seed, (v) => { n.seed = Math.round(v); touch(); }, { step: 1 })),
+        row("Size", numInput(n.scale, (v) => { n.scale = Math.max(0.05, v); touch(); }, { step: 0.1 })),
+        row("Detail", numInput(n.octaves, (v) => { n.octaves = Math.min(6, Math.max(1, Math.round(v))); touch(); }, { step: 1 })),
+        row("Bumpiness", numInput(n.persistence, (v) => { n.persistence = v; touch(); }, { step: 0.05 })),
       ) : null,
-      h("div.section", null, "Point events"),
-      h("div.muted", null, "Dwell, flow change and retract events arrive in phase 5. Events in imported brushes are kept."),
-      h("div.section", null, "Info"),
-      h("div.muted", null, `id ${brush.id} · v${brush.version}${mx.library.isPreset(brush.id) ? " · preset (saving makes a copy)" : ""}`),
+      h("div.section", null, "Pauses and blobs"),
+      h("div.muted", null, "Coming soon: pause the nozzle, add a blob, or lift off at chosen spots."),
+      h("div.section", null, "About"),
+      h("div.muted", null, `${brush.category ?? "My patterns"} · version ${brush.version}${mx.library.isPreset(brush.id) ? " · built-in (saving keeps your own copy)" : ""}`),
     ));
   }
 
@@ -145,10 +166,10 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
       g.beginPath(); g.moveTo(X(a.x), Y(a.y)); g.lineTo(X(b.x), Y(b.y)); g.stroke();
     }
     g.fillStyle = "#8a93a0"; g.font = "11px Inter, system-ui";
-    g.fillText(`base path`, X(0), Y(0) - 6 - brush.amplitude * sy);
+    g.fillText("plain wall", X(0), Y(0) - 6 - brush.amplitude * sy);
     g.fillText("10 mm", X(L - 10), H - 8); g.strokeStyle = "#8a93a0"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(X(L - 10), H - 18); g.lineTo(X(L), H - 18); g.stroke();
-    previewCap.textContent = `${out.points.length} samples · ${(performance.now() - t0).toFixed(1)} ms · colour/width = flow`;
+    previewCap.textContent = `colour and thickness show the amount of plastic · ${(performance.now() - t0).toFixed(0)} ms`;
   }
 
   function thumb(cv: HTMLCanvasElement, b: MotionBrush): void {
@@ -161,6 +182,8 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
     g.stroke();
   }
 
-  function renderAll(): void { title.textContent = brush.name + (dirty ? " •" : ""); renderLib(); renderMain(); renderSide(); }
+  function renderAll(): void { title.textContent = brush.name + (dirty ? " •" : ""); desc.textContent = brush.description ?? ""; openGroups.add(brushGroup(brush)); renderLib(); renderMain(); renderSide(); }
+
+  function brushGroup(b: MotionBrush): string { return mx.library.isPreset(b.id) ? b.category ?? "Other" : "My patterns"; }
   renderAll();
 }

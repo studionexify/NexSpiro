@@ -128,7 +128,7 @@ export class CurveEditor {
       g.fillStyle = this.o.disabled ? "#c5cad2" : i === this.selected ? "#7c3aed" : "#fff"; g.fill();
       g.strokeStyle = this.o.disabled ? "#c5cad2" : "#7c3aed"; g.lineWidth = 2; g.stroke();
     });
-    if (this.o.disabled) { g.fillStyle = "#6b7380"; g.font = "600 12px Inter, system-ui"; g.fillText("Z motion unlocks with toolhead collision checks (phase 6)", this.pad.l + 10, this.pad.t + 18); }
+    if (this.o.disabled) { g.fillStyle = "#6b7380"; g.font = "600 12px Inter, system-ui"; g.fillText("Up-and-down patterns are coming soon", this.pad.l + 10, this.pad.t + 18); }
   }
 }
 

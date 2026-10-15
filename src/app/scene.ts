@@ -19,7 +19,7 @@ export class Viewport {
   onPick: (id: string | null) => void = () => {};
 
   constructor(private host: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false });
     this.renderer.setPixelRatio(Math.min(2, devicePixelRatio));
     this.renderer.setClearColor(0xeef0f3);
     host.prepend(this.renderer.domElement);
@@ -27,6 +27,7 @@ export class Viewport {
     this.camera.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    this.controls.addEventListener("start", () => { this.userMoved = true; });
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(200, -300, 500); this.scene.add(sun);
     this.scene.add(this.plate, this.objects, this.paths);
@@ -37,10 +38,23 @@ export class Viewport {
     loop();
   }
 
+  private bed: MachineProfile["bed"] | null = null;
+  private userMoved = false;
+
   private resize(): void {
     const w = this.host.clientWidth, h = this.host.clientHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h); this.camera.updateProjectionMatrix();
+    if (!this.userMoved) this.frame();
+  }
+
+  /** Point the camera at the whole plate; on tall, narrow screens step back so the plate still fits. */
+  private frame(): void {
+    if (!this.bed) return;
+    const { x: W, y: D } = this.bed, r = Math.max(W, D) / Math.min(1, Math.max(0.35, this.camera.aspect));
+    this.camera.position.set(W / 2 + r * 0.05, -r * 1.25, r * 1.0);
+    this.controls.target.set(W / 2, D / 2, 0);
+    this.camera.far = r * 20; this.camera.updateProjectionMatrix();
   }
 
   private downAt = { x: 0, y: 0 };
@@ -76,10 +90,8 @@ export class Viewport {
     this.plate.add(lines([0, 0, 0.1, 20, 0, 0.1], 0xe5484d), lines([0, 0, 0.1, 0, 20, 0.1], 0x30a46c), lines([0, 0, 0.1, 0, 0, 20], 0x3e63dd));
     const label = textSprite(`${m.name}  ·  ${W}×${D}`, W);
     label.position.set(W / 2, -2.5, 0.03); this.plate.add(label);
-    const r = Math.max(W, D);
-    this.camera.position.set(W / 2 + r * 0.05, -r * 1.25, r * 1.0);
-    this.controls.target.set(W / 2, D / 2, 0);
-    this.camera.far = r * 20; this.camera.updateProjectionMatrix();
+    this.bed = m.bed; this.userMoved = false;
+    this.frame();
   }
 
   setObjects(objs: SceneObject[], selected: string | null): void {

@@ -80,8 +80,8 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
       z: c.z, f, flow, e: 0,
     });
   }
-  if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} samples clamped to brush flow limits` });
-  if (speedClamps) warn({ code: "motionex_speed_limit", message: `${speedClamps} samples clamped to machine max XY speed ${maxXY} mm/s` });
+  if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this pattern's plastic limit` });
+  if (speedClamps) warn({ code: "motionex_speed_limit", message: `${speedClamps} spots were slowed to your printer's top speed (${maxXY} mm/s)` });
   return { ...path, points: out, modifiedBy: "motionex" };
 }
 
@@ -102,9 +102,9 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const sorted = apps.filter((a) => a.enabled).sort((a, b) => a.order - b.order);
   for (const app of sorted) {
     const brush = brushes(app.brush_id);
-    if (!brush) { warn({ code: "motionex_missing_brush", message: `brush ${app.brush_id} not found` }); continue; }
-    if (app.target.type === "patternex_region") { warn({ code: "motionex_patternex", message: "Patternex regions arrive in phase 8; application skipped" }); continue; }
-    if (brush.curves.z_offset.points.some((q) => Math.abs(q.v) > 1e-9)) warn({ code: "motionex_z_pending", message: `brush ${brush.name}: Z offset needs toolhead collision checks (phase 6) and is ignored` });
+    if (!brush) { warn({ code: "motionex_missing_brush", message: `Pattern ${app.brush_id} was not found` }); continue; }
+    if (app.target.type === "patternex_region") { warn({ code: "motionex_patternex", message: "Region patterns are coming soon, so this one was skipped" }); continue; }
+    if (brush.curves.z_offset.points.some((q) => Math.abs(q.v) > 1e-9)) warn({ code: "motionex_z_pending", message: `${brush.name}: the up-and-down part is coming soon and was skipped` });
     const { z_start, z_end, fade_in_mm, fade_out_mm } = app.mask;
     const fade = (z: number) => {
       if (z < z_start || z > z_end) return 0;

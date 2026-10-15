@@ -12,10 +12,12 @@
     <nav class="tabs" id="tabs">
       <button data-tab="prepare" class="on">Prepare</button>
       <button data-tab="preview">Preview</button>
-      <button data-tab="device">Device</button>
+      <button data-tab="device">Printer</button>
     </nav>
     <div class="spacer"></div>
-    <button id="sliceBtn" class="primary">Slice plate</button>
+    <button id="leftToggle" class="drawer-btn" aria-label="Show objects and printer">☰<span class="lbl"> Objects</span></button>
+    <button id="rightToggle" class="drawer-btn" aria-label="Show patterns">✦<span class="lbl"> Patterns</span></button>
+    <button id="sliceBtn" class="primary">Slice</button>
     <button id="exportBtn" disabled>Export G-code</button>
   </header>
   <aside id="left"></aside>

@@ -27,7 +27,11 @@ const mx = createMotionex(storage);
 host.register(mx.plugin);
 
 const $ = (id: string) => document.getElementById(id)!;
-const view = new Viewport($("view"));
+let view: Viewport;
+try { view = new Viewport($("view")); } catch (err) {
+  $("view").append(h("div.nogl", null, h("strong", null, "3D view could not start"), h("div", null, "Your browser blocked 3D graphics (WebGL). Try Chrome, Edge or Safari, or turn on hardware acceleration in your browser settings.")));
+  throw err;
+}
 view.onPick = (id) => { state.selected = id; renderLeft(); syncScene(); };
 
 // Starter scene: a 20 mm cube and a vase, with a sine brush on the outer wall.
@@ -59,8 +63,8 @@ function renderLeft(): void {
         view.setMachine(state.machine); invalidate(); renderLeft(); renderRight(); syncScene();
       })),
       row("Filament", select(state.filament.id, FILAMENTS.map((f) => [f.id, f.name]), (v) => { state.filament = FILAMENTS.find((f) => f.id === v)!; invalidate(); renderRight(); })),
-      row("Process", select(state.process.id, PROCESSES.map((p) => [p.id, p.name]), (v) => { state.process = PROCESSES.find((p) => p.id === v)!; invalidate(); renderRight(); })),
-      h("div.muted", null, `${state.machine.firmware} · ${state.machine.bed.x}×${state.machine.bed.y}×${state.machine.bed.z} mm · ⌀${state.machine.nozzle}`),
+      row("Print settings", select(state.process.id, PROCESSES.map((p) => [p.id, p.name]), (v) => { state.process = PROCESSES.find((p) => p.id === v)!; invalidate(); renderRight(); })),
+      h("div.muted", null, `Build area ${state.machine.bed.x} × ${state.machine.bed.y} × ${state.machine.bed.z} mm · ${state.machine.nozzle} mm nozzle`),
     ),
     h("div.card", null, h("h3", null, "Objects", select<PrimitiveKind | "">("", [["", "+ Add shape"], ["cube", "Cube"], ["cylinder", "Cylinder"], ["vase", "Vase"]], (k) => {
       if (!k) return; const [cx, cy] = centre(); const o = makeObject(k, cx, cy); state.objects.push(o); state.selected = o.id; invalidate(); renderLeft(); syncScene();
@@ -73,9 +77,9 @@ function renderLeft(): void {
     sel ? h("div.card", null, h("h3", null, `Object · ${sel.name}`),
       row("X (mm)", numInput(sel.x, (v) => change(() => { sel.x = v; })())),
       row("Y (mm)", numInput(sel.y, (v) => change(() => { sel.y = v; })())),
-      row("Rotate Z (°)", numInput(sel.rotation, (v) => change(() => { sel.rotation = v; })())),
-      row("Size X (mm)", numInput(sel.size.x, (v) => change(() => { sel.size.x = Math.max(1, v); })())),
-      row("Size Y (mm)", numInput(sel.size.y, (v) => change(() => { sel.size.y = Math.max(1, v); })())),
+      row("Turn (°)", numInput(sel.rotation, (v) => change(() => { sel.rotation = v; })())),
+      row("Width (mm)", numInput(sel.size.x, (v) => change(() => { sel.size.x = Math.max(1, v); })())),
+      row("Depth (mm)", numInput(sel.size.y, (v) => change(() => { sel.size.y = Math.max(1, v); })())),
       row("Height (mm)", numInput(sel.size.z, (v) => change(() => { sel.size.z = Math.min(state.machine.bed.z, Math.max(1, v)); })())),
       plateCheck(sel),
     ) : null,
@@ -92,12 +96,11 @@ function plateCheck(o: SceneObject): HTMLElement | null {
 function renderRight(): void {
   const p = state.process;
   $("right").replaceChildren(
-    h("div.card", null, h("h3", null, "Process"),
-      ...([["Layer height", p.layerHeight, "mm"], ["Line width", p.lineWidth, "mm"], ["Walls", p.walls, ""], ["Wall speed", p.wallSpeed, "mm/s"],
-        ["Max flow", Math.min(state.machine.maxVolumetricFlow, state.filament.maxVolumetricFlow), "mm³/s"]] as [string, number, string][])
+    h("div.card", null, h("h3", null, "Print settings"),
+      ...([["Layer height", p.layerHeight, "mm"], ["Line thickness", p.lineWidth, "mm"], ["Walls", p.walls, ""], ["Wall speed", p.wallSpeed, "mm/s"]] as [string, number, string][])
         .map(([l, v, u]) => h("div.row", null, h("span.muted", null, l), h("span", null, `${v} ${u}`)))),
     motionexCard(),
-    h("div.card", null, h("h3", null, "Plugins"), h("div.list", null, ...host.list().map((pl) => h("div.item", null, h("span.name", null, pl.name), h("span.tag", null, pl.version), h("span.tag", null, "post-toolpath"))))),
+    h("div.card", null, h("h3", null, "Plugins"), h("div.list", null, ...host.list().map((pl) => h("div.item", null, h("span.name", null, pl.name), h("span.tag", null, `v${pl.version}`), h("span.tag", null, "On"))))),
   );
 }
 
@@ -109,24 +112,33 @@ function motionexCard(): HTMLElement {
     return h("div.app" + (a.enabled ? "" : ".off"), null,
       h("div.app-top", null,
         h<"input">("input", { type: "checkbox", checked: a.enabled, title: "Enabled", onchange: (e: Event) => upd(() => { a.enabled = (e.target as HTMLInputElement).checked; }) }),
-        select(a.brush_id, brushes.map((b) => [b.id, b.name]), (v) => upd(() => { a.brush_id = v; })),
+        patternSelect(a.brush_id, (v) => upd(() => { a.brush_id = v; })),
         h("button.sm", { title: "Edit brush", onclick: () => edit(a.brush_id) }, "Edit"),
         h("button.ghost.sm", { title: "Remove", onclick: () => upd(() => { mx.state.applications.splice(i, 1); }) }, "✕")),
-      h("div.row", null, h("span.muted", null, "Apply to"), select(targetVal, [["feature:outer_wall", "Outer wall"], ["feature:inner_wall", "Inner walls"], ["model", "Whole model"], ["patternex_region", "Patternex region (phase 8)"]],
+      h("div.row", null, h("span.muted", null, "Apply to"), select(targetVal, [["feature:outer_wall", "Outer wall"], ["feature:inner_wall", "Inner walls"], ["model", "All walls"]],
         (v) => upd(() => { const [t, ref] = v.split(":"); a.target = { type: t as TargetType, ref }; }))),
       h("div.row.three", null,
-        h("label.muted", null, "Z from", numInput(a.mask.z_start, (v) => upd(() => { a.mask.z_start = v; }))),
-        h("label.muted", null, "Z to", numInput(a.mask.z_end >= 1e4 ? state.machine.bed.z : a.mask.z_end, (v) => upd(() => { a.mask.z_end = v; }))),
-        h("label.muted", null, "Fade in", numInput(a.mask.fade_in_mm, (v) => upd(() => { a.mask.fade_in_mm = Math.max(0, v); })))),
+        h("label.muted", null, "From height", numInput(a.mask.z_start, (v) => upd(() => { a.mask.z_start = v; }))),
+        h("label.muted", null, "To height", numInput(a.mask.z_end >= 1e4 ? state.machine.bed.z : a.mask.z_end, (v) => upd(() => { a.mask.z_end = v; }))),
+        h("label.muted", null, "Blend in", numInput(a.mask.fade_in_mm, (v) => upd(() => { a.mask.fade_in_mm = Math.max(0, v); })))),
     );
   };
   return h("div.card", null,
-    h("div.plugin-head", null, h("span.plugin-badge", null, "M"), h("div", { style: "flex:1" }, h("div", { style: "font-weight:700" }, "Motionex"), h("div.muted", null, "Motion brushes for X/Y toolpaths")),
-      h("button.sm", { onclick: () => edit(mx.state.applications[0]?.brush_id ?? null) }, "Brush editor")),
+    h("div.plugin-head", null, h("span.plugin-badge", null, "M"), h("div", { style: "flex:1" }, h("div", { style: "font-weight:700" }, "Motionex"), h("div.muted", null, "Waves, loops and textures for your walls")),
+      h("button.sm", { onclick: () => edit(mx.state.applications[0]?.brush_id ?? null) }, "Pattern library")),
     ...mx.state.applications.map(app),
-    h("button.sm", { onclick: () => { mx.state.applications.push({ ...defaultApplication("preset-zigzag"), order: mx.state.applications.length }); invalidate(); renderRight(); } }, "+ Apply brush"),
-    h("div.row", null, h("span.muted", null, "Resample step (mm)"), numInput(mx.state.options.resampleStep, (v) => { mx.state.options.resampleStep = Math.min(2, Math.max(0.05, v)); invalidate(); })),
+    h("button.sm", { onclick: () => { mx.state.applications.push({ ...defaultApplication("preset-zigzag"), order: mx.state.applications.length }); invalidate(); renderRight(); } }, "+ Add pattern"),
+    h("div.row", null, h("span.muted", { title: "Smaller numbers follow the pattern more closely but make bigger files" }, "Detail (mm)"), numInput(mx.state.options.resampleStep, (v) => { mx.state.options.resampleStep = Math.min(2, Math.max(0.05, v)); invalidate(); })),
   );
+}
+
+function patternSelect(value: string, onChange: (v: string) => void): HTMLSelectElement {
+  const all = mx.state.library.all(), groups = new Map<string, typeof all>();
+  for (const b of all) { const g = mx.state.library.isPreset(b.id) ? b.category ?? "Other" : "My patterns"; groups.set(g, [...(groups.get(g) ?? []), b]); }
+  const s = h<"select">("select", { onchange: (e: Event) => onChange((e.target as HTMLSelectElement).value) },
+    ...[...groups].map(([g, bs]) => h<"optgroup">("optgroup", { label: g }, ...bs.map((b) => h<"option">("option", { value: b.id }, b.name)))));
+  s.value = value;
+  return s;
 }
 
 function edit(id: string | null): void {
@@ -143,7 +155,7 @@ function slice(): void {
     state.result = runPipeline(state.objects, profiles(), host);
     (state.result as PipelineResult & { ms?: number }).ms = performance.now() - t0;
     state.stale = false; state.maxLayer = Infinity;
-    btn.disabled = false; btn.textContent = "Slice plate";
+    btn.disabled = false; btn.textContent = "Slice";
     ($("exportBtn") as HTMLButtonElement).disabled = false;
     setTab("preview");
   }, 20);
@@ -151,11 +163,11 @@ function slice(): void {
 
 function renderStats(): void {
   const r = state.result as (PipelineResult & { ms?: number }) | null;
-  if (!r) { $("stats").textContent = state.objects.length ? `${state.objects.length} object(s) · not sliced` : ""; return; }
+  if (!r) { $("stats").textContent = state.objects.length ? `${state.objects.length} object${state.objects.length === 1 ? "" : "s"} on the plate · press Slice to see the print` : ""; return; }
   const t = r.stats.seconds, hh = Math.floor(t / 3600), mm = Math.floor((t % 3600) / 60);
   const lines = [
-    `${r.layers.length} layers · ${r.stats.moves.toLocaleString()} moves · ${(r.ms ?? 0).toFixed(0)} ms`,
-    `wall time ≈ ${hh}h ${mm}m · ${(r.stats.filamentMm / 1000).toFixed(2)} m · ${r.stats.grams.toFixed(1)} g`,
+    `${r.layers.length} layers · sliced in ${((r.ms ?? 0) / 1000).toFixed(1)} s`,
+    `Walls print in about ${hh}h ${mm}m · ${(r.stats.filamentMm / 1000).toFixed(2)} m of filament · ${r.stats.grams.toFixed(1)} g`,
     ...r.warnings.map((w) => `⚠ ${w.message}`),
   ];
   $("stats").textContent = lines.join("\n");
@@ -165,10 +177,10 @@ function renderViewTools(): void {
   const tools = $("viewTools");
   if (state.tab !== "preview" || !state.result) { tools.replaceChildren(); return; }
   const n = state.result.layers.length;
-  const seg = h("div.seg", null, ...(["feature", "speed", "flow"] as ColorMode[]).map((m) => h("button.sm" + (m === state.color ? ".on" : ""), { onclick: () => { state.color = m; renderViewTools(); syncScene(); } }, m[0].toUpperCase() + m.slice(1))));
+  const seg = h("div.seg", null, ...(["feature", "speed", "flow"] as ColorMode[]).map((m) => h("button.sm" + (m === state.color ? ".on" : ""), { onclick: () => { state.color = m; renderViewTools(); syncScene(); } }, { feature: "Parts", speed: "Speed", flow: "Plastic" }[m])));
   const legend = state.color === "feature"
-    ? h("div.seg", null, h("span.legend", { style: "padding:2px 8px" }, h("span.dot", { style: "background:#8b5cf6" }), "Motionex wall", h("span.dot", { style: "background:#f97316" }), "Outer", h("span.dot", { style: "background:#facc15" }), "Inner"))
-    : h("div.seg", null, h("span.legend", { style: "padding:2px 8px" }, "low", h("span.ramp"), "high"));
+    ? h("div.seg", null, h("span.legend", { style: "padding:2px 8px" }, h("span.dot", { style: "background:#8b5cf6" }), "Patterned wall", h("span.dot", { style: "background:#f97316" }), "Outer wall", h("span.dot", { style: "background:#facc15" }), "Inner wall"))
+    : h("div.seg", null, h("span.legend", { style: "padding:2px 8px" }, "less", h("span.ramp"), "more"));
   const slider = h<"input">("input", { type: "range", min: "0", max: String(n - 1), value: String(Math.min(n - 1, state.maxLayer)), style: "width:180px",
     oninput: (e: Event) => { state.maxLayer = +(e.target as HTMLInputElement).value; syncScene(); } });
   tools.replaceChildren(seg, legend, h("div.seg", null, h("span.muted", { style: "padding:2px 6px" }, "Layers"), slider));
@@ -187,13 +199,22 @@ function showDevice(): void {
   const win = h("div.window", { style: "grid-template:52px 1fr / 1fr;grid-template-areas:'wh' 'main';width:min(560px,calc(100vw - 32px));height:auto" },
     h("div.whead", null, h("span.title", null, `Device · ${m.name}`), h("div.spacer"), h("button.ghost", { onclick: () => { $("modal").hidden = true; setTab("prepare"); } }, "✕")),
     h("div.wmain", null,
-      h("div.muted", null, "Machine limits used by the motion planner and Motionex. Editing and toolhead geometry come in phase 6."),
-      ...([["Firmware", m.firmware], ["Bed", `${m.bed.x} × ${m.bed.y} × ${m.bed.z} mm`], ["Max speed X/Y/Z", `${m.maxSpeed.x} / ${m.maxSpeed.y} / ${m.maxSpeed.z} mm/s`],
-        ["Max accel X/Y/Z", `${m.maxAccel.x} / ${m.maxAccel.y} / ${m.maxAccel.z} mm/s²`], ["Max volumetric flow", `${m.maxVolumetricFlow} mm³/s`],
-        ["Z brushes", m.firmware === "klipper" ? "Supported (phase 6)" : `Gated: max Z ${m.maxSpeed.z} mm/s limits in-layer Z motion (phase 6)`]] as [string, string][])
+      h("div.muted", null, "These are the limits Nexspiro keeps to for this printer. Editing them and setting up your print head shape are coming soon."),
+      ...([["Printer type", { klipper: "Klipper", marlin: "Marlin", bambu: "Bambu Lab" }[m.firmware]], ["Build area", `${m.bed.x} × ${m.bed.y} × ${m.bed.z} mm`], ["Top speed", `${m.maxSpeed.x} mm/s`],
+        ["Top up/down speed", `${m.maxSpeed.z} mm/s`], ["Up-and-down patterns", "Coming soon"]] as [string, string][])
         .map(([k, v]) => h("div.row", null, h("span.muted", null, k), h("span", null, v)))));
   $("modal").replaceChildren(win); $("modal").hidden = false;
 }
+
+// Narrow screens: side panels slide over the 3D view instead of squeezing it.
+for (const side of ["left", "right"] as const) {
+  $(`${side}Toggle`).addEventListener("click", () => {
+    const other = side === "left" ? "right" : "left";
+    document.body.classList.remove(`show-${other}`);
+    document.body.classList.toggle(`show-${side}`);
+  });
+}
+$("view").addEventListener("pointerdown", () => document.body.classList.remove("show-left", "show-right"));
 
 $("tabs").addEventListener("click", (e) => { const t = (e.target as HTMLElement).dataset.tab; if (t) setTab(t as typeof state.tab); });
 $("sliceBtn").addEventListener("click", slice);

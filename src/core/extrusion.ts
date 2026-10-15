@@ -28,6 +28,6 @@ export function computeExtrusion(layers: Layer[], p: PrintProfiles): SliceWarnin
       if (vol > cap) { b.f = cap / (beadArea(p.process.lineWidth, layer.height) * b.flow); capHits++; }
     }
   }
-  if (capHits) warnings.push({ code: "flow_cap", message: `${capHits} moves slowed to stay under ${cap} mm³/s volumetric flow` });
+  if (capHits) warnings.push({ code: "flow_cap", message: `Slowed ${capHits} spots down so the nozzle can melt plastic fast enough` });
   return warnings;
 }

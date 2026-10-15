@@ -37,5 +37,5 @@ test("brush changes wall geometry: outer wall leaves the cube footprint by ~ampl
   const xs = [...g.matchAll(/^G1 X([\d.]+) Y/gm)].map((m) => +m[1]);
   // Cube spans 118–138; outer wall centre is inset 0.225; sine amplitude 0.6 pushes ~0.375 outside.
   assert.ok(Math.max(...xs) > 138.3 && Math.max(...xs) < 138.5, String(Math.max(...xs)));
-  assert.match(g, /; motionex: Sine wave v1 on feature:outer_wall/);
+  assert.match(g, /; motionex: Wave v1 on feature:outer_wall/);
 });

@@ -70,3 +70,40 @@ input[type=range] { padding: 0; }
 .section { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
 .tag { font-size: 10px; padding: 1px 6px; border-radius: 99px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
 @media (max-width: 1000px) { body { grid-template-columns: 240px 1fr 300px; } }
+
+/* ── Responsive: keep the 3D view usable at every width ── */
+html, body { height: 100%; }
+body { position: fixed; inset: 0; } /* fills the window even when embedded in another page */
+.drawer-btn { display: none; }
+.nogl { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; padding: 24px; color: var(--muted); }
+.nogl strong { color: var(--text); font-size: 15px; }
+@media (max-width: 1199px) {
+  body { grid-template: 52px minmax(0, 1fr) / minmax(0, 1fr); grid-template-areas: "top" "view"; }
+  #topbar { min-width: 0; overflow: hidden; }
+  .drawer-btn { display: inline-block; }
+  #left, #right { position: fixed; top: 52px; bottom: 0; width: min(340px, 92vw); z-index: 5; background: var(--bg); box-shadow: 0 10px 40px rgba(0,0,0,.18); transition: transform .2s ease; }
+  #left { left: 0; transform: translateX(-105%); }
+  #right { right: 0; transform: translateX(105%); }
+  body.show-left #left, body.show-right #right { transform: none; }
+}
+@media (max-width: 640px) {
+  #topbar { gap: 6px; padding: 0 8px; }
+  .brand span:last-child, .drawer-btn .lbl { display: none; }
+  .tabs { margin-left: 4px; }
+  .tabs button { padding: 6px 8px; }
+  #exportBtn { display: none; }
+  #topbar button { padding: 6px 8px; }
+  #viewTools { flex-wrap: wrap; right: 12px; }
+  #stats { font-size: 11px; white-space: pre-wrap; }
+}
+@media (max-width: 900px) {
+  .window { grid-template: auto auto auto auto / 1fr; grid-template-areas: "wh" "main" "side" "lib"; overflow-y: auto; height: calc(100vh - 16px); width: calc(100vw - 16px); }
+  .whead { flex-wrap: wrap; padding: 8px 12px; gap: 6px; }
+  .wlib, .wside { border: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .wmain { overflow: visible; }
+}
+.lib-search { margin-bottom: 8px; }
+.lib-group summary { cursor: pointer; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 8px 2px 4px; list-style: none; display: flex; justify-content: space-between; }
+.lib-group summary::-webkit-details-marker { display: none; }
+.lib-group summary::after { content: "▸"; } .lib-group[open] summary::after { content: "▾"; }
+.wdesc { color: var(--muted); font-size: 12px; }
