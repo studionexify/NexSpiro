@@ -9,9 +9,24 @@ export function rotateLoop(pts: number[], i: number): number[] {
   return [...pts.slice(i * 2), ...pts.slice(0, i * 2)];
 }
 
-export function pickSeam(pts: number[], mode: SeamMode, px: number, py: number, prev: [number, number] | null, rnd: () => number): number {
+export interface SeamHints { enforce: [number, number][]; block: [number, number][] }
+
+export function pickSeam(pts: number[], mode: SeamMode, px: number, py: number, prev: [number, number] | null, rnd: () => number, hints?: SeamHints): number {
   const n = pts.length / 2;
-  if (mode === 'random') return Math.floor(rnd() * n);
+  // painted seam enforcers win when close to this loop
+  if (hints?.enforce.length) {
+    let bi = -1, bd = 2.25; // within 1.5 mm
+    for (let i = 0; i < n; i++) for (const [ex, ey] of hints.enforce) {
+      const d = (pts[i * 2] - ex) ** 2 + (pts[i * 2 + 1] - ey) ** 2;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    if (bi >= 0) return bi;
+  }
+  const blocked = (i: number) => !!hints?.block.some(([bx, by]) => (pts[i * 2] - bx) ** 2 + (pts[i * 2 + 1] - by) ** 2 < 4);
+  if (mode === 'random') {
+    for (let k = 0; k < 20; k++) { const i = Math.floor(rnd() * n); if (!blocked(i)) return i; }
+    return Math.floor(rnd() * n);
+  }
   let best = 0, bestScore = Infinity;
   const tx = mode === 'aligned' && prev ? prev[0] : px;
   const ty = mode === 'aligned' && prev ? prev[1] : py;
@@ -28,6 +43,7 @@ export function pickSeam(pts: number[], mode: SeamMode, px: number, py: number, 
       const cos = (ax * bx + ay * by) / (la * lb);
       if (cos > -0.5) score -= mode === 'back' ? 2 : 4; // corner sharper than 120°
     }
+    if (hints?.block.length && blocked(i)) score += 1e9;
     if (score < bestScore) { bestScore = score; best = i; }
   }
   return best;

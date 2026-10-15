@@ -49,6 +49,28 @@ G1 X${purgeX0 + 110} E2 F3000
 G1 Z1 F1200
 ;===== end of start G-code =====`;
 
+const bambuChange = (chuteX: number, chuteY: number) => `; ===== NexSpiro filament change [previous_extruder] -> [next_extruder] =====
+M620 S[next_extruder]A
+M204 S9000
+G1 Z[toolchange_z] F1200
+G1 X${chuteX} Y${chuteY - 20} F21000
+G1 Y${chuteY} F3000 ; over the purge chute
+M400
+M106 P1 S0 ; part fan off while flushing
+M104 S[new_filament_temp]
+T[next_extruder] ; AMS: cut, unload, load
+M400
+G92 E0
+M109 S[new_filament_temp]
+G1 E[flush_length] F240 ; flush the previous colour
+M400
+G1 E-0.8 F1800
+G1 X${chuteX + 20} F15000 ; wipe
+G1 X${chuteX} F15000
+G1 X${chuteX + 20} F15000
+M621 S[next_extruder]A
+; ===== end filament change =====`;
+
 const bambuEnd = `;===== NexSpiro end G-code =====
 G1 E-0.8 F1800 ; retract
 G91
@@ -70,6 +92,13 @@ const baseMachine = (o: Config): Config => ({
   max_speed_z: 20,
   max_acceleration: 20000,
   layer_change_gcode: '',
+  change_filament_gcode: `; ===== filament change [previous_extruder] -> [next_extruder] =====
+G1 Z[toolchange_z] F1200
+M600 ; swap to filament [next_extruder], then resume
+; ===== end filament change =====`,
+  machine_pause_gcode: 'M601',
+  filament_change_time: 0,
+  has_ams: false,
   ...o,
 });
 
@@ -77,41 +106,41 @@ export const PRINTERS: PrinterProfile[] = [
   {
     id: 'bbl-a1', vendor: 'Bambu Lab', model: 'A1', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab A1', -0.5, 20), machine_end_gcode: bambuEnd, max_acceleration: 12000 }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab A1', -0.5, 20), machine_end_gcode: bambuEnd, max_acceleration: 12000, change_filament_gcode: bambuChange(-38, 245), machine_pause_gcode: 'M400 U1', filament_change_time: 60, has_ams: true }),
     processOverrides: { travel_speed: 700, default_acceleration: 10000, outer_wall_acceleration: 5000 },
   },
   {
     id: 'bbl-a1mini', vendor: 'Bambu Lab', model: 'A1 mini', nozzle: 0.4, bed: { x: 180, y: 180, z: 180 },
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab A1 mini', -0.5, 10), machine_end_gcode: bambuEnd.replace('X128 Y250', 'X90 Y175'), max_acceleration: 10000 }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab A1 mini', -0.5, 10), machine_end_gcode: bambuEnd.replace('X128 Y250', 'X90 Y175'), max_acceleration: 10000, change_filament_gcode: bambuChange(-13, 175), machine_pause_gcode: 'M400 U1', filament_change_time: 60, has_ams: true }),
     processOverrides: { travel_speed: 700, default_acceleration: 10000 },
   },
   {
     id: 'bbl-p1s', vendor: 'Bambu Lab', model: 'P1S', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     excludedAreas: [[[0, 0], [18, 0], [18, 28], [0, 28]]],
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab P1S', 0.5, 20), machine_end_gcode: bambuEnd }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab P1S', 0.5, 20), machine_end_gcode: bambuEnd, change_filament_gcode: bambuChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
     processOverrides: {},
   },
   {
     id: 'bbl-p1p', vendor: 'Bambu Lab', model: 'P1P', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     excludedAreas: [[[0, 0], [18, 0], [18, 28], [0, 28]]],
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab P1P', 0.5, 20), machine_end_gcode: bambuEnd }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab P1P', 0.5, 20), machine_end_gcode: bambuEnd, change_filament_gcode: bambuChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
     processOverrides: {},
   },
   {
     id: 'bbl-x1c', vendor: 'Bambu Lab', model: 'X1 Carbon', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     excludedAreas: [[[0, 0], [18, 0], [18, 28], [0, 28]]],
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab X1 Carbon', 0.5, 20), machine_end_gcode: bambuEnd }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab X1 Carbon', 0.5, 20), machine_end_gcode: bambuEnd, change_filament_gcode: bambuChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
     processOverrides: {},
   },
   {
     id: 'bbl-x1e', vendor: 'Bambu Lab', model: 'X1E', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     excludedAreas: [[[0, 0], [18, 0], [18, 28], [0, 28]]],
     plates: BAMBU_PLATES, flavor: 'bambu', connections: ['bambu_lan'],
-    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab X1E', 0.5, 20), machine_end_gcode: bambuEnd }),
+    machine: baseMachine({ machine_start_gcode: bambuStart('Bambu Lab X1E', 0.5, 20), machine_end_gcode: bambuEnd, change_filament_gcode: bambuChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
     processOverrides: {},
   },
   {
@@ -127,6 +156,7 @@ M109 S[nozzle_temperature_initial_layer]
 G90
 M83`,
       machine_end_gcode: 'END_PRINT',
+      machine_pause_gcode: 'PAUSE',
       retraction_length: 0.8, retraction_speed: 40, deretraction_speed: 40, z_hop: 0.2,
       max_acceleration: 8000,
     }),
@@ -163,6 +193,7 @@ M106 S0
 M84`,
       retraction_length: 0.8, retraction_speed: 40, deretraction_speed: 40, z_hop: 0.2,
       max_acceleration: 5000,
+      machine_pause_gcode: 'PAUSE',
     }),
     processOverrides: {
       outer_wall_speed: 150, inner_wall_speed: 200, sparse_infill_speed: 250, internal_solid_infill_speed: 200, top_surface_speed: 150,

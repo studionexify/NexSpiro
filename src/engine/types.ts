@@ -22,6 +22,7 @@ export type FeatureType =
   | 'brim'
   | 'support'
   | 'support_interface'
+  | 'prime_tower'
   | 'travel';
 
 export const FEATURE_LABELS: Record<FeatureType, string> = {
@@ -38,6 +39,7 @@ export const FEATURE_LABELS: Record<FeatureType, string> = {
   brim: 'Brim',
   support: 'Support',
   support_interface: 'Support interface',
+  prime_tower: 'Prime tower',
   travel: 'Travel',
 };
 
@@ -73,12 +75,56 @@ export interface LayerResult {
   time: number;
 }
 
+export type PartType = 'negative' | 'modifier' | 'support_enforcer' | 'support_blocker';
+
+export interface PartInput {
+  type: PartType;
+  /** World-space, indexed. */
+  vertices: Float32Array;
+  indices: Uint32Array;
+  /** Modifier overrides (only MODIFIER_KEYS are honoured). */
+  overrides?: Record<string, number | boolean | string>;
+}
+
+/** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */
+export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array }
+
 export interface MeshInput {
   id: string;
   name: string;
   /** World-space vertex positions (already transformed), indexed. */
   vertices: Float32Array;
   indices: Uint32Array;
+  /** 0-based filament slot for this object (default 0). */
+  filament?: number;
+  /** Per-object setting overrides (only OBJECT_KEYS are honoured). */
+  overrides?: Record<string, number | boolean | string>;
+  parts?: PartInput[];
+  paint?: MeshPaint;
+  /** Variable layer height profile: successive layer heights from the bed. */
+  layerHeights?: number[];
+}
+
+/** Filament slot settings used during emission. */
+export interface FilamentSlot {
+  name: string;
+  type: string;
+  color: string;
+  diameter: number;
+  density: number;
+  cost: number;
+  nozzleTemp: number;
+  nozzleTempInitial: number;
+  flowRatio: number;
+  maxVolumetricSpeed: number;
+}
+
+/** Actions inserted at a layer height (from the preview slider). */
+export interface LayerAction { z: number; type: 'pause' | 'color' | 'custom'; filament?: number; gcode?: string }
+
+export interface SliceOptions {
+  filaments?: FilamentSlot[];
+  layerActions?: LayerAction[];
 }
 
 export interface SliceStats {
@@ -87,6 +133,9 @@ export interface SliceStats {
   filamentGrams: number;
   filamentCost: number;
   layerCount: number;
+  toolChanges: number;
+  perFilament: { grams: number; mm: number; cost: number }[];
+  towerGrams: number;
   byFeature: Partial<Record<FeatureType, { time: number; filamentMm: number }>>;
 }
 
@@ -102,5 +151,5 @@ export interface SliceOutput {
 export const FEATURE_ORDER: FeatureType[] = [
   'outer_wall', 'inner_wall', 'overhang_wall', 'sparse_infill', 'internal_solid_infill',
   'top_surface', 'bottom_surface', 'bridge', 'ironing', 'skirt', 'brim', 'support',
-  'support_interface', 'travel',
+  'support_interface', 'travel', 'prime_tower',
 ];

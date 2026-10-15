@@ -18,6 +18,7 @@ export const FEATURE_COLORS: Record<FeatureType, string> = {
   brim: '#27AE60',
   support: '#219653',
   support_interface: '#0652DD',
+  prime_tower: '#6FCF97',
   travel: '#1976D2',
 };
 

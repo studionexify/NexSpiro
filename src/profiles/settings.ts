@@ -104,8 +104,10 @@ export const PROCESS_PARAMS: ParamDef[] = [
 
   // ---------------- Support
   { key: 'enable_support', label: 'Enable support', tab: 'Support', group: 'Support', type: 'bool', def: false, tip: 'Generate support under overhangs steeper than the threshold angle.' },
-  { key: 'support_type', label: 'Type', tab: 'Support', group: 'Support', type: 'enum', def: 'normal_auto', disabledWhen: noSupport, options: [{ value: 'normal_auto', label: 'Normal (auto)' }],
-    tip: 'Normal supports project vertical columns down from overhangs. Tree supports arrive in Phase 2.' },
+  { key: 'support_type', label: 'Type', tab: 'Support', group: 'Support', type: 'enum', def: 'normal_auto', disabledWhen: noSupport, options: [
+    { value: 'normal_auto', label: 'Normal (auto)' }, { value: 'tree_auto', label: 'Tree (auto)' },
+    { value: 'normal_manual', label: 'Normal (manual)' }, { value: 'tree_manual', label: 'Tree (manual)' }],
+    tip: 'Normal supports project vertical columns down from overhangs. Tree supports grow branches that steer around the model and merge into trunks. Manual types only support painted enforcer areas and enforcer volumes.' },
   { key: 'support_threshold_angle', label: 'Threshold angle', tab: 'Support', group: 'Support', type: 'float', unit: '°', min: 1, max: 90, def: 30, disabledWhen: noSupport, tip: 'Faces flatter than this angle (measured from the bed) get support.' },
   { key: 'support_on_build_plate_only', label: 'On build plate only', tab: 'Support', group: 'Support', type: 'bool', def: false, disabledWhen: noSupport, tip: 'Never start supports on top of the model itself.' },
   { key: 'support_remove_small_overhang', label: 'Remove small overhangs', tab: 'Support', group: 'Support', type: 'bool', def: true, disabledWhen: noSupport, tip: 'Skip tiny overhangs that print fine without support.' },
@@ -114,6 +116,11 @@ export const PROCESS_PARAMS: ParamDef[] = [
   { key: 'support_angle', label: 'Pattern angle', tab: 'Support', group: 'Advanced', type: 'float', unit: '°', min: 0, max: 359, def: 0, disabledWhen: noSupport, tip: 'Direction of support lines.' },
   { key: 'support_interface_top_layers', label: 'Top interface layers', tab: 'Support', group: 'Advanced', type: 'int', min: 0, max: 10, def: 2, disabledWhen: noSupport, tip: 'Dense layers directly under the model.' },
   { key: 'support_interface_spacing', label: 'Top interface spacing', tab: 'Support', group: 'Advanced', type: 'float', unit: 'mm', min: 0, max: 5, step: 0.1, def: 0.5, disabledWhen: noSupport, tip: 'Gap between interface lines.' },
+  { key: 'tree_support_branch_angle', label: 'Tree branch angle', tab: 'Support', group: 'Tree supports', type: 'float', unit: '°', min: 5, max: 70, def: 40, disabledWhen: (c) => !c.enable_support || !String(c.support_type).startsWith('tree'), tip: 'How far a branch may lean from vertical. Larger angles reach further around the model.' },
+  { key: 'tree_support_tip_diameter', label: 'Tip diameter', tab: 'Support', group: 'Tree supports', type: 'float', unit: 'mm', min: 0.4, max: 5, step: 0.1, def: 1.6, disabledWhen: (c) => !c.enable_support || !String(c.support_type).startsWith('tree'), tip: 'Diameter of branch tips touching the model.' },
+  { key: 'tree_support_branch_diameter', label: 'Maximum trunk diameter', tab: 'Support', group: 'Tree supports', type: 'float', unit: 'mm', min: 1, max: 20, step: 0.5, def: 6, disabledWhen: (c) => !c.enable_support || !String(c.support_type).startsWith('tree'), tip: 'Branches thicken as they merge and descend, up to this diameter.' },
+  { key: 'tree_support_branch_distance', label: 'Tip spacing', tab: 'Support', group: 'Tree supports', type: 'float', unit: 'mm', min: 1, max: 20, step: 0.5, def: 4, disabledWhen: (c) => !c.enable_support || !String(c.support_type).startsWith('tree'), tip: 'Distance between branch tips under an overhang.' },
+  { key: 'support_filament', label: 'Support filament', tab: 'Support', group: 'Advanced', type: 'int', min: 0, max: 16, def: 0, disabledWhen: noSupport, tip: 'Filament slot used for supports (0 = whichever filament is loaded, avoiding extra filament changes).' },
   { key: 'support_object_xy_distance', label: 'Support/object XY distance', tab: 'Support', group: 'Advanced', type: 'float', unit: 'mm', min: 0, max: 5, step: 0.05, def: 0.35, disabledWhen: noSupport, tip: 'Horizontal clearance between supports and the model walls.' },
 
   // ---------------- Others
@@ -126,6 +133,13 @@ export const PROCESS_PARAMS: ParamDef[] = [
     tip: 'Auto adds a brim only to tall, narrow objects with a small footprint.' },
   { key: 'brim_width', label: 'Brim width', tab: 'Others', group: 'Bed adhesion', type: 'float', unit: 'mm', min: 0, max: 100, def: 5, tip: 'Width of the brim flange.' },
   { key: 'brim_object_gap', label: 'Brim-object gap', tab: 'Others', group: 'Bed adhesion', type: 'float', unit: 'mm', min: 0, max: 2, step: 0.01, def: 0.1, tip: 'Small gap between brim and object for easy removal.' },
+  { key: 'enable_prime_tower', label: 'Enable prime tower', tab: 'Others', group: 'Prime tower', type: 'bool', def: true, tip: 'Builds a small tower that primes the nozzle after every filament change. Used only when more than one filament is printed.' },
+  { key: 'prime_tower_width', label: 'Width', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: 10, max: 100, def: 35, tip: 'X width of the prime tower. Its depth is sized from the prime volume.' },
+  { key: 'prime_volume', label: 'Prime volume', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm³', min: 10, max: 1000, def: 45, tip: 'Volume printed on the tower after each filament change.' },
+  { key: 'prime_tower_x', label: 'Position X', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: -1, max: 1000, def: -1, tip: 'Front-left corner of the tower (−1 = automatic, back right of the plate).' },
+  { key: 'prime_tower_y', label: 'Position Y', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: -1, max: 1000, def: -1, tip: 'Front-left corner of the tower (−1 = automatic).' },
+  { key: 'flush_volume', label: 'Flush volume', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm³', min: 0, max: 2000, def: 280, tip: 'Filament purged when changing colour (into the chute on Bambu printers, onto the tower on manual-change printers).' },
+  { key: 'mmu_paint_depth', label: 'Painted colour depth', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: 0.4, max: 10, step: 0.1, def: 1.5, tip: 'How deep painted colours extend inward from the surface.' },
   { key: 'spiral_mode', label: 'Spiral vase', tab: 'Others', group: 'Special mode', type: 'bool', def: false, tip: 'Prints one continuous rising outer wall with a solid bottom and no top.' },
   { key: 'fuzzy_skin', label: 'Fuzzy skin', tab: 'Others', group: 'Special mode', type: 'enum', def: 'none', options: [
     { value: 'none', label: 'None' }, { value: 'external', label: 'Outer walls' }, { value: 'all', label: 'All walls' }],
@@ -149,3 +163,12 @@ export const PROCESS_PRESETS: { id: string; name: string; values: Config }[] = [
   { id: '0.24', name: '0.24mm Draft', values: { layer_height: 0.24, top_shell_layers: 4 } },
   { id: '0.28', name: '0.28mm Extra Draft', values: { layer_height: 0.28, top_shell_layers: 4, bottom_shell_layers: 3 } },
 ];
+
+/** Settings that may be overridden per object (Objects tab). */
+export const OBJECT_KEYS = [
+  'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'top_surface_pattern', 'bottom_surface_pattern',
+  'sparse_infill_density', 'sparse_infill_pattern', 'infill_direction', 'seam_position',
+  'ironing_type', 'fuzzy_skin', 'fuzzy_skin_thickness', 'infill_wall_overlap',
+];
+/** Settings a modifier volume may change inside its region. */
+export const MODIFIER_KEYS = ['sparse_infill_density', 'sparse_infill_pattern'];

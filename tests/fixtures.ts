@@ -27,3 +27,18 @@ export function cylinder(cx: number, cy: number, r: number, h: number, seg = 64)
   }
   return new Float32Array(out);
 }
+
+/** Truncated cone (frustum) from radius r0 at z=0 to r1 at z=h. */
+export function cone(cx: number, cy: number, r0: number, r1: number, h: number, seg = 64): Float32Array {
+  const out: number[] = [];
+  for (let i = 0; i < seg; i++) {
+    const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
+    const b0 = [cx + r0 * Math.cos(a0), cy + r0 * Math.sin(a0)], b1 = [cx + r0 * Math.cos(a1), cy + r0 * Math.sin(a1)];
+    const t0 = [cx + r1 * Math.cos(a0), cy + r1 * Math.sin(a0)], t1 = [cx + r1 * Math.cos(a1), cy + r1 * Math.sin(a1)];
+    out.push(cx, cy, 0, b1[0], b1[1], 0, b0[0], b0[1], 0);
+    out.push(cx, cy, h, t0[0], t0[1], h, t1[0], t1[1], h);
+    out.push(b0[0], b0[1], 0, b1[0], b1[1], 0, t1[0], t1[1], h);
+    out.push(b0[0], b0[1], 0, t1[0], t1[1], h, t0[0], t0[1], h);
+  }
+  return new Float32Array(out);
+}

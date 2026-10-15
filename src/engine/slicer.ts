@@ -1,16 +1,17 @@
 // The NexSpiro slicing pipeline (stages 2–10). Pure TypeScript, runs in a Web Worker or Node.
-import type { Config } from '../profiles/settings';
+import { MODIFIER_KEYS, OBJECT_KEYS, type Config } from '../profiles/settings';
 import {
   area, bounds, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
 } from './clipper';
 import ClipperLib from 'clipper-lib';
 import { concentricFill, linesFill, sparseFill, type SparsePattern } from './fill';
-import { emit, type LayerOps, type Op } from './gcode';
+import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import type { IndexedMesh } from './mesh';
-import { orderPaths, pickSeam, rotateLoop, simplify, type SeamMode } from './order';
+import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
+import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh } from './slice';
-import { generateSupport } from './support';
-import type { ExPolygon, FeatureType, MeshInput, Paths, Polyline2, SliceOutput } from './types';
+import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
+import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -32,6 +33,11 @@ function pointInPaths(x: number, y: number, paths: Paths): boolean {
   for (const p of paths) if (C.Clipper.PointInPolygon(pt, p) !== 0) inside++;
   return inside % 2 === 1;
 }
+
+const rectPath = (x0: number, y0: number, x1: number, y1: number) => [
+  { X: Math.round(x0 * SCALE), Y: Math.round(y0 * SCALE) }, { X: Math.round(x1 * SCALE), Y: Math.round(y0 * SCALE) },
+  { X: Math.round(x1 * SCALE), Y: Math.round(y1 * SCALE) }, { X: Math.round(x0 * SCALE), Y: Math.round(y1 * SCALE) },
+];
 
 /** Splits a wall loop into runs, marking segments unsupported by the layer below as overhang. */
 function splitOverhang(item: PathItem, support: Paths | null): PathItem[] {
@@ -82,37 +88,87 @@ function mulberry(seed: number) {
   };
 }
 
-export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}): SliceOutput {
+const pick = (o: Record<string, unknown> | undefined, keys: string[]) =>
+  Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => keys.includes(k))) as Config;
+
+/** Filament slot derived from the flat config (single-material default). */
+export function slotFromConfig(cfg: Config): FilamentSlot {
+  return {
+    name: String(cfg.filament_settings_id ?? 'Filament'), type: String(cfg.filament_type ?? 'PLA'), color: String(cfg.filament_colour ?? '#5DBE7A'),
+    diameter: Number(cfg.filament_diameter ?? 1.75), density: Number(cfg.filament_density ?? 1.24), cost: Number(cfg.filament_cost ?? 20),
+    nozzleTemp: Number(cfg.nozzle_temperature ?? 210), nozzleTempInitial: Number(cfg.nozzle_temperature_initial_layer ?? 210),
+    flowRatio: Number(cfg.filament_flow_ratio ?? 1), maxVolumetricSpeed: Number(cfg.filament_max_volumetric_speed ?? 15),
+  };
+}
+
+interface Island { obj: number; fil: number; ex: ExPolygon; loops: PathItem[][]; inner: Paths }
+type Regions = { top: Paths; bottom: Paths; bridge: Paths; solid: Paths; sparse: Paths; sparseMods: { paths: Paths; density: number; pattern: SparsePattern }[] };
+
+export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}, opts: SliceOptions = {}): SliceOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const str = (k: string) => String(cfg[k] ?? '');
   const bool = (k: string) => cfg[k] === true;
   const warnings: string[] = [];
   const rnd = mulberry(42);
+  const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
+  const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
+
+  // per-object effective config
+  const ocfg: Config[] = meshes.map((m) => ({ ...cfg, ...pick(m.overrides, OBJECT_KEYS) }));
+  const onum = (o: number, k: string) => Number(ocfg[o][k] ?? 0);
+  const ostr = (o: number, k: string) => String(ocfg[o][k] ?? '');
 
   const nozzle = num('nozzle_diameter');
   const lw = (k: string) => num(k) || num('line_width') || nozzle * 1.05;
   const h0 = num('initial_layer_print_height');
   const hN = num('layer_height');
   const vase = bool('spiral_mode');
-  const density = vase ? 0 : num('sparse_infill_density') / 100;
   const flavor = str('gcode_flavor');
+  const hasAms = bool('has_ams');
 
-  // ---------- layer plan
+  // ---------- layer plan (variable layer height profile if any object has one)
   let maxZ = 0;
   for (const m of meshes) for (let i = 2; i < m.vertices.length; i += 3) maxZ = Math.max(maxZ, m.vertices[i]);
   if (maxZ <= 0) throw new Error('Nothing to slice: the plate is empty.');
   const zs: number[] = [], hs: number[] = [];
-  let z = h0; zs.push(z); hs.push(h0);
-  while (z + hN * 0.5 < maxZ) { z += hN; zs.push(+z.toFixed(4)); hs.push(hN); }
+  const profile = vase ? undefined : meshes.find((m) => m.layerHeights?.length)?.layerHeights;
+  let z = 0;
+  if (profile) {
+    if (meshes.filter((m) => m.layerHeights?.length).length > 1) warnings.push('Several objects have variable layer heights; the first profile is used for the whole plate.');
+    for (const h of profile) {
+      if (z + h * 0.5 >= maxZ) break;
+      z = +(z + h).toFixed(4); zs.push(z); hs.push(h);
+    }
+  } else { z = h0; zs.push(z); hs.push(h0); }
+  while (z + hN * 0.5 < maxZ) { z = +(z + hN).toFixed(4); zs.push(z); hs.push(hN); }
   const N = zs.length;
   const planes = zs.map((zz, i) => zz - hs[i] / 2);
 
-  // ---------- stage 2/3: slice each object + compensation
-  progress('Slicing mesh', 0.05);
-  const objSlices: Paths[][] = meshes.map((m, oi) => {
+  // ---------- stage 2/3: slice objects & parts
+  progress('Slicing mesh', 0.04);
+  const objSlices: Paths[][] = [];
+  const modSlices: { o: number; ov: Config; slices: Paths[] }[] = [];
+  const encVol: Paths[] = Array.from({ length: N }, () => []);
+  const blkVol: Paths[] = Array.from({ length: N }, () => []);
+  meshes.forEach((m, oi) => {
     const s = sliceMesh(m as IndexedMesh, planes);
-    progress('Slicing mesh', 0.05 + 0.15 * ((oi + 1) / meshes.length));
-    return s;
+    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes));
+    if (negatives.length) for (let i = 0; i < N; i++) {
+      const cut = negatives.flatMap((n) => n[i]);
+      if (cut.length && s[i].length) s[i] = difference(s[i], union(cut));
+    }
+    for (const p of m.parts ?? []) {
+      if (p.type === 'modifier') {
+        const ov = pick(p.overrides, MODIFIER_KEYS);
+        if (Object.keys(ov).length) modSlices.push({ o: oi, ov, slices: sliceMesh(p as IndexedMesh, planes) });
+      } else if (p.type === 'support_enforcer' || p.type === 'support_blocker') {
+        const ps = sliceMesh(p as IndexedMesh, planes);
+        const target = p.type === 'support_enforcer' ? encVol : blkVol;
+        for (let i = 0; i < N; i++) if (ps[i].length) target[i] = target[i].concat(ps[i]);
+      }
+    }
+    objSlices.push(s);
+    progress('Slicing mesh', 0.04 + 0.14 * ((oi + 1) / meshes.length));
   });
   const xyc = num('xy_contour_compensation'), xyh = num('xy_hole_compensation'), efc = num('elefant_foot_compensation');
   for (const sl of objSlices) {
@@ -128,13 +184,44 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   }
   const layerSlices: Paths[] = Array.from({ length: N }, (_, i) => union(objSlices.flatMap((s) => s[i])));
 
-  // ---------- stage 4: perimeters (classic)
-  progress('Generating perimeters', 0.25);
+  // ---------- multi-material: base filament per layer (colour-change actions) + painted colour regions
+  const colorActions = (opts.layerActions ?? []).filter((a) => a.type === 'color' && a.filament !== undefined).sort((a, b) => a.z - b.z);
+  const baseFilAt = (o: number, i: number) => {
+    let f = clampFil(meshes[o].filament ?? 0);
+    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = clampFil(a.filament!);
+    return f;
+  };
+  const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
+  const paintDepth = num('mmu_paint_depth') || 1.5;
+  const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
+    const sl = objSlices[o][i];
+    if (!sl.length) return [];
+    const base = baseFilAt(o, i);
+    if (!colorTris[o].length) return [{ fil: base, paths: sl }];
+    const map = colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth);
+    const out: { fil: number; paths: Paths }[] = [];
+    let taken: Paths = [];
+    for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
+      const fil = clampFil(c - 1);
+      const r = taken.length ? difference(paths, taken) : paths;
+      if (!r.length) continue;
+      out.push({ fil, paths: r });
+      taken = union(taken, r);
+    }
+    const rest = taken.length ? difference(sl, taken) : sl;
+    if (rest.length) out.unshift({ fil: base, paths: rest });
+    // merge regions sharing a filament
+    const merged = new Map<number, Paths>();
+    for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
+    return [...merged].map(([fil, paths]) => ({ fil, paths }));
+  };
+
+  // ---------- stage 4: perimeters (classic), per object & filament region
+  progress('Generating perimeters', 0.2);
   const wo0 = lw('outer_wall_line_width'), wi0 = lw('inner_wall_line_width');
-  const walls = vase ? 1 : Math.max(0, Math.round(num('wall_loops')));
-  interface Island { obj: number; ex: ExPolygon; loops: PathItem[][]; inner: Paths }
   const layerIslands: Island[][] = [];
-  const layerInner: Paths[][] = []; // per object
+  const layerInner: Paths[][] = []; // [layer][obj]
+  const filInner: Map<number, Paths>[][] = []; // [layer][obj] fil -> inner
   for (let i = 0; i < N; i++) {
     const h = hs[i];
     const wo = i === 0 ? lw('initial_layer_line_width') : wo0;
@@ -142,59 +229,69 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const so = spacingOf(wo, h), si = spacingOf(wi, h);
     const islands: Island[] = [];
     const inners: Paths[] = [];
-    objSlices.forEach((sl, oi) => {
+    const finners: Map<number, Paths>[] = [];
+    for (let oi = 0; oi < meshes.length; oi++) {
+      const walls = vase ? 1 : Math.max(0, Math.round(onum(oi, 'wall_loops')));
       const objInner: Paths = [];
-      for (const ex of toExPolygons(sl[i])) {
-        const ip = exToPaths(ex);
-        const loops: PathItem[][] = [];
-        let boundary = 0;
-        for (let k = 0; k < walls; k++) {
-          const d = k === 0 ? wo / 2 : wo / 2 + (so + si) / 2 + (k - 1) * si;
-          const ps = offset(ip, -d);
-          if (!ps.length) break;
-          const w = k === 0 ? wo : wi;
-          loops.push(ps.filter((p) => p.length >= 3).map((p) => ({
-            pts: pathToPoly(p), closed: true, feature: (k === 0 ? 'outer_wall' : 'inner_wall') as FeatureType, width: w, flow: 1,
-          })));
-          boundary = d + (k === 0 ? so : si) / 2;
+      const fmap = new Map<number, Paths>();
+      for (const reg of filRegions(oi, i)) {
+        const regInner: Paths = [];
+        for (const ex of toExPolygons(reg.paths)) {
+          const ip = exToPaths(ex);
+          const loops: PathItem[][] = [];
+          let boundary = 0;
+          for (let k = 0; k < walls; k++) {
+            const d = k === 0 ? wo / 2 : wo / 2 + (so + si) / 2 + (k - 1) * si;
+            const ps = offset(ip, -d);
+            if (!ps.length) break;
+            const w = k === 0 ? wo : wi;
+            loops.push(ps.filter((p) => p.length >= 3).map((p) => ({
+              pts: pathToPoly(p), closed: true, feature: (k === 0 ? 'outer_wall' : 'inner_wall') as FeatureType, width: w, flow: 1,
+            })));
+            boundary = d + (k === 0 ? so : si) / 2;
+          }
+          const inner = walls > 0 ? (loops.length === walls ? offset(ip, -boundary) : []) : ip;
+          regInner.push(...inner);
+          islands.push({ obj: oi, fil: reg.fil, ex, loops, inner });
         }
-        const inner = walls > 0 ? (loops.length === walls ? offset(ip, -boundary) : []) : ip;
-        objInner.push(...inner);
-        islands.push({ obj: oi, ex, loops, inner });
+        const u = union(regInner);
+        fmap.set(reg.fil, u);
+        objInner.push(...u);
       }
       inners.push(union(objInner));
-    });
+      finners.push(fmap);
+    }
     layerIslands.push(islands);
     layerInner.push(inners);
-    if (i % 10 === 0) progress('Generating perimeters', 0.25 + 0.15 * (i / N));
+    filInner.push(finners);
+    if (i % 10 === 0) progress('Generating perimeters', 0.2 + 0.15 * (i / N));
   }
 
   // ---------- stage 5: region classification (per object)
-  progress('Classifying surfaces', 0.4);
-  const topLayers = vase ? 0 : Math.max(Math.round(num('top_shell_layers')), num('top_shell_thickness') > 0 ? Math.ceil(num('top_shell_thickness') / hN - 1e-6) : 0);
-  const botLayers = Math.max(Math.round(num('bottom_shell_layers')), num('bottom_shell_thickness') > 0 ? Math.ceil(num('bottom_shell_thickness') / hN - 1e-6) : 0);
-  type Regions = { top: Paths; bottom: Paths; bridge: Paths; solid: Paths; sparse: Paths };
-  const regions: Regions[][] = []; // [layer][obj]
-  const minSparse = num('minimum_sparse_infill_area');
+  progress('Classifying surfaces', 0.36);
+  const regions: Regions[][] = [];
   for (let i = 0; i < N; i++) {
     const per: Regions[] = [];
     for (let o = 0; o < meshes.length; o++) {
+      const empty: Regions = { top: [], bottom: [], bridge: [], solid: [], sparse: [], sparseMods: [] };
       const inner = layerInner[i][o];
-      if (!inner.length) { per.push({ top: [], bottom: [], bridge: [], solid: [], sparse: [] }); continue; }
+      if (!inner.length) { per.push(empty); continue; }
+      const density = vase ? 0 : onum(o, 'sparse_infill_density') / 100;
+      const topLayers = vase ? 0 : Math.max(Math.round(onum(o, 'top_shell_layers')), onum(o, 'top_shell_thickness') > 0 ? Math.ceil(onum(o, 'top_shell_thickness') / hN - 1e-6) : 0);
+      const botLayers = Math.max(Math.round(onum(o, 'bottom_shell_layers')), onum(o, 'bottom_shell_thickness') > 0 ? Math.ceil(onum(o, 'bottom_shell_thickness') / hN - 1e-6) : 0);
       const sw = lw('internal_solid_infill_line_width');
       const clean = (p: Paths) => opening(p, sw * 0.25);
       const above = i + 1 < N ? objSlices[o][i + 1] : [];
       const below = i > 0 ? objSlices[o][i - 1] : [];
       let top = vase && i >= botLayers ? [] : clean(i + 1 < N ? difference(inner, above) : inner);
       const bottomAll = clean(i > 0 ? difference(inner, below) : inner);
-      let bottom = i === 0 ? bottomAll : [];
+      const bottom = i === 0 ? bottomAll : [];
       let bridge = i === 0 ? [] : bottomAll;
       if (vase && i >= botLayers) { top = []; bridge = []; }
 
       let solid: Paths = [];
-      if (vase) {
-        solid = i < botLayers ? inner : [];
-      } else {
+      if (vase) solid = i < botLayers ? inner : [];
+      else {
         if (topLayers > 0) {
           let cov: Paths | null = null;
           for (let k = 1; k <= topLayers; k++) {
@@ -217,34 +314,105 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       }
       let sparse = vase ? [] : difference(inner, union([...top, ...bottom, ...bridge, ...solid]));
       if (density >= 0.999) { solid = union([...solid, ...sparse]); sparse = []; }
-      else if (minSparse > 0 && sparse.length) {
-        const exs = toExPolygons(sparse);
-        const small = exs.filter((e) => area(e.contour) + e.holes.reduce((s, hh) => s + area(hh), 0) < minSparse);
+      else if (num('minimum_sparse_infill_area') > 0 && sparse.length) {
+        const small = toExPolygons(sparse).filter((e) => area(e.contour) + e.holes.reduce((s2, hh) => s2 + area(hh), 0) < num('minimum_sparse_infill_area'));
         if (small.length) {
-          const smallPaths = small.flatMap(exToPaths);
-          solid = union([...solid, ...smallPaths]);
-          sparse = difference(sparse, smallPaths);
+          const sp = small.flatMap(exToPaths);
+          solid = union([...solid, ...sp]);
+          sparse = difference(sparse, sp);
         }
       }
-      per.push({ top, bottom, bridge, solid, sparse });
+      // modifier volumes re-parameterise sparse infill inside them
+      const sparseMods: Regions['sparseMods'] = [];
+      for (const mod of modSlices) {
+        if (mod.o !== o || !mod.slices[i].length || !sparse.length) continue;
+        const r = intersection(sparse, mod.slices[i]);
+        if (!r.length) continue;
+        sparse = difference(sparse, mod.slices[i]);
+        const d = mod.ov.sparse_infill_density !== undefined ? Number(mod.ov.sparse_infill_density) / 100 : density;
+        const pat = (mod.ov.sparse_infill_pattern ?? ostr(o, 'sparse_infill_pattern')) as SparsePattern;
+        if (d >= 0.999) solid = union(solid, r);
+        else if (d > 0) sparseMods.push({ paths: r, density: d, pattern: pat });
+      }
+      per.push({ top, bottom, bridge, solid, sparse, sparseMods });
     }
     regions.push(per);
-    if (i % 10 === 0) progress('Classifying surfaces', 0.4 + 0.15 * (i / N));
+    if (i % 10 === 0) progress('Classifying surfaces', 0.36 + 0.14 * (i / N));
   }
 
-  // ---------- stage 6: support
+  // ---------- stage 6: support (auto overhangs + painted/volume enforcers & blockers)
   let support: { base: Paths[]; iface: Paths[] } | null = null;
   if (bool('enable_support')) {
-    progress('Generating support', 0.55);
-    support = generateSupport(layerSlices, hs, {
-      thresholdAngle: num('support_threshold_angle'),
-      topZDistance: num('support_top_z_distance'),
-      xyDistance: num('support_object_xy_distance'),
-      interfaceLayers: Math.round(num('support_interface_top_layers')),
-      buildPlateOnly: bool('support_on_build_plate_only'),
-      removeSmall: bool('support_remove_small_overhang'),
-      lineWidth: lw('support_line_width'),
-    });
+    progress('Generating support', 0.5);
+    const type = str('support_type') || 'normal_auto';
+    const manual = type.endsWith('manual');
+    const sw = lw('support_line_width');
+    const over: Paths[] = manual ? Array.from({ length: N }, () => []) : computeOverhangs(layerSlices, hs, num('support_threshold_angle'), bool('support_remove_small_overhang'), sw);
+    const supTris = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.support));
+    const blocked: Paths[] = Array.from({ length: N }, () => []);
+    for (let i = 1; i < N; i++) {
+      const add: Paths = [];
+      let sub: Paths = [];
+      meshes.forEach((m, o) => {
+        if (!supTris[o].length) return;
+        const enf = footprintsInBand(m as IndexedMesh, supTris[o], 1, zs[i] - hs[i], zs[i]);
+        if (enf.length) add.push(...difference(intersection(enf, objSlices[o][i]), objSlices[o][i - 1]));
+        const blk = footprintsInBand(m as IndexedMesh, supTris[o], 2, zs[i] - hs[i], zs[i], 0.5);
+        if (blk.length) sub = sub.concat(blk);
+      });
+      if (encVol[i].length) add.push(...intersection(difference(layerSlices[i], layerSlices[i - 1]), union(encVol[i])));
+      if (add.length) over[i] = union(over[i], add);
+      if (sub.length && over[i].length) over[i] = difference(over[i], union(sub));
+      if (blkVol[i].length) blocked[i] = union(blkVol[i]);
+    }
+    const common = {
+      topZDistance: num('support_top_z_distance'), xyDistance: num('support_object_xy_distance'),
+      interfaceLayers: Math.round(num('support_interface_top_layers')), buildPlateOnly: bool('support_on_build_plate_only'),
+      lineWidth: sw, blocked,
+    };
+    support = type.startsWith('tree')
+      ? generateTreeSupport(layerSlices, hs, over, {
+        ...common, branchAngle: num('tree_support_branch_angle') || 40, tipDiameter: num('tree_support_tip_diameter') || 1.6,
+        branchDiameter: num('tree_support_branch_diameter') || 6, branchDistance: num('tree_support_branch_distance') || 4,
+      })
+      : generateSupport(layerSlices, hs, over, common);
+  }
+
+  // ---------- filament plan & prime tower
+  const supportFil = num('support_filament') > 0 ? clampFil(num('support_filament') - 1) : -1;
+  const layerFils: number[][] = [];
+  const usedFils = new Set<number>();
+  for (let i = 0; i < N; i++) {
+    const s = new Set(layerIslands[i].map((isl) => isl.fil));
+    if (support && supportFil >= 0 && (support.base[i].length || support.iface[i].length)) s.add(supportFil);
+    layerFils.push([...s]);
+    s.forEach((f) => usedFils.add(f));
+  }
+  // simulate tool order: current tool first, then ascending
+  const changesPerLayer: number[] = [];
+  {
+    let cur = -1;
+    for (let i = 0; i < N; i++) {
+      const order = [...layerFils[i]].sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a - b));
+      let c = 0;
+      for (const f of order) { if (cur !== -1 && f !== cur) c++; cur = f; }
+      changesPerLayer.push(c);
+    }
+  }
+  const useTower = bool('enable_prime_tower') && usedFils.size > 1 && !vase;
+  const lastChangeLayer = changesPerLayer.reduce((a, c, i) => (c > 0 ? i : a), -1);
+  const tw = num('prime_tower_width') || 35;
+  const primeVol = (num('prime_volume') || 45) + (hasAms ? 0 : num('flush_volume'));
+  const bandDepth = Math.max(1.5, primeVol / (tw * hN));
+  const maxChanges = Math.max(1, ...changesPerLayer);
+  const td = Math.max(4, bandDepth * maxChanges);
+  let tx = num('prime_tower_x'), ty = num('prime_tower_y');
+  if (tx < 0) tx = Math.max(5, num('bed_x') - tw - 15);
+  if (ty < 0) ty = Math.max(5, num('bed_y') - td - 25);
+  if (useTower) {
+    const tb = offset([rectPath(tx, ty, tx + tw, ty + td)], 3);
+    if (intersection(tb, layerSlices[0]).length) warnings.push('The prime tower overlaps an object — move it in Others › Prime tower.');
+    if (tx + tw > num('bed_x') || ty + td > num('bed_y')) warnings.push('The prime tower does not fit on the plate.');
   }
 
   // ---------- bed adhesion (first layer)
@@ -255,7 +423,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const s = spacingOf(w, h0);
     let brimType = str('brim_type');
     if (brimType === 'auto_brim') {
-      // brim only for tall objects with a small footprint
       const b = bounds(layerSlices[0]);
       const minDim = Math.min(b.maxX - b.minX, b.maxY - b.minY) / SCALE;
       brimType = isFinite(minDim) && (maxZ / Math.max(minDim, 0.1) > 3 || minDim < 6) ? 'outer_only' : 'no_brim';
@@ -275,7 +442,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }
     const skirtN = Math.round(num('skirt_loops'));
     if (skirtN > 0) {
-      let base = union([...layerSlices[0], ...(support ? [...support.base[0], ...support.iface[0]] : [])]);
+      let base = union([...layerSlices[0], ...(support ? [...support.base[0], ...support.iface[0]] : []), ...(useTower ? [rectPath(tx, ty, tx + tw, ty + td)] : [])]);
       if (brimLoops.length) base = union(base, offset(base, gap + bw));
       for (let k = skirtN - 1; k >= 0; k--) {
         for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) skirtLoops.push({ pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 });
@@ -284,23 +451,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   }
 
   // ---------- stage 7/8: infill, ordering, ops
-  progress('Generating infill & toolpaths', 0.6);
-  const seamMode = str('seam_position') as SeamMode;
+  progress('Generating infill & toolpaths', 0.58);
   const resolution = num('resolution');
-  const overlap = num('infill_wall_overlap') / 100;
-  const sparsePattern = str('sparse_infill_pattern') as SparsePattern;
-  const infillDir = num('infill_direction');
   const solidDir = num('solid_infill_direction');
-  const ironing = str('ironing_type');
-  const fuzzy = str('fuzzy_skin');
   const wallSeq = str('wall_sequence');
-  const filArea = Math.PI * (num('filament_diameter') / 2) ** 2;
-  const flowRatio = num('filament_flow_ratio') || 1;
-  const mvs = num('filament_max_volumetric_speed') || 1e9;
 
   const speedFor = (feat: FeatureType, layer: number): number => {
     if (layer === 0) {
-      if (feat === 'outer_wall' || feat === 'inner_wall' || feat === 'overhang_wall' || feat === 'skirt' || feat === 'brim') return num('initial_layer_speed');
+      if (feat === 'outer_wall' || feat === 'inner_wall' || feat === 'overhang_wall' || feat === 'skirt' || feat === 'brim' || feat === 'prime_tower') return num('initial_layer_speed');
       return num('initial_layer_infill_speed');
     }
     switch (feat) {
@@ -314,6 +472,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       case 'ironing': return num('ironing_speed');
       case 'support': return num('support_speed');
       case 'support_interface': return num('support_interface_speed');
+      case 'prime_tower': return Math.min(num('sparse_infill_speed'), 150);
       default: return num('initial_layer_speed');
     }
   };
@@ -330,12 +489,22 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const reduceInfillRetract = bool('reduce_infill_retraction');
   const fanOffLayers = num('close_fan_the_first_x_layers');
   const labels = bool('label_objects') && flavor !== 'bambu';
+  const labelName = (o: number) => `obj${o}_${meshes[o].name.replace(/[^A-Za-z0-9_]/g, '_')}`;
+  const seamTris = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.seam));
+  const actionsByLayer = new Map<number, typeof opts.layerActions>();
+  for (const a of opts.layerActions ?? []) {
+    if (a.type === 'color') continue;
+    const li = zs.findIndex((zz) => zz >= a.z - 1e-6);
+    if (li < 0) continue;
+    actionsByLayer.set(li, [...(actionsByLayer.get(li) ?? []), a]);
+  }
 
   const layerOps: LayerOps[] = [];
   let px = 0, py = 0;
   let retracted = false;
   let prevSeams: [number, number][] = [];
   let curZ = 0;
+  let curTool = -1;
 
   for (let i = 0; i < N; i++) {
     const h = hs[i], zTop = zs[i];
@@ -343,11 +512,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const seams: [number, number][] = [];
     let lastFeature: FeatureType | null = null;
     let accelSet = -1;
-    let lastObj = -1;
 
-    const travel = (x: number, y: number, feat: FeatureType, z = zTop) => {
+    const layerFan = i < fanOffLayers ? 0 : num('fan_max_speed');
+    const travel = (x: number, y: number, feat: FeatureType, zz = zTop) => {
+      if (isNaN(px)) {
+        // position unknown after a filament change macro
+        ops.push({ k: 'move', x, y, z: zz, e: 0, f: travelSpeed, feature: 'travel', w: 0, h, travel: true });
+        px = x; py = y; curZ = zz;
+        return;
+      }
       const d = Math.hypot(x - px, y - py);
-      if (d < 1e-4 && Math.abs(z - curZ) < 1e-6) return;
+      if (d < 1e-4 && Math.abs(zz - curZ) < 1e-6) return;
       const skipRetract = reduceInfillRetract && feat === 'sparse_infill' && lastFeature === 'sparse_infill';
       const needRetract = retractLen > 0 && d > minTravel && !skipRetract;
       if (needRetract && !retracted) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); retracted = true; }
@@ -355,14 +530,16 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const ta = num('travel_acceleration');
       if (ta && ta !== accelSet) { ops.push({ k: 'accel', a: ta }); accelSet = ta; }
       if (hop) ops.push({ k: 'move', x: px, y: py, z: curZ + zHop, e: 0, f: num('max_speed_z') || 10, feature: 'travel', w: 0, h, travel: true, fixed: true });
-      ops.push({ k: 'move', x, y, z: hop ? curZ + zHop : z, e: 0, f: i === 0 ? Math.min(travelSpeed, 250) : travelSpeed, feature: 'travel', w: 0, h, travel: true });
-      if (hop) ops.push({ k: 'move', x, y, z, e: 0, f: num('max_speed_z') || 10, feature: 'travel', w: 0, h, travel: true, fixed: true });
-      curZ = z; px = x; py = y;
+      ops.push({ k: 'move', x, y, z: hop ? curZ + zHop : zz, e: 0, f: i === 0 ? Math.min(travelSpeed, 250) : travelSpeed, feature: 'travel', w: 0, h, travel: true });
+      if (hop) ops.push({ k: 'move', x, y, z: zz, e: 0, f: num('max_speed_z') || 10, feature: 'travel', w: 0, h, travel: true, fixed: true });
+      curZ = zz; px = x; py = y;
     };
 
     const extrudePath = (it: PathItem) => {
       let pts = it.pts;
       if (pts.length < 4) return;
+      const fl = filaments[Math.max(0, curTool)];
+      const filArea = Math.PI * (fl.diameter / 2) ** 2;
       const startZ = it.spiral ? zTop - h : zTop;
       travel(pts[0], pts[1], it.feature, startZ);
       if (retracted) { ops.push({ k: 'retract', len: -retractLen, speed: deretractSpeed }); retracted = false; }
@@ -372,11 +549,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const xs = it.feature === 'bridge'
         ? Math.PI * (nozzle / 2) ** 2
         : it.width > hEff ? (it.width - hEff) * hEff + Math.PI * (hEff / 2) ** 2 : it.width * hEff;
-      const ePerMm = (xs / filArea) * flowRatio * it.flow;
+      const ePerMm = (xs / filArea) * (fl.flowRatio || 1) * it.flow;
       let v = speedFor(it.feature, i);
-      v = Math.min(v, mvs / Math.max(xs, 1e-6));
+      v = Math.min(v, (fl.maxVolumetricSpeed || 1e9) / Math.max(xs, 1e-6));
       if (it.closed) pts = [...pts, pts[0], pts[1]];
-      // total length for spiral z ramp
       let totalLen = 0;
       if (it.spiral) for (let k = 2; k < pts.length; k += 2) totalLen += Math.hypot(pts[k] - pts[k - 2], pts[k + 1] - pts[k - 1]);
       let run = 0;
@@ -392,7 +568,64 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       lastFeature = it.feature;
     };
 
-    // --- first-layer adhesion
+    // --- prime tower
+    let towerOutlineDone = false;
+    let bandsDone = 0;
+    const towerOutline = () => {
+      if (towerOutlineDone) return;
+      towerOutlineDone = true;
+      const w = i === 0 ? lw('initial_layer_line_width') : lw('support_line_width');
+      const loops: PathItem[] = [];
+      if (i === 0) for (let k = 3; k >= 1; k--) for (const p of offset([rectPath(tx, ty, tx + tw, ty + td)], k * w)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
+      for (const p of offset([rectPath(tx, ty, tx + tw, ty + td)], -w / 2)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'prime_tower', width: w, flow: 1 });
+      for (const it of orderPaths(loops, px, py).paths) extrudePath(it);
+    };
+    const towerBand = (k: number, solid: boolean) => {
+      const w = i === 0 ? lw('initial_layer_line_width') : lw('support_line_width');
+      const y0 = ty + k * bandDepth, y1 = Math.min(ty + td, y0 + bandDepth);
+      const reg = offset([rectPath(tx, y0, tx + tw, y1)], -w);
+      const lines = linesFill(reg, solid ? spacingOf(w, h) : 4, solid ? (i % 2 ? 45 : -45) : 90);
+      for (const it of orderPaths(lines.map((l) => ({ ...l, feature: 'prime_tower' as FeatureType, width: w, flow: 1 })), px, py).paths) extrudePath(it);
+    };
+    const towerActive = useTower && i <= lastChangeLayer;
+
+    // --- filament change
+    const changeTo = (next: number) => {
+      if (next === curTool) return;
+      if (curTool === -1 && (!hasAms || (usedFils.size <= 1 && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
+      const fl = filaments[next];
+      const flushLen = (num('flush_volume') || 0) / (Math.PI * (fl.diameter / 2) ** 2);
+      const prev = curTool < 0 ? 0 : curTool;
+      if (!retracted && curTool >= 0) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); }
+      ops.push({
+        k: 'raw', resetPos: true, time: num('filament_change_time'),
+        text: expandMacro(str('change_filament_gcode'), cfg, {
+          previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
+          new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
+          flush_length: flushLen.toFixed(2),
+        }),
+      });
+      if (layerFan > 0) ops.push({ k: 'raw', text: `M106 S${Math.round((layerFan / 100) * 255)} ; restore part fan` });
+      ops.push({ k: 'tool', tool: next });
+      retracted = hasAms; // the AMS sequence ends with a retraction; M600 leaves the nozzle primed
+      px = NaN; py = NaN;
+      const wasFirst = curTool === -1;
+      curTool = next;
+      if (towerActive && !wasFirst) { towerOutline(); towerBand(bandsDone++, true); }
+    };
+
+    // --- layer actions (pause / custom G-code)
+    for (const a of actionsByLayer.get(i) ?? []) {
+      if (a.type === 'pause') ops.push({ k: 'raw', text: `; PAUSE at layer ${i + 1}\n${str('machine_pause_gcode') || 'M601'}`, resetPos: true });
+      else if (a.type === 'custom' && a.gcode) ops.push({ k: 'raw', text: `; custom G-code at layer ${i + 1}\n${a.gcode}` });
+    }
+
+    // order filaments: current first
+    const order = [...layerFils[i]].sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+    if (!order.length && curTool === -1) changeTo(supportFil >= 0 ? supportFil : 0);
+
+    // --- first-layer adhesion (printed with the first filament of the layer)
+    if (order.length) changeTo(order[0]);
     if (i === 0) {
       for (const it of orderPaths(skirtLoops, px, py).paths) extrudePath(it);
       for (const it of orderPaths(brimLoops, px, py).paths) extrudePath(it);
@@ -400,147 +633,143 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       for (const it of orderPaths(skirtLoops.map((s) => ({ ...s })), px, py).paths) extrudePath(it);
     }
 
-    // --- infill per object
     const islands = layerIslands[i];
-    const lowerSupport = i > 0 ? offset(layerSlices[i - 1], (wo0 / 2)) : null;
-    const objIndices = Array.from(new Set(islands.map((s) => s.obj)));
-    for (const o of objIndices) {
-      const rg = regions[i][o];
-      const sw = lw('internal_solid_infill_line_width'), tw = lw('top_surface_line_width'), spw = lw('sparse_infill_line_width');
-      const w0 = lw('initial_layer_line_width');
-      const innerAll = layerInner[i][o];
-      const clipTo = (r: Paths, w: number) => (r.length ? intersection(r, offset(innerAll, -(w / 2) + overlap * w)) : []);
-      const fills: PathItem[] = [];
-      const add = (polys: Polyline2[], feature: FeatureType, width: number, flow = 1) => {
-        for (const p of polys) fills.push({ ...p, pts: simplify(p.pts, resolution, p.closed), feature, width, flow });
-      };
-      const solidAngle = solidDir + (i % 2 ? 90 : 0);
-      const surface = (r: Paths, pattern: string, w: number, feature: FeatureType) => {
-        const reg = clipTo(r, w);
-        if (!reg.length) return;
-        const s = spacingOf(w, h);
-        if (pattern === 'concentric') add(concentricFill(reg, s, 0), feature, w);
-        else add(linesFill(reg, s, pattern === 'aligned_rectilinear' ? solidDir : solidAngle, pattern === 'monotonic'), feature, w);
-      };
-      if (i === 0) surface(rg.bottom, str('bottom_surface_pattern'), w0, 'bottom_surface');
-      else surface(rg.bottom, str('bottom_surface_pattern'), sw, 'bottom_surface');
-      if (rg.bridge.length) {
-        const reg = clipTo(rg.bridge, nozzle);
-        for (const ex of toExPolygons(reg)) {
-          const b = bounds([ex.contour]);
-          const ang = (b.maxX - b.minX) > (b.maxY - b.minY) ? 90 : 0;
-          add(linesFill(exToPaths(ex), nozzle * 1.0, ang), 'bridge', nozzle, num('bridge_flow') || 1);
-        }
-      }
-      if (rg.solid.length) {
-        const reg = clipTo(rg.solid, i === 0 ? w0 : sw);
-        add(linesFill(reg, spacingOf(i === 0 ? w0 : sw, h), solidAngle), 'internal_solid_infill', i === 0 ? w0 : sw);
-      }
-      if (rg.sparse.length && density > 0) {
-        const reg = clipTo(rg.sparse, spw);
-        add(sparseFill(reg, sparsePattern, spw, density, i, zTop, infillDir), 'sparse_infill', spw);
-      }
-      if (rg.top.length) surface(rg.top, str('top_surface_pattern'), tw, 'top_surface');
-      const ironPaths: PathItem[] = [];
-      if (rg.top.length && (ironing === 'top' || (ironing === 'topmost' && i === N - 1))) {
-        const reg = offset(rg.top, -tw / 2);
-        for (const p of linesFill(reg, num('ironing_spacing'), solidAngle + 90)) {
-          ironPaths.push({ ...p, feature: 'ironing', width: num('ironing_spacing'), flow: num('ironing_flow') / 100 * (h / num('ironing_spacing')) });
-        }
-      }
-
-      // assign fills to islands by first point
-      const objIslands = islands.filter((s) => s.obj === o);
-      const byIsland = new Map<Island, PathItem[]>();
-      for (const it of [...fills, ...ironPaths]) {
-        let owner = objIslands[0];
-        if (objIslands.length > 1) {
-          const tx = it.pts[0], ty = it.pts[1];
-          owner = objIslands.find((s) => pointInPaths(tx, ty, exToPaths(s.ex))) ?? objIslands[0];
-        }
-        const l = byIsland.get(owner); if (l) l.push(it); else byIsland.set(owner, [it]);
-      }
-
-      // order islands nearest-neighbour
-      const left = objIslands.slice();
-      if (labels && lastObj !== o) {
-        const name = `obj${o}_${meshes[o].name.replace(/[^A-Za-z0-9_]/g, '_')}`;
-        ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_START NAME=${name}` : `M486 S${o}` });
-        lastObj = o;
-      }
-      while (left.length) {
-        let bi = 0, bd = Infinity;
-        left.forEach((s, k) => {
-          const c = s.ex.contour[0];
-          const d = (c.X / SCALE - px) ** 2 + (c.Y / SCALE - py) ** 2;
-          if (d < bd) { bd = d; bi = k; }
-        });
-        const isl = left.splice(bi, 1)[0];
-        // walls in configured order
-        const depthOrder = isl.loops.map((_, k) => k);
-        let seq: number[];
-        if (wallSeq === 'outer_inner') seq = depthOrder;
-        else if (wallSeq === 'inner_outer_inner' && depthOrder.length >= 3) seq = [...depthOrder.slice(2).reverse(), 0, 1];
-        else seq = depthOrder.slice().reverse();
-        const wallItems: PathItem[] = [];
-        for (const k of seq) {
-          const ordered = orderPaths(isl.loops[k].map((l) => ({ ...l })), px, py).paths;
-          for (const loop of ordered) {
-            let pts = simplify(loop.pts, resolution, true);
-            const prev = seamMode === 'aligned' && prevSeams.length
-              ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
-              : null;
-            const si = pickSeam(pts, seamMode, px, py, prev, rnd);
-            pts = rotateLoop(pts, si);
-            if (k === 0) seams.push([pts[0], pts[1]]);
-            if (fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, num('fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
-            const item: PathItem = { ...loop, pts, spiral: vase && i >= botLayers };
-            wallItems.push(...(i > 0 && !vase ? splitOverhang(item, lowerSupport) : [item]));
-          }
-        }
-        const isFill = byIsland.get(isl) ?? [];
-        const fillOrdered = () => {
-          const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
-          const outp: PathItem[] = [];
-          for (const g of groups) {
-            const r = orderPaths(isFill.filter((f) => f.feature === g), px, py);
-            outp.push(...r.paths);
-          }
-          return outp;
+    const lowerSupport = i > 0 ? offset(layerSlices[i - 1], wo0 / 2) : null;
+    for (const fil of order) {
+      changeTo(fil);
+      for (let o = 0; o < meshes.length; o++) {
+        const objIslands = islands.filter((s) => s.obj === o && s.fil === fil);
+        if (!objIslands.length) continue;
+        const rg = regions[i][o];
+        const sw = lw('internal_solid_infill_line_width'), twid = lw('top_surface_line_width'), spw = lw('sparse_infill_line_width');
+        const w0 = lw('initial_layer_line_width');
+        const fInner = filInner[i][o].get(fil) ?? [];
+        const overlap = onum(o, 'infill_wall_overlap') / 100;
+        const clipTo = (r: Paths, w: number) => (r.length && fInner.length ? intersection(r, offset(fInner, -(w / 2) + overlap * w)) : []);
+        const fills: PathItem[] = [];
+        const add = (polys: Polyline2[], feature: FeatureType, width: number, flow = 1) => {
+          for (const p of polys) fills.push({ ...p, pts: simplify(p.pts, resolution, p.closed), feature, width, flow });
         };
-        if (bool('is_infill_first')) { for (const it of fillOrdered()) extrudePath(it); for (const it of wallItems) extrudePath(it); }
-        else { for (const it of wallItems) extrudePath(it); for (const it of fillOrdered()) extrudePath(it); }
-      }
-      if (labels) {
-        const name = `obj${o}_${meshes[o].name.replace(/[^A-Za-z0-9_]/g, '_')}`;
-        ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_END NAME=${name}` : 'M486 S-1' });
-        lastObj = -1;
+        const solidAngle = solidDir + (i % 2 ? 90 : 0);
+        const surface = (r: Paths, pattern: string, w: number, feature: FeatureType) => {
+          const reg = clipTo(r, w);
+          if (!reg.length) return;
+          const s = spacingOf(w, h);
+          if (pattern === 'concentric') add(concentricFill(reg, s, 0), feature, w);
+          else add(linesFill(reg, s, pattern === 'aligned_rectilinear' ? solidDir : solidAngle, pattern === 'monotonic'), feature, w);
+        };
+        surface(rg.bottom, ostr(o, 'bottom_surface_pattern'), i === 0 ? w0 : sw, 'bottom_surface');
+        if (rg.bridge.length) {
+          for (const ex of toExPolygons(clipTo(rg.bridge, nozzle))) {
+            const b = bounds([ex.contour]);
+            const ang = (b.maxX - b.minX) > (b.maxY - b.minY) ? 90 : 0;
+            add(linesFill(exToPaths(ex), nozzle, ang), 'bridge', nozzle, num('bridge_flow') || 1);
+          }
+        }
+        if (rg.solid.length) {
+          const ww = i === 0 ? w0 : sw;
+          add(linesFill(clipTo(rg.solid, ww), spacingOf(ww, h), solidAngle), 'internal_solid_infill', ww);
+        }
+        const dens = vase ? 0 : onum(o, 'sparse_infill_density') / 100;
+        if (rg.sparse.length && dens > 0) add(sparseFill(clipTo(rg.sparse, spw), ostr(o, 'sparse_infill_pattern') as SparsePattern, spw, dens, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
+        for (const m of rg.sparseMods) add(sparseFill(clipTo(m.paths, spw), m.pattern, spw, m.density, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
+        if (rg.top.length) surface(rg.top, ostr(o, 'top_surface_pattern'), twid, 'top_surface');
+        const ironing = ostr(o, 'ironing_type');
+        if (rg.top.length && (ironing === 'top' || (ironing === 'topmost' && i === N - 1))) {
+          const reg = intersection(offset(rg.top, -twid / 2), fInner);
+          for (const p of linesFill(reg, num('ironing_spacing'), solidAngle + 90)) {
+            fills.push({ ...p, feature: 'ironing', width: num('ironing_spacing'), flow: (num('ironing_flow') / 100) * (h / num('ironing_spacing')) });
+          }
+        }
+
+        // assign fills to islands by first point
+        const byIsland = new Map<Island, PathItem[]>();
+        for (const it of fills) {
+          let owner = objIslands[0];
+          if (objIslands.length > 1) owner = objIslands.find((s) => pointInPaths(it.pts[0], it.pts[1], exToPaths(s.ex))) ?? objIslands[0];
+          const l = byIsland.get(owner); if (l) l.push(it); else byIsland.set(owner, [it]);
+        }
+
+        if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_START NAME=${labelName(o)}` : `M486 S${o}` });
+        const hints: SeamHints | undefined = seamTris[o].length
+          ? { enforce: pointsAtZ(meshes[o] as IndexedMesh, seamTris[o], 1, planes[i]), block: pointsAtZ(meshes[o] as IndexedMesh, seamTris[o], 2, planes[i]) }
+          : undefined;
+        const seamMode = ostr(o, 'seam_position') as SeamMode;
+        const fuzzy = ostr(o, 'fuzzy_skin');
+        const left = objIslands.slice();
+        while (left.length) {
+          let bi = 0, bd = Infinity;
+          left.forEach((s, k) => {
+            const c = s.ex.contour[0];
+            const d = (c.X / SCALE - (isNaN(px) ? 0 : px)) ** 2 + (c.Y / SCALE - (isNaN(py) ? 0 : py)) ** 2;
+            if (d < bd) { bd = d; bi = k; }
+          });
+          const isl = left.splice(bi, 1)[0];
+          const depthOrder = isl.loops.map((_, k) => k);
+          let seq: number[];
+          if (wallSeq === 'outer_inner') seq = depthOrder;
+          else if (wallSeq === 'inner_outer_inner' && depthOrder.length >= 3) seq = [...depthOrder.slice(2).reverse(), 0, 1];
+          else seq = depthOrder.slice().reverse();
+          const wallItems: PathItem[] = [];
+          for (const k of seq) {
+            const ordered = orderPaths(isl.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
+            for (const loop of ordered) {
+              let pts = simplify(loop.pts, resolution, true);
+              const prev = seamMode === 'aligned' && prevSeams.length
+                ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
+                : null;
+              const si = pickSeam(pts, seamMode, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, prev, rnd, hints);
+              pts = rotateLoop(pts, si);
+              if (k === 0) seams.push([pts[0], pts[1]]);
+              if (fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
+              const item: PathItem = { ...loop, pts, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
+              wallItems.push(...(i > 0 && !vase ? splitOverhang(item, lowerSupport) : [item]));
+            }
+          }
+          const isFill = byIsland.get(isl) ?? [];
+          const fillOrdered = () => {
+            const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
+            const outp: PathItem[] = [];
+            for (const g of groups) outp.push(...orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+            return outp;
+          };
+          if (bool('is_infill_first')) { for (const it of fillOrdered()) extrudePath(it); for (const it of wallItems) extrudePath(it); }
+          else { for (const it of wallItems) extrudePath(it); for (const it of fillOrdered()) extrudePath(it); }
+        }
+        if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_END NAME=${labelName(o)}` : 'M486 S-1' });
       }
     }
 
     // --- support
-    if (support) {
+    if (support && (support.base[i].length || support.iface[i].length)) {
+      if (supportFil >= 0) changeTo(supportFil);
       const sw = i === 0 ? lw('initial_layer_line_width') : lw('support_line_width');
       const items: PathItem[] = [];
       if (support.base[i].length) {
-        for (const p of offset(support.base[i], -sw / 2).map((pp) => ({ pts: pathToPoly(pp), closed: true }))) items.push({ ...p, feature: 'support', width: sw, flow: 1 });
+        for (const p of offset(support.base[i], -sw / 2)) items.push({ pts: pathToPoly(p), closed: true, feature: 'support', width: sw, flow: 1 });
         for (const p of linesFill(offset(support.base[i], -sw), num('support_base_pattern_spacing') + sw, num('support_angle') + (i === 0 ? 90 : 0))) items.push({ ...p, feature: 'support', width: sw, flow: 1 });
       }
       if (support.iface[i].length) {
         for (const p of linesFill(support.iface[i], num('support_interface_spacing') + sw, num('support_angle') + 90)) items.push({ ...p, feature: 'support_interface', width: sw, flow: 1 });
       }
-      for (const it of orderPaths(items, px, py).paths) extrudePath(it);
+      for (const it of orderPaths(items, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it);
+    }
+
+    // --- tower remainder: keep it growing every layer until the last filament change
+    if (towerActive) {
+      towerOutline();
+      for (let k = bandsDone; k < maxChanges; k++) towerBand(k, i === 0);
     }
 
     if (seams.length) prevSeams = seams;
-    const fan = i < fanOffLayers ? 0 : num('fan_max_speed');
-    const L: LayerOps = { z: zTop, h, ops, fan };
+    const L: LayerOps = { z: zTop, h, ops, fan: layerFan };
     if (i === 1) {
-      if (num('nozzle_temperature') !== num('nozzle_temperature_initial_layer')) L.temp = num('nozzle_temperature');
+      const fl = filaments[Math.max(0, curTool)];
+      if (fl.nozzleTemp !== fl.nozzleTempInitial) L.temp = fl.nozzleTemp;
       if (num('bed_temperature') !== num('bed_temperature_initial_layer')) L.bedTemp = num('bed_temperature');
     }
     layerOps.push(L);
-    if (i % 5 === 0) progress('Generating infill & toolpaths', 0.6 + 0.3 * (i / N));
+    if (i % 5 === 0) progress('Generating infill & toolpaths', 0.58 + 0.32 * (i / N));
   }
 
   // ---------- stage 10: emit
@@ -548,17 +777,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const objectLabels = meshes.map((m, o) => {
     const b = bounds(objSlices[o].flat());
     const x0 = b.minX / SCALE, y0 = b.minY / SCALE, x1 = b.maxX / SCALE, y1 = b.maxY / SCALE;
-    return { name: `obj${o}_${m.name.replace(/[^A-Za-z0-9_]/g, '_')}`, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as [number, number][] };
+    return { name: labelName(o), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as [number, number][] };
   }).filter((l) => isFinite(l.cx));
-  const res = emit({ cfg, layers: layerOps, objectLabels: labels ? objectLabels : [] });
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [] });
 
-  // bounds check
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
   if (all.minX / SCALE < -0.01 || all.minY / SCALE < -0.01 || all.maxX / SCALE > bx + 0.01 || all.maxY / SCALE > by + 0.01) {
     warnings.push('Some geometry lies outside the printable area.');
   }
   if (maxZ > num('bed_z')) warnings.push(`Model height ${maxZ.toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
+  if (usedFils.size > 1 && !hasAms) warnings.push(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
   return { ...res, warnings };
 }
