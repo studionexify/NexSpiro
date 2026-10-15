@@ -1,0 +1,19 @@
+[project]
+name = "nexspiro"
+version = "0.1.0"
+description = "Nexspiro slicer plugin framework (Studio Nexify, in-house)"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+mesh = ["trimesh>=4", "numpy"]
+dev = ["pytest", "pyinstaller"]
+
+[project.scripts]
+nexspiro-plugin = "nexspiro.runner.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nexspiro*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
