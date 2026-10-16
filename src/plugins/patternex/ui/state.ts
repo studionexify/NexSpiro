@@ -131,3 +131,32 @@ export function toPatternexConfig(s: PatternexState, objects: { id: string; matr
     transitionVolume: s.transitionVolume,
   };
 }
+
+/** What a project file keeps (spec: placements can be re-used for repeat orders). */
+export interface PatternexProjectData {
+  version: 1;
+  patterns: Pattern[]; placements: ObjPlacement[]; actions: RegionAction[];
+  singleColour: SingleColourPolicy; transitionVolume: (number | null)[];
+}
+
+export function projectData(s: PatternexState): PatternexProjectData | undefined {
+  if (!s.placements.length) return undefined;
+  const used = new Set(s.placements.map((p) => p.pattern_id));
+  return {
+    version: 1, patterns: s.patterns.filter((p) => used.has(p.id)), placements: s.placements, actions: s.actions,
+    singleColour: s.singleColour, transitionVolume: s.transitionVolume,
+  };
+}
+
+/** Replace the current placements with a project's (patterns are merged into the library). */
+export function restoreProject(s: PatternexState, d: PatternexProjectData | undefined, objectIds: string[]): void {
+  s.placements = []; s.actions = []; s.selected = null; s.armed = null;
+  if (!d || d.version !== 1) return;
+  for (const p of d.patterns ?? []) addPattern(s, p);
+  const ids = new Set(objectIds);
+  s.placements = (d.placements ?? []).filter((p) => ids.has(p.object_id));
+  const kept = new Set(s.placements.map((p) => p.id));
+  s.actions = (d.actions ?? []).filter((a) => kept.has(a.region_ref.placement_id));
+  s.singleColour = d.singleColour ?? s.singleColour;
+  s.transitionVolume = d.transitionVolume ?? s.transitionVolume;
+}

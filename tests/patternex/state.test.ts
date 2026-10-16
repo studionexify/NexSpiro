@@ -54,3 +54,26 @@ describe('Patternex UI state', () => {
     expect(r.armed).toBeNull();
   });
 });
+
+describe('Patternex in project files', () => {
+  it('round-trips placements, patterns and actions; drops placements on missing objects', async () => {
+    const { projectData, restoreProject } = await import('../../src/plugins/patternex/ui/state');
+    const s = createPatternexState(null);
+    s.patterns.push(pat, builtinPattern('hex'));
+    s.placements.push(place(), place({ id: 'z', object_id: 'gone' }));
+    s.actions.push(...defaultActions('a', pat, 3), ...defaultActions('z', pat, 3));
+    s.singleColour = 'band'; s.transitionVolume = [30, null];
+    const d = JSON.parse(JSON.stringify(projectData(s)));
+    expect(d.patterns.map((p: { id: string }) => p.id)).toEqual([pat.id]); // only used patterns are saved
+    const r = createPatternexState(null);
+    r.placements.push(place({ id: 'old' }));
+    restoreProject(r, d, ['o1']);
+    expect(r.placements.map((p) => p.id)).toEqual(['a']);
+    expect(r.actions.every((a) => a.region_ref.placement_id === 'a')).toBe(true);
+    expect(r.singleColour).toBe('band');
+    expect(r.transitionVolume).toEqual([30, null]);
+    expect(projectData(createPatternexState(null))).toBeUndefined();
+    restoreProject(r, undefined, ['o1']); // a project without Patternex clears placements
+    expect(r.placements).toEqual([]);
+  });
+});

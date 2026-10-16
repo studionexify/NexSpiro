@@ -61,7 +61,7 @@ Purge grams use the flush volumes actually applied (default `flush_volume` 280 m
 - **Change-point shift** stays within the extrusion run next to the change (same layer).
 - **Reduced purge** without a volume uses half of the matrix value.
 - Region outlines in the preview are capped at 200k points.
-- Patterns, placements and region actions are kept in the browser/app storage, not yet in the `.3mf` project file.
+- Patterns, placements and region actions are saved in the `.3mf` project (`Metadata/nexspiro_project.json` → `patternex`) and restored on open; placements on objects missing from the project are dropped.
 
 ## 7. Not started (spec §11 extended scope)
 Pattern library and text tool, raster tracing/halftone/dither, palette quantisation, paint brush, spherical/UV projection, tiling, angle filter, region booleans, edge treatments, non-colour region actions, dithered gradients, extra purge strategies (into infill/object), bleed calibration wizard, swap optimiser, waste/cost estimate per pattern, rule engine, style presets, per-order templates, project files, Emerald/Nexder/Nexcal integration, job logging.
