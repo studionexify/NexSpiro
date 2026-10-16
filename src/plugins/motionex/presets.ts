@@ -1,4 +1,4 @@
-// Built-in pattern library. Every pattern is a shape function over one repeat (u = 0..1),
+// Built-in motion library. Every motion is a shape function over one repeat (u = 0..1),
 // turned into editable curves, then offered in several sizes.
 import { flatCurve, pt, type Curve, type CurveKey, type LayerEffect, type LayerMode, type MotionBrush, type MotionEvent, type NoiseSettings } from "./model";
 
@@ -57,16 +57,16 @@ interface Shape {
   /** Up-and-down curve and its height in mm. */
   zc?: Curve; zamp?: number;
   events?: MotionEvent[];
-  /** Fit a whole number of repeats around each wall so vertical patterns line up. */
+  /** Fit a whole number of repeats around each wall so vertical motions line up. */
   fit?: boolean;
 }
 
 /** Layer effect shorthand: shift (°), mode, layers per step, optional on/off bands. */
 const lay = (shift_deg: number, mode: LayerMode, every = 1, band_on = 0, band_off = 0): LayerEffect => ({ shift_deg, mode, every, band_on, band_off });
-/** Crossed: the same pattern slanting both ways, for diamond and lattice grids. */
+/** Crossed: the same motion slanting both ways, for diamond and lattice grids. */
 const cross = (shift_deg: number, every = 1): LayerEffect => ({ ...lay(shift_deg, "steady", every), cross: true });
 
-const W = "Waves", T = "Teeth & steps", B = "Bumps & dents", P = "Pulses & beats", L = "Loops & coils", K = "Knits, braids & ropes", F = "Plastic flow patterns", R = "Rough & natural", M = "Mixed";
+const W = "Waves", T = "Teeth & steps", B = "Bumps & dents", P = "Pulses & beats", L = "Loops & coils", K = "Knits, braids & ropes", F = "Plastic flow motions", R = "Rough & natural", M = "Mixed";
 const G = "Grids & tiles", V = "Ribs, twists & stripes", N = "Nature & animals", D = "Decor & ornament", S = "Surfaces & finishes";
 
 const SHAPES: Shape[] = [
@@ -138,7 +138,7 @@ const SHAPES: Shape[] = [
   { key: "weave", name: "Basket weave", desc: "Blocks that look woven", cat: K, lat: smooth(softSquare(4), 32), along: smooth((u) => 0.3 * Math.sin(TAU * 2 * u)), amp: 0.5, period: 6 },
   { key: "cable", name: "Cable knit", desc: "Chunky twisted cable", cat: K, lat: smooth(norm((u) => Math.sin(TAU * u) + 0.6 * Math.sin(TAU * 2 * u + 1)), 24), along: smooth((u) => 0.5 * Math.cos(TAU * u)), amp: 1.1, period: 5 },
   { key: "stitch", name: "Running stitch", desc: "Dashed stitch line", cat: K, lat: smooth(gauss(0.2), 24), flow: jumps([[0, 1.3], [0.6, 0.7]]), amp: 0.4, period: 4 },
-  // Plastic flow patterns
+  // Plastic flow motions
   { key: "beads", name: "Pearl beads", desc: "Thicker blobs along a straight wall", cat: F, flow: smooth((u) => 1 + 0.45 * Math.cos(TAU * u)), period: 3 },
   { key: "dashes", name: "Dashes", desc: "Alternating thick and thin sections", cat: F, flow: jumps([[0, 1.4], [0.5, 0.6]]), period: 4 },
   { key: "thick-thin", name: "Thick and thin", desc: "Line slowly swells and slims", cat: F, flow: smooth((u) => 1 + 0.35 * Math.sin(TAU * u)), period: 10 },
@@ -181,7 +181,7 @@ const SHAPES: Shape[] = [
   { key: "waffle", name: "Waffle", desc: "Grid of square pockets", cat: G, lat: jumps([[0, 1], [0.8, -1]]), layers: lay(0, "steady", 1, 16, 3), amp: 0.4, period: 6, fit: true },
   { key: "herringbone", name: "Herringbone", desc: "Slanted blocks that flip direction", cat: G, lat: jumps([[0, 1], [0.5, -1]]), layers: lay(6, "back_and_forth", 25), amp: 0.35, period: 8, fit: true },
   { key: "chevron", name: "Chevrons", desc: "Stacked V shapes", cat: G, lat: sharp(tri), layers: lay(10, "back_and_forth", 18), period: 6, fit: true },
-  { key: "argyle", name: "Argyle", desc: "Sweater-style diamond pattern", cat: G, lat: smooth(gauss(0.1), 48), layers: cross(3), period: 12, fit: true },
+  { key: "argyle", name: "Argyle", desc: "Sweater-style diamond motion", cat: G, lat: smooth(gauss(0.1), 48), layers: cross(3), period: 12, fit: true },
   { key: "lattice", name: "Lattice", desc: "Crossing diagonal strips", cat: G, lat: smooth(gauss(0.12), 48), layers: cross(5), period: 7, fit: true },
   { key: "fishnet", name: "Fishnet", desc: "Open net of thin diagonal lines", cat: G, lat: smooth(gauss(0.05), 48), layers: cross(6), amp: 0.4, period: 7, fit: true },
   { key: "quilted", name: "Quilted", desc: "Soft puffy squares like a quilt", cat: G, lat: smooth(bump, 24), layers: lay(180, "alternate", 14), period: 9, fit: true },
@@ -242,7 +242,7 @@ const SHAPES: Shape[] = [
   ...motionShapes(),
 ];
 
-/** Patterns that use up-and-down movement, pauses, blobs and lift-offs. */
+/** Motions that use up-and-down movement, pauses, blobs and lift-offs. */
 function motionShapes(): Shape[] {
   const U = "Up & down", E = "Dots, stitches & jumps";
   const pause = (pct: number, ms: number, blob = 0): MotionEvent => ({ at: { mode: "percent", value: pct }, type: "dwell", params: { ms, blob_mm3: blob } });
@@ -319,7 +319,7 @@ function build(s: Shape): MotionBrush {
   };
 }
 
-/** Every built-in pattern. Size is set per use with the Size slider. Presets are read-only; editing one saves a copy. */
+/** Every built-in motion. Size is set per use with the Size slider. Presets are read-only; editing one saves a copy. */
 export const PRESETS: MotionBrush[] = SHAPES.map(build);
 
 export const PRESET_CATEGORIES: string[] = [...new Set(SHAPES.map((s) => s.cat))];

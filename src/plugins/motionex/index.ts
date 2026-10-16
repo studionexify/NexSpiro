@@ -1,10 +1,11 @@
-// Motionex UI-side state: pattern library, applied patterns and print-head shapes.
+// Motionex UI-side state: motion library, applied motions and print-head shapes.
 // The engine side (engine.ts) receives a plain-data snapshot of this through toConfig().
 import { defaultToolhead, type CollisionMode, type ToolheadProfile } from './core/toolhead';
 import { DEFAULT_OPTIONS, type ModifierOptions } from './modifier';
 import { BrushLibrary, type KeyValueStore } from './library';
 import type { MotionApplication } from './model';
 import type { MotionexConfig } from './engine';
+import type { PreviewView } from './preview';
 
 export interface MotionexState {
   library: BrushLibrary;
@@ -13,6 +14,8 @@ export interface MotionexState {
   /** What to do when the print head would hit the print. */
   collisionMode: CollisionMode;
   toolheads: ToolheadLibrary;
+  /** What the quick preview on the model is coloured by. */
+  previewView: PreviewView;
 }
 
 const TOOLHEAD_KEY = 'nexspiro.toolheads.v1';
@@ -36,17 +39,17 @@ export class ToolheadLibrary {
 export function createMotionexState(store: KeyValueStore | null): MotionexState {
   const state: MotionexState = {
     library: new BrushLibrary(store), applications: [], options: { ...DEFAULT_OPTIONS },
-    collisionMode: 'clamp', toolheads: new ToolheadLibrary(store),
+    collisionMode: 'clamp', toolheads: new ToolheadLibrary(store), previewView: 'motion',
   };
   try {
     const s = JSON.parse(store?.getItem(APPS_KEY) ?? 'null');
-    if (s) { state.applications = s.applications ?? []; state.options = { ...DEFAULT_OPTIONS, ...s.options }; state.collisionMode = s.collisionMode ?? 'clamp'; }
+    if (s) { state.applications = s.applications ?? []; state.options = { ...DEFAULT_OPTIONS, ...s.options }; state.collisionMode = s.collisionMode ?? 'clamp'; state.previewView = s.previewView ?? 'motion'; }
   } catch { /* fresh start */ }
   return state;
 }
 
 export function saveMotionexState(state: MotionexState, store: KeyValueStore | null): void {
-  try { store?.setItem(APPS_KEY, JSON.stringify({ applications: state.applications, options: state.options, collisionMode: state.collisionMode })); } catch { /* storage unavailable */ }
+  try { store?.setItem(APPS_KEY, JSON.stringify({ applications: state.applications, options: state.options, collisionMode: state.collisionMode, previewView: state.previewView })); } catch { /* storage unavailable */ }
 }
 
 /** Plain-data snapshot for the slicing worker. */

@@ -9,7 +9,7 @@ import {
 import { addPart, addPlate, deletePlate, moveToPlate, PART_LABELS } from '../state/ops';
 import { useStore, type ContextMenuState } from '../state/store';
 import type { PartType } from '../engine/types';
-import { applyPatternToObjects } from '../plugins/motionex/ui/MotionexPanel';
+import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
 import { editObjectArtwork, openPatternLibrary } from '../plugins/patternex/ui/PatternexPanel';
 
 export interface MenuItem {
@@ -82,7 +82,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paint colour', kbd: 'N', disabled: s.filaments.length < 2, onClick: () => s.set({ selected: ids, tool: 'paint_color' }) },
     { label: 'Cut', kbd: 'C', disabled: !one, onClick: () => s.set({ selected: ids, tool: 'cut' }) },
   ];
-  if (s.plugins.includes('motionex')) items.push({ label: 'Motion on whole object (Motionex)', onClick: () => applyPatternToObjects(ids) });
+  if (s.plugins.includes('motionex')) items.push({ label: 'Motion on whole object (Motionex)', onClick: () => applyMotionToObjects(ids) });
   if (s.plugins.includes('patternex')) {
     const placed = s.objects.filter((o) => ids.includes(o.id)).reduce((n, o) => n + (o.patternex?.placements.length ?? 0), 0);
     items.push({ label: 'Artwork (Patternex)', sub: [

@@ -4,7 +4,7 @@ import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
 import { motionexConfig, MotionexPanel, motionexPreview, mx } from './motionex/ui/MotionexPanel';
-import { PatternStudio } from './motionex/ui/PatternStudio';
+import { MotionStudio } from './motionex/ui/MotionStudio';
 import { toConfig } from './motionex';
 import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patternex/ui/PatternexPanel';
 import { patternexPreview } from './patternex/ui/preview';
@@ -20,7 +20,7 @@ export interface UiPlugin {
   sliceConfig(): unknown;
   /** Quick preview lines drawn on the model in Prepare (no slicing), or null for none. */
   preview?(): { positions: Float32Array; colors: Float32Array } | null;
-  /** Full-height editor shown beside the 3D view in the Pattern tab. */
+  /** Full-height editor shown beside the 3D view in the Motion tab. */
   Studio?: ComponentType;
 }
 
@@ -41,7 +41,7 @@ export const PLUGINS: UiPlugin[] = [
       return { ...c, applications: [...c.applications, ...extra], brushes };
     },
     preview: motionexPreview,
-    Studio: PatternStudio,
+    Studio: MotionStudio,
   },
   {
     id: 'patternex', name: 'Patternex', badge: 'P',

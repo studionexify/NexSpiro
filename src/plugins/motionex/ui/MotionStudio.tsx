@@ -1,18 +1,21 @@
-// Pattern tab: change the pattern of one placement and watch it on the model as you go. The model view
-// keeps drawing the quick pattern preview; this panel holds the shape, depth and spacing, how layers lead
+// Motion tab: change the motion of one placement and watch it on the model as you go. The model view
+// keeps drawing the quick motion preview; this panel holds the shape, depth and spacing, how layers lead
 // or lag each other, layer stacking and the advanced curves, with close-ups of a short piece of wall.
-// Edits go into the placement's own copy of the pattern; the library is left alone unless you save to it.
+// Edits go into the placement's own copy of the motion; the library is left alone unless you save to it.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../../state/store';
 import { currentConfig } from '../../../state/slicing';
 import { SURFACE_COLORS } from '../../../state/motionPaint';
 import { profilesFromConfig } from '../engine';
-import { brushAt, layerPhase } from '../modifier';
+import { composePath, layerPhase } from '../modifier';
+import { VIEW_COLORS, type PreviewView } from '../preview';
+import type { PrintProfiles } from '../core/profiles';
+import type { Toolpath, ToolpathPoint } from '../core/types';
 import { CURVE_INFO, pt, type CurveKey, type EventType, type Interpolation, type LayerEffect, type LayerMode, type MotionApplication, type MotionBrush, type MotionEvent } from '../model';
 import { CurveEditor } from './curveEditor';
-import { activate, activeApp, brushOf, changed, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
+import { activate, activeApp, brushOf, changed, lastPreview, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
 
-/** The pattern being edited: the placement's own copy, or a copy of the library pattern with its size slider baked in. */
+/** The motion being edited: the placement's own copy, or a copy of the library motion with its size slider baked in. */
 function draftOf(a: MotionApplication): MotionBrush | undefined {
   if (a.brush) return a.brush;
   const b = mx.library.get(a.brush_id);
@@ -52,8 +55,15 @@ const MODES: [LayerMode, string, string][] = [
 ];
 
 const ADV_KEYS: CurveKey[] = ['along_offset', 'z_offset', 'extrusion_mult', 'speed_mult'];
+const CURVE_HINT: Record<CurveKey, string> = {
+  lateral_offset: 'Side to side, in and out of the wall.',
+  along_offset: 'Forwards and back along the wall: makes loops and curls. The model shows the motion itself.',
+  z_offset: 'Up and down within the layer. The model is coloured by height: orange lifted, blue lowered.',
+  extrusion_mult: 'How much plastic each spot gets. The model is coloured by plastic and the close-up line gets thicker and thinner.',
+  speed_mult: 'How fast each spot prints. The model is coloured by speed.',
+};
 
-export function PatternStudio() {
+export function MotionStudio() {
   useMx();
   const set = useStore((s) => s.set);
   const printerId = useStore((s) => s.printerId);
@@ -108,7 +118,7 @@ export function PatternStudio() {
         )}
         <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
           <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} />
-          <select className="select" style={{ flex: 1 }} value={a.brush_id} aria-label="Pattern"
+          <select className="select" style={{ flex: 1 }} value={a.brush_id} aria-label="Motion"
             onChange={(e) => { if (a.brush && !confirm('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = e.target.value; a.brush = undefined; changed(); }}>
             {[...libGroups].map(([g, bs]) => <optgroup key={g} label={g}>{bs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</optgroup>)}
           </select>
@@ -120,7 +130,9 @@ export function PatternStudio() {
         </div>
       </div>
 
-      <CloseUps b={draft} lineWidth={profiles.process.lineWidth} layerHeight={profiles.process.layerHeight || 0.2} layer={layer} setLayer={setLayer} />
+      <ViewPicker />
+
+      <CloseUps b={draft} profiles={profiles} layer={layer} setLayer={setLayer} />
 
       <section className="mx-card">
         <div className="mx-card-title">Wave shape</div>
@@ -174,7 +186,7 @@ export function PatternStudio() {
           </>
         )}
         <div className="mx-two">
-          <label className="mx-field">Pattern on for (layers)
+          <label className="mx-field">Motion on for (layers)
             <input className="input" type="number" min={0} step={1} value={draft.layers?.band_on ?? 0} title="0 = on all the time"
               onChange={(e) => edit((b) => { b.layers = { shift_deg: 0, mode: 'steady', every: 1, band_off: 0, ...b.layers, band_on: Math.max(0, Math.round(+e.target.value)) }; })} />
           </label>
@@ -185,7 +197,7 @@ export function PatternStudio() {
         </div>
       </section>
 
-      <Advanced b={draft} onEdit={edit} />
+      <Advanced b={draft} onEdit={edit} profiles={profiles} />
     </aside>
   );
 }
@@ -212,7 +224,7 @@ function Slider({ label, unit, min, max, step, value, onChange }: { label: strin
   );
 }
 
-/** How far each layer's pattern sits ahead of (lead) or behind (lag) the layer below, in mm along the wall. */
+/** How far each layer's motion sits ahead of (lead) or behind (lag) the layer below, in mm along the wall. */
 function LeadLag({ b, layerHeight, onEdit }: { b: MotionBrush; layerHeight: number; onEdit: (fn: (b: MotionBrush) => void) => void }) {
   const e = b.layers;
   const mm = r3((((e?.shift_deg ?? 0) / 360) * b.period_mm));
@@ -272,23 +284,34 @@ function CurveBox({ b, k, onEdit }: { b: MotionBrush; k: CurveKey; onEdit: (fn: 
   );
 }
 
-function Advanced({ b, onEdit }: { b: MotionBrush; onEdit: (fn: (b: MotionBrush) => void) => void }) {
-  const [k, setK] = useState<CurveKey>('z_offset');
+/** The model preview shows what each advanced curve changes. */
+const VIEW_FOR: Record<CurveKey, PreviewView> = { lateral_offset: 'motion', along_offset: 'motion', z_offset: 'height', extrusion_mult: 'plastic', speed_mult: 'speed' };
+
+function Advanced({ b, onEdit, profiles }: { b: MotionBrush; onEdit: (fn: (b: MotionBrush) => void) => void; profiles: PrintProfiles }) {
+  const [k, setKey] = useState<CurveKey>('z_offset');
+  const setK = (x: CurveKey) => { setKey(x); setView(VIEW_FOR[x]); };
   const n = b.noise;
+  const zFlat = !(b.z_amplitude && b.z_amplitude > 0);
+  // a Z curve does nothing at zero height: editing it gives it a height so the change shows
+  const curveEdit = k === 'z_offset' ? (fn: (x: MotionBrush) => void) => onEdit((x) => { fn(x); if (!(x.z_amplitude && x.z_amplitude > 0)) x.z_amplitude = Math.min(0.3, profiles.process.layerHeight * 1.5 || 0.3); }) : onEdit;
+  // plastic limits and plastic events show in the plastic view
+  const plasticEdit = (fn: (x: MotionBrush) => void) => { setView('plastic'); onEdit(fn); };
   const newEvent = (t: EventType): MotionEvent => t === 'dwell' ? { at: { mode: 'percent', value: 50 }, type: t, params: { ms: 300, blob_mm3: 0 } }
     : t === 'flow_change' ? { at: { mode: 'percent', value: 50 }, type: t, params: { mult: 1.3 } }
     : { at: { mode: 'percent', value: 50 }, type: t, params: { length: 0, travel_mm: 1 } };
   return (
-    <details className="mx-card mx-more">
+    <details className="mx-card mx-more" onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open) setView(VIEW_FOR[k]); }}>
       <summary className="mx-card-title">Advanced</summary>
       <div className="seg mx-seg">
         {ADV_KEYS.map((x) => <button key={x} className={k === x ? 'on' : ''} onClick={() => setK(x)}>{CURVE_INFO[x].label}</button>)}
       </div>
       {k === 'z_offset' && <Slider label="Up-and-down height" unit="mm" min={0} max={3} step={0.05} value={b.z_amplitude ?? 0} onChange={(v) => onEdit((x) => { x.z_amplitude = v; })} />}
-      <CurveBox b={b} k={k} onEdit={onEdit} />
+      {k === 'z_offset' && zFlat && <p className="mx-muted" style={{ margin: 0 }}>Up-and-down height is 0, so this curve has no effect yet. Changing the curve gives it a small height so you can see it.</p>}
+      <p className="mx-muted" style={{ margin: 0 }}>{CURVE_HINT[k]}</p>
+      <CurveBox b={b} k={k} onEdit={curveEdit} />
       <div className="mx-two">
-        <label className="mx-field">Least plastic (×)<input className="input" type="number" step={0.05} value={b.limits.min_flow_mult} onChange={(e) => onEdit((x) => { x.limits = { ...x.limits, min_flow_mult: +e.target.value }; })} /></label>
-        <label className="mx-field">Most plastic (×)<input className="input" type="number" step={0.05} value={b.limits.max_flow_mult} onChange={(e) => onEdit((x) => { x.limits = { ...x.limits, max_flow_mult: +e.target.value }; })} /></label>
+        <label className="mx-field">Least plastic (×)<input className="input" type="number" step={0.05} value={b.limits.min_flow_mult} onChange={(e) => plasticEdit((x) => { x.limits = { ...x.limits, min_flow_mult: +e.target.value }; })} /></label>
+        <label className="mx-field">Most plastic (×)<input className="input" type="number" step={0.05} value={b.limits.max_flow_mult} onChange={(e) => plasticEdit((x) => { x.limits = { ...x.limits, max_flow_mult: +e.target.value }; })} /></label>
       </div>
       <label className="row" style={{ gap: 8, margin: 0 }}>
         <span style={{ flex: 1, fontSize: 12 }}>Random roughness</span>
@@ -311,29 +334,91 @@ function Advanced({ b, onEdit }: { b: MotionBrush; onEdit: (fn: (b: MotionBrush)
             <label className="mx-field">ms<input className="input" type="number" min={0} step={50} value={e.params.ms ?? 0} onChange={(ev) => onEdit((x) => { x.events[i].params = { ...x.events[i].params, ms: Math.max(0, +ev.target.value) }; })} /></label>
             <label className="mx-field">Blob mm³<input className="input" type="number" min={0} step={0.5} value={e.params.blob_mm3 ?? 0} onChange={(ev) => onEdit((x) => { x.events[i].params = { ...x.events[i].params, blob_mm3: Math.max(0, +ev.target.value) }; })} /></label>
           </>}
-          {e.type === 'flow_change' && <label className="mx-field">Plastic ×<input className="input" type="number" min={0} step={0.1} value={e.params.mult ?? 1} onChange={(ev) => onEdit((x) => { x.events[i].params = { ...x.events[i].params, mult: Math.max(0, +ev.target.value) }; })} /></label>}
+          {e.type === 'flow_change' && <label className="mx-field">Plastic ×<input className="input" type="number" min={0} step={0.1} value={e.params.mult ?? 1} onChange={(ev) => plasticEdit((x) => { x.events[i].params = { ...x.events[i].params, mult: Math.max(0, +ev.target.value) }; })} /></label>}
           {e.type === 'retract' && <label className="mx-field">Jump mm<input className="input" type="number" min={0} step={0.5} value={e.params.travel_mm ?? 0} onChange={(ev) => onEdit((x) => { x.events[i].params = { ...x.events[i].params, travel_mm: Math.max(0, +ev.target.value) }; })} /></label>}
           <button className="icon-btn" title="Remove" onClick={() => onEdit((x) => { x.events.splice(i, 1); })}>✕</button>
         </div>
       ))}
       <div className="row" style={{ gap: 6, margin: 0 }}>
         {([['dwell', '+ Pause'], ['flow_change', '+ Plastic change'], ['retract', '+ Lift-off']] as [EventType, string][]).map(([t, l]) => (
-          <button key={t} className="btn-secondary btn-small" onClick={() => onEdit((x) => { x.events = [...x.events, newEvent(t)]; })}>{l}</button>
+          <button key={t} className="btn-secondary btn-small" onClick={() => { if (t === 'flow_change') setView('plastic'); onEdit((x) => { x.events = [...x.events, newEvent(t)]; }); }}>{l}</button>
         ))}
       </div>
     </details>
   );
 }
 
+/** Switch what the model preview and the close-ups are coloured by. */
+const VIEWS: [PreviewView, string, string][] = [
+  ['motion', 'Motion', 'Each motion in its own colour; fainter where it fades out.'],
+  ['height', 'Up / down', 'How far each spot is lifted (orange) or lowered (blue).'],
+  ['plastic', 'Plastic', 'More plastic in orange, less in blue (after the plastic limits).'],
+  ['speed', 'Speed', 'Faster in orange, slower in blue.'],
+];
+export function setView(v: PreviewView) {
+  if (mx.previewView === v) return;
+  mx.previewView = v;
+  changed();
+}
+const css = (c: readonly number[]) => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+
+function ViewPicker() {
+  useMx();
+  const [, bump] = useState(0);
+  useEffect(() => { const on = () => bump((n) => n + 1); window.addEventListener('nx-preview-built', on); return () => window.removeEventListener('nx-preview-built', on); }, []);
+  const v = mx.previewView;
+  const lp = lastPreview && lastPreview.view === v ? lastPreview : null;
+  const unit = v === 'height' ? ' mm' : '×';
+  const fmt = (x: number) => (v === 'height' ? x.toFixed(2) : x.toFixed(2));
+  return (
+    <section className="mx-card">
+      <div className="mx-card-title">Show on the model</div>
+      <div className="seg mx-seg">
+        {VIEWS.map(([id, label, hint]) => <button key={id} className={v === id ? 'on' : ''} title={hint} onClick={() => setView(id)}>{label}</button>)}
+      </div>
+      <div className="studio-legend">
+        {v === 'motion'
+          ? <span>{VIEWS[0][2]}</span>
+          : <><i className="lg" style={{ background: css(VIEW_COLORS.low) }} />{lp ? `${fmt(lp.range[0])}${unit}` : 'low'}
+            <i className="lg" style={{ background: css(VIEW_COLORS.mid) }} />{v === 'height' ? '0 mm' : '1×'}
+            <i className="lg" style={{ background: css(VIEW_COLORS.high) }} />{lp ? `${fmt(lp.range[1])}${unit}` : 'high'}</>}
+        <span className="spacer" />
+        <i className="lg" style={{ background: css(VIEW_COLORS.pause) }} />pause / blob
+        <i className="lg" style={{ background: css(VIEW_COLORS.lift) }} />lift-off
+        <i className="lg" style={{ background: css(VIEW_COLORS.jump) }} />jump
+      </div>
+    </section>
+  );
+}
+
+/** A straight piece of wall run through the same code the slicer uses, for the close-ups. */
+function closeUpPath(b: MotionBrush, p: PrintProfiles, layer: number, L: number, step: number): ToolpathPoint[] {
+  const pts: ToolpathPoint[] = [{ x: 0, y: 0, z: 1, f: 50, flow: 1, e: 0 }, { x: L, y: 0, z: 1, f: 50, flow: 1, e: 0 }];
+  const tp: Toolpath = { feature: 'outer_wall', closed: false, points: pts };
+  // tile at the brush's own repeat, as on a long wall
+  const brush: MotionBrush = b.repeat_mode === 'stretch' ? { ...b, repeat_mode: 'tile' } : b;
+  // the wall runs along +x, so its outward side is −y: flip so "sticks out" is up in the drawing
+  return composePath(tp, [{ brush, weight: () => 1, blend: 'add' }], p, { resampleStep: step, loopSpeedShare: 1 }, () => {}, layer)
+    .points.map((q) => ({ ...q, y: -q.y }));
+}
+const valueOf = (q: ToolpathPoint, v: PreviewView) => (v === 'height' ? q.zOff ?? 0 : v === 'plastic' ? q.flow : v === 'speed' ? q.f / 50 : q.y);
+const rampCss = (t: number) => {
+  const u = Math.max(-1, Math.min(1, t)), m = VIEW_COLORS.mid, e = u < 0 ? VIEW_COLORS.low : VIEW_COLORS.high, a = Math.abs(u);
+  return [0, 1, 2].map((i) => m[i] + (e[i] - m[i]) * a);
+};
+
 /** Close-ups of a short piece of wall: from above with the layers below and above, and from the side. */
-function CloseUps({ b, lineWidth, layerHeight, layer, setLayer }: { b: MotionBrush; lineWidth: number; layerHeight: number; layer: number; setLayer: (n: number) => void }) {
+function CloseUps({ b, profiles, layer, setLayer }: { b: MotionBrush; profiles: PrintProfiles; layer: number; setLayer: (n: number) => void }) {
+  useMx();
   const top = useRef<HTMLCanvasElement>(null);
   const side = useRef<HTMLCanvasElement>(null);
   const theme = useStore((s) => s.theme);
+  const view = mx.previewView;
+  const lineWidth = profiles.process.lineWidth, layerHeight = profiles.process.layerHeight || 0.2;
   useEffect(() => {
     const draw = () => {
-      if (top.current) drawTop(top.current, b, lineWidth, layer, theme === 'dark');
-      if (side.current) drawSide(side.current, b, layer, theme === 'dark');
+      if (top.current) drawTop(top.current, b, profiles, layer, theme === 'dark', view);
+      if (side.current) drawSide(side.current, b, profiles, layer, theme === 'dark', view);
     };
     draw();
     const ro = new ResizeObserver(draw);
@@ -341,6 +426,7 @@ function CloseUps({ b, lineWidth, layerHeight, layer, setLayer }: { b: MotionBru
     return () => ro.disconnect();
   });
   const off = layerPhase(b, layer) === null;
+  const sideLegend = view === 'height' ? ['lifted', 'lowered'] : view === 'plastic' ? ['more plastic', 'less plastic'] : view === 'speed' ? ['faster', 'slower'] : ['sticks out', 'pressed in'];
   return (
     <section className="mx-card studio-closeups">
       <div className="mx-card-title">Close-up<span className="spacer" />
@@ -348,58 +434,91 @@ function CloseUps({ b, lineWidth, layerHeight, layer, setLayer }: { b: MotionBru
         <input className="input studio-num" type="number" min={1} step={1} value={layer} onChange={(e) => setLayer(Math.max(1, Math.round(+e.target.value)))} aria-label="Close-up layer" />
       </div>
       <canvas ref={top} className="studio-canvas" style={{ height: 150 }} />
-      <div className="studio-legend"><i className="lg cur" />layer {layer}{off ? ' (plain)' : ''}<i className="lg below" />layer below<i className="lg above" />layer above<span className="spacer" />seen from above</div>
+      <div className="studio-legend"><i className="lg cur" />layer {layer}{off ? ' (plain)' : ''} · line thickness = plastic<i className="lg below" />layer below<i className="lg above" />layer above<span className="spacer" />seen from above</div>
       <canvas ref={side} className="studio-canvas" style={{ height: 110 }} />
-      <div className="studio-legend"><i className="lg out" />sticks out<i className="lg in" />pressed in<span className="spacer" />{(layerHeight * 36).toFixed(1)} mm of wall seen from the side</div>
+      <div className="studio-legend"><i className="lg out" />{sideLegend[0]}<i className="lg in" />{sideLegend[1]}<span className="spacer" />{(layerHeight * 36).toFixed(1)} mm of wall seen from the side · {lineWidth.toFixed(2)} mm line</div>
     </section>
   );
 }
 
 const SPAN = (b: MotionBrush) => Math.max(10, Math.min(60, b.period_mm * 3));
 
-function drawTop(cv: HTMLCanvasElement, b: MotionBrush, lineWidth: number, layer: number, dark: boolean) {
+function drawTop(cv: HTMLCanvasElement, b: MotionBrush, p: PrintProfiles, layer: number, dark: boolean, view: PreviewView) {
   const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
   if (!W || !H) return;
   cv.width = W * dpr; cv.height = H * dpr;
   const g = cv.getContext('2d')!; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const lineWidth = p.process.lineWidth;
   const L = SPAN(b), A = Math.max(0.3, b.amplitude * 1.25 + lineWidth);
   const sx = (W - 24) / L, sy = Math.min(sx * 2, (H - 26) / (2 * A));
   const X = (x: number) => 12 + x * sx, Y = (y: number) => H / 2 - 4 - y * sy;
   g.strokeStyle = dark ? '#4a5260' : '#cfd5dd'; g.lineWidth = 1; g.setLineDash([4, 4]);
   g.beginPath(); g.moveTo(X(0), Y(0)); g.lineTo(X(L), Y(0)); g.stroke(); g.setLineDash([]);
-  const line = (n: number, style: string, width: number, dash: number[] = []) => {
+  const step = Math.max(0.05, L / 400);
+  const plain = (n: number, style: string, width: number, dash: number[] = []) => {
     if (n < 0) return;
+    const pts = closeUpPath(b, p, n, L, step);
     g.strokeStyle = style; g.lineWidth = width; g.setLineDash(dash); g.lineCap = 'round'; g.lineJoin = 'round';
     g.beginPath();
-    let pen = false;
-    for (let k = 0; k <= 400; k++) {
-      const s = (k / 400) * L;
-      const m = brushAt(b, s, 1e6, n, b.period_mm);
-      const x = s + (m?.along ?? 0), y = m?.lat ?? 0;
-      if (!pen) { g.moveTo(X(x), Y(y)); pen = true; } else g.lineTo(X(x), Y(y));
-    }
+    pts.forEach((q, i) => { if (i === 0 || q.travel) g.moveTo(X(q.x), Y(q.y)); else g.lineTo(X(q.x), Y(q.y)); });
     g.stroke(); g.setLineDash([]);
   };
-  line(layer - 1, dark ? 'rgba(170,180,195,.55)' : 'rgba(110,120,135,.45)', Math.max(1.5, lineWidth * sx * 0.9));
-  line(layer, 'rgba(255,122,69,.85)', Math.max(2, lineWidth * sx));
-  line(layer + 1, dark ? '#69c0ff' : '#1f6fd1', 1.5, [5, 4]);
+  plain(layer - 1, dark ? 'rgba(170,180,195,.55)' : 'rgba(110,120,135,.45)', Math.max(1.5, lineWidth * sx * 0.9));
+  // this layer: thickness follows the plastic, colour follows the chosen view, events marked
+  const pts = closeUpPath(b, p, layer, L, step);
+  const vals = pts.map((q) => valueOf(q, view));
+  const centre = view === 'height' || view === 'motion' ? 0 : 1;
+  const span = Math.max(0.05, ...vals.map((v) => Math.abs(v - centre)));
+  g.lineCap = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], q = pts[i];
+    if (q.travel) {
+      g.strokeStyle = css(VIEW_COLORS.jump); g.lineWidth = 1.5; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(X(a.x), Y(a.y)); g.lineTo(X(q.x), Y(q.y)); g.stroke(); g.setLineDash([]);
+      continue;
+    }
+    g.strokeStyle = view === 'motion' ? 'rgba(255,122,69,.85)' : css(rampCss((vals[i] - centre) / span));
+    g.lineWidth = Math.max(1, lineWidth * sx * Math.max(0.1, q.flow));
+    g.beginPath(); g.moveTo(X(a.x), Y(a.y)); g.lineTo(X(q.x), Y(q.y)); g.stroke();
+  }
+  for (const q of pts) {
+    if (!q.post) continue;
+    const c = q.post.retract_mm ? VIEW_COLORS.lift : VIEW_COLORS.pause;
+    if (q.post.retract_mm || q.post.dwell_ms || q.post.blob_mm) {
+      g.fillStyle = css(c); g.beginPath(); g.arc(X(q.x), Y(q.y), q.post.blob_mm ? 6 : 4, 0, Math.PI * 2); g.fill();
+    }
+  }
+  plain(layer + 1, dark ? '#69c0ff' : '#1f6fd1', 1.5, [5, 4]);
   g.fillStyle = dark ? '#9aa3b0' : '#6b7380'; g.font = '11px Inter, system-ui, sans-serif';
   const bar = Math.min(10, Math.max(1, Math.round(L / 4)));
   g.fillText(`${bar} mm`, X(L - bar), H - 4);
   g.strokeStyle = g.fillStyle; g.lineWidth = 1; g.beginPath(); g.moveTo(X(L - bar), H - 14); g.lineTo(X(L), H - 14); g.stroke();
 }
 
-function drawSide(cv: HTMLCanvasElement, b: MotionBrush, layer: number, dark: boolean) {
+function drawSide(cv: HTMLCanvasElement, b: MotionBrush, p: PrintProfiles, layer: number, dark: boolean, view: PreviewView) {
   const W = Math.max(1, Math.floor(cv.clientWidth)), H = Math.max(1, Math.floor(cv.clientHeight));
   cv.width = W; cv.height = H;
-  const g = cv.getContext('2d')!, img = g.createImageData(W, H), L = SPAN(b), rows = 36, A = Math.max(0.05, b.amplitude * 1.2);
+  const g = cv.getContext('2d')!, img = g.createImageData(W, H), L = SPAN(b), rows = 36;
   const first = Math.max(0, layer - rows / 2);
   const bg = dark ? [42, 46, 54] : [246, 245, 242];
+  const step = Math.max(0.05, L / W);
+  // one row per layer: the value of the chosen view along the wall, from the slicer's own code
+  const data = Array.from({ length: rows }, (_, r) => {
+    const n = first + rows - 1 - r;
+    const pts = closeUpPath(b, p, n, L, step);
+    const col = new Float64Array(W).fill(NaN);
+    for (const q of pts) { const x = Math.min(W - 1, Math.max(0, Math.round((q.x / L) * (W - 1)))); if (!q.travel) col[x] = valueOf(q, view); }
+    return { n, col };
+  });
+  const centre = view === 'plastic' || view === 'speed' ? 1 : 0;
+  let span = view === 'motion' ? Math.max(0.05, b.amplitude * 1.2) : 0.05;
+  if (view !== 'motion') for (const { col } of data) for (const v of col) if (Number.isFinite(v)) span = Math.max(span, Math.abs(v - centre));
   for (let r = 0; r < rows; r++) {
-    const n = first + rows - 1 - r, y0 = Math.floor((r * H) / rows), y1 = Math.floor(((r + 1) * H) / rows);
+    const { n, col } = data[r], y0 = Math.floor((r * H) / rows), y1 = Math.floor(((r + 1) * H) / rows);
+    let last = centre;
     for (let x = 0; x < W; x++) {
-      const m = brushAt(b, (x / W) * L, 1e6, n, b.period_mm);
-      const t = m ? Math.max(-1, Math.min(1, m.lat / A)) : 0;
+      const v = Number.isFinite(col[x]) ? (last = col[x]) : last;
+      const t = Math.max(-1, Math.min(1, (v - centre) / span));
       const c = t >= 0 ? [bg[0] + (255 - bg[0]) * t, bg[1] + (122 - bg[1]) * t, bg[2] + (69 - bg[2]) * t] : [bg[0] + (54 - bg[0]) * -t, bg[1] + (130 - bg[1]) * -t, bg[2] + (230 - bg[2]) * -t];
       const edge = n === layer;
       for (let y = y0; y < y1; y++) {

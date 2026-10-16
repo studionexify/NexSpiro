@@ -60,7 +60,12 @@ describe('Motionex in the slicer', () => {
     expect(inner).not.toEqual(wallXY(plain.gcode, '5', 'inner wall'));
     expect(inner.every(([x, y]) => x > 99.5 && x < 120.5 && y > 99.5 && y < 120.5)).toBe(true);
     const loose = slice([mesh()], cfg(), () => {}, { plugins: { motionex: { ...mx([app({ type: 'body', walls: 'outer' })]), options: { ...DEFAULT_OPTIONS, bondInnerWalls: false } } } });
-    expect(wallXY(loose.gcode, '5', 'inner wall')).toEqual(wallXY(plain.gcode, '5', 'inner wall'));
+    // without bonding the inner wall stays where the slicer put it, only cut back where the waves reach it
+    const onSquare = ([x, y]: [number, number]) => (Math.abs(x - 100.602) < 2e-3 || Math.abs(x - 119.398) < 2e-3) ? y > 100.6 && y < 119.4 : (Math.abs(y - 100.602) < 2e-3 || Math.abs(y - 119.398) < 2e-3) && x > 100.6 && x < 119.4;
+    const looseInner = wallXY(loose.gcode, '5', 'inner wall');
+    expect(wallXY(plain.gcode, '5', 'inner wall').every(onSquare)).toBe(true);
+    expect(looseInner.length).toBeGreaterThan(4);
+    expect(looseInner.every(onSquare)).toBe(true);
     // below the mask start the print is unchanged
     expect(wallXY(out.gcode, '1', 'outer wall')).toEqual(wallXY(plain.gcode, '1', 'outer wall'));
     expect(out.stats.filamentMm).toBeGreaterThan(plain.stats.filamentMm);
@@ -73,7 +78,7 @@ describe('Motionex in the slicer', () => {
     expect(wallXY(out.gcode, '5', 'inner wall').length).toBeGreaterThan(wallXY(plain.gcode, '5', 'inner wall').length * 3);
   });
 
-  it('picked face: only the +X side gets the pattern', () => {
+  it('picked face: only the +X side gets the motion', () => {
     const m = mesh();
     const n = triNormals(m);
     const seed = Array.from({ length: m.indices.length / 3 }, (_, t) => t).find((t) => n[t * 3] > 0.99)!;

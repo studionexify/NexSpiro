@@ -42,7 +42,7 @@ export function Toolbar() {
   );
 }
 
-/** Shown while the pattern preview is drawn on the model. */
+/** Shown while the motion preview is drawn on the model. */
 export function LiveChip() {
   const { liveToolpaths, objects } = useStore();
   const [info, setInfo] = useState('');
@@ -178,9 +178,9 @@ export function PaintPanel() {
       )}
       <div className="hint-list">
         {s.tool === 'paint_color'
-          ? <><span><kbd>Left drag</kbd> paint</span><span><kbd>Right drag</kbd> reset to object filament</span></>
-          : <><span><kbd>Left drag</kbd> {s.tool === 'paint_support' ? 'enforce support' : 'enforce seam'}</span><span><kbd>Right drag</kbd> block</span></>}
-        <span><kbd>Shift + drag</kbd> erase</span><span><kbd>Middle drag</kbd> orbit · <kbd>Wheel</kbd> zoom</span>
+          ? <><span><kbd>Left drag</kbd> on model: paint</span><span><kbd>Alt + drag</kbd> reset to object filament</span></>
+          : <><span><kbd>Left drag</kbd> on model: {s.tool === 'paint_support' ? 'enforce support' : 'enforce seam'}</span><span><kbd>Alt + drag</kbd> block</span></>}
+        <span><kbd>Shift + drag</kbd> erase</span><span><kbd>Left drag</kbd> off model: rotate · <kbd>Middle</kbd>/<kbd>Right drag</kbd> pan · <kbd>Wheel</kbd> zoom</span>
       </div>
       <button className="btn-secondary btn-small" onClick={clear}>{sel ? 'Clear on selected object' : 'Clear on all objects'}</button>
     </div>
