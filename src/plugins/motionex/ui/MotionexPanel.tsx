@@ -1,4 +1,4 @@
-// Motionex panel in Nexspiro's right dock. The front shows only what you need to place a pattern:
+// Motionex panel in Nexspiro's right dock. The front shows only what you need to place a motion:
 // pick it from the library, choose where it goes (click, paint, lasso, box, height band, whole object or
 // the whole plate), and watch the real toolpath on the model. Everything else sits under "More options".
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -35,7 +35,7 @@ export function changed(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('nx-plugin-preview'));
 }
 
-/** Pattern preview lines for the active plate (see ../preview.ts), or null when nothing is switched on. */
+/** Motion preview lines for the active plate (see ../preview.ts), or null when nothing is switched on. */
 export function motionexPreview(): PreviewLines | null {
   const s = useStore.getState();
   const apps: PreviewApp[] = [];
@@ -51,10 +51,13 @@ export function motionexPreview(): PreviewLines | null {
   if (!apps.length) return null;
   const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
     .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
-  return buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId));
+  lastPreview = buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId), 0.25, mx.previewView);
+  return lastPreview;
 }
+/** The last preview built, for the legend in the Motion tab. */
+export let lastPreview: PreviewLines | null = null;
 
-/** Slicer config, or undefined when no pattern is switched on. */
+/** Slicer config, or undefined when no motion is switched on. */
 export function motionexConfig(printerId: string): MotionexConfig | undefined {
   return mx.applications.some((a) => a.enabled) ? toConfig(mx, printerId) : undefined;
 }
@@ -63,10 +66,10 @@ const MAX_SURFACES = SURFACE_COLORS.length;
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
 const COLLIDE: [CollisionMode, string][] = [['clamp', 'Lower the movement there'], ['skip', 'Skip the movement there'], ['fail', 'Stop and show me']];
 
-/** The pattern a placement uses: its own edited copy, or the library pattern. */
+/** The motion a placement uses: its own edited copy, or the library motion. */
 export const brushOf = (a: MotionApplication): MotionBrush | undefined => a.brush ?? mx.library.get(a.brush_id);
 
-/** The surface set (1..n) a pattern paints into. Older saves stored it only in target.faces. */
+/** The surface set (1..n) a motion paints into. Older saves stored it only in target.faces. */
 export function surfaceOf(a: MotionApplication): number {
   if (!a.surface) {
     const n = Number(a.target.faces?.[0]);
@@ -102,14 +105,14 @@ function addApplication(brushId: string): MotionApplication {
   return a;
 }
 
-/** Make the pattern go on picked surfaces (its own surface set). */
+/** Make the motion go on picked surfaces (its own surface set). */
 function toFaces(a: MotionApplication) {
   const n = surfaceOf(a);
   if (a.target.type !== 'faces' || a.target.faces?.[0] !== String(n)) a.target = { ...a.target, type: 'faces', faces: [String(n)] };
 }
 
-/** Right-click "Motionex pattern on whole object": the active pattern (or a new one) covers these objects. */
-export function applyPatternToObjects(ids: string[]) {
+/** Right-click "Motionex motion on whole object": the active motion (or a new one) covers these objects. */
+export function applyMotionToObjects(ids: string[]) {
   const s = useStore.getState();
   const a = activeApp() ?? addApplication('preset-sine');
   toFaces(a);
@@ -119,7 +122,7 @@ export function applyPatternToObjects(ids: string[]) {
   changed();
 }
 
-/** Height band dragged on the model: the active pattern runs between those heights (all the way round). */
+/** Height band dragged on the model: the active motion runs between those heights (all the way round). */
 function setBand(a: MotionApplication, from: number, to: number) {
   a.mask.z_start = +Math.max(0, Math.min(from, to)).toFixed(2);
   a.mask.z_end = +Math.max(from, to).toFixed(2);
@@ -134,7 +137,7 @@ if (typeof window !== 'undefined') window.addEventListener('nx-motion-band', (e)
   if (!a) return;
   if (erase) { a.mask.z_start = 0; a.mask.z_end = 1e4; changed(); return; }
   setBand(a, from, to);
-  // nothing picked yet: the band goes round the whole object it was drawn on (but not over other patterns)
+  // nothing picked yet: the band goes round the whole object it was drawn on (but not over other motions)
   if (a.target.type === 'faces' && !motionCounts(useStore.getState().objects, surfaceOf(a)).tris) {
     const o = useStore.getState().objects.find((x) => x.id === id);
     if (o) assignMotion(new Map([[o.id, allTris(o)]]), surfaceOf(a), surfaceOf(a), true, true);
@@ -153,7 +156,7 @@ export function MotionexPanel() {
     if (picking === 'change' && act) { act.brush_id = b.id; act.brush = undefined; }
     else {
       const a = addApplication(b.id);
-      // with an object selected, a new pattern starts on that whole object
+      // with an object selected, a new motion starts on that whole object
       const s = useStore.getState();
       const sel = s.objects.filter((o) => s.selected.includes(o.id));
       if (sel.length) assignMotion(new Map(sel.map((o) => [o.id, allTris(o)])), surfaceOf(a), surfaceOf(a));
@@ -170,16 +173,16 @@ export function MotionexPanel() {
       </div>
       <LiveToggle />
       <section className="mx-card">
-        <div className="mx-card-title">Patterns<span className="spacer" />
-          <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own patterns">Edit library…</button>
+        <div className="mx-card-title">Motions<span className="spacer" />
+          <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own motions">Edit library…</button>
         </div>
-        {!apps.length && !picking && <p className="mx-muted">Pick a pattern, then click, paint or draw where it goes on the model.</p>}
+        {!apps.length && !picking && <p className="mx-muted">Pick a motion, then click, paint or draw where it goes on the model.</p>}
         <div className="mx-layers">
           {apps.map((a, i) => <LayerRow key={i} a={a} i={i} active={a === act} onChange={() => setPicking('change')} />)}
         </div>
-        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => useStore.getState().set({ workspace: 'pattern', tool: 'select' })} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Edit {brushOf(act)?.name ?? 'pattern'} in Pattern tab →</button>}
+        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => useStore.getState().set({ workspace: 'motion', tool: 'select' })} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Edit {brushOf(act)?.name ?? 'motion'} in Motion tab →</button>}
         {picking ? <Library current={picking === 'change' ? act?.brush_id : undefined} onPick={choose} onCancel={() => setPicking(null)} />
-          : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add pattern</button>}
+          : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add motion</button>}
       </section>
       {act && !picking && <Placement a={act} />}
       {act && !picking && <MoreOptions a={act} first={apps.indexOf(act) === 0} />}
@@ -194,10 +197,10 @@ function LiveToggle() {
   return (
     <section className="mx-card mx-live">
       <label className="row" style={{ gap: 8, margin: 0 }}>
-        <span style={{ flex: 1 }}><b>Show pattern path on model</b>
-          <div className="mx-muted" style={{ margin: 0 }}>{liveToolpaths ? 'Quick preview of the patterned walls only, updated as you edit. Slice for the exact G-code.' : 'Draws the patterned wall lines on the model, instantly, without slicing.'}</div>
+        <span style={{ flex: 1 }}><b>Show motion path on model</b>
+          <div className="mx-muted" style={{ margin: 0 }}>{liveToolpaths ? 'Quick preview of the motion walls only, updated as you edit. Slice for the exact G-code.' : 'Draws the motion wall lines on the model, instantly, without slicing.'}</div>
         </span>
-        <button className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-label="Show pattern path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })} />
+        <button className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-label="Show motion path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })} />
       </label>
     </section>
   );
@@ -228,7 +231,7 @@ function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number;
       <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} />
       <input type="checkbox" checked={a.enabled} aria-label="On" title="On / off" onClick={(e) => e.stopPropagation()} onChange={(e) => upd(() => { a.enabled = e.target.checked; })} />
       <div className="mx-layer-text">
-        <button className="mx-layer-name" title="Change pattern" onClick={(e) => { e.stopPropagation(); activate(i); onChange(); }}>{b?.name ?? a.brush_id}{a.brush ? ' (edited)' : ''} ▾</button>
+        <button className="mx-layer-name" title="Change motion" onClick={(e) => { e.stopPropagation(); activate(i); onChange(); }}>{b?.name ?? a.brush_id}{a.brush ? ' (edited)' : ''} ▾</button>
         <div className="mx-muted" style={{ margin: 0 }}>{coverage(a, objects)}</div>
       </div>
       {b && <Wave b={b} small />}
@@ -237,14 +240,14 @@ function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number;
   );
 }
 
-/** Pattern library as a grid of cards with a little drawing of each wave. */
+/** Motion library as a grid of cards with a little drawing of each wave. */
 export function Library({ current, onPick, onCancel }: { current?: string; onPick: (b: MotionBrush) => void; onCancel: () => void }) {
   const [q, setQ] = useState('');
   const groups = useMemo(() => {
     const g = new Map<string, MotionBrush[]>();
     for (const b of mx.library.all()) {
       if (q && !`${b.name} ${b.description ?? ''} ${b.category ?? ''}`.toLowerCase().includes(q.toLowerCase())) continue;
-      const k = mx.library.isPreset(b.id) ? b.category ?? 'Other' : 'My patterns';
+      const k = mx.library.isPreset(b.id) ? b.category ?? 'Other' : 'My motions';
       g.set(k, [...(g.get(k) ?? []), b]);
     }
     return [...g];
@@ -252,7 +255,7 @@ export function Library({ current, onPick, onCancel }: { current?: string; onPic
   return (
     <div className="mx-lib">
       <div className="row" style={{ gap: 6, margin: 0 }}>
-        <input className="input" autoFocus placeholder="Search patterns" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1 }} />
+        <input className="input" autoFocus placeholder="Search motions" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1 }} />
         <button className="btn-secondary btn-small" onClick={onCancel}>Cancel</button>
       </div>
       {groups.map(([g, bs]) => (
@@ -268,7 +271,7 @@ export function Library({ current, onPick, onCancel }: { current?: string; onPic
           </div>
         </div>
       ))}
-      {!groups.length && <p className="mx-muted">No pattern matches “{q}”.</p>}
+      {!groups.length && <p className="mx-muted">No motion matches “{q}”.</p>}
     </div>
   );
 }
@@ -302,12 +305,12 @@ export function Wave({ b, small }: { b: MotionBrush; small?: boolean }) {
 
 const PLACE_TOOLS: { tool: Tool | 'box' | 'plate'; label: string; icon: string; hint: string }[] = [
   { tool: 'pick_motion', label: 'Click', icon: '◉', hint: 'Click a surface: a flat side, or a whole curved wall.' },
-  { tool: 'paint_motion', label: 'Paint', icon: '✎', hint: 'Drag to paint the pattern on.' },
+  { tool: 'paint_motion', label: 'Paint', icon: '✎', hint: 'Drag to paint the motion on.' },
   { tool: 'lasso_motion', label: 'Lasso', icon: '◌', hint: 'Draw round an area of the model. Only faces turned towards you are taken.' },
   { tool: 'box', label: 'Box', icon: '▭', hint: 'Drag a box over an area of the model. Only faces turned towards you are taken.' },
-  { tool: 'band_motion', label: 'Height', icon: '☰', hint: 'Drag up or down on the model to set the heights the pattern runs between, all the way round.' },
+  { tool: 'band_motion', label: 'Height', icon: '☰', hint: 'Drag up or down on the model to set the heights the motion runs between, all the way round.' },
   { tool: 'object_motion', label: 'Object', icon: '⬢', hint: 'Click an object to cover all of it. Click it again to take it off.' },
-  { tool: 'plate', label: 'All', icon: '▦', hint: 'The pattern goes on every object on the plate.' },
+  { tool: 'plate', label: 'All', icon: '▦', hint: 'The motion goes on every object on the plate.' },
 ];
 
 function Placement({ a }: { a: MotionApplication }) {
@@ -334,7 +337,7 @@ function Placement({ a }: { a: MotionApplication }) {
           </button>
         ))}
       </div>
-      {info && <p className="mx-muted" style={{ margin: 0 }}>{info.hint}{current === 'band_motion' ? ' Right drag goes back to full height.' : current !== 'plate' && current !== 'object_motion' ? ' Right click or Shift erases.' : ''}</p>}
+      {info && <p className="mx-muted" style={{ margin: 0 }}>{info.hint}{current === 'band_motion' ? ' Shift + drag goes back to full height.' : current === 'lasso_motion' ? ' Shift + drag takes it off.' : current !== 'plate' && current !== 'object_motion' ? ' Shift + drag or a right click takes it off.' : ''}{current === 'lasso_motion' ? ' Right or middle drag pans; wheel zooms; press Done to rotate again.' : current !== 'plate' ? ' Drag off the model to rotate; right or middle drag pans; wheel zooms.' : ''}</p>}
       {current === 'pick_motion' && (
         <label className="mx-field">Spread over edges up to {motionGrowAngle}°
           <input type="range" min={1} max={60} value={motionGrowAngle} onChange={(e) => set({ motionGrowAngle: +e.target.value })} />
@@ -386,22 +389,22 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
         <label className="mx-field">Fade in over (mm)<input className="input" type="number" min={0} step={0.2} value={a.mask.fade_in_mm} onChange={(e) => upd(() => { a.mask.fade_in_mm = Math.max(0, +e.target.value); })} /></label>
         <label className="mx-field">Fade out over (mm)<input className="input" type="number" min={0} step={0.2} value={a.mask.fade_out_mm} onChange={(e) => upd(() => { a.mask.fade_out_mm = Math.max(0, +e.target.value); })} /></label>
       </div>
-      <label className="mx-field">Soft edge where the pattern stops: {(a.mask.blend_mm ?? 1.5).toFixed(1)} mm
+      <label className="mx-field">Soft edge where the motion stops: {(a.mask.blend_mm ?? 1.5).toFixed(1)} mm
         <input type="range" min={0} max={10} step={0.5} value={a.mask.blend_mm ?? 1.5} onChange={(e) => upd(() => { a.mask.blend_mm = +e.target.value; })} />
       </label>
       {!first && (
         <>
-          <div className="mx-label">Where it overlaps the patterns above</div>
+          <div className="mx-label">Where it overlaps the motions above</div>
           <div className="seg mx-seg">
             <button className={a.blend === 'add' ? 'on' : ''} onClick={() => upd(() => { a.blend = 'add'; })}>Add on top</button>
             <button className={a.blend === 'override' ? 'on' : ''} onClick={() => upd(() => { a.blend = 'override'; })}>Replace</button>
           </div>
         </>
       )}
-      <div className="mx-label">All patterns</div>
+      <div className="mx-label">All motions</div>
       <label className="row" style={{ gap: 8, margin: 0 }}>
-        <span style={{ flex: 1, fontSize: 12 }}>Inner walls follow the pattern<div className="mx-muted" style={{ margin: 0 }}>Keeps the patterned skin fused to the part, with no gaps or double plastic behind it.</div></span>
-        <button className={`toggle ${mx.options.bondInnerWalls !== false ? 'on' : ''}`} aria-label="Inner walls follow the pattern" onClick={() => upd(() => { mx.options.bondInnerWalls = mx.options.bondInnerWalls === false; })} />
+        <span style={{ flex: 1, fontSize: 12 }}>Inner walls follow the motion<div className="mx-muted" style={{ margin: 0 }}>Keeps the motion skin fused to the part, with no gaps or double plastic behind it.</div></span>
+        <button className={`toggle ${mx.options.bondInnerWalls !== false ? 'on' : ''}`} aria-label="Inner walls follow the motion" onClick={() => upd(() => { mx.options.bondInnerWalls = mx.options.bondInnerWalls === false; })} />
       </label>
       <label className="mx-field">If the print head would hit the print
         <select className="select" value={mx.collisionMode} onChange={(e) => upd(() => { mx.collisionMode = e.target.value as CollisionMode; })}>
@@ -411,7 +414,7 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
       <label className="mx-field">Loops print at {Math.round(mx.options.loopSpeedShare * 100)}% speed
         <input type="range" min={0.2} max={1} step={0.05} value={mx.options.loopSpeedShare} onChange={(e) => upd(() => { mx.options.loopSpeedShare = +e.target.value; })} />
       </label>
-      <p className="mx-muted">Print-head shape: {mx.toolheads.get(printerId).name}. Used to check up-and-down patterns for collisions.</p>
+      <p className="mx-muted">Print-head shape: {mx.toolheads.get(printerId).name}. Used to check up-and-down motions for collisions.</p>
     </details>
   );
 }

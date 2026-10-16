@@ -150,8 +150,8 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   attr.needsUpdate = true;
 }
 
-/** Pattern lines drawn on the model: the Prepare toggle, and always in the Pattern tab. */
-const showsPattern = (s: { workspace: string; liveToolpaths: boolean }) => (s.workspace === 'prepare' && s.liveToolpaths) || s.workspace === 'pattern';
+/** Motion lines drawn on the model: the Prepare toggle, and always in the Motion tab. */
+const showsMotion = (s: { workspace: string; liveToolpaths: boolean }) => (s.workspace === 'prepare' && s.liveToolpaths) || s.workspace === 'motion';
 export const isMotionTool = (t: Tool) => t === 'paint_motion' || t === 'pick_motion' || t === 'lasso_motion' || t === 'band_motion' || t === 'object_motion';
 export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || isMotionTool(t);
 
@@ -173,10 +173,13 @@ export function Viewport() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.15;
     controls.screenSpacePanning = true;
+    // One set of mouse controls everywhere, painting tools included:
+    // left drag rotates, middle drag pans, right drag pans, wheel zooms.
+    // While a painting tool is on, a left press that lands on the model paints instead of rotating
+    // (decided per press in onPressCapture below); a left press on empty space still rotates.
     const normalButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
-    // while painting: left = enforce, right = block, middle-drag orbits
-    const paintButtons = { LEFT: -1 as unknown as THREE.MOUSE, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: -1 as unknown as THREE.MOUSE };
-    controls.mouseButtons = normalButtons;
+    const paintButtons = { LEFT: -1 as unknown as THREE.MOUSE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+    controls.mouseButtons = { ...normalButtons };
 
     scene.add(new THREE.HemisphereLight('#ffffff', '#334455', 1.4));
     const sun = new THREE.DirectionalLight('#ffffff', 1.6);
@@ -325,7 +328,7 @@ export function Viewport() {
         mat.emissive.set(sel ? slotColor(s, o.filament ?? 0) : '#000000');
         mat.emissiveIntensity = sel ? 0.28 : 0;
         // see-through while the live toolpath is shown on it, and for objects left out of the print
-        const ghost = showsPattern(s) ? 0.45 : o.printable === false ? 0.45 : 1;
+        const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
@@ -370,7 +373,6 @@ export function Viewport() {
         e.mesh.updateMatrixWorld();
         selBoxes.add(new THREE.BoxHelper(e.mesh, s.theme === 'dark' ? '#E9D8C8' : '#142030'));
       }
-      controls.mouseButtons = isPaintTool(s.tool) ? paintButtons : normalButtons;
       if (!isPaintTool(s.tool)) brush.visible = false;
       syncGizmo();
       invalidate();
@@ -548,7 +550,7 @@ export function Viewport() {
           const nn = B.sub(A).cross(Cc.sub(A)).applyMatrix3(nm).normalize();
           if (nn.z > -thr) continue;
         }
-        // erasing a pattern's surfaces leaves other patterns' surfaces alone
+        // erasing a motion's surfaces leaves other motions' surfaces alone
         if (painting.layer === 'motion' && !painting.value && arr[t] !== s.motionSet) continue;
         if (arr[t] !== painting.value) { arr[t] = painting.value; changed = true; }
       }
@@ -558,14 +560,21 @@ export function Viewport() {
       }
     };
 
+    const capture = (ev: PointerEvent) => { try { renderer.domElement.setPointerCapture(ev.pointerId); } catch { /* pointer already up */ } };
     const onDown = (ev: PointerEvent) => {
       downAt = [ev.clientX, ev.clientY];
+      // middle and right buttons always pan; only the left button paints
+      if (ev.button !== 0) return;
+      startPaint(ev, ev.shiftKey, ev.altKey);
+    };
+    /** Paint, pick or draw at the pointer. erase: take paint off · alt: the tool's second action (block / object filament). */
+    const startPaint = (ev: PointerEvent, eraseIn: boolean, alt: boolean) => {
       const s = useStore.getState();
-      if (!isPaintTool(s.tool) || s.workspace !== 'prepare' || ev.button === 1) return;
-      const erase = ev.shiftKey || ev.button === 2;
+      if (!isPaintTool(s.tool) || s.workspace !== 'prepare') return;
+      const erase = eraseIn || (alt && isMotionTool(s.tool));
       if (s.tool === 'lasso_motion') {
         drawing = { pts: [[ev.clientX, ev.clientY]], value: erase ? 0 : s.motionSet, box: s.motionDraw === 'box' };
-        renderer.domElement.setPointerCapture(ev.pointerId);
+        capture(ev);
         showOutline();
         return;
       }
@@ -582,13 +591,13 @@ export function Viewport() {
       }
       if (s.tool === 'band_motion') {
         band = { id, z0: hit.point.z, z1: hit.point.z, value: erase ? 0 : s.motionSet, anchor: hit.point.clone() };
-        renderer.domElement.setPointerCapture(ev.pointerId);
+        capture(ev);
         showBand();
         return;
       }
       const motion = s.tool === 'paint_motion' || s.tool === 'pick_motion';
       const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : motion ? 'motion' : 'color';
-      const value = ev.shiftKey ? 0 : layer === 'color' ? (ev.button === 2 ? 0 : s.paintColor) : motion ? (ev.button === 2 ? 0 : s.motionSet) : ev.button === 2 ? 2 : 1;
+      const value = eraseIn ? 0 : layer === 'color' ? (alt ? 0 : s.paintColor) : motion ? (erase ? 0 : s.motionSet) : alt ? 2 : 1;
       // copy-on-write so undo keeps the previous paint
       s.updateObjects((o) => {
         const tris = o.mesh.indices.length / 3;
@@ -606,7 +615,7 @@ export function Viewport() {
         paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color));
         invalidate();
       }
-      renderer.domElement.setPointerCapture(ev.pointerId);
+      capture(ev);
       paintAt(ev);
     };
     const onMove = (ev: PointerEvent) => {
@@ -621,6 +630,13 @@ export function Viewport() {
       if (band) { band.z1 = bandHeight(ev); showBand(); return; }
       if (s.tool === 'lasso_motion' || s.tool === 'band_motion' || s.tool === 'object_motion') return;
       if (isPaintTool(s.tool) && s.workspace === 'prepare') paintAt(ev);
+    };
+    const endPaint = () => {
+      if (!painting) return;
+      painting = null;
+      const s = useStore.getState();
+      s.set({ objects: s.objects.map((o) => (o.paint ? { ...o, paint: { ...o.paint } } : o)) }); // paint arrays were mutated in place
+      s.markDirty();
     };
     const onUp = (ev: PointerEvent) => {
       if (drawing) {
@@ -647,21 +663,26 @@ export function Viewport() {
         const o = s.objects.find((x) => x.id === b.id);
         const lo = Math.min(b.z0, b.z1), hi = Math.max(b.z0, b.z1);
         // A band is a height range, not a set of triangles (one triangle can span the whole height
-        // of a low-poly model), so it is handed to the plugin panel to set the pattern's heights.
+        // of a low-poly model), so it is handed to the plugin panel to set the motion's heights.
         if (o && (hi - lo > 0.05 || !b.value)) {
           window.dispatchEvent(new CustomEvent('nx-motion-band', { detail: { id: o.id, from: lo, to: hi, erase: !b.value } }));
         }
         return;
       }
-      if (painting) {
-        painting = null;
+      if (painting) { endPaint(); return; }
+      if (!downAt) return;
+      if (ev.button === 2) {
         const s = useStore.getState();
-        s.set({ objects: s.objects.map((o) => (o.paint ? { ...o, paint: { ...o.paint } } : o)) }); // paint arrays were mutated in place
-        s.markDirty();
+        // painting tools: a right click (no drag) on the model takes paint off there; right drag pans
+        if (isPaintTool(s.tool) && s.workspace === 'prepare') {
+          const moved = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]);
+          downAt = null;
+          if (moved <= 4 && s.tool !== 'lasso_motion' && s.tool !== 'band_motion') { startPaint(ev, true, false); endPaint(); }
+          return;
+        }
+        openMenu(ev);
         return;
       }
-      if (!downAt) return;
-      if (ev.button === 2) { openMenu(ev); return; }
       if (ev.button !== 0) return;
       const moved = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]);
       downAt = null;
@@ -723,6 +744,18 @@ export function Viewport() {
       s.set({ selected: [], selectedPart: null, activePlate: plate, contextMenu: { ...at, kind: 'plate', plate, world } });
     };
     const onContext = (ev: Event) => ev.preventDefault();
+    // Runs before the camera controls see the press: a left press with a painting tool on that lands on
+    // the model (or anywhere, for the lasso) paints; everywhere else the left button rotates as usual.
+    const onPressCapture = (ev: PointerEvent) => {
+      const s = useStore.getState();
+      let paints = false;
+      if (ev.button === 0 && isPaintTool(s.tool) && s.workspace === 'prepare' && ev.target === renderer.domElement) {
+        if (s.tool === 'lasso_motion') paints = true;
+        else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
+      }
+      controls.mouseButtons = paints ? { ...paintButtons } : { ...normalButtons };
+    };
+    el.addEventListener('pointerdown', onPressCapture, true);
     const onLeave = () => { brush.visible = false; invalidate(); };
     const onCancel = () => { drawing = null; band = null; showOutline(); showBand(); };
     renderer.domElement.addEventListener('pointerdown', onDown);
@@ -732,33 +765,33 @@ export function Viewport() {
     renderer.domElement.addEventListener('contextmenu', onContext);
     renderer.domElement.addEventListener('pointercancel', onCancel);
 
-    // ---------------- pattern preview in Prepare: plugin lines drawn on the model, no slicing
-    const patternMat = new LineMaterial({ linewidth: 2, vertexColors: true, worldUnits: false, depthTest: true, transparent: true });
-    const patternLines = new LineSegments2(new LineSegmentsGeometry(), patternMat);
-    patternLines.renderOrder = 5;
-    patternLines.visible = false;
-    patternLines.frustumCulled = false;
-    scene.add(patternLines);
+    // ---------------- motion preview in Prepare: plugin lines drawn on the model, no slicing
+    const motionMat = new LineMaterial({ linewidth: 2, vertexColors: true, worldUnits: false, depthTest: true, transparent: true });
+    const motionLines = new LineSegments2(new LineSegmentsGeometry(), motionMat);
+    motionLines.renderOrder = 5;
+    motionLines.visible = false;
+    motionLines.frustumCulled = false;
+    scene.add(motionLines);
     let previewTimer: ReturnType<typeof setTimeout> | null = null;
-    const rebuildPatternPreview = () => {
+    const rebuildMotionPreview = () => {
       if (previewTimer) clearTimeout(previewTimer);
       previewTimer = setTimeout(() => {
         previewTimer = null;
         const s = useStore.getState();
-        if (!showsPattern(s)) return;
+        if (!showsMotion(s)) return;
         const t0 = performance.now();
         let lines: { positions: Float32Array; colors: Float32Array } | null = null;
         for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { lines = p.preview(); if (lines) break; }
         const geo = new LineSegmentsGeometry();
         if (lines && lines.positions.length) { geo.setPositions(lines.positions); geo.setColors(lines.colors); }
-        patternLines.geometry.dispose();
-        patternLines.geometry = geo;
+        motionLines.geometry.dispose();
+        motionLines.geometry = geo;
         (window as any).__nxPreviewMs = performance.now() - t0;
         window.dispatchEvent(new Event('nx-preview-built'));
         invalidate();
       }, 120);
     };
-    window.addEventListener('nx-plugin-preview', rebuildPatternPreview);
+    window.addEventListener('nx-plugin-preview', rebuildMotionPreview);
 
     // ---------------- preview
     let lastColorKey = '';
@@ -777,7 +810,7 @@ export function Viewport() {
       objGroup.visible = !preview;
       selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
-      patternLines.visible = showsPattern(s);
+      motionLines.visible = showsMotion(s);
       if (preview) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
@@ -796,7 +829,7 @@ export function Viewport() {
       renderer.domElement.style.width = w + 'px';
       renderer.domElement.style.height = h + 'px';
       camera.aspect = w / Math.max(h, 1);
-      patternMat.resolution.set(w, h);
+      motionMat.resolution.set(w, h);
       camera.updateProjectionMatrix();
       invalidate();
     };
@@ -817,8 +850,8 @@ export function Viewport() {
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
-      if (showsPattern(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
-        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins)) rebuildPatternPreview();
+      if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins)) rebuildMotionPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
@@ -843,8 +876,9 @@ export function Viewport() {
       renderer.dispose();
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);
-      window.removeEventListener('nx-plugin-preview', rebuildPatternPreview);
-      patternLines.geometry.dispose(); patternMat.dispose();
+      window.removeEventListener('nx-plugin-preview', rebuildMotionPreview);
+      el.removeEventListener('pointerdown', onPressCapture, true);
+      motionLines.geometry.dispose(); motionMat.dispose();
       viewApi.current = null;
     };
   }, []);

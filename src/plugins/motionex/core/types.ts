@@ -19,6 +19,8 @@ export interface ToolpathPoint {
   zOff?: number;
   /** Wall slope at this point in degrees: 0 = straight up, + = leaning out (overhang), − = leaning in. */
   slope?: number;
+  /** Line width (mm) of the move ending here, when it differs along the path (variable-width walls). */
+  w?: number;
   /** Problem marker for the preview and report. */
   flag?: "collision" | "loop";
 }
@@ -56,7 +58,11 @@ export interface Toolpath {
   points: ToolpathPoint[];
   /** Plugin id that last modified this path, for preview colouring. */
   modifiedBy?: string;
-  /** The path as the slicer made it, kept so a "replace" pattern can start over from it. */
+  /** A wall moved only to follow a motion wall (bonded inner wall), not by a motion of its own. */
+  follows?: boolean;
+  /** Cut where it would have printed over a motion wall; points carry their own extrusion (e). */
+  clipped?: boolean;
+  /** The path as the slicer made it, kept so a "replace" motion can start over from it. */
   base?: ToolpathPoint[];
 }
 

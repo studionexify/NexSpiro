@@ -430,7 +430,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mx-more .ok { color: var(--accent); }
 .mx-more .bad { color: var(--warning); }
 
-/* Pattern tab: editor beside the 3D view */
+/* Motion tab: editor beside the 3D view */
 .studio { width: var(--studio-w, 440px); min-height: 0; overflow-y: auto; background: var(--surface-primary); border-left: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
 .studio-head { display: flex; flex-direction: column; gap: 8px; }
 .studio-places { display: flex; flex-wrap: wrap; gap: 4px; }

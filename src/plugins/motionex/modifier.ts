@@ -3,14 +3,15 @@
 // Extrusion itself is recomputed by the core from the real 3D length after all plugins run.
 import { emptyCheck, type Layer, type PrintCheck, type SliceWarning, type Toolpath, type ToolpathPoint } from "./core/types";
 import type { PrintProfiles } from "./core/profiles";
-import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
+import { regionWeight, type MotionexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
 import { wallMatches, type MotionApplication, type MotionBrush } from "./model";
+import { offsetInnerWalls } from "./core/follow";
 
 export interface ModifierOptions {
   resampleStep: number;
-  /** Inner walls follow the outer wall's movement so the patterned skin stays fused to the body. */
+  /** Inner walls follow the outer wall's movement so the motion skin stays fused to the body. */
   bondInnerWalls?: boolean;
   /** Speed for parts where loops overlap, as a share of the wall speed (spec: loops print slow and warn). */
   loopSpeedShare: number;
@@ -115,18 +116,18 @@ export type Weight = (x: number, y: number, z: number, slope: number) => number;
 /** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
 export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
 
-/** One pattern taking part in a path: how strongly it applies where, and how it combines with earlier ones. */
+/** One motion taking part in a path: how strongly it applies where, and how it combines with earlier ones. */
 export interface PathLayer {
   brush: MotionBrush;
   weight: Weight;
-  /** add: displacement adds to earlier patterns · override: cross-fades from earlier patterns to this one. */
+  /** add: displacement adds to earlier motions · override: cross-fades from earlier motions to this one. */
   blend: "add" | "override";
   repeats?: RepeatLock;
 }
 
 /**
  * Where along a path a brush is sampled. Closed loops are measured from a fixed direction (+X from the
- * loop centre), not from the seam, and fit a whole number of repeats, so the pattern closes on itself at
+ * loop centre), not from the seam, and fit a whole number of repeats, so the motion closes on itself at
  * the seam and lines up from one layer to the next wherever the slicer put the seam.
  */
 function pathParam(samples: Sample[], closed: boolean, b: MotionBrush, repeats?: RepeatLock) {
@@ -156,8 +157,8 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
 }
 
 /**
- * Apply several patterns to one path at once. Every pattern is worked out on the slicer's own path and
- * the movements are combined (added, or cross-faded for "replace"), so where one pattern hands over to
+ * Apply several motions to one path at once. Every motion is worked out on the slicer's own path and
+ * the movements are combined (added, or cross-faded for "replace"), so where one motion hands over to
  * another, or fades out into the plain wall, the line stays one continuous line with no step.
  */
 export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfiles, opt: ModifierOptions, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[]): Toolpath {
@@ -190,7 +191,7 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     if (!any) continue;
     const prm = pathParam(samples, path.closed, b, repeats);
     if (b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0) canLoop = true;
-    // Events: positions are found in the same measure as the pattern, then mapped back onto the path.
+    // Events: positions are found in the same measure as the motion, then mapped back onto the path.
     const evs = eventPositions(b, prm.L, layer, prm.period).map((e) => ({ s: prm.toS(e.s), i: e.i })).sort((a, c) => a.s - c.s || a.i - c.i);
     let ev = 0, flowState = 1, travelUntil = -1, pendingUnretract = 0, lastPrinted = 0;
     for (let i = 0; i < N; i++) {
@@ -283,8 +284,8 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     }
   }
   check.speedHits += speedClamps; check.zSpeedHits += zClamps; check.accelHits += accel; check.loopSlowed += loops;
-  const name = layers.length === 1 ? layers[0].brush.name : "Patterns";
-  if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this pattern's plastic limit` });
+  const name = layers.length === 1 ? layers[0].brush.name : "Motions";
+  if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this motion's plastic limit` });
   if (speedClamps) warn({ code: "motionex_speed_limit", message: `Some spots were slowed to your printer's top speed (${maxXY} mm/s)` });
   if (loops) warn({ code: "motionex_loops", message: `${name}: loops lay plastic over itself, so those parts print slower (${Math.round(loopSpeed)} mm/s)` });
   if (zClamps) warn({ code: "motionex_z_speed", message: `Up-and-down moves slowed to your printer's top up/down speed (${machine.maxSpeed.z} mm/s)` });
@@ -302,15 +303,15 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const seen = new Set<string>();
   const warn = (w: SliceWarning) => { if (!seen.has(w.code)) { seen.add(w.code); warnings.push(w); } };
   const sorted = apps.filter((a) => a.enabled).sort((a, b) => a.order - b.order);
-  interface Prepared { app: MotionApplication; brush: MotionBrush; faces: PatternexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
+  interface Prepared { app: MotionApplication; brush: MotionBrush; faces: MotionexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
   const prepared: Prepared[] = [];
   for (const app of sorted) {
     const found = app.brush ?? brushes(app.brush_id);
     const k = app.scale ?? 1;
     const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
-    if (!brush) { warn({ code: "motionex_missing_brush", message: `Pattern ${app.brush_id} was not found` }); continue; }
-    const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is PatternexRegion => !!r) : [];
-    if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A pattern is set to picked surfaces but none are picked, so it was skipped" }); continue; }
+    if (!brush) { warn({ code: "motionex_missing_brush", message: `Motion ${app.brush_id} was not found` }); continue; }
+    const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is MotionexRegion => !!r) : [];
+    if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A motion is set to picked surfaces but none are picked, so it was skipped" }); continue; }
     if ((brush.z_amplitude ?? 0) > 0 && p.machine.firmware !== "klipper" && !check.notes.includes("slow-z"))
       check.notes.push("slow-z");
     const { z_start, z_end, fade_in_mm, fade_out_mm } = app.mask;
@@ -359,14 +360,19 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
       });
       return parts.length ? composePath(path, parts, p, opt, warn, layer.index, check) : path;
     });
-    if (opt.bondInnerWalls !== false) bondInnerWalls(layer, p, opt);
+    if (opt.bondInnerWalls !== false) {
+      // closed inner walls are rebuilt as true offsets of the moved outer wall; anything left (open
+      // pieces) follows the outer wall's movement point by point
+      offsetInnerWalls(layer, Math.max(1, p.process.walls) * (p.process.lineWidth || 0.42));
+      bondInnerWalls(layer, p, opt);
+    }
   }
-  if (check.notes.includes("slow-z")) warn({ code: "motionex_slow_z", message: `${p.machine.name} moves up and down slowly (${p.machine.maxSpeed.z} mm/s), so up-and-down patterns will print slower` });
+  if (check.notes.includes("slow-z")) warn({ code: "motionex_slow_z", message: `${p.machine.name} moves up and down slowly (${p.machine.maxSpeed.z} mm/s), so up-and-down motions will print slower` });
   return { layers, warnings };
 }
 
 /**
- * Inner walls follow the outer wall's movement, fading out over the wall stack, so the patterned skin
+ * Inner walls follow the outer wall's movement, fading out over the wall stack, so the motion skin
  * stays fused to the body: no gap opens behind an outward bump and no double plastic piles up behind an
  * inward dent. Only the side-to-side movement is followed; up-and-down movement stays on the outer wall.
  */
@@ -394,7 +400,7 @@ export function bondInnerWalls(layer: Layer, p: PrintProfiles, opt: ModifierOpti
   }
   if (!any) return 0;
   const span = Math.ceil((reach + lw) / cell);
-  // cap so a big pattern doesn't drag the inner walls into the infill
+  // cap so a big motion doesn't drag the inner walls into the infill
   const cap = reach;
   let moved = 0;
   layer.paths = layer.paths.map((path) => {
@@ -421,7 +427,7 @@ export function bondInnerWalls(layer: Layer, p: PrintProfiles, opt: ModifierOpti
     });
     if (!touched) return path;
     moved++;
-    return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
+    return { ...path, points: out, modifiedBy: "motionex", follows: true, base: path.base ?? path.points };
   });
   return moved;
 }

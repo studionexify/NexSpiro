@@ -9,7 +9,7 @@ import {
 import { addPart, addPlate, deletePlate, moveToPlate, PART_LABELS } from '../state/ops';
 import { useStore, type ContextMenuState } from '../state/store';
 import type { PartType } from '../engine/types';
-import { applyPatternToObjects } from '../plugins/motionex/ui/MotionexPanel';
+import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
 
 export interface MenuItem {
   label?: string;
@@ -81,7 +81,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paint colour', kbd: 'N', disabled: s.filaments.length < 2, onClick: () => s.set({ selected: ids, tool: 'paint_color' }) },
     { label: 'Cut', kbd: 'C', disabled: !one, onClick: () => s.set({ selected: ids, tool: 'cut' }) },
   ];
-  if (s.plugins.includes('motionex')) items.push({ label: 'Motionex pattern on whole object', onClick: () => applyPatternToObjects(ids) });
+  if (s.plugins.includes('motionex')) items.push({ label: 'Motionex motion on whole object', onClick: () => applyMotionToObjects(ids) });
   items.push({ sep: true }, { label: 'Export as STL…', onClick: () => exportStl(ids) });
   return items;
 }

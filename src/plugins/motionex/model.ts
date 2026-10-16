@@ -27,7 +27,7 @@ export interface NoiseSettings { enabled: boolean; type: "value"; seed: number; 
 
 export type LayerMode = "steady" | "alternate" | "back_and_forth" | "shift_hold";
 
-/** How the pattern changes from one layer to the next. Builds diamonds, bricks, twists and bands. */
+/** How the motion changes from one layer to the next. Builds diamonds, bricks, twists and bands. */
 export interface LayerEffect {
   /** Degrees of the repeat to shift by at each step. */
   shift_deg: number;
@@ -36,10 +36,10 @@ export interface LayerEffect {
   mode: LayerMode;
   /** Layers per step. */
   every: number;
-  /** Pattern is on for band_on layers then off for band_off layers; 0 = always on. */
+  /** Motion is on for band_on layers then off for band_off layers; 0 = always on. */
   band_on: number;
   band_off: number;
-  /** Draw the pattern slanting both ways at once (average of +shift and −shift): diamond and lattice grids. */
+  /** Draw the motion slanting both ways at once (average of +shift and −shift): diamond and lattice grids. */
   cross?: boolean;
 }
 
@@ -69,7 +69,7 @@ export interface MotionBrush {
 
 /** "body": the whole model; "faces": only the surfaces picked in the 3D view (face sets). */
 export type TargetType = "body" | "faces";
-/** Which wall lines a pattern moves: the outer wall line, the inner wall lines, or every wall. */
+/** Which wall lines a motion moves: the outer wall line, the inner wall lines, or every wall. */
 export type WallChoice = "outer" | "inner" | "all";
 
 const WALL_FEATURES: Record<WallChoice, string[]> = {
@@ -81,7 +81,7 @@ export const wallMatches = (walls: WallChoice, feature: string) => WALL_FEATURES
 
 export interface MotionApplication {
   brush_id: string;
-  /** faces: face-set ids ("objectId:setId") the pattern is limited to. */
+  /** faces: face-set ids ("objectId:setId") the motion is limited to. */
   target: { type: TargetType; walls: WallChoice; faces?: string[] };
   mask: {
     z_start: number; z_end: number; fade_in_mm: number; fade_out_mm: number;
@@ -97,9 +97,9 @@ export interface MotionApplication {
   scale?: number;
   /** Optional name shown in the list. */
   label?: string;
-  /** Surface set (1..n) this pattern's picked faces are stored in; the panel keeps one per pattern. */
+  /** Surface set (1..n) this motion's picked faces are stored in; the panel keeps one per motion. */
   surface?: number;
-  /** This placement's own edited copy of the pattern (from the Pattern tab); the library one is left as it is. */
+  /** This placement's own edited copy of the motion (from the Motion tab); the library one is left as it is. */
   brush?: MotionBrush;
 }
 

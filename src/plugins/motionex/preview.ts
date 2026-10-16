@@ -1,5 +1,5 @@
-// Quick look at the patterned walls without slicing: the model is cut at a sample of layer heights,
-// only where a pattern applies, and the patterns are applied to those outlines with the same code
+// Quick look at the motion walls without slicing: the model is cut at a sample of layer heights,
+// only where a motion applies, and the motions are applied to those outlines with the same code
 // the slicer uses. The result is plain line segments for the 3D view; it takes milliseconds, not a slice.
 import { sliceMesh } from '../../engine/slice';
 import { SCALE } from '../../engine/clipper';
@@ -19,17 +19,36 @@ export interface PreviewObject {
 
 export interface PreviewApp { app: MotionApplication; brush: MotionBrush; surface: number; color: [number, number, number] }
 
+/**
+ * What the preview colours the lines by. motion: which motion it is (and how strongly it applies) ·
+ * height: up-and-down movement · plastic: how much plastic each spot gets (after the limits) ·
+ * speed: how fast each spot prints.
+ */
+export type PreviewView = "motion" | "height" | "plastic" | "speed";
+
 export interface PreviewLines {
   /** Segment end points, xyz xyz per segment. */
   positions: Float32Array;
   /** rgb per end point. */
   colors: Float32Array;
   layers: number;
+  view: PreviewView;
+  /** Lowest and highest value shown (height: mm, plastic and speed: ×), for the legend. */
+  range: [number, number];
+  /** Pauses, blobs and lift-offs drawn as markers. */
+  events: number;
 }
+
+/** Colours shared with the legend. */
+export const VIEW_COLORS = { low: [0.2, 0.5, 0.95], mid: [0.62, 0.62, 0.62], high: [1, 0.42, 0.18], pause: [0.86, 0.2, 0.86], lift: [0.98, 0.8, 0.1], jump: [0.8, 0.8, 0.8] } as const;
+const ramp = (t: number): number[] => {
+  const u = Math.max(-1, Math.min(1, t)), m = VIEW_COLORS.mid, e = u < 0 ? VIEW_COLORS.low : VIEW_COLORS.high, a = Math.abs(u);
+  return [m[0] + (e[0] - m[0]) * a, m[1] + (e[1] - m[1]) * a, m[2] + (e[2] - m[2]) * a];
+};
 
 /** Most layers drawn per object; tall parts show every n-th layer. */
 const MAX_LAYERS = 140;
-/** Plain wall shown around a picked area (mm), so you can see how the pattern runs into it. */
+/** Plain wall shown around a picked area (mm), so you can see how the motion runs into it. */
 const CONTEXT_MM = 3;
 const smooth = (t: number) => { const u = Math.max(0, Math.min(1, t)); return u * u * (3 - 2 * u); };
 
@@ -75,9 +94,18 @@ function segmentField(segs: number[], cell: number) {
   };
 }
 
-export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25): PreviewLines {
+export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25, view: PreviewView = "motion"): PreviewLines {
   const pos: number[] = [], col: number[] = [];
+  // colours that depend on the value range are filled in at the end: [index into col, value]
+  const valued: [number, number][] = [];
+  let vLo = Infinity, vHi = -Infinity, events = 0;
+  const BASE_F = 50;
   let layersDrawn = 0;
+  const cross = (x: number, y: number, z: number, r: number, c: readonly number[]) => {
+    pos.push(x - r, y, z, x + r, y, z, x, y - r, z, x, y + r, z, x, y, z - r, x, y, z + r);
+    for (let k = 0; k < 6; k++) col.push(c[0], c[1], c[2]);
+    events++;
+  };
   const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
   const locks = new Map<string, Map<string, number>>();
   const lockFor = (id: string): RepeatLock => (x, y, suggested) => {
@@ -87,7 +115,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
     return m.get(key)!;
   };
   for (const o of objects) {
-    // which patterns touch this object, and which of its triangles each one covers
+    // which motions touch this object, and which of its triangles each one covers
     const mine = apps.map((a) => {
       if (a.app.target.type === 'body') return { ...a, tris: null as number[] | null };
       const tris: number[] = [];
@@ -98,7 +126,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
     const v = o.mesh.vertices;
     let zMin = Infinity, zMax = -Infinity;
     for (let i = 2; i < v.length; i += 3) { zMin = Math.min(zMin, v[i]); zMax = Math.max(zMax, v[i]); }
-    // height range worth cutting: where some pattern is switched on and has picked faces
+    // height range worth cutting: where some motion is switched on and has picked faces
     let lo = Infinity, hi = -Infinity;
     for (const a of mine) {
       let tlo = zMin, thi = zMax;
@@ -138,24 +166,40 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
       let drew = false;
       for (const path of loops[li] ?? []) {
         if (path.length < 3) continue;
-        const pts = path.map((q) => ({ x: q.X / SCALE, y: q.Y / SCALE, z, f: 50, flow: 1, e: 0 }));
+        const pts = path.map((q) => ({ x: q.X / SCALE, y: q.Y / SCALE, z, f: BASE_F, flow: 1, e: 0 }));
         pts.push({ ...pts[0] });
         if (!resample(pts, 1).some((q) => near(q.x, q.y))) continue;
         const tp: Toolpath = { feature: 'outer_wall', closed: true, points: pts };
         const out = composePath(tp, parts, p, { resampleStep: step, loopSpeedShare: 1 }, () => {}, layer);
         const base = resample(pts, step);
         if (base.length !== out.points.length) continue;
-        // strength and colour per point: the strongest pattern there, plain context in grey
+        // strength and colour per point: the strongest motion there, plain context in grey
         const strength = base.map((q) => { let best = 0, who = -1; ws.forEach((w, k) => { const x = w(q.x, q.y, z, 0); if (x > best) { best = x; who = k; } }); return { best, who, near: near(q.x, q.y) }; });
+        const valueOf = (q: (typeof out.points)[number]) =>
+          view === "height" ? q.zOff ?? 0 : view === "plastic" ? q.flow : view === "speed" ? q.f / BASE_F : 0;
         for (let i = 1; i < out.points.length; i++) {
           const a = strength[i - 1], b = strength[i];
           if (!a.near && !b.near) continue;
           const pa = out.points[i - 1], pb = out.points[i];
-          if (pa.travel || pb.travel) continue;
+          if (pa.post && (pa.post.dwell_ms || pa.post.blob_mm)) cross(pa.x, pa.y, pa.z, pa.post.blob_mm ? 0.9 : 0.5, VIEW_COLORS.pause);
+          if (pa.post?.retract_mm) cross(pa.x, pa.y, pa.z, 0.5, VIEW_COLORS.lift);
+          if (pb.travel) {
+            // lift-off: the nozzle jumps here without printing
+            pos.push(pa.x, pa.y, pa.z + 0.15, pb.x, pb.y, pb.z + 0.15);
+            for (let k = 0; k < 2; k++) col.push(...VIEW_COLORS.jump);
+            continue;
+          }
           pos.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
-          for (const s of [a, b]) {
+          for (const [s, q] of [[a, pa], [b, pb]] as const) {
+            if (view !== "motion" && s.best > 0) {
+              const v = valueOf(q);
+              vLo = Math.min(vLo, v); vHi = Math.max(vHi, v);
+              valued.push([col.length, v]);
+              col.push(0, 0, 0);
+              continue;
+            }
             const c = s.who >= 0 ? mine[s.who].color : [0.6, 0.6, 0.6];
-            const t = 0.25 + 0.75 * s.best;
+            const t = view !== "motion" ? 0 : 0.25 + 0.75 * s.best;
             col.push(0.55 + (c[0] - 0.55) * t, 0.55 + (c[1] - 0.55) * t, 0.55 + (c[2] - 0.55) * t);
           }
           drew = true;
@@ -164,5 +208,10 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
       if (drew) layersDrawn++;
     });
   }
-  return { positions: Float32Array.from(pos), colors: Float32Array.from(col), layers: layersDrawn };
+  // value colours: height around 0 mm, plastic and speed around 1×, scaled to the largest change seen
+  const centre = view === "height" ? 0 : 1;
+  const span = Math.max(0.05, Math.abs(vLo - centre), Math.abs(vHi - centre));
+  for (const [k, v] of valued) { const c = ramp((v - centre) / span); col[k] = c[0]; col[k + 1] = c[1]; col[k + 2] = c[2]; }
+  return { positions: Float32Array.from(pos), colors: Float32Array.from(col), layers: layersDrawn, view,
+    range: valued.length ? [vLo, vHi] : [centre, centre], events };
 }

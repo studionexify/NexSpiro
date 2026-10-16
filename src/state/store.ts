@@ -8,7 +8,7 @@ import { printerById } from '../profiles/printers';
 import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
-export type Workspace = 'home' | 'prepare' | 'preview' | 'pattern' | 'device' | 'project' | 'calibration';
+export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
 export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
@@ -120,7 +120,7 @@ interface State {
   /** Measure tool: picked world points (up to 2). */
   measurePoints: Vec3[];
   contextMenu: ContextMenuState | null;
-  /** Draw the plugins' quick pattern preview on the model in Prepare (no slicing). */
+  /** Draw the plugins' quick motion preview on the model in Prepare (no slicing). */
   liveToolpaths: boolean;
 
   set: (p: Partial<State>) => void;

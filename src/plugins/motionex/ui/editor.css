@@ -1,4 +1,4 @@
-/* Motionex pattern editor (plain-DOM window), scoped under .mx-modal and using Nexspiro's theme tokens. */
+/* Motionex motion editor (plain-DOM window), scoped under .mx-modal and using Nexspiro's theme tokens. */
 .mx-modal { position: fixed; inset: 0; background: rgba(5, 10, 20, .45); display: grid; place-items: center; z-index: 60;
   --line: var(--border); --panel: var(--surface-secondary); --panel-2: var(--surface-tertiary); --muted: var(--text-muted);
   --accent-2: var(--accent-tint); --warn: var(--warning); color: var(--text); font-size: 13px; }

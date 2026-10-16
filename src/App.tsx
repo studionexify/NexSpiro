@@ -21,7 +21,7 @@ const TABS: { id: Workspace; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'prepare', label: 'Prepare', icon: 'cube' },
   { id: 'preview', label: 'Preview', icon: 'layers' },
-  { id: 'pattern', label: 'Pattern', icon: 'brush' },
+  { id: 'motion', label: 'Motion', icon: 'brush' },
   { id: 'device', label: 'Device', icon: 'device' },
   { id: 'project', label: 'Project', icon: 'folder' },
   { id: 'calibration', label: 'Calibration', icon: 'calib' },
@@ -74,7 +74,7 @@ function TopBar() {
       <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
       <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
       <nav className="tabs" role="tablist">
-        {TABS.filter((t) => t.id !== 'pattern' || hasStudio).map((t) => (
+        {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
           <button key={t.id} role="tab" aria-selected={workspace === t.id} className={`tab ${workspace === t.id ? 'active' : ''}`} onClick={() => set({ workspace: t.id })}>
             {t.label}
           </button>
@@ -160,13 +160,13 @@ function useShortcuts() {
 export default function App() {
   const { theme, workspace: ws } = useStore();
   const studio = useStore((s) => PLUGINS.find((p) => p.Studio && s.plugins.includes(p.id))?.Studio);
-  // the Pattern tab needs a plugin that has one; without it, fall back to Prepare
-  const workspace = ws === 'pattern' && !studio ? 'prepare' : ws;
+  // the Motion tab needs a plugin that has one; without it, fall back to Prepare
+  const workspace = ws === 'motion' && !studio ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
-  const Studio = workspace === 'pattern' ? studio : undefined;
+  const Studio = workspace === 'motion' ? studio : undefined;
   const hasDock = useStore((s) => s.plugins.length > 0);
 
   return (

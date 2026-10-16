@@ -110,7 +110,7 @@ test("heater block box counts: tall plastic under the block footprint is a colli
 });
 
 // ── loops: slow and warn ──
-test("loop patterns print slower where the nozzle runs backwards, and say so", () => {
+test("loop motions print slower where the nozzle runs backwards, and say so", () => {
   const loop = PRESETS.find((b) => b.id === "preset-loop")!;
   const warns: string[] = [], check = emptyCheck();
   const out = applyBrushToPath(line(12), loop, profiles(), DEFAULT_OPTIONS, () => 1, (w) => warns.push(w.message), 0, check);
@@ -128,7 +128,7 @@ const app = (brush_id: string, over: Partial<MotionApplication> = {}): MotionApp
 const maxY = (t: Toolpath) => Math.max(...t.points.map((q) => Math.abs(q.y - 10)));
 const brushes = (id: string) => PRESETS.find((b) => b.id === id);
 
-test("stacking: add builds on the earlier pattern, replace starts over", () => {
+test("stacking: add builds on the earlier motion, replace starts over", () => {
   const twice = applyMotion([layerOf([line(16)])], [app("preset-sine", { order: 0 }), app("preset-sine", { order: 1 })], brushes, profiles()).layers[0].paths[0];
   const replace = applyMotion([layerOf([line(16)])], [app("preset-sine", { order: 0 }), app("preset-sine", { order: 1, blend: "override", scale: 0.5 })], brushes, profiles()).layers[0].paths[0];
   assert.ok(Math.abs(maxY(twice) - 1.2) < 0.03, `add gave ${maxY(twice)}`);
@@ -143,7 +143,7 @@ test("fade out and wall-slope masks", () => {
   assert.ok(maxY(masked) < 1e-9);
 });
 
-test("picked-surface target: pattern only inside the box, with a soft edge", () => {
+test("picked-surface target: motion only inside the box, with a soft edge", () => {
   const reg = new RegionRegistry();
   reg.set(regionFromDef({ id: "logo", name: "Logo", kind: "box", x: 18, y: 10, w: 8, d: 10, z_from: 0, z_to: 50 }, 0.2, 0.2, { x: 100, y: 100 }));
   const r = reg.get("logo")!;
@@ -158,7 +158,7 @@ test("picked-surface target: pattern only inside the box, with a soft edge", () 
 });
 
 
-// ── merging: patterns hand over smoothly, close at the seam and stack layer to layer ──
+// ── merging: motions hand over smoothly, close at the seam and stack layer to layer ──
 import { bondInnerWalls, composePath, type Weight } from "../../src/plugins/motionex/modifier";
 
 const square = (size: number, start: number, z = 1): Toolpath => {
@@ -168,7 +168,7 @@ const square = (size: number, start: number, z = 1): Toolpath => {
 };
 const maxStep = (t: Toolpath) => Math.max(...t.points.slice(1).map((q, i) => Math.hypot(q.x - t.points[i].x, q.y - t.points[i].y)));
 
-test("pattern fades into the plain wall with no step", () => {
+test("motion fades into the plain wall with no step", () => {
   const sine = PRESETS.find((b) => b.id === "preset-sine")!;
   const ramp: Weight = (x) => Math.min(1, Math.max(0, (x - 14) / 4));
   const out = applyBrushToPath(line(16), sine, profiles(), DEFAULT_OPTIONS, ramp, () => {});
@@ -176,7 +176,7 @@ test("pattern fades into the plain wall with no step", () => {
   assert.ok(out.points.filter((q) => q.x < 14).every((q) => Math.abs(q.y - 10) < 1e-9));
 });
 
-test("two patterns cross-fade where they meet instead of jumping", () => {
+test("two motions cross-fade where they meet instead of jumping", () => {
   const sine = PRESETS.find((b) => b.id === "preset-sine")!;
   const big = { ...sine, amplitude: 1.2, period_mm: 3 };
   const a: Weight = (x) => 1 - Math.min(1, Math.max(0, (x - 17) / 2));
@@ -187,7 +187,7 @@ test("two patterns cross-fade where they meet instead of jumping", () => {
   }
 });
 
-test("closed loops: the pattern closes at the seam and lines up whatever the seam position", () => {
+test("closed loops: the motion closes at the seam and lines up whatever the seam position", () => {
   const sine = { ...PRESETS.find((b) => b.id === "preset-sine")!, repeat_mode: "tile" as const, period_mm: 3.3 };
   const a = applyBrushToPath(square(20, 3), sine, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
   const b = applyBrushToPath(square(20, 11), sine, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
@@ -213,7 +213,7 @@ test("inner walls follow the outer wall so the gap between them stays the same",
   }
 });
 
-test("a placement's own edited pattern is used instead of the library one, which stays as it was", () => {
+test("a placement's own edited motion is used instead of the library one, which stays as it was", () => {
   const lib = brushes("preset-sine")!;
   const own = { ...structuredClone(lib), amplitude: lib.amplitude * 2 };
   const edited = applyMotion([layerOf([line(16)])], [app("preset-sine", { brush: own })], brushes, profiles()).layers[0].paths[0];

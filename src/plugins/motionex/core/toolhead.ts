@@ -58,7 +58,7 @@ export const DEFAULT_TOOLHEADS: Record<string, ToolheadProfile> = {
   },
 };
 
-/** Nexspiro printer ids → the closest starting shape. Measure your own head for tight patterns. */
+/** Nexspiro printer ids → the closest starting shape. Measure your own head for tight motions. */
 const SHAPE_FOR: Record<string, string> = {
   "bbl-a1": "bambu-x1c", "bbl-a1mini": "bambu-x1c", "bbl-p1s": "bambu-x1c", "bbl-p1p": "bambu-x1c",
   "bbl-x1c": "bambu-x1c", "bbl-x1e": "bambu-x1c", "bbl-h2d": "bambu-x1c",

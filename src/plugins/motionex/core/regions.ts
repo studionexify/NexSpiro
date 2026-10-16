@@ -1,17 +1,17 @@
-// Shared region model (spec §8). Patternex publishes regions; Motionex (and future plugins) clip to them.
+// Shared region model (spec §8). Motionex publishes regions; Motionex (and future plugins) clip to them.
 // Contract: { region_id, layer_range, polygon_mask_per_layer, attributes }. Polygons are CCW lists of [x, y] in plate mm.
-// Until Patternex exists, Nexspiro offers simple regions drawn by the user: a height band or a box.
+// Until Motionex exists, Nexspiro offers simple regions drawn by the user: a height band or a box.
 
 export type Polygon = [number, number][];
 
-export interface PatternexRegion {
+export interface MotionexRegion {
   region_id: string;
   name: string;
   /** Inclusive layer index range. */
   layer_range: [number, number];
   /** Masks for a given layer. Function form so large plates need not precompute every layer. */
   polygon_mask_per_layer: (layer: number) => Polygon[];
-  /** Effects stack order: mask → material (Patternex) → motion (Motionex). */
+  /** Effects stack order: mask → material (Motionex) → motion (Motionex). */
   attributes: Record<string, unknown>;
 }
 
@@ -20,7 +20,7 @@ export type RegionDef =
   | { id: string; name: string; kind: "band"; z_from: number; z_to: number }
   | { id: string; name: string; kind: "box"; x: number; y: number; w: number; d: number; z_from: number; z_to: number };
 
-export function regionFromDef(def: RegionDef, layerHeight: number, firstLayer: number, bed: { x: number; y: number }): PatternexRegion {
+export function regionFromDef(def: RegionDef, layerHeight: number, firstLayer: number, bed: { x: number; y: number }): MotionexRegion {
   const li = (z: number) => Math.max(0, Math.round((z - firstLayer) / layerHeight));
   const poly: Polygon = def.kind === "band"
     ? [[0, 0], [bed.x, 0], [bed.x, bed.y], [0, bed.y]]
@@ -30,11 +30,11 @@ export function regionFromDef(def: RegionDef, layerHeight: number, firstLayer: n
 
 /** Registry shared by all plugins through the plugin host. */
 export class RegionRegistry {
-  private regions = new Map<string, PatternexRegion>();
-  set(r: PatternexRegion): void { this.regions.set(r.region_id, r); }
+  private regions = new Map<string, MotionexRegion>();
+  set(r: MotionexRegion): void { this.regions.set(r.region_id, r); }
   clear(): void { this.regions.clear(); }
-  get(id: string): PatternexRegion | undefined { return this.regions.get(id); }
-  all(): PatternexRegion[] { return [...this.regions.values()]; }
+  get(id: string): MotionexRegion | undefined { return this.regions.get(id); }
+  all(): MotionexRegion[] { return [...this.regions.values()]; }
 }
 
 export function pointInPolygon(x: number, y: number, poly: Polygon): boolean {
@@ -59,7 +59,7 @@ export function distanceToEdges(x: number, y: number, poly: Polygon): number {
 }
 
 /** 0..1 weight for a point against a region on a layer: 1 inside, 0 outside, smooth across blend mm at the edge. */
-export function regionWeight(r: PatternexRegion, layer: number, x: number, y: number, blend: number): number {
+export function regionWeight(r: MotionexRegion, layer: number, x: number, y: number, blend: number): number {
   if (layer < r.layer_range[0] || layer > r.layer_range[1]) return 0;
   let best = 0;
   for (const poly of r.polygon_mask_per_layer(layer)) {
