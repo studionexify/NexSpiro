@@ -51,8 +51,11 @@ export type PurgeMode = 'full' | 'reduced' | 'none';
 
 export interface RegionAction {
   region_ref: { placement_id: string; color_group?: string; shape_ids?: number[] };
-  /** slot: 0-based filament slot (AMS). manual: label shown at the pause. */
-  material: { mode: 'slot'; slot_index: number } | { mode: 'manual'; swap_label: string };
+  /**
+   * slot: 0-based filament slot (AMS loads it automatically).
+   * manual: single-colour printers — the slot still names the colour; swap_label is shown at the pause.
+   */
+  material: { mode: 'slot' | 'manual'; slot_index: number; swap_label?: string };
   purge: { mode: PurgeMode; volume_mm3?: number; change_point_shift_mm: number };
   motion: { motionex_brush_id: string } | null;
 }

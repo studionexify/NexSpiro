@@ -148,9 +148,17 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     for (const f of ctx.faceRegions) {
       regions.set({ region_id: f.id, name: f.name, layer_range: [0, layerOps.length - 1], polygon_mask_per_layer: (l) => f.polygonsAt(l), attributes: { source: 'faces' } });
     }
-    // A picked-surface number means that surface set on every object.
+    // Regions owned by Patternex (spec §8): Motionex only edits toolpaths inside their masks.
+    for (const r of ctx.sharedRegions ?? []) regions.set(r);
+    // A picked-surface number means that surface set on every object; a shared region id is used as is.
     for (const a of apps) if (a.target.type === 'faces')
-      a.target = { ...a.target, faces: ctx.faceRegions.filter((f) => (a.target.faces ?? []).some((n) => f.id === n || f.id.endsWith(`:${n}`))).map((f) => f.id) };
+      a.target = {
+        ...a.target,
+        faces: [
+          ...ctx.faceRegions.filter((f) => (a.target.faces ?? []).some((n) => f.id === n || f.id.endsWith(`:${n}`))).map((f) => f.id),
+          ...(a.target.faces ?? []).filter((n) => regions.get(n)?.attributes.source === 'patternex'),
+        ],
+      };
     const { layers, runs } = opsToLayers(layerOps);
     const originals = runs.map((r) => ({ ...r.path.points[0] }));
     const brushes = new Map(config.brushes.map((b) => [b.id, b]));
