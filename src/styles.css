@@ -200,9 +200,46 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .toolbar { top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 0 6px; height: 42px; }
 .toolbar .icon-btn { height: 34px; min-width: 34px; }
-.viewcube { left: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 44px); gap: 2px; padding: 4px; }
-.viewcube button { height: 24px; border: 0; border-radius: 4px; background: var(--surface-tertiary); cursor: pointer; font-size: 10px; font-weight: 700; color: var(--text-muted); }
-.viewcube button:hover { color: var(--text); background: var(--surface-hover); }
+.viewcube { left: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 4px; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.cube-stage { position: relative; width: 104px; height: 104px; cursor: grab; touch-action: none; }
+.cube-stage:active { cursor: grabbing; }
+.cube { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+.cube-face {
+  position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  font-size: 11px; font-weight: 600; color: var(--text); user-select: none; cursor: pointer;
+  background: var(--surface-secondary); border: 1px solid var(--border-strong, var(--border)); box-shadow: inset 0 0 10px rgba(0, 0, 0, .08);
+}
+.cube-face:hover { background: var(--accent); color: var(--accent-ink); }
+.cube-face.top { background: color-mix(in srgb, var(--surface-secondary) 82%, var(--accent)); }
+.cube-face.top:hover { background: var(--accent); }
+.cube-fit { height: 30px; min-width: 30px; background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 6px; }
+
+/* Bambu-style instant tooltip */
+.instant-tip {
+  position: fixed; z-index: 200; pointer-events: none; max-width: 320px; padding: 5px 9px; font-size: 12px; line-height: 1.4;
+  color: var(--text-strong); background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); white-space: pre-line;
+}
+
+/* per-plate controls drawn beside each plate */
+.plate-controls { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+.plate-icons {
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 3px; pointer-events: auto; opacity: .7;
+}
+.plate-icons.active, .plate-icons:hover { opacity: 1; }
+.plate-icon {
+  width: 28px; height: 26px; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface-overlay); color: var(--text);
+}
+.plate-icon:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.plate-icon.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.plate-icon:disabled { opacity: .4; cursor: default; }
+.plate-num {
+  position: absolute; left: 0; top: 0; pointer-events: auto; display: flex; align-items: center; gap: 2px; cursor: pointer;
+  font: italic 800 20px/1 "Segoe UI", system-ui, sans-serif; color: var(--text-muted); background: none; border: 0; padding: 2px 4px;
+}
+.plate-num.active { color: var(--accent); }
+.plate-num:hover { color: var(--accent); }
+.form-grid.plate-form { grid-template-columns: 110px 1fr; align-items: center; }
 .actionbar { right: 20px; bottom: 20px; display: flex; gap: 8px; padding: 8px; }
 .btn-primary {
   height: 40px; min-width: 140px; padding: 0 18px; border: 0; border-radius: 8px; cursor: pointer;

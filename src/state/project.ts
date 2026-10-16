@@ -2,7 +2,7 @@
 // plus Metadata/nexspiro_project.json with the full scene state, settings and project notes.
 import JSZip from 'jszip';
 import { saveFile } from '../platform';
-import { emptyProject, newId, objectMatrix, useStore, type ProjectInfo, type SceneObject } from './store';
+import { emptyProject, newId, objectMatrix, useStore, type Plate, type ProjectInfo, type SceneObject } from './store';
 import type { LayerAction } from '../engine/types';
 import type { Config } from '../profiles/settings';
 import type { PatternexProjectData } from '../plugins/patternex/ui/state';
@@ -22,7 +22,7 @@ interface ProjectJson {
   printerId: string; plate: string; presetId: string;
   overrides: Config; machineOverrides: Config;
   filaments: { presetId: string; color: string }[];
-  plates: { id: string; name: string; layerActions: LayerAction[] }[];
+  plates: Plate[];
   project: ProjectInfo;
   /** Older projects stored Patternex placements here; they now live on each object. */
   patternex?: PatternexProjectData;

@@ -1,40 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { arrange, autoOrient, exportGcode, importDialog, sliceAndPreview } from '../state/actions';
+import { splitObject } from '../state/objectOps';
 import { openPrintDialog } from './PrintModal';
 import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
-import { addPlate, currentProfile, deletePlate, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
+import { addPlate, arrangeAll, arrangeSelected, currentProfile, deletePlate, orientPlate, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { plateObjects } from '../state/slicing';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
+/** The Prepare toolbar, in Bambu Studio's order: object commands, then the gizmos and tools. */
 export function Toolbar() {
-  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart, liveToolpaths } = useStore();
+  const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates } = useStore();
   const has = selected.length > 0 || !!selectedPart;
-  const T = (t: Tool, icon: string, label: string, key: string) => (
-    <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label}
+  const one = selected.length === 1 && !selectedPart;
+  const T = (t: Tool, icon: string, label: string, key: string, disabled = false) => (
+    <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label} disabled={disabled}
       onClick={() => set({ tool: tool === t ? 'select' : t })}><Icon name={icon} /></button>
   );
+  const locked = !!plates[activePlate]?.locked;
   return (
     <div className="float toolbar" role="toolbar">
-      <button className="icon-btn" title="Add model (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="add" /></button>
-      <button className="icon-btn" title="Auto orient (O)" aria-label="Auto orient" disabled={!has} onClick={() => autoOrient()}><Icon name="orient" /></button>
-      <button className="icon-btn" title="Arrange all (A)" aria-label="Arrange" disabled={!objects.length} onClick={() => arrange()}><Icon name="arrange" /></button>
-      <button className="icon-btn" title="Duplicate (Ctrl+D)" aria-label="Duplicate" disabled={!has} onClick={duplicateSelected}><Icon name="copy" /></button>
-      <button className="icon-btn" title="Delete (Del)" aria-label="Delete" disabled={!has} onClick={removeSelected}><Icon name="trash" /></button>
+      <button className="icon-btn" title="Add (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="add" /></button>
+      <button className="icon-btn" title="Add plate" aria-label="Add plate" onClick={addPlate}><Icon name="addPlate" /></button>
+      <button className="icon-btn" title={has ? 'Auto orient selected (O)' : 'Auto orient all objects on the plate (O)'} aria-label="Auto orient"
+        disabled={!objects.length || (!has && locked)} onClick={() => (has ? autoOrient() : orientPlate())}><Icon name="orient" /></button>
+      <button className="icon-btn" title="Arrange all objects (A) · Shift+A: arrange selected" aria-label="Arrange" disabled={!objects.length} onClick={(e) => (e.shiftKey ? arrangeSelected() : arrangeAll())}><Icon name="arrange" /></button>
+      <button className="icon-btn" title="Split to objects" aria-label="Split to objects" disabled={!one} onClick={() => splitObject(selected[0])}><Icon name="split" /></button>
+      {T('vlh', 'vlh', 'Variable layer height', 'H', !objects.length)}
       <span className="sep" />
       {T('move', 'move', 'Move', 'M')}
       {T('rotate', 'rotate', 'Rotate', 'R')}
       {T('scale', 'scale', 'Scale', 'S')}
       {T('face', 'face', 'Lay on face', 'F')}
-      <span className="sep" />
-      {T('paint_support', 'brushSupport', 'Support painting', 'L')}
-      {T('paint_seam', 'brushSeam', 'Seam painting', 'P')}
-      {T('paint_color', 'brushColor', 'Colour painting', 'N')}
-      {T('vlh', 'vlh', 'Variable layer height', 'H')}
-      <span className="sep" />
       {T('cut', 'cut', 'Cut', 'C')}
       {T('boolean', 'boolean', 'Mesh boolean', 'B')}
-      {T('text', 'text', 'Text', 'T')}
+      {T('paint_support', 'brushSupport', 'Support painting', 'L')}
+      {T('paint_seam', 'brushSeam', 'Seam painting', 'P')}
+      {T('text', 'text', 'Text shape', 'T')}
+      {T('paint_color', 'brushColor', 'Color painting', 'N')}
       {T('measure', 'measure', 'Measure', 'U')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
@@ -55,12 +58,62 @@ export function LiveChip() {
   return <div className="float live-chip" role="status"><i />Toolpath view (quick){info ? ` · ${info}` : ''} · slice for exact G-code</div>;
 }
 
+type CubeFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
+// Each face in world space (Z up, front = -Y): screen-right, screen-down and outward normal.
+const FACES: [CubeFace, string, number[], number[], number[]][] = [
+  ['top', 'Top', [1, 0, 0], [0, -1, 0], [0, 0, 1]],
+  ['bottom', 'Bottom', [1, 0, 0], [0, 1, 0], [0, 0, -1]],
+  ['front', 'Front', [1, 0, 0], [0, 0, -1], [0, -1, 0]],
+  ['back', 'Back', [-1, 0, 0], [0, 0, -1], [0, 1, 0]],
+  ['right', 'Right', [0, 1, 0], [0, 0, -1], [1, 0, 0]],
+  ['left', 'Left', [0, -1, 0], [0, 0, -1], [-1, 0, 0]],
+];
+const CUBE = 62;
+
+/** Bambu Studio's view cube: turns with the camera, click a face to look at it, drag to orbit. */
 export function ViewCube() {
-  const v = (name: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back', label: string) => <button onClick={() => viewApi.current?.setView(name)}>{label}</button>;
+  const cube = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  useEffect(() => {
+    const on = (e: ArrayLike<number>) => {
+      // camera rotation, with y flipped into CSS's y-down screen space
+      if (cube.current) cube.current.style.transform = `matrix3d(${[e[0], -e[1], e[2], 0, e[4], -e[5], e[6], 0, e[8], -e[9], e[10], 0, 0, 0, 0, 1].join(',')})`;
+    };
+    viewApi.cameraListeners.add(on);
+    viewApi.current?.emitCamera();
+    return () => { viewApi.cameraListeners.delete(on); };
+  }, []);
+  const h = CUBE / 2;
   return (
-    <div className="float viewcube" aria-label="Camera views">
-      {v('left', 'LEFT')}{v('top', 'TOP')}{v('right', 'RIGHT')}
-      {v('front', 'FRONT')}{v('iso', 'ISO')}{v('back', 'BACK')}
+    <div className="float viewcube" aria-label="View cube">
+      <div className="cube-stage" title="Click a face to view from that side · drag to rotate"
+        onPointerDown={(e) => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d) return;
+          const dx = e.clientX - d.x, dy = e.clientY - d.y;
+          if (!d.moved && Math.hypot(dx, dy) < 3) return;
+          d.moved = true; d.x = e.clientX; d.y = e.clientY;
+          viewApi.current?.orbit(-dx * 0.012, -dy * 0.012);
+        }}
+        onPointerUp={(e) => {
+          const d = drag.current;
+          drag.current = null;
+          if (d && !d.moved) {
+            const face = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.dataset.face as CubeFace | undefined;
+            if (face) viewApi.current?.setView(face);
+          }
+        }}>
+        <div className="cube" ref={cube}>
+          {FACES.map(([id, label, r, d, n]) => (
+            <div key={id} data-face={id} className={`cube-face ${id}`}
+              style={{ width: CUBE, height: CUBE, marginLeft: -h, marginTop: -h, transform: `matrix3d(${[...r, 0, ...d, 0, ...n, 0, n[0] * h, n[1] * h, n[2] * h, 1].join(',')})` }}>
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <button className="icon-btn cube-fit" title="Zoom to fit the plate (Z) · 0: default view" aria-label="Zoom to fit" onClick={() => viewApi.current?.fit()}><Icon name="fit" size={16} /></button>
     </div>
   );
 }

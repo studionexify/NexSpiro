@@ -18,9 +18,19 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PLUGINS } from '../plugins/registry';
+import { plateAnchors } from '../ui/PlateControls';
 
-export interface ViewApi { setView: (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => void; fit: () => void }
-export const viewApi: { current: ViewApi | null } = { current: null };
+export type ViewName = 'iso' | 'top' | 'bottom' | 'front' | 'left' | 'right' | 'back';
+export interface ViewApi {
+  setView: (v: ViewName) => void;
+  /** Recentre on the active plate, keeping the viewing direction. */
+  fit: () => void;
+  /** Turn the camera around the target: azimuth about Z and polar (radians). */
+  orbit: (dAzimuth: number, dPolar: number) => void;
+  emitCamera: () => void;
+}
+/** cameraListeners get the camera's world-to-view matrix (column-major) after each frame drawn. */
+export const viewApi: { current: ViewApi | null; cameraListeners: Set<(m: ArrayLike<number>) => void> } = { current: null, cameraListeners: new Set() };
 
 const THEMES = {
   dark: { zenith: '#1E3442', nadir: '#0B1520', plate: '#1B2E3D', minor: '#284355', major: '#3B5F78', border: '#85A3B2', label: '#85A3B2' },
@@ -43,27 +53,38 @@ function backgroundTexture(theme: 'dark' | 'light') {
   return tex;
 }
 
-function labelSprite(text: string, color: string, active: boolean) {
+/** Bed type name printed along the plate's left edge, as on Bambu Studio's plates. */
+function bedLabel(text: string, color: string, length: number) {
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 96;
+  c.width = 1024; c.height = 64;
   const g = c.getContext('2d')!;
-  g.font = '600 56px "Segoe UI", system-ui, sans-serif';
-  g.fillStyle = active ? '#FF5C8D' : color;
+  g.font = 'italic 700 40px "Segoe UI", system-ui, sans-serif';
+  g.fillStyle = color;
+  g.globalAlpha = 0.55;
   g.textBaseline = 'middle';
-  g.fillText(text, 8, 48);
+  g.fillText(text, 12, 34);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.Mesh(new THREE.PlaneGeometry(64, 12), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(length, length / 16), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  m.userData.surface = true;
+  return m;
 }
 
-function buildPlate(p: PrinterProfile, theme: 'dark' | 'light', index: number, active: boolean, multi: boolean): THREE.Group {
+function buildPlate(p: PrinterProfile, theme: 'dark' | 'light', index: number, active: boolean, multi: boolean, bedName: string): THREE.Group {
   const t = THEMES[theme];
   const g = new THREE.Group();
   const { x: X, y: Y } = p.bed;
   const plate = new THREE.Mesh(new THREE.BoxGeometry(X, Y, 1.2), new THREE.MeshStandardMaterial({ color: t.plate, roughness: 0.75, metalness: 0.2 }));
   plate.position.set(X / 2, Y / 2, -0.62);
   plate.userData.plateIndex = index;
+  // the solid plate is hidden while the camera is below it, leaving only the grid and outline (as in Bambu Studio)
+  plate.userData.surface = true;
   g.add(plate);
+  const name = bedLabel(bedName, t.label, Math.min(Y * 0.8, 220));
+  name.rotation.z = Math.PI / 2;
+  name.position.set(9, Y / 2, 0.015);
+  g.add(name);
   const minor: number[] = [], major: number[] = [];
   for (let x = 0; x <= X + 1e-6; x += 10) (x % 50 === 0 ? major : minor).push(x, 0, 0.01, x, Y, 0.01);
   for (let y = 0; y <= Y + 1e-6; y += 10) (y % 50 === 0 ? major : minor).push(0, y, 0.01, X, y, 0.01);
@@ -92,11 +113,6 @@ function buildPlate(p: PrinterProfile, theme: 'dark' | 'light', index: number, a
   );
   box.position.set(X / 2, Y / 2, p.bed.z / 2);
   g.add(box);
-  if (multi) {
-    const lbl = labelSprite(`Plate ${index + 1}`, t.label, active);
-    lbl.position.set(32, -10, 0.05);
-    g.add(lbl);
-  }
   return g;
 }
 
@@ -272,31 +288,63 @@ export function Viewport() {
     };
     controls.addEventListener('change', invalidate);
 
-    const setView = (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => {
+    /** Camera distance that shows the whole plate with a margin, like Bambu Studio's default view. */
+    const fitDistance = (X: number, Y: number) => {
+      const half = Math.hypot(X, Y) * 0.5 * 1.08;
+      const vfov = (camera.fov * Math.PI) / 180;
+      const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+      return half / Math.tan(Math.min(vfov, hfov) / 2);
+    };
+    const setView = (v: ViewName) => {
       const s = useStore.getState();
       const { x: X, y: Y, z: Z } = printer.bed;
       const [ox, oy] = plateOrigin(s.activePlate, s.printerId);
       const c = new THREE.Vector3(ox + X / 2, oy + Y / 2, 0);
-      const r = Math.max(X, Y) * 1.05;
+      const r = fitDistance(X, Y);
       const dirs: Record<string, [number, number, number]> = {
-        iso: [0, -0.85, 0.7], top: [0, -0.001, 1], front: [0, -1, 0.12], back: [0, 1, 0.12], left: [-1, 0, 0.12], right: [1, 0, 0.12],
+        iso: [0, -0.85, 0.7], top: [0, -0.001, 1], bottom: [0, -0.001, -1], front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0],
       };
       const d = new THREE.Vector3(...dirs[v]).normalize().multiplyScalar(r);
       camera.position.copy(c).add(d);
-      controls.target.copy(c).setZ(v === 'iso' ? Z * 0.06 : 0);
+      controls.target.copy(c).setZ(v === 'iso' ? Z * 0.06 : ['front', 'back', 'left', 'right'].includes(v) ? Z * 0.15 : 0);
       controls.update();
       invalidate();
     };
-    viewApi.current = { setView, fit: () => setView('iso') };
-    (window as any).__nx = { camera, controls, invalidate, THREE };
+    const fit = () => {
+      const s = useStore.getState();
+      const { x: X, y: Y } = printer.bed;
+      const [ox, oy] = plateOrigin(s.activePlate, s.printerId);
+      const dir = camera.position.clone().sub(controls.target).normalize();
+      controls.target.set(ox + X / 2, oy + Y / 2, 0);
+      camera.position.copy(controls.target).addScaledVector(dir, fitDistance(X, Y));
+      controls.update();
+      invalidate();
+    };
+    const Z_UP = new THREE.Vector3(0, 0, 1);
+    const orbit = (dAz: number, dPol: number) => {
+      const off = camera.position.clone().sub(controls.target);
+      off.applyAxisAngle(Z_UP, dAz);
+      const polar = off.angleTo(Z_UP);
+      const next = Math.min(Math.PI - 0.001, Math.max(0.001, polar + dPol));
+      const axis = new THREE.Vector3().crossVectors(Z_UP, off);
+      if (axis.lengthSq() < 1e-12) axis.set(1, 0, 0);
+      off.applyAxisAngle(axis.normalize(), next - polar);
+      camera.position.copy(controls.target).add(off);
+      controls.update();
+      invalidate();
+    };
+    const emitCamera = () => { camera.updateMatrixWorld(); for (const l of viewApi.cameraListeners) l(camera.matrixWorldInverse.elements); };
+    viewApi.current = { setView, fit, orbit, emitCamera };
+    (window as any).__nx = { camera, controls, invalidate, THREE, store: useStore };
 
     const rebuildPlates = () => {
       plateGroup.traverse((o: any) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
       plateGroup.clear();
       const s = useStore.getState();
       printer = printerById(s.printerId);
-      s.plates.forEach((_, i) => {
-        const g = buildPlate(printer, s.theme, i, i === s.activePlate, s.plates.length > 1);
+      s.plates.forEach((pl, i) => {
+        const bed = pl.bedType ?? s.plate;
+        const g = buildPlate(printer, s.theme, i, i === s.activePlate, s.plates.length > 1, printer.plates.find((x) => x.type === bed)?.label ?? '');
         const [ox, oy] = plateOrigin(i, s.printerId);
         g.position.set(ox, oy, 0);
         plateGroup.add(g);
@@ -635,6 +683,7 @@ export function Viewport() {
       paintAt(ev);
     };
     const onMove = (ev: PointerEvent) => {
+      if (objDrag) { moveObjectDrag(ev); return; }
       const s = useStore.getState();
       if (placeDragging()) {
         ray.setFromCamera(ndc(ev), camera);
@@ -661,6 +710,7 @@ export function Viewport() {
       s.markDirty();
     };
     const onUp = (ev: PointerEvent) => {
+      if (endObjectDrag()) return;
       if (placeUp()) { downAt = null; return; }
       if (useStore.getState().tool === 'place_pattern') { downAt = null; return; }
       if (drawing) {
@@ -769,6 +819,69 @@ export function Viewport() {
       s.set({ selected: [], selectedPart: null, activePlate: plate, contextMenu: { ...at, kind: 'plate', plate, world } });
     };
     const onContext = (ev: Event) => ev.preventDefault();
+
+    // ---------------- free move: left drag on an object slides it (and the rest of the selection) over the bed,
+    // with no tool needed, as in Bambu Studio. The drag runs on the horizontal plane through the grabbed point.
+    let objDrag: { ids: string[]; plane: THREE.Plane; start: THREE.Vector3; at: [number, number]; delta: THREE.Vector3; moved: boolean; base: Map<THREE.Mesh, THREE.Matrix4>; proxy: THREE.Vector3 } | null = null;
+    const FREE_MOVE_TOOLS: Tool[] = ['select', 'move', 'rotate', 'scale'];
+    const startObjectDrag = (ev: PointerEvent): boolean => {
+      const s = useStore.getState();
+      if (ev.button !== 0 || s.workspace !== 'prepare' || !FREE_MOVE_TOOLS.includes(s.tool) || ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+      if (gizmo.object && gizmo.axis) return false; // the gizmo handle under the cursor wins
+      ray.setFromCamera(ndc(ev), camera);
+      const parts = [...partMeshes.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
+      const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
+      if (!hit || hit.object.userData.partId) return false;
+      const id = hit.object.userData.id as string;
+      const ids = s.selected.includes(id) && !s.selectedPart ? s.selected : [id];
+      if (ids !== s.selected || s.selectedPart) s.set({ selected: ids, selectedPart: null });
+      const base = new Map<THREE.Mesh, THREE.Matrix4>();
+      for (const oid of ids) {
+        const e = meshes.get(oid);
+        if (e) base.set(e.mesh, e.mesh.matrix.clone());
+        const o = s.objects.find((x) => x.id === oid);
+        for (const p of o?.parts ?? []) { const pe = partMeshes.get(p.id); if (pe) base.set(pe.mesh, pe.mesh.matrix.clone()); }
+      }
+      objDrag = {
+        ids, plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), -hit.point.z), start: hit.point.clone(), at: [ev.clientX, ev.clientY],
+        delta: new THREE.Vector3(), moved: false, base, proxy: proxy.position.clone(),
+      };
+      capture(ev);
+      return true;
+    };
+    const moveObjectDrag = (ev: PointerEvent) => {
+      const d = objDrag!;
+      if (!d.moved && Math.hypot(ev.clientX - d.at[0], ev.clientY - d.at[1]) <= 4) return;
+      ray.setFromCamera(ndc(ev), camera);
+      const p = ray.ray.intersectPlane(d.plane, new THREE.Vector3());
+      if (!p) return;
+      // keep a grazing view from flinging the object to the horizon
+      const far = Math.max(printer.bed.x, printer.bed.y) * 2;
+      d.delta.set(p.x - d.start.x, p.y - d.start.y, 0).clampLength(0, far * 4);
+      if (!d.moved) { d.moved = true; dragging = true; renderer.domElement.style.cursor = 'move'; }
+      const t = new THREE.Matrix4().makeTranslation(d.delta.x, d.delta.y, 0);
+      for (const [m, b] of d.base) { m.matrix.multiplyMatrices(t, b); m.matrixWorldNeedsUpdate = true; m.updateMatrixWorld(); }
+      for (const b of selBoxes.children) (b as THREE.BoxHelper).update();
+      if (gizmo.object === proxy) { proxy.position.copy(d.proxy).add(d.delta); proxy.updateMatrixWorld(); }
+      invalidate();
+    };
+    const endObjectDrag = (): boolean => {
+      const d = objDrag;
+      objDrag = null;
+      if (!d) return false;
+      renderer.domElement.style.cursor = '';
+      if (!d.moved) return false; // a click: the normal selection logic runs
+      dragging = false;
+      downAt = null;
+      const s = useStore.getState();
+      const { x: dx, y: dy } = d.delta;
+      if (Math.hypot(dx, dy) < 1e-6) { syncObjects(); return true; }
+      s.updateObjects((o) => ({ ...o, position: [o.position[0] + dx, o.position[1] + dy, o.position[2]] }), d.ids);
+      // dropping onto another plate makes it the active plate
+      const pi = plateAt(d.start.x + dx, d.start.y + dy, s.printerId, s.plates.length);
+      if (pi !== s.activePlate) s.set({ activePlate: pi });
+      return true;
+    };
     // Runs before the camera controls see the press: a left press with a painting or placing tool that
     // lands on the model (or anywhere, for the lasso) paints or places; elsewhere the left button rotates.
     const onPressCapture = (ev: PointerEvent) => {
@@ -777,12 +890,15 @@ export function Viewport() {
       if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
         if (s.tool === 'lasso_motion') paints = true;
         else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
-      }
+      } else if (ev.target === renderer.domElement && startObjectDrag(ev)) paints = true;
       controls.mouseButtons = paints ? { ...paintButtons } : { ...normalButtons };
     };
     el.addEventListener('pointerdown', onPressCapture, true);
     const onLeave = () => { brush.visible = false; invalidate(); };
-    const onCancel = () => { drawing = null; band = null; showOutline(); showBand(); };
+    const onCancel = () => {
+      drawing = null; band = null; showOutline(); showBand();
+      if (objDrag) { objDrag = null; dragging = false; renderer.domElement.style.cursor = ''; syncObjects(); }
+    };
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointermove', onMove);
     renderer.domElement.addEventListener('pointerup', onUp);
@@ -891,7 +1007,7 @@ export function Viewport() {
     syncPreview();
 
     const unsub = useStore.subscribe((s, prev) => {
-      if (s.printerId !== prev.printerId || s.theme !== prev.theme || s.plates.length !== prev.plates.length || s.activePlate !== prev.activePlate) {
+      if (s.printerId !== prev.printerId || s.theme !== prev.theme || s.plates !== prev.plates || s.plate !== prev.plate || s.activePlate !== prev.activePlate) {
         rebuildPlates();
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
@@ -906,11 +1022,36 @@ export function Viewport() {
       if (s.cutPlane !== prev.cutPlane || s.measurePoints !== prev.measurePoints || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) syncTools();
     });
 
+    // screen anchors for the per-plate icon column (back-right corner) and the plate number (front-right)
+    const anchorV = new THREE.Vector3();
+    const toScreen = (x: number, y: number): [number, number] | null => {
+      anchorV.set(x, y, 0).project(camera);
+      if (anchorV.z > 1 || anchorV.z < -1) return null;
+      const r = renderer.domElement;
+      return [(anchorV.x + 1) / 2 * r.clientWidth, (1 - anchorV.y) / 2 * r.clientHeight];
+    };
+    const placePlateAnchors = () => {
+      const s = useStore.getState();
+      const { x: X, y: Y } = printer.bed;
+      plateAnchors.current = s.plates.map((_, i) => {
+        const [ox, oy] = plateOrigin(i, s.printerId);
+        return { icons: toScreen(ox + X + 6, oy + Y), label: toScreen(ox + X + 10, oy - 8) };
+      });
+      for (const l of plateAnchors.listeners) l();
+    };
+
     let raf = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
       if (controls.update()) needsRender = true;
-      if (needsRender) { renderer.render(scene, camera); needsRender = false; }
+      if (needsRender) {
+        const below = camera.position.z < 0;
+        plateGroup.traverse((o) => { if (o.userData.surface) o.visible = !below; });
+        renderer.render(scene, camera);
+        needsRender = false;
+        emitCamera();
+        placePlateAnchors();
+      }
     };
     loop();
 

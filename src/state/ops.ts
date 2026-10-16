@@ -1,7 +1,7 @@
 // Scene operations: arrange, auto-orient, lay-on-face, centre.
 import * as THREE from 'three';
 import { printerById } from '../profiles/printers';
-import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type ScenePart } from './store';
+import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type Plate, type SceneObject, type ScenePart } from './store';
 import { weld, type IndexedMesh } from '../engine/mesh';
 import { adaptiveProfile, applyHeightRange, smoothProfile, uniformProfile } from '../engine/layers';
 import type { PartType } from '../engine/types';
@@ -10,9 +10,10 @@ import { currentConfig } from './slicing';
 const DEG = 180 / Math.PI;
 
 /** Shelf bin-packing of bounding boxes centred on the bed (spacing in mm). */
-export function arrange(spacing = 6, plate = useStore.getState().activePlate) {
+export function arrange(spacing = 6, plate = useStore.getState().activePlate, only?: string[]) {
   const s = useStore.getState();
-  const objs = s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate);
+  if (s.plates[plate]?.locked) return;
+  const objs = s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate && (!only || only.includes(o.id)));
   if (!objs.length) return;
   const p = printerById(s.printerId);
   const [ox, oy] = plateOrigin(plate, s.printerId);
@@ -122,6 +123,33 @@ export function centreOnBed(o: SceneObject, printerId: string, plate = useStore.
 }
 
 // ---------------------------------------------------------------- plates
+/** Arrange every unlocked plate, like Bambu Studio's toolbar Arrange. */
+export function arrangeAll(spacing = 6) {
+  const s = useStore.getState();
+  s.plates.forEach((p, i) => { if (!p.locked) arrange(spacing, i); });
+}
+
+/** Arrange only the selected objects, each group on its own plate. */
+export function arrangeSelected(spacing = 6) {
+  const s = useStore.getState();
+  const plates = new Set(s.objects.filter((o) => s.selected.includes(o.id)).map((o) => objectPlate(o, s.printerId, s.plates.length)));
+  for (const p of plates) arrange(spacing, p, s.selected);
+}
+
+/** Auto orient every object on a plate (skipped while the plate is locked). */
+export function orientPlate(plate = useStore.getState().activePlate) {
+  const s = useStore.getState();
+  if (s.plates[plate]?.locked) return;
+  const ids = s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate).map((o) => o.id);
+  if (ids.length) autoOrient(ids);
+}
+
+export function updatePlate(index: number, patch: Partial<Plate>) {
+  const s = useStore.getState();
+  s.set({ plates: s.plates.map((p, i) => (i === index ? { ...p, ...patch } : p)) });
+  s.markDirty();
+}
+
 export function addPlate() {
   const s = useStore.getState();
   const n = s.plates.length;
@@ -158,42 +186,66 @@ export function moveToPlate(target: number) {
   });
 }
 
-// ---------------------------------------------------------------- primitive parts
-export function primitive(shape: 'box' | 'cylinder' | 'sphere', size: number): IndexedMesh {
+// ---------------------------------------------------------------- primitive shapes
+export type ShapeKind = 'box' | 'cylinder' | 'sphere' | 'cone' | 'disc' | 'torus' | 'tube' | 'hemisphere' | 'pyramid' | 'prism' | 'capsule';
+
+/** Shapes offered by "Add primitive", in menu order. */
+export const SHAPES: [ShapeKind, string][] = [
+  ['box', 'Cube'], ['cylinder', 'Cylinder'], ['sphere', 'Sphere'], ['cone', 'Cone'], ['disc', 'Disc'], ['torus', 'Torus'],
+  ['tube', 'Tube'], ['hemisphere', 'Hemisphere'], ['pyramid', 'Pyramid'], ['prism', 'Triangular prism'], ['capsule', 'Capsule'],
+];
+
+/** Closed surface of revolution around Z. profile: [radius, z] points; open profiles start and end on the axis, closed ones repeat their first point. */
+function revolve(profile: [number, number][], seg: number, a0 = 0): number[] {
   const out: number[] = [];
+  const P = (k: number, j: number) => { const a = a0 + (j / seg) * Math.PI * 2, [r, z] = profile[k]; return [r * Math.cos(a), r * Math.sin(a), z]; };
+  for (let k = 0; k < profile.length - 1; k++) for (let j = 0; j < seg; j++) {
+    const a = P(k, j), b = P(k, j + 1), c = P(k + 1, j + 1), d = P(k + 1, j);
+    out.push(...a, ...b, ...c, ...a, ...c, ...d);
+  }
+  return out;
+}
+
+function signedVolume(m: IndexedMesh) {
+  const v = m.vertices, ix = m.indices;
+  let vol = 0;
+  for (let t = 0; t < ix.length; t += 3) {
+    const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+    vol += v[a] * (v[b + 1] * v[c + 2] - v[b + 2] * v[c + 1]) - v[a + 1] * (v[b] * v[c + 2] - v[b + 2] * v[c]) + v[a + 2] * (v[b] * v[c + 1] - v[b + 1] * v[c]);
+  }
+  return vol / 6;
+}
+
+/** A closed, outward-facing primitive about `size` mm across, centred on the origin. */
+export function primitive(shape: ShapeKind, size: number): IndexedMesh {
   const r = size / 2;
+  let out: number[] = [];
+  const arc = (cx: number, cz: number, rad: number, from: number, to: number, n: number) =>
+    Array.from({ length: n + 1 }, (_, i) => { const a = from + ((to - from) * i) / n; return [cx + rad * Math.cos(a), cz + rad * Math.sin(a)] as [number, number]; });
   if (shape === 'box') {
     const v = [[-r, -r, -r], [r, -r, -r], [r, r, -r], [-r, r, -r], [-r, -r, r], [r, -r, r], [r, r, r], [-r, r, r]];
     const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
     for (const t of f) for (const i of t) out.push(...v[i]);
-  } else if (shape === 'cylinder') {
-    const seg = 48;
-    for (let i = 0; i < seg; i++) {
-      const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
-      const p0 = [r * Math.cos(a0), r * Math.sin(a0)], p1 = [r * Math.cos(a1), r * Math.sin(a1)];
-      out.push(0, 0, -r, p1[0], p1[1], -r, p0[0], p0[1], -r, 0, 0, r, p0[0], p0[1], r, p1[0], p1[1], r);
-      out.push(p0[0], p0[1], -r, p1[0], p1[1], -r, p1[0], p1[1], r, p0[0], p0[1], -r, p1[0], p1[1], r, p0[0], p0[1], r);
-    }
-  } else {
-    const st = 16, sl = 32;
-    const P = (i: number, j: number) => {
-      const th = (i / st) * Math.PI, ph = (j / sl) * Math.PI * 2;
-      return [r * Math.sin(th) * Math.cos(ph), r * Math.sin(th) * Math.sin(ph), r * Math.cos(th)];
-    };
-    for (let i = 0; i < st; i++) for (let j = 0; j < sl; j++) {
-      const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
-      if (i > 0) out.push(...a, ...b, ...d);
-      if (i < st - 1) out.push(...b, ...c, ...d);
-    }
-  }
-  return weld(new Float32Array(out));
+  } else if (shape === 'cylinder') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 48);
+  else if (shape === 'prism') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 3, Math.PI / 2);
+  else if (shape === 'disc') out = revolve([[0, -r * 0.15], [r, -r * 0.15], [r, r * 0.15], [0, r * 0.15]], 64);
+  else if (shape === 'cone') out = revolve([[0, -r], [r, -r], [0, r]], 48);
+  else if (shape === 'pyramid') out = revolve([[0, -r], [r * Math.SQRT2, -r], [0, r]], 4, Math.PI / 4);
+  else if (shape === 'sphere') out = revolve(arc(0, 0, r, -Math.PI / 2, Math.PI / 2, 24), 48);
+  else if (shape === 'hemisphere') out = revolve([[0, 0], ...arc(0, 0, r, 0, Math.PI / 2, 12)], 48);
+  else if (shape === 'capsule') out = revolve([...arc(0, -r * 0.5, r * 0.5, -Math.PI / 2, 0, 8), ...arc(0, r * 0.5, r * 0.5, 0, Math.PI / 2, 8)], 48);
+  else if (shape === 'tube') out = revolve([[r * 0.6, -r], [r, -r], [r, r], [r * 0.6, r], [r * 0.6, -r]], 48);
+  else if (shape === 'torus') out = revolve(arc(r * 0.68, 0, r * 0.32, 0, Math.PI * 2, 24), 48);
+  const m = weld(new Float32Array(out));
+  if (signedVolume(m) < 0) for (let t = 0; t < m.indices.length; t += 3) { const k = m.indices[t + 1]; m.indices[t + 1] = m.indices[t + 2]; m.indices[t + 2] = k; }
+  return m;
 }
 
 export const PART_LABELS: Record<PartType, string> = {
   negative: 'Negative part', modifier: 'Modifier', support_enforcer: 'Support enforcer', support_blocker: 'Support blocker',
 };
 
-export function addPart(objectId: string, type: PartType, shape: 'box' | 'cylinder' | 'sphere') {
+export function addPart(objectId: string, type: PartType, shape: ShapeKind) {
   const s = useStore.getState();
   const o = s.objects.find((x) => x.id === objectId);
   if (!o) return;

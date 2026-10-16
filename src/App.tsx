@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PluginsButton, RightDock } from './ui/RightDock';
-import { arrange, autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
+import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
@@ -13,6 +13,9 @@ import { ActionBar, LiveChip, PaintPanel, PlateBar, Toolbar, TransformPanel, Vie
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
+import { PlateControls, PlateSettingsHost } from './ui/PlateControls';
+import { InstantTooltips } from './ui/Tooltip';
+import { arrangeAll, arrangeSelected } from './state/ops';
 import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
@@ -153,11 +156,10 @@ function useShortcuts() {
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
       else if (k === 's') s.set({ tool: s.tool === 'scale' ? 'select' : 'scale' });
       else if (k === 'f') s.set({ tool: s.tool === 'face' ? 'select' : 'face' });
-      else if (k === 'a') arrange();
+      else if (k === 'a') { if (e.shiftKey) arrangeSelected(); else arrangeAll(); }
       else if (k === 'o') autoOrient();
-      else if (k === '0') viewApi.current?.setView('iso');
-      else if (k === '1') viewApi.current?.setView('top');
-      else if (k === '2') viewApi.current?.setView('front');
+      else if (k === 'z') viewApi.current?.fit();
+      else if (k >= '0' && k <= '6') viewApi.current?.setView((['iso', 'top', 'bottom', 'front', 'back', 'left', 'right'] as const)[+k]);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -190,7 +192,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><ActionBar /><LiveChip /><ContextMenu /></>}
+          {workspace === 'prepare' && <><PlateControls /><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><ActionBar /><LiveChip /><ContextMenu /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -205,6 +207,8 @@ export default function App() {
       </div>
       <Toast />
       <PrintDialogHost />
+      <PlateSettingsHost />
+      <InstantTooltips />
     </div>
   );
 }

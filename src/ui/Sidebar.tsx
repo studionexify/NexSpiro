@@ -184,7 +184,6 @@ function ParamRow({ def, value, baseValue, cfg, modified }: { def: ParamDef; val
   const setOverride = useStore((s) => s.setOverride);
   const disabled = def.disabledWhen?.(cfg) ?? false;
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
-  const timer = useRef<number>();
   const commit = (v: Config[string]) => setOverride(def.key, v === baseValue ? undefined : v);
 
   let control;
@@ -209,8 +208,8 @@ function ParamRow({ def, value, baseValue, cfg, modified }: { def: ParamDef; val
   return (
     <div className={`prow ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''}`}>
       <span className="plabel"
-        onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); timer.current = window.setTimeout(() => setTip({ x: r.right + 8, y: r.top }), 400); }}
-        onMouseLeave={() => { clearTimeout(timer.current); setTip(null); }}>
+        onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); setTip({ x: r.right + 8, y: r.top }); }}
+        onMouseLeave={() => setTip(null)}>
         {def.label}
       </span>
       {modified ? <button className="reset" title={`Reset to ${String(baseValue)}`} onClick={() => setOverride(def.key, undefined)}><Icon name="reset" size={14} /></button> : <span />}

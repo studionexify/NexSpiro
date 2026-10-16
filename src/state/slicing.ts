@@ -11,9 +11,12 @@ let worker: Worker | null = null;
 let seq = 0;
 let pending: ((r: SliceOutput | null) => void) | null = null;
 
-export function currentConfig() {
+/** Settings for slicing a plate: the global ones with the plate's own bed type and spiral vase on top. */
+export function currentConfig(plateIndex = useStore.getState().activePlate) {
   const s = useStore.getState();
-  return { ...resolveConfig({ printerId: s.printerId, plate: s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides }), ...tuningConfig(s.filaments[0].tuning) };
+  const pl = s.plates[plateIndex];
+  const overrides = pl?.spiralVase === undefined ? s.overrides : { ...s.overrides, spiral_mode: pl.spiralVase };
+  return { ...resolveConfig({ printerId: s.printerId, plate: pl?.bedType ?? s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides, machineOverrides: s.machineOverrides }), ...tuningConfig(s.filaments[0].tuning) };
 }
 
 export const plateObjects = (plate = useStore.getState().activePlate) => {
@@ -72,7 +75,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
       }
     };
     worker!.postMessage({
-      id, meshes, cfg: currentConfig(),
+      id, meshes, cfg: currentConfig(plate),
       opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
