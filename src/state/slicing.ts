@@ -9,6 +9,7 @@ import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } fro
 
 let worker: Worker | null = null;
 let seq = 0;
+let pending: ((r: SliceOutput | null) => void) | null = null;
 
 export function currentConfig() {
   const s = useStore.getState();
@@ -23,12 +24,13 @@ export const plateObjects = (plate = useStore.getState().activePlate) => {
 export function sliceNow(): Promise<SliceOutput | null> {
   const s = useStore.getState();
   const plate = s.activePlate;
-  const objs = plateObjects(plate);
+  const objs = plateObjects(plate).filter((o) => o.printable !== false);
   if (!objs.length) {
     s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
     return Promise.resolve(null);
   }
   worker?.terminate();
+  pending?.(null); // a slice that is replaced never finishes
   worker = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
   const id = ++seq;
   const [ox, oy] = plateOrigin(plate, s.printerId);
@@ -47,8 +49,10 @@ export function sliceNow(): Promise<SliceOutput | null> {
       vertices: transformVertices(p.mesh.vertices, toPlate.clone().multiply(partWorldMatrix(o, p)).elements),
     })),
   }));
-  s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate } });
-  return new Promise((resolve) => {
+  s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate, dirty: false } }); // edits during the slice mark it dirty again
+  return new Promise((done) => {
+    const resolve = (r: SliceOutput | null) => { if (pending === resolve) pending = null; done(r); };
+    pending = resolve;
     worker!.onmessage = (ev) => {
       const m = ev.data;
       if (m.id !== id) return;
@@ -57,13 +61,13 @@ export function sliceNow(): Promise<SliceOutput | null> {
       else if (m.type === 'done') {
         const out = m.out as SliceOutput;
         st.set({
-          slice: { status: 'done', stage: 'Done', progress: 1, result: out, error: null, dirty: false, plate },
+          slice: { status: 'done', stage: 'Done', progress: 1, result: out, error: null, dirty: st.slice.dirty, plate },
           layerRange: [0, out.layers.length - 1], moveCursor: -1,
           toast: out.warnings.length ? { kind: 'warn', text: out.warnings.join(' ') } : null,
         });
         resolve(out);
       } else {
-        st.set({ slice: { ...st.slice, status: 'error', error: m.message }, toast: { kind: 'error', text: `Slicing failed: ${m.message}` } });
+        st.set({ slice: { ...st.slice, status: 'error', error: m.message, dirty: true }, toast: { kind: 'error', text: `Slicing failed: ${m.message}` } });
         resolve(null);
       }
     };

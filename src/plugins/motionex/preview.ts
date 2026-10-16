@@ -1,0 +1,168 @@
+// Quick look at the patterned walls without slicing: the model is cut at a sample of layer heights,
+// only where a pattern applies, and the patterns are applied to those outlines with the same code
+// the slicer uses. The result is plain line segments for the 3D view; it takes milliseconds, not a slice.
+import { sliceMesh } from '../../engine/slice';
+import { SCALE } from '../../engine/clipper';
+import type { IndexedMesh } from '../../engine/mesh';
+import { composePath, resample, type PathLayer, type RepeatLock, type Weight } from './modifier';
+import type { PrintProfiles } from './core/profiles';
+import type { Toolpath } from './core/types';
+import type { MotionApplication, MotionBrush } from './model';
+
+export interface PreviewObject {
+  id: string;
+  /** World-space mesh. */
+  mesh: IndexedMesh;
+  /** Surface set per triangle (paint.motion). */
+  motion?: Uint8Array;
+}
+
+export interface PreviewApp { app: MotionApplication; brush: MotionBrush; surface: number; color: [number, number, number] }
+
+export interface PreviewLines {
+  /** Segment end points, xyz xyz per segment. */
+  positions: Float32Array;
+  /** rgb per end point. */
+  colors: Float32Array;
+  layers: number;
+}
+
+/** Most layers drawn per object; tall parts show every n-th layer. */
+const MAX_LAYERS = 140;
+/** Plain wall shown around a picked area (mm), so you can see how the pattern runs into it. */
+const CONTEXT_MM = 3;
+const smooth = (t: number) => { const u = Math.max(0, Math.min(1, t)); return u * u * (3 - 2 * u); };
+
+/** Cross-section of the picked triangles at height z, as 2D segments (x0, y0, x1, y1, …). */
+function pickedSegments(m: IndexedMesh, tris: number[], z: number): number[] {
+  const v = m.vertices, ix = m.indices, out: number[] = [];
+  for (const t of tris) {
+    const p: number[] = [];
+    for (let e = 0; e < 3; e++) {
+      const a = ix[t * 3 + e] * 3, b = ix[t * 3 + ((e + 1) % 3)] * 3;
+      const za = v[a + 2], zb = v[b + 2];
+      if ((za - z) * (zb - z) > 0 || za === zb) continue;
+      const u = (z - za) / (zb - za);
+      p.push(v[a] + (v[b] - v[a]) * u, v[a + 1] + (v[b + 1] - v[a + 1]) * u);
+    }
+    if (p.length >= 4) out.push(p[0], p[1], p[2], p[3]);
+  }
+  return out;
+}
+
+/** Distance from a point to the nearest segment, through a coarse grid. */
+function segmentField(segs: number[], cell: number) {
+  const grid = new Map<string, number[]>();
+  for (let k = 0; k < segs.length; k += 4) {
+    const x0 = Math.floor(Math.min(segs[k], segs[k + 2]) / cell), x1 = Math.floor(Math.max(segs[k], segs[k + 2]) / cell);
+    const y0 = Math.floor(Math.min(segs[k + 1], segs[k + 3]) / cell), y1 = Math.floor(Math.max(segs[k + 1], segs[k + 3]) / cell);
+    for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
+      const key = `${gx}|${gy}`; const l = grid.get(key); if (l) l.push(k); else grid.set(key, [k]);
+    }
+  }
+  return (x: number, y: number) => {
+    const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
+    let best = Infinity;
+    for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) {
+      for (const k of grid.get(`${ix}|${iy}`) ?? []) {
+        const ax = segs[k], ay = segs[k + 1], dx = segs[k + 2] - ax, dy = segs[k + 3] - ay;
+        const L2 = dx * dx + dy * dy || 1;
+        const u = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2));
+        best = Math.min(best, Math.hypot(x - ax - u * dx, y - ay - u * dy));
+      }
+    }
+    return best;
+  };
+}
+
+export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25): PreviewLines {
+  const pos: number[] = [], col: number[] = [];
+  let layersDrawn = 0;
+  const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
+  const locks = new Map<string, Map<string, number>>();
+  const lockFor = (id: string): RepeatLock => (x, y, suggested) => {
+    let m = locks.get(id); if (!m) locks.set(id, (m = new Map()));
+    const key = `${Math.round(x / 2)}|${Math.round(y / 2)}`;
+    if (!m.has(key)) m.set(key, suggested);
+    return m.get(key)!;
+  };
+  for (const o of objects) {
+    // which patterns touch this object, and which of its triangles each one covers
+    const mine = apps.map((a) => {
+      if (a.app.target.type === 'body') return { ...a, tris: null as number[] | null };
+      const tris: number[] = [];
+      o.motion?.forEach((v, t) => { if (v === a.surface) tris.push(t); });
+      return tris.length ? { ...a, tris } : null;
+    }).filter((a): a is PreviewApp & { tris: number[] | null } => !!a);
+    if (!mine.length) continue;
+    const v = o.mesh.vertices;
+    let zMin = Infinity, zMax = -Infinity;
+    for (let i = 2; i < v.length; i += 3) { zMin = Math.min(zMin, v[i]); zMax = Math.max(zMax, v[i]); }
+    // height range worth cutting: where some pattern is switched on and has picked faces
+    let lo = Infinity, hi = -Infinity;
+    for (const a of mine) {
+      let tlo = zMin, thi = zMax;
+      if (a.tris) {
+        tlo = Infinity; thi = -Infinity;
+        for (const t of a.tris) for (let k = 0; k < 3; k++) { const z = v[o.mesh.indices[t * 3 + k] * 3 + 2]; tlo = Math.min(tlo, z); thi = Math.max(thi, z); }
+      }
+      lo = Math.min(lo, Math.max(tlo, a.app.mask.z_start)); hi = Math.max(hi, Math.min(thi, a.app.mask.z_end));
+    }
+    lo = Math.max(lo, zMin + first * 0.5); hi = Math.min(hi, zMax - 1e-3);
+    if (!(hi > lo)) continue;
+    const firstIdx = Math.max(0, Math.ceil((lo - zMin - first) / lh));
+    const lastIdx = Math.floor((hi - zMin - first) / lh);
+    const every = Math.max(1, Math.ceil((lastIdx - firstIdx + 1) / MAX_LAYERS));
+    const idx: number[] = [];
+    for (let i = firstIdx; i <= lastIdx; i += every) idx.push(i);
+    // cut a little under the layer top, like the slicer's mid-layer plane
+    const planes = idx.map((i) => zMin + first + i * lh - lh / 2);
+    const loops = sliceMesh(o.mesh, planes);
+    planes.forEach((z, li) => {
+      const layer = idx[li] + 1;
+      const fields = mine.map((a) => (a.tris ? segmentField(pickedSegments(o.mesh, a.tris, z), 2) : null));
+      const parts: PathLayer[] = [];
+      const ws: Weight[] = [];
+      mine.forEach((a, k) => {
+        const { z_start, z_end, fade_in_mm, fade_out_mm } = a.app.mask;
+        if (z < z_start || z > z_end) return;
+        const zw = Math.min(fade_in_mm > 0 ? smooth((z - z_start) / fade_in_mm) : 1, fade_out_mm > 0 ? smooth((z_end - z) / fade_out_mm) : 1);
+        const f = fields[k], blend = a.app.mask.blend_mm ?? 1.5;
+        // on the picked faces full strength, easing to nothing over the soft edge outside them
+        const w: Weight = f ? (x, y) => { const d = f(x, y); return d < 0.05 ? zw : blend > 0 ? zw * (1 - smooth(d / blend)) : 0; } : () => zw;
+        ws.push(w);
+        parts.push({ brush: a.brush, weight: w, blend: a.app.blend, repeats: lockFor(`${o.id}|${a.app.brush_id}|${k}`) });
+      });
+      if (!parts.length) return;
+      const near = (x: number, y: number) => fields.some((f, k) => (f ? f(x, y) < (mine[k].app.mask.blend_mm ?? 1.5) + CONTEXT_MM : true));
+      let drew = false;
+      for (const path of loops[li] ?? []) {
+        if (path.length < 3) continue;
+        const pts = path.map((q) => ({ x: q.X / SCALE, y: q.Y / SCALE, z, f: 50, flow: 1, e: 0 }));
+        pts.push({ ...pts[0] });
+        if (!resample(pts, 1).some((q) => near(q.x, q.y))) continue;
+        const tp: Toolpath = { feature: 'outer_wall', closed: true, points: pts };
+        const out = composePath(tp, parts, p, { resampleStep: step, loopSpeedShare: 1 }, () => {}, layer);
+        const base = resample(pts, step);
+        if (base.length !== out.points.length) continue;
+        // strength and colour per point: the strongest pattern there, plain context in grey
+        const strength = base.map((q) => { let best = 0, who = -1; ws.forEach((w, k) => { const x = w(q.x, q.y, z, 0); if (x > best) { best = x; who = k; } }); return { best, who, near: near(q.x, q.y) }; });
+        for (let i = 1; i < out.points.length; i++) {
+          const a = strength[i - 1], b = strength[i];
+          if (!a.near && !b.near) continue;
+          const pa = out.points[i - 1], pb = out.points[i];
+          if (pa.travel || pb.travel) continue;
+          pos.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+          for (const s of [a, b]) {
+            const c = s.who >= 0 ? mine[s.who].color : [0.6, 0.6, 0.6];
+            const t = 0.25 + 0.75 * s.best;
+            col.push(0.55 + (c[0] - 0.55) * t, 0.55 + (c[1] - 0.55) * t, 0.55 + (c[2] - 0.55) * t);
+          }
+          drew = true;
+        }
+      }
+      if (drew) layersDrawn++;
+    });
+  }
+  return { positions: Float32Array.from(pos), colors: Float32Array.from(col), layers: layersDrawn };
+}

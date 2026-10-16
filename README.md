@@ -13,7 +13,7 @@
 | Area | Features |
 | --- | --- |
 | **Import** | STL (binary + ASCII), OBJ, 3MF (multi-object, components & transforms). Drag-and-drop or File → Import. |
-| **Prepare** | Build plate sized to the printer (10/50 mm grid, origin axes, excluded zones), move / rotate / scale gizmos with numeric panels, lay on face, auto-orient, auto-arrange, duplicate, delete, undo/redo, overhang highlight, out-of-bounds warning. |
+| **Prepare** | Build plate sized to the printer (10/50 mm grid, origin axes, excluded zones), move / rotate / scale gizmos with numeric panels, lay on face, auto-orient, auto-arrange, duplicate, delete, undo/redo, overhang highlight, out-of-bounds warning. Right-click menus on the plate, objects and parts (add model or shape, paste, arrange, clone, fill bed, mirror, split, filament, printable, add parts and modifiers, export STL). |
 | **Printers** | Bambu Lab A1, A1 mini, P1S, P1P, X1 Carbon, X1E · Creality Ender-3 V3 KE · Elegoo Neptune 4 Max. Editable retraction and start/end/layer G-code. |
 | **Filaments** | PLA, PLA Matte, PETG, ABS, ASA, TPU with per-plate bed temperatures, cooling and max volumetric speed. |
 | **Process** | 0.08–0.28 mm presets; Quality / Strength / Speed / Support / Others tabs; modified values in amber with one-click reset; search (Ctrl+F); hover tooltips with internal keys. |
@@ -46,6 +46,7 @@
 | --- | --- |
 | **Printers** | 44 profiles: all current Bambu Lab (incl. H2D single-nozzle), Creality K1/K2/Ender-3 V3 family, Elegoo Neptune 3/4 & Centauri, Prusa MK3S+/MK4S/MINI+/CORE One/XL, Anycubic Kobra, Voron, Qidi, Sovol, Artillery, generic Marlin/Klipper. |
 | **Tools** | Cut (tilted plane, capped), Mesh boolean (union/difference/intersection), Text (object/emboss/engrave), Measure, Flushing-volume matrix. |
+| **Motionex plugin** | Wall patterns from a library, placed by click, paint, lasso, box, height band, whole object or whole plate. Instant pattern preview on the model in Prepare (patterned walls only, no slicing). Pattern tab: change a placed pattern's wave shape, depth, spacing, layer lead/lag, stacking and advanced curves with live close-ups and the model redrawn as you edit; changes stay on that placement unless saved to the library. Patterns fade into plain walls and cross-fade into each other, close at the seam, line up layer to layer, and inner walls follow the outer wall so the skin stays fused. |
 
 ### Plugins
 | Plugin | Features |

@@ -90,7 +90,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     filaments: s.filaments, plates: s.plates, project, patternex: projectData(px),
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
-      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, meshIndex: i,
+      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, meshIndex: i,
       parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type, position: p.position, rotation: p.rotation, scale: p.scale, overrides: p.overrides, v: f32(p.mesh.vertices), i: u32(p.mesh.indices) })),
       paint: o.paint ? Object.fromEntries(Object.entries(o.paint).filter(([, a]) => a).map(([k, a]) => [k, b64(a as Uint8Array)])) : undefined,
     })),
@@ -135,7 +135,7 @@ export async function loadProject(data: ArrayBuffer) {
   }
   const objects: SceneObject[] = json.objects.map((o) => ({
     id: o.id || newId(), name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges ?? 0,
-    filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights,
+    filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable,
     mesh: meshes[o.meshIndex],
     parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type as any, position: p.position as any, rotation: p.rotation as any, scale: p.scale as any, overrides: p.overrides ?? {}, mesh: { vertices: toF32(p.v), indices: toU32(p.i) } })),
     paint: o.paint ? Object.fromEntries(Object.entries(o.paint).map(([k, v]) => [k, unb64(v)])) : undefined,

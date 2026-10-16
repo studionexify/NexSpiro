@@ -8,7 +8,7 @@ import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
 export function Toolbar() {
-  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart } = useStore();
+  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart, liveToolpaths } = useStore();
   const has = selected.length > 0 || !!selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string) => (
     <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label}
@@ -38,8 +38,22 @@ export function Toolbar() {
       {T('measure', 'measure', 'Measure', 'U')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
+      <button className={`icon-btn ${liveToolpaths ? 'active' : ''}`} title="Show pattern path on model (quick preview, no slicing)" aria-label="Show pattern path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })}><Icon name="slice" /></button>
     </div>
   );
+}
+
+/** Shown while the pattern preview is drawn on the model. */
+export function LiveChip() {
+  const { liveToolpaths, objects } = useStore();
+  const [info, setInfo] = useState('');
+  useEffect(() => {
+    const on = () => setInfo(`${Math.round((window as any).__nxPreviewMs ?? 0)} ms`);
+    window.addEventListener('nx-preview-built', on);
+    return () => window.removeEventListener('nx-preview-built', on);
+  }, []);
+  if (!liveToolpaths || !objects.length) return null;
+  return <div className="float live-chip" role="status"><i />Pattern preview{info ? ` · ${info}` : ''} · slice for exact G-code</div>;
 }
 
 export function ViewCube() {
@@ -133,19 +147,6 @@ function NumField({ value, onSet }: { value: number; onSet: (v: number) => void 
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (draft !== null) { const v = parseFloat(draft); if (isFinite(v)) onSet(v); setDraft(null); } }}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-  );
-}
-
-export function EmptyHint() {
-  const objects = useStore((s) => s.objects);
-  if (objects.length) return null;
-  return (
-    <div className="empty">
-      <div className="hint">
-        <b>Drop STL, OBJ or 3MF files here</b>
-        or <button className="btn-secondary btn-small" style={{ display: 'inline-flex', margin: '0 4px' }} onClick={importDialog}><Icon name="add" size={14} />Add model</button> · pick a sample on the Home tab
-      </div>
-    </div>
   );
 }
 

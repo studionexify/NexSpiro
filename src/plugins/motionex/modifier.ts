@@ -10,10 +10,12 @@ import { wallMatches, type MotionApplication, type MotionBrush } from "./model";
 
 export interface ModifierOptions {
   resampleStep: number;
+  /** Inner walls follow the outer wall's movement so the patterned skin stays fused to the body. */
+  bondInnerWalls?: boolean;
   /** Speed for parts where loops overlap, as a share of the wall speed (spec: loops print slow and warn). */
   loopSpeedShare: number;
 }
-export const DEFAULT_OPTIONS: ModifierOptions = { resampleStep: 0.2, loopSpeedShare: 0.5 };
+export const DEFAULT_OPTIONS: ModifierOptions = { resampleStep: 0.2, loopSpeedShare: 0.5, bondInnerWalls: true };
 
 interface Sample { x: number; y: number; z: number; s: number; f: number; flow: number; slope: number }
 export interface BrushSample { lat: number; along: number; z: number; flow: number; speed: number }
@@ -93,11 +95,11 @@ function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number, fixedP
 }
 
 /** Arc-length positions on this path where each event fires. */
-export function eventPositions(b: MotionBrush, L: number, layer: number): { s: number; i: number }[] {
+export function eventPositions(b: MotionBrush, L: number, layer: number, fixedPeriod?: number): { s: number; i: number }[] {
   if (!b.events.length) return [];
   const lp = layerPhase(b, layer);
   if (lp === null) return [];
-  const period = periodFor(b, L);
+  const period = fixedPeriod ?? periodFor(b, L);
   const ph = (((b.phase_deg + lp) % 360 + 360) % 360 / 360) * period;
   const out: { s: number; i: number }[] = [];
   b.events.forEach((e, i) => {
@@ -113,87 +115,151 @@ export type Weight = (x: number, y: number, z: number, slope: number) => number;
 /** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
 export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
 
+/** One pattern taking part in a path: how strongly it applies where, and how it combines with earlier ones. */
+export interface PathLayer {
+  brush: MotionBrush;
+  weight: Weight;
+  /** add: displacement adds to earlier patterns · override: cross-fades from earlier patterns to this one. */
+  blend: "add" | "override";
+  repeats?: RepeatLock;
+}
+
+/**
+ * Where along a path a brush is sampled. Closed loops are measured from a fixed direction (+X from the
+ * loop centre), not from the seam, and fit a whole number of repeats, so the pattern closes on itself at
+ * the seam and lines up from one layer to the next wherever the slicer put the seam.
+ */
+function pathParam(samples: Sample[], closed: boolean, b: MotionBrush, repeats?: RepeatLock) {
+  const L = samples[samples.length - 1].s;
+  if (!closed || b.repeat_mode === "once") return { L, period: undefined as number | undefined, at: (i: number) => samples[i].s, toS: (p: number) => p };
+  let cx = 0, cy = 0;
+  for (const q of samples) { cx += q.x; cy += q.y; }
+  cx /= samples.length; cy /= samples.length;
+  const suggested = Math.max(1, Math.round(L / b.period_mm));
+  const n = repeats ? repeats(cx, cy, suggested) : suggested;
+  const period = L / n;
+  if (repeats && b.repeat_mode === "stretch") {
+    // "Fit evenly": placed by angle round the loop, so it stacks straight up when the loop grows or shrinks.
+    const at = (i: number) => (((Math.atan2(samples[i].y - cy, samples[i].x - cx) / (2 * Math.PI)) % 1) + 1) % 1 * L;
+    return { L, period, at: (i: number) => (i === samples.length - 1 ? at(0) : at(i)), toS: (p: number) => p };
+  }
+  // Start of the loop's measure: the sample nearest the +X direction from the centre.
+  let s0 = 0, best = Infinity;
+  for (const q of samples) { const a = Math.abs(Math.atan2(q.y - cy, q.x - cx)); if (a < best) { best = a; s0 = q.s; } }
+  const wrap = (v: number) => ((v % L) + L) % L;
+  return { L, period, at: (i: number) => (i === samples.length - 1 ? wrap(-s0) : wrap(samples[i].s - s0)), toS: (p: number) => wrap(p + s0) };
+}
+
 /** Apply one brush to one path, returning a new path. */
 export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, weight: Weight, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[], repeats?: RepeatLock): Toolpath {
-  const samples = resample(source ?? path.points, opt.resampleStep);
-  const L = samples[samples.length - 1].s;
-  if (L <= 0) return path;
-  // "Fit evenly" on a closed loop: the same number of repeats every layer, placed by angle round the
-  // loop, so the pattern stacks straight up even when the loop grows or shrinks (vases, cones).
-  let lockPeriod: number | undefined, cx = 0, cy = 0;
-  if (repeats && path.closed && b.repeat_mode === "stretch") {
-    for (const q of samples) { cx += q.x; cy += q.y; }
-    cx /= samples.length; cy /= samples.length;
-    const n = repeats(cx, cy, Math.max(1, Math.round(L / b.period_mm)));
-    lockPeriod = L / n;
-  }
-  const posAt = (c: Sample) => lockPeriod === undefined ? c.s : ((((Math.atan2(c.y - cy, c.x - cx) / (2 * Math.PI)) % 1) + 1) % 1) * L;
+  return composePath(path, [{ brush: b, weight, blend: "add", repeats }], p, opt, warn, layer, check, source);
+}
+
+/**
+ * Apply several patterns to one path at once. Every pattern is worked out on the slicer's own path and
+ * the movements are combined (added, or cross-faded for "replace"), so where one pattern hands over to
+ * another, or fades out into the plain wall, the line stays one continuous line with no step.
+ */
+export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfiles, opt: ModifierOptions, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[]): Toolpath {
+  const samples = resample(source ?? path.base ?? path.points, opt.resampleStep);
+  const N = samples.length;
+  const L = samples[N - 1].s;
+  if (L <= 0 || !layers.length) return path;
   const { machine, process, filament } = p;
   const maxXY = Math.min(machine.maxSpeed.x, machine.maxSpeed.y);
   const filArea = Math.PI * (filament.diameter / 2) ** 2;
-  const events = eventPositions(b, L, layer);
-  let ev = 0, flowState = 1, travelUntil = -1, pendingUnretract = 0;
-  const out: ToolpathPoint[] = [];
-  let flowClamps = 0, speedClamps = 0, zClamps = 0;
-  for (let i = 0; i < samples.length; i++) {
-    const c = samples[i];
-    // Tangent from neighbours; for closed paths wrap around so the seam has no kink.
-    const prev = samples[i > 0 ? i - 1 : path.closed ? samples.length - 2 : 0];
-    const next = samples[i < samples.length - 1 ? i + 1 : path.closed ? 1 : samples.length - 1];
-    let tx = next.x - prev.x, ty = next.y - prev.y;
-    const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
-    // Outward normal: walls are CCW, so outward is the right-hand normal.
-    const nx = ty, ny = -tx;
-    const w = clamp(weight(c.x, c.y, c.z, c.slope), 0, 1);
-    const s = path.closed && i === samples.length - 1 ? posAt(samples[0]) : posAt(c); // seam closes onto its own start
-    const m = w > 0 ? brushAt(b, s, L, layer, lockPeriod) : null;
-    const q: ToolpathPoint = { x: c.x, y: c.y, z: c.z, f: c.f, flow: c.flow, e: 0, slope: c.slope };
-    if (m) {
-      q.x += (nx * m.lat + tx * m.along) * w;
-      q.y += (ny * m.lat + ty * m.along) * w;
-      const dz = m.z * w;
-      if (dz !== 0) { q.z = round(c.z + dz); q.zOff = round(dz); }
-      let flow = c.flow * (1 + (m.flow * flowState - 1) * w);
-      const fc = clamp(flow, b.limits.min_flow_mult, b.limits.max_flow_mult);
-      if (fc !== flow) flowClamps++;
-      q.flow = fc;
-      q.f = c.f * (1 + (m.speed - 1) * w);
-    }
-    // Events land on the first sample at or past their position.
-    let retractedHere = false;
-    while (ev < events.length && events[ev].s <= c.s + 1e-9) {
-      const e = b.events[events[ev++].i];
-      if (w < 0.5) continue;
-      if (e.type === "dwell") {
-        q.post = { ...q.post, dwell_ms: Math.max(0, e.params.ms ?? 200) };
-        if ((e.params.blob_mm3 ?? 0) > 0) q.post.blob_mm = round(e.params.blob_mm3 / filArea);
-        check.events.dwell++;
-      } else if (e.type === "flow_change") {
-        flowState = Math.max(0, e.params.mult ?? 1);
-        check.events.flow++;
-      } else if (e.type === "retract" && pendingUnretract === 0) {
-        const len = (e.params.length ?? 0) > 0 ? e.params.length : process.retractLength;
-        q.post = { ...q.post, retract_mm: len };
-        pendingUnretract = len;
-        travelUntil = c.s + Math.max(0.2, e.params.travel_mm ?? 1);
-        check.events.retract++;
-        retractedHere = true;
+  // Tangent and outward normal of the slicer's path (walls are CCW, so outward is the right-hand normal).
+  const tx = new Float64Array(N), ty = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    // for closed paths wrap around so the seam has no kink
+    const prev = samples[i > 0 ? i - 1 : path.closed ? N - 2 : 0];
+    const next = samples[i < N - 1 ? i + 1 : path.closed ? 1 : N - 1];
+    const dx = next.x - prev.x, dy = next.y - prev.y, l = Math.hypot(dx, dy) || 1;
+    tx[i] = dx / l; ty[i] = dy / l;
+  }
+  const lat = new Float64Array(N), along = new Float64Array(N), dz = new Float64Array(N);
+  const flow = new Float64Array(N).fill(1), speed = new Float64Array(N).fill(1), total = new Float64Array(N);
+  const lo = new Float64Array(N).fill(-Infinity), hi = new Float64Array(N).fill(Infinity);
+  const post: (ToolpathPoint["post"] | undefined)[] = new Array(N);
+  const travel = new Uint8Array(N);
+  let flowClamps = 0, canLoop = false;
+  for (const { brush: b, weight, blend, repeats } of layers) {
+    const w = new Float64Array(N);
+    let any = false;
+    for (let i = 0; i < N; i++) { const c = samples[i]; w[i] = clamp(weight(c.x, c.y, c.z, c.slope), 0, 1); if (w[i] > 0) any = true; }
+    if (!any) continue;
+    const prm = pathParam(samples, path.closed, b, repeats);
+    if (b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0) canLoop = true;
+    // Events: positions are found in the same measure as the pattern, then mapped back onto the path.
+    const evs = eventPositions(b, prm.L, layer, prm.period).map((e) => ({ s: prm.toS(e.s), i: e.i })).sort((a, c) => a.s - c.s || a.i - c.i);
+    let ev = 0, flowState = 1, travelUntil = -1, pendingUnretract = 0, lastPrinted = 0;
+    for (let i = 0; i < N; i++) {
+      const c = samples[i], wi = w[i];
+      const m = wi > 0 ? brushAt(b, prm.at(i), prm.L, layer, prm.period) : null;
+      const mLat = m ? m.lat : 0, mAlong = m ? m.along : 0, mZ = m ? m.z : 0;
+      const mFlow = m ? m.flow * flowState : 1, mSpeed = m ? m.speed : 1;
+      if (blend === "override") {
+        lat[i] = lat[i] * (1 - wi) + mLat * wi; along[i] = along[i] * (1 - wi) + mAlong * wi; dz[i] = dz[i] * (1 - wi) + mZ * wi;
+        flow[i] = flow[i] * (1 - wi) + mFlow * wi; speed[i] = speed[i] * (1 - wi) + mSpeed * wi;
+      } else if (m) {
+        lat[i] += mLat * wi; along[i] += mAlong * wi; dz[i] += mZ * wi;
+        flow[i] *= 1 + (mFlow - 1) * wi; speed[i] *= 1 + (mSpeed - 1) * wi;
       }
+      if (m) { total[i] = Math.max(total[i], wi); lo[i] = Math.max(lo[i], b.limits.min_flow_mult); hi[i] = Math.min(hi[i], b.limits.max_flow_mult); }
+      // Events land on the first sample at or past their position.
+      let retractedHere = false;
+      while (ev < evs.length && evs[ev].s <= c.s + 1e-9) {
+        const e = b.events[evs[ev++].i];
+        if (wi < 0.5) continue;
+        if (e.type === "dwell") {
+          post[i] = { ...post[i], dwell_ms: Math.max(0, e.params.ms ?? 200) };
+          if ((e.params.blob_mm3 ?? 0) > 0) post[i]!.blob_mm = round(e.params.blob_mm3 / filArea);
+          check.events.dwell++;
+        } else if (e.type === "flow_change") {
+          flowState = Math.max(0, e.params.mult ?? 1);
+          check.events.flow++;
+        } else if (e.type === "retract" && pendingUnretract === 0) {
+          const len = (e.params.length ?? 0) > 0 ? e.params.length : process.retractLength;
+          post[i] = { ...post[i], retract_mm: len };
+          pendingUnretract = len;
+          travelUntil = c.s + Math.max(0.2, e.params.travel_mm ?? 1);
+          check.events.retract++;
+          retractedHere = true;
+        }
+      }
+      if (retractedHere) { lastPrinted = i; continue; }
+      if (pendingUnretract > 0) {
+        if (c.s <= travelUntil + 1e-9) travel[i] = 1;
+        else { post[lastPrinted] = { ...post[lastPrinted], unretract_mm: pendingUnretract }; pendingUnretract = 0; }
+      }
+      lastPrinted = i;
     }
-    if (retractedHere) { out.push(q); continue; }
-    if (pendingUnretract > 0) {
-      if (c.s <= travelUntil + 1e-9) q.travel = true;
-      else { const last = out[out.length - 1]; last.post = { ...last.post, unretract_mm: pendingUnretract }; pendingUnretract = 0; }
+    if (pendingUnretract > 0) post[N - 1] = { ...post[N - 1], unretract_mm: pendingUnretract };
+  }
+  const out: ToolpathPoint[] = [];
+  for (let i = 0; i < N; i++) {
+    const c = samples[i];
+    const q: ToolpathPoint = { x: c.x, y: c.y, z: c.z, f: c.f, flow: c.flow, e: 0, slope: c.slope };
+    if (total[i] > 0) {
+      const nx = ty[i], ny = -tx[i];
+      q.x += nx * lat[i] + tx[i] * along[i];
+      q.y += ny * lat[i] + ty[i] * along[i];
+      if (dz[i] !== 0) { q.z = round(c.z + dz[i]); q.zOff = round(dz[i]); }
+      const f = c.flow * flow[i];
+      const fc = clamp(f, lo[i], hi[i]);
+      if (fc !== f) flowClamps++;
+      q.flow = fc;
+      q.f = c.f * speed[i];
     }
+    if (post[i]) q.post = post[i];
+    if (travel[i]) q.travel = true;
     out.push(q);
   }
-  if (pendingUnretract > 0) { const last = out[out.length - 1]; last.post = { ...last.post, unretract_mm: pendingUnretract }; }
 
   // Second pass: loops, speed limits, up-and-down speed and corner hardness, using the final positions.
   const loopSpeed = process.wallSpeed * opt.loopSpeedShare;
-  let loops = 0, accel = 0;
+  let loops = 0, accel = 0, speedClamps = 0, zClamps = 0;
   // Only forward-and-back movement can make the nozzle run backwards over its own plastic.
-  const canLoop = b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0;
   for (let i = 1; i < out.length; i++) {
     const a = out[i - 1], q = out[i], sa = samples[i - 1], sb = samples[i];
     if (q.travel) continue;
@@ -204,8 +270,8 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
       q.flag ??= "loop";
     }
     if (q.f > maxXY) { q.f = maxXY; speedClamps++; }
-    const len3 = Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z), dz = Math.abs(q.z - a.z);
-    if (dz > 1e-6 && len3 > 0 && (q.f * dz) / len3 > machine.maxSpeed.z) { q.f = (machine.maxSpeed.z * len3) / dz; zClamps++; }
+    const len3 = Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z), ddz = Math.abs(q.z - a.z);
+    if (ddz > 1e-6 && len3 > 0 && (q.f * ddz) / len3 > machine.maxSpeed.z) { q.f = (machine.maxSpeed.z * len3) / ddz; zClamps++; }
     if (i > 1) {
       const z0 = out[i - 2];
       const v1x = a.x - z0.x, v1y = a.y - z0.y, v2x = q.x - a.x, v2y = q.y - a.y;
@@ -217,13 +283,18 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
     }
   }
   check.speedHits += speedClamps; check.zSpeedHits += zClamps; check.accelHits += accel; check.loopSlowed += loops;
+  const name = layers.length === 1 ? layers[0].brush.name : "Patterns";
   if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this pattern's plastic limit` });
   if (speedClamps) warn({ code: "motionex_speed_limit", message: `Some spots were slowed to your printer's top speed (${maxXY} mm/s)` });
-  if (loops) warn({ code: "motionex_loops", message: `${b.name}: loops lay plastic over itself, so those parts print slower (${Math.round(loopSpeed)} mm/s)` });
+  if (loops) warn({ code: "motionex_loops", message: `${name}: loops lay plastic over itself, so those parts print slower (${Math.round(loopSpeed)} mm/s)` });
   if (zClamps) warn({ code: "motionex_z_speed", message: `Up-and-down moves slowed to your printer's top up/down speed (${machine.maxSpeed.z} mm/s)` });
   if (accel) warn({ code: "motionex_accel", message: "Some tight turns are sharper than your printer can follow at full speed; it will round them off slightly" });
   return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
 }
+
+/** Smooth 0..1 step over the soft band around a slope limit (degrees). */
+const SLOPE_SOFT = 4;
+const smooth = (t: number) => { const u = clamp(t, 0, 1); return u * u * (3 - 2 * u); };
 
 /** Run all enabled applications in order over the layers. */
 export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes: (id: string) => MotionBrush | undefined, p: PrintProfiles, opt: ModifierOptions = DEFAULT_OPTIONS, check: PrintCheck = emptyCheck(), regions?: RegionRegistry): { layers: Layer[]; warnings: SliceWarning[] } {
@@ -231,8 +302,10 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const seen = new Set<string>();
   const warn = (w: SliceWarning) => { if (!seen.has(w.code)) { seen.add(w.code); warnings.push(w); } };
   const sorted = apps.filter((a) => a.enabled).sort((a, b) => a.order - b.order);
+  interface Prepared { app: MotionApplication; brush: MotionBrush; faces: PatternexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
+  const prepared: Prepared[] = [];
   for (const app of sorted) {
-    const found = brushes(app.brush_id);
+    const found = app.brush ?? brushes(app.brush_id);
     const k = app.scale ?? 1;
     const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Pattern ${app.brush_id} was not found` }); continue; }
@@ -240,8 +313,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
     if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A pattern is set to picked surfaces but none are picked, so it was skipped" }); continue; }
     if ((brush.z_amplitude ?? 0) > 0 && p.machine.firmware !== "klipper" && !check.notes.includes("slow-z"))
       check.notes.push("slow-z");
-    const { z_start, z_end, fade_in_mm, fade_out_mm, angle_min, angle_max } = app.mask;
-    const blend = app.mask.blend_mm ?? 0;
+    const { z_start, z_end, fade_in_mm, fade_out_mm } = app.mask;
     const zWeight = (z: number) => {
       if (z < z_start || z > z_end) return 0;
       const a = fade_in_mm > 0 ? clamp((z - z_start) / fade_in_mm, 0, 1) : 1;
@@ -254,12 +326,20 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
       if (!locked.has(key)) locked.set(key, suggested);
       return locked.get(key)!;
     };
-    for (const layer of layers) {
-      if (zWeight(layer.z) <= 0) continue;
-      const weight: Weight = (x, y, z, slope) => {
+    prepared.push({ app, brush, faces, zWeight, lockFor });
+  }
+  for (const layer of layers) {
+    const active = prepared.filter((a) => a.zWeight(layer.z) > 0);
+    if (!active.length) continue;
+    const weights = active.map(({ app, faces, zWeight }): Weight => {
+      const { angle_min, angle_max } = app.mask;
+      const blend = app.mask.blend_mm ?? 1.5;
+      return (x, y, z, slope) => {
         let w = zWeight(z);
-        if (angle_min !== undefined && slope < angle_min) return 0;
-        if (angle_max !== undefined && slope > angle_max) return 0;
+        // Slope limits fade over a few degrees instead of cutting off.
+        if (angle_min !== undefined) w *= smooth((slope - angle_min) / SLOPE_SOFT + 1);
+        if (angle_max !== undefined) w *= smooth((angle_max - slope) / SLOPE_SOFT + 1);
+        if (w <= 0) return 0;
         if (faces.length) {
           let f = 0;
           for (const r of faces) { f = Math.max(f, regionWeight(r, layer.index, x, y, blend)); if (f >= 1) break; }
@@ -267,19 +347,83 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
         }
         return w;
       };
-      layer.paths = layer.paths.map((path) => {
-        const hit = wallMatches(app.target.walls ?? "outer", path.feature);
-        if (!hit) return path;
+    });
+    layer.paths = layer.paths.map((path) => {
+      const parts: PathLayer[] = [];
+      active.forEach((a, k) => {
+        if (!wallMatches(a.app.target.walls ?? "outer", path.feature)) return;
         // Leave paths the mask never reaches untouched (keeps G-code small and exact there).
-        if (faces.length && !resample(path.points, 1).some((q) => weight(q.x, q.y, layer.z, 0) > 0)) return path;
-        // "Replace" starts again from the slicer's path; "add" builds on whatever earlier patterns did.
-        const source = app.blend === "override" ? path.base ?? path.points : undefined;
-        return applyBrushToPath(path, brush, p, opt, weight, warn, layer.index, check, source, lockFor(path.feature));
+        if ((a.faces.length || a.app.mask.angle_min !== undefined || a.app.mask.angle_max !== undefined)
+          && !resample(path.points, 1).some((q) => weights[k](q.x, q.y, layer.z, q.slope) > 0)) return;
+        parts.push({ brush: a.brush, weight: weights[k], blend: a.app.blend, repeats: a.lockFor(path.feature) });
       });
-    }
+      return parts.length ? composePath(path, parts, p, opt, warn, layer.index, check) : path;
+    });
+    if (opt.bondInnerWalls !== false) bondInnerWalls(layer, p, opt);
   }
   if (check.notes.includes("slow-z")) warn({ code: "motionex_slow_z", message: `${p.machine.name} moves up and down slowly (${p.machine.maxSpeed.z} mm/s), so up-and-down patterns will print slower` });
   return { layers, warnings };
+}
+
+/**
+ * Inner walls follow the outer wall's movement, fading out over the wall stack, so the patterned skin
+ * stays fused to the body: no gap opens behind an outward bump and no double plastic piles up behind an
+ * inward dent. Only the side-to-side movement is followed; up-and-down movement stays on the outer wall.
+ */
+export function bondInnerWalls(layer: Layer, p: PrintProfiles, opt: ModifierOptions): number {
+  const lw = p.process.lineWidth || 0.42;
+  const reach = Math.max(1, p.process.walls) * lw;
+  const cell = Math.max(0.5, lw * 2);
+  const grid = new Map<string, { x: number; y: number; dx: number; dy: number }[]>();
+  let any = false;
+  for (const path of layer.paths) {
+    if (path.modifiedBy !== "motionex" || !wallMatches("outer", path.feature) || !path.base) continue;
+    const base = resample(path.base, opt.resampleStep);
+    if (base.length !== path.points.length) continue;
+    for (let i = 0; i < base.length; i++) {
+      const q = path.points[i];
+      if (q.travel) continue;
+      // zero movement is kept too: an inner point behind a still part of the wall must stay still
+      const dx = q.x - base[i].x, dy = q.y - base[i].y;
+      if (Math.abs(dx) > 1e-6 || Math.abs(dy) > 1e-6) any = true;
+      const key = `${Math.floor(base[i].x / cell)}|${Math.floor(base[i].y / cell)}`;
+      const l = grid.get(key);
+      const e = { x: base[i].x, y: base[i].y, dx, dy };
+      if (l) l.push(e); else grid.set(key, [e]);
+    }
+  }
+  if (!any) return 0;
+  const span = Math.ceil((reach + lw) / cell);
+  // cap so a big pattern doesn't drag the inner walls into the infill
+  const cap = reach;
+  let moved = 0;
+  layer.paths = layer.paths.map((path) => {
+    if (path.feature !== "inner_wall" || path.modifiedBy === "motionex") return path;
+    const pts = resample(path.points, opt.resampleStep);
+    let touched = false;
+    const out: ToolpathPoint[] = pts.map((c) => {
+      const gx = Math.floor(c.x / cell), gy = Math.floor(c.y / cell);
+      let best: { x: number; y: number; dx: number; dy: number } | null = null, bd = Infinity;
+      for (let ix = gx - span; ix <= gx + span; ix++) for (let iy = gy - span; iy <= gy + span; iy++) {
+        for (const e of grid.get(`${ix}|${iy}`) ?? []) { const d = Math.hypot(e.x - c.x, e.y - c.y); if (d < bd) { bd = d; best = e; } }
+      }
+      const q: ToolpathPoint = { x: c.x, y: c.y, z: c.z, f: c.f, flow: c.flow, e: 0, slope: c.slope };
+      if (!best) return q;
+      // full follow for the wall right behind the outer one, fading to nothing at the inside of the stack
+      const f = 1 - smooth((bd - lw) / reach);
+      if (f <= 0) return q;
+      let dx = best.dx * f, dy = best.dy * f;
+      const m = Math.hypot(dx, dy);
+      if (m > cap) { dx *= cap / m; dy *= cap / m; }
+      q.x += dx; q.y += dy;
+      touched = true;
+      return q;
+    });
+    if (!touched) return path;
+    moved++;
+    return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
+  });
+  return moved;
 }
 
 const round = (v: number) => Math.round(v * 1e4) / 1e4;

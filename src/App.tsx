@@ -9,15 +9,19 @@ import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
-import { ActionBar, EmptyHint, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
+import { ActionBar, LiveChip, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
+import { ContextMenu } from './ui/ContextMenu';
+import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
+import { PLUGINS } from './plugins/registry';
 
 const TABS: { id: Workspace; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'prepare', label: 'Prepare', icon: 'cube' },
   { id: 'preview', label: 'Preview', icon: 'layers' },
+  { id: 'pattern', label: 'Pattern', icon: 'brush' },
   { id: 'device', label: 'Device', icon: 'device' },
   { id: 'project', label: 'Project', icon: 'folder' },
   { id: 'calibration', label: 'Calibration', icon: 'calib' },
@@ -61,6 +65,7 @@ function FileMenu() {
 
 function TopBar() {
   const { workspace, set, theme, undo, redo, undoStack, redoStack } = useStore();
+  const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
       <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" />NexSpiro</div>
@@ -69,7 +74,7 @@ function TopBar() {
       <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
       <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
       <nav className="tabs" role="tablist">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.id !== 'pattern' || hasStudio).map((t) => (
           <button key={t.id} role="tab" aria-selected={workspace === t.id} className={`tab ${workspace === t.id ? 'active' : ''}`} onClick={() => set({ workspace: t.id })}>
             {t.label}
           </button>
@@ -123,6 +128,8 @@ function useShortcuts() {
       if (s.workspace !== 'prepare') return;
       if (mod && k === 'a') { s.set({ selected: s.objects.map((o) => o.id) }); e.preventDefault(); return; }
       if (mod && k === 'd') { s.duplicateSelected(); e.preventDefault(); return; }
+      if (mod && k === 'c') { if (s.selected.length) copyObjects(); e.preventDefault(); return; }
+      if (mod && k === 'v') { pasteObjects(); e.preventDefault(); return; }
       if (mod) return;
       if (k === 'delete' || k === 'backspace') s.removeSelected();
       else if (k === 'escape') s.set({ selected: [], selectedPart: null, tool: 'select' });
@@ -151,11 +158,15 @@ function useShortcuts() {
 }
 
 export default function App() {
-  const { theme, workspace } = useStore();
+  const { theme, workspace: ws } = useStore();
+  const studio = useStore((s) => PLUGINS.find((p) => p.Studio && s.plugins.includes(p.id))?.Studio);
+  // the Pattern tab needs a plugin that has one; without it, fall back to Prepare
+  const workspace = ws === 'pattern' && !studio ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
+  const Studio = workspace === 'pattern' ? studio : undefined;
   const hasDock = useStore((s) => s.plugins.length > 0);
 
   return (
@@ -168,17 +179,18 @@ export default function App() {
         if (files.length) importBuffers(files);
       }}>
       <TopBar />
-      <div className="workspace" style={is3d ? { gridTemplateColumns: hasDock ? 'var(--sidebar-w, 360px) 1fr auto' : undefined } : { gridTemplateColumns: '1fr' }}>
+      <div className="workspace" style={is3d ? { gridTemplateColumns: hasDock ? 'var(--sidebar-w, 360px) 1fr auto' : undefined } : Studio ? { gridTemplateColumns: '1fr auto' } : { gridTemplateColumns: '1fr' }}>
         {is3d && <Sidebar />}
-        <main className="stage" style={is3d ? undefined : { display: 'none' }}>
+        <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><EmptyHint /><ActionBar /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><ActionBar /><LiveChip /><ContextMenu /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
         {is3d && <RightDock />}
+        {Studio && <Studio />}
         {workspace === 'home' && <HomePage />}
         {workspace === 'device' && <DevicePage />}
         {workspace === 'project' && <ProjectPage />}

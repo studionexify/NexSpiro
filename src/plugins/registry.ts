@@ -3,7 +3,8 @@
 import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
-import { motionexConfig, MotionexPanel, mx } from './motionex/ui/MotionexPanel';
+import { motionexConfig, MotionexPanel, motionexPreview, mx } from './motionex/ui/MotionexPanel';
+import { PatternStudio } from './motionex/ui/PatternStudio';
 import { toConfig } from './motionex';
 import { patternexConfig, patternexMotionApps, PatternexPanel } from './patternex/ui/PatternexPanel';
 
@@ -16,6 +17,10 @@ export interface UiPlugin {
   Panel: ComponentType;
   /** Plain-data config for the slicer, or undefined when the plugin has nothing to do. */
   sliceConfig(): unknown;
+  /** Quick preview lines drawn on the model in Prepare (no slicing), or null for none. */
+  preview?(): { positions: Float32Array; colors: Float32Array } | null;
+  /** Full-height editor shown beside the 3D view in the Pattern tab. */
+  Studio?: ComponentType;
 }
 
 export const PLUGINS: UiPlugin[] = [
@@ -34,6 +39,8 @@ export const PLUGINS: UiPlugin[] = [
       const brushes = [...c.brushes, ...extra.map((a) => a.brush_id).filter((id, i, l) => !have.has(id) && l.indexOf(id) === i).map((id) => mx.library.get(id)).filter((b): b is NonNullable<typeof b> => !!b).map((b) => structuredClone(b))];
       return { ...c, applications: [...c.applications, ...extra], brushes };
     },
+    preview: motionexPreview,
+    Studio: PatternStudio,
   },
   {
     id: 'patternex', name: 'Patternex', badge: 'P',
@@ -67,4 +74,4 @@ export function faceSetsOf(motion: Uint8Array | undefined): FaceSet[] | undefine
 }
 
 export const surfaceName = (n: number) => `Surface ${n}`;
-export const SURFACE_COLORS = ['#ff7a45', '#36cfc9', '#b37feb', '#ffd666', '#ff85c0', '#69c0ff', '#95de64', '#ff4d4f'];
+export { SURFACE_COLORS } from '../state/motionPaint';
