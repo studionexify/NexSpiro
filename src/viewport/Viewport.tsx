@@ -1,7 +1,6 @@
 // The 3D workspace (Prepare + Preview share one renderer).
 import { useEffect, useRef } from 'react';
 import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
-import { SURFACE_COLORS } from '../plugins/registry';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -11,7 +10,9 @@ import {
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace } from '../state/ops';
+import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
+import { FEATURE_ORDER } from '../engine/types';
 
 export interface ViewApi { setView: (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => void; fit: () => void }
 export const viewApi: { current: ViewApi | null } = { current: null };
@@ -131,7 +132,7 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   const slotC = slots.map((c) => new THREE.Color(c));
   const tris = arr.length / 9;
   const p: ObjectPaint = o.paint ?? {};
-  const motion = tool === 'paint_motion' || tool === 'pick_motion';
+  const motion = isMotionTool(tool);
   const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : motion ? p.motion : undefined;
   const layerC = (tool === 'paint_support' ? PAINT.support : motion ? SURFACE_COLORS : PAINT.seam).map((c) => new THREE.Color(c));
   const dim = tool === 'paint_support' || tool === 'paint_seam' || motion ? 0.55 : 1;
@@ -146,7 +147,10 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   attr.needsUpdate = true;
 }
 
-export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || t === 'paint_motion' || t === 'pick_motion';
+export const isMotionTool = (t: Tool) => t === 'paint_motion' || t === 'pick_motion' || t === 'lasso_motion' || t === 'band_motion' || t === 'object_motion';
+export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || isMotionTool(t);
+/** Features drawn on the model in Prepare when the live toolpath is on: the walls the patterns move. */
+const LIVE_FEATURES = new Set(['outer_wall', 'inner_wall', 'overhang_wall']);
 const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
 
 export function Viewport() {
@@ -193,6 +197,18 @@ export function Viewport() {
     brush.renderOrder = 10;
     brush.visible = false;
     scene.add(brush);
+    // Lasso / box outline drawn over the canvas.
+    const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    overlay.setAttribute('class', 'lasso-overlay');
+    const outline = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    overlay.appendChild(outline);
+    el.appendChild(overlay);
+    // Height band preview for the band tool.
+    const bandMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#FF5C8D', transparent: true, opacity: 0.22, depthWrite: false }));
+    bandMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: '#FF5C8D' })));
+    bandMesh.visible = false;
+    bandMesh.renderOrder = 9;
+    scene.add(bandMesh);
 
     const proxy = new THREE.Object3D();
     scene.add(proxy);
@@ -304,6 +320,9 @@ export function Viewport() {
         const sel = s.selected.includes(o.id) && !s.selectedPart && !isPaintTool(s.tool);
         mat.emissive.set(sel ? slotColor(s, o.filament ?? 0) : '#000000');
         mat.emissiveIntensity = sel ? 0.28 : 0;
+        // see-through while the live toolpath is shown on it, and for objects left out of the print
+        const ghost = s.workspace === 'prepare' && s.liveToolpaths && !!s.slice.result ? 0.35 : o.printable === false ? 0.45 : 1;
+        if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
         u.uCos.value = Math.cos(((Number(s.overrides.support_threshold_angle ?? 30)) * Math.PI) / 180);
@@ -433,6 +452,37 @@ export function Viewport() {
     const objectMeshes = () => [...meshes.values()].map((m) => m.mesh);
     let downAt: [number, number] | null = null;
     let painting: { id: string; value: number; layer: keyof ObjectPaint } | null = null;
+    let drawing: { pts: [number, number][]; value: number; box: boolean } | null = null;
+    let band: { id: string; z0: number; z1: number; value: number; anchor: THREE.Vector3 } | null = null;
+    const showOutline = () => {
+      const r = renderer.domElement.getBoundingClientRect();
+      if (!drawing) { outline.setAttribute('points', ''); return; }
+      let pts = drawing.pts;
+      if (drawing.box && pts.length > 1) { const [a, b] = [pts[0], pts[pts.length - 1]]; pts = [a, [b[0], a[1]], b, [a[0], b[1]]]; }
+      outline.setAttribute('points', pts.map(([x, y]) => `${x - r.left},${y - r.top}`).join(' '));
+      outline.setAttribute('class', drawing.value ? '' : 'erase');
+    };
+    const showBand = () => {
+      const s = useStore.getState();
+      const o = band && s.objects.find((x) => x.id === band!.id);
+      bandMesh.visible = !!o;
+      if (o && band) {
+        const b = worldBounds(o);
+        const lo = Math.min(band.z0, band.z1), hi = Math.max(band.z0, band.z1, lo + 0.2);
+        bandMesh.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (lo + hi) / 2);
+        bandMesh.scale.set(b.max[0] - b.min[0] + 4, b.max[1] - b.min[1] + 4, hi - lo);
+        (bandMesh.material as THREE.MeshBasicMaterial).color.set(band.value ? '#FF5C8D' : '#888888');
+      }
+      invalidate();
+    };
+    /** Height under the cursor on a vertical plane through the band's start point, facing the camera. */
+    const bandHeight = (ev: PointerEvent) => {
+      ray.setFromCamera(ndc(ev), camera);
+      const n = new THREE.Vector3(camera.position.x - band!.anchor.x, camera.position.y - band!.anchor.y, 0);
+      if (n.lengthSq() < 1e-9) n.set(0, -1, 0);
+      const hitP = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n.normalize(), band!.anchor), new THREE.Vector3());
+      return hitP ? Math.max(0, hitP.z) : band!.z1;
+    };
     // per-triangle bounding spheres (centre xyz + radius) for fast brush culling
     const sphereCache = new WeakMap<object, Float32Array>();
     const spheres = (mesh: SceneObject['mesh']) => {
@@ -456,6 +506,7 @@ export function Viewport() {
 
     const paintAt = (ev: PointerEvent) => {
       const s = useStore.getState();
+      if (s.tool === 'lasso_motion' || s.tool === 'band_motion' || s.tool === 'object_motion') return;
       ray.setFromCamera(ndc(ev), camera);
       const hit = ray.intersectObjects(objectMeshes(), false)[0];
       if (!hit) { if (brush.visible) { brush.visible = false; invalidate(); } return; }
@@ -493,6 +544,8 @@ export function Viewport() {
           const nn = B.sub(A).cross(Cc.sub(A)).applyMatrix3(nm).normalize();
           if (nn.z > -thr) continue;
         }
+        // erasing a pattern's surfaces leaves other patterns' surfaces alone
+        if (painting.layer === 'motion' && !painting.value && arr[t] !== s.motionSet) continue;
         if (arr[t] !== painting.value) { arr[t] = painting.value; changed = true; }
       }
       if (changed) {
@@ -505,10 +558,30 @@ export function Viewport() {
       downAt = [ev.clientX, ev.clientY];
       const s = useStore.getState();
       if (!isPaintTool(s.tool) || s.workspace !== 'prepare' || ev.button === 1) return;
+      const erase = ev.shiftKey || ev.button === 2;
+      if (s.tool === 'lasso_motion') {
+        drawing = { pts: [[ev.clientX, ev.clientY]], value: erase ? 0 : s.motionSet, box: s.motionDraw === 'box' };
+        renderer.domElement.setPointerCapture(ev.pointerId);
+        showOutline();
+        return;
+      }
       ray.setFromCamera(ndc(ev), camera);
       const hit = ray.intersectObjects(objectMeshes(), false)[0];
       if (!hit) return;
       const id = hit.object.userData.id as string;
+      if (s.tool === 'object_motion') {
+        // click an object: the whole object; clicking it again (or right click) takes it off
+        const o = s.objects.find((x) => x.id === id)!;
+        const all = !!o.paint?.motion?.every((v) => v === s.motionSet);
+        assignMotion(new Map([[id, allTris(o)]]), erase || all ? 0 : s.motionSet);
+        return;
+      }
+      if (s.tool === 'band_motion') {
+        band = { id, z0: hit.point.z, z1: hit.point.z, value: erase ? 0 : s.motionSet, anchor: hit.point.clone() };
+        renderer.domElement.setPointerCapture(ev.pointerId);
+        showBand();
+        return;
+      }
       const motion = s.tool === 'paint_motion' || s.tool === 'pick_motion';
       const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : motion ? 'motion' : 'color';
       const value = ev.shiftKey ? 0 : layer === 'color' ? (ev.button === 2 ? 0 : s.paintColor) : motion ? (ev.button === 2 ? 0 : s.motionSet) : ev.button === 2 ? 2 : 1;
@@ -525,7 +598,7 @@ export function Viewport() {
         let a = adjCache.get(o.mesh);
         if (!a) { a = { adj: triAdjacency(o.mesh), normals: triNormals(o.mesh) }; adjCache.set(o.mesh, a); }
         const arr = o.paint!.motion!;
-        for (const t of growFaces(o.mesh, hit.faceIndex, s.motionGrowAngle, a.adj, a.normals)) arr[t] = value;
+        for (const t of growFaces(o.mesh, hit.faceIndex, s.motionGrowAngle, a.adj, a.normals)) if (value || arr[t] === s.motionSet) arr[t] = value;
         paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color));
         invalidate();
       }
@@ -534,9 +607,48 @@ export function Viewport() {
     };
     const onMove = (ev: PointerEvent) => {
       const s = useStore.getState();
+      if (drawing) {
+        const last = drawing.pts[drawing.pts.length - 1];
+        if (drawing.box) drawing.pts = [drawing.pts[0], [ev.clientX, ev.clientY]];
+        else if (Math.hypot(ev.clientX - last[0], ev.clientY - last[1]) > 3) drawing.pts.push([ev.clientX, ev.clientY]);
+        showOutline();
+        return;
+      }
+      if (band) { band.z1 = bandHeight(ev); showBand(); return; }
+      if (s.tool === 'lasso_motion' || s.tool === 'band_motion' || s.tool === 'object_motion') return;
       if (isPaintTool(s.tool) && s.workspace === 'prepare') paintAt(ev);
     };
     const onUp = (ev: PointerEvent) => {
+      if (drawing) {
+        const d = drawing;
+        drawing = null;
+        showOutline();
+        downAt = null;
+        let poly = d.pts;
+        if (d.box && poly.length > 1) { const [a, b] = [poly[0], poly[poly.length - 1]]; poly = [a, [b[0], a[1]], b, [a[0], b[1]]]; }
+        const s = useStore.getState();
+        const rect = renderer.domElement.getBoundingClientRect();
+        camera.updateMatrixWorld();
+        const sel = new Map<string, number[]>();
+        for (const o of s.objects) sel.set(o.id, trisInScreenPolygon(o, poly, camera, rect));
+        assignMotion(sel, d.value);
+        return;
+      }
+      if (band) {
+        const b = band;
+        band = null;
+        downAt = null;
+        showBand();
+        const s = useStore.getState();
+        const o = s.objects.find((x) => x.id === b.id);
+        const lo = Math.min(b.z0, b.z1), hi = Math.max(b.z0, b.z1);
+        // A band is a height range, not a set of triangles (one triangle can span the whole height
+        // of a low-poly model), so it is handed to the plugin panel to set the pattern's heights.
+        if (o && (hi - lo > 0.05 || !b.value)) {
+          window.dispatchEvent(new CustomEvent('nx-motion-band', { detail: { id: o.id, from: lo, to: hi, erase: !b.value } }));
+        }
+        return;
+      }
       if (painting) {
         painting = null;
         const s = useStore.getState();
@@ -544,7 +656,9 @@ export function Viewport() {
         s.markDirty();
         return;
       }
-      if (!downAt || ev.button !== 0) return;
+      if (!downAt) return;
+      if (ev.button === 2) { openMenu(ev); return; }
+      if (ev.button !== 0) return;
       const moved = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]);
       downAt = null;
       if (moved > 4 || dragging) return;
@@ -579,13 +693,40 @@ export function Viewport() {
       const pi = plateAt(hit.point.x, hit.point.y, s.printerId, s.plates.length);
       if (pi !== s.activePlate) s.set({ activePlate: pi });
     };
-    const onContext = (ev: Event) => { if (isPaintTool(useStore.getState().tool)) ev.preventDefault(); };
+    // Right click without dragging (right drag pans): menu for the object, part or plate spot under the cursor.
+    const openMenu = (ev: PointerEvent) => {
+      const moved = Math.hypot(ev.clientX - downAt![0], ev.clientY - downAt![1]);
+      downAt = null;
+      const s = useStore.getState();
+      if (moved > 4 || s.workspace !== 'prepare' || isPaintTool(s.tool)) return;
+      ray.setFromCamera(ndc(ev), camera);
+      const parts = [...partMeshes.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
+      const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
+      const plates = plateGroup.children.flatMap((g) => g.children.filter((c) => c.userData.plateIndex !== undefined));
+      const at = { x: ev.clientX, y: ev.clientY };
+      if (hit) {
+        const id = hit.object.userData.id as string;
+        const partId = hit.object.userData.partId as string | undefined;
+        const plate = plateAt(hit.point.x, hit.point.y, s.printerId, s.plates.length);
+        if (partId) { s.set({ selected: [id], selectedPart: partId, contextMenu: { ...at, kind: 'part', plate, id, partId } }); return; }
+        s.set({ selected: s.selected.includes(id) ? s.selected : [id], selectedPart: null, activePlate: plate, contextMenu: { ...at, kind: 'object', plate, id } });
+        return;
+      }
+      const ph = ray.intersectObjects(plates, false)[0];
+      // Off the plate the menu still opens for the active plate, like Bambu Studio.
+      const plate = ph ? ph.object.userData.plateIndex as number : s.activePlate;
+      const world: [number, number] | undefined = ph ? [ph.point.x, ph.point.y] : undefined;
+      s.set({ selected: [], selectedPart: null, activePlate: plate, contextMenu: { ...at, kind: 'plate', plate, world } });
+    };
+    const onContext = (ev: Event) => ev.preventDefault();
     const onLeave = () => { brush.visible = false; invalidate(); };
+    const onCancel = () => { drawing = null; band = null; showOutline(); showBand(); };
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointermove', onMove);
     renderer.domElement.addEventListener('pointerup', onUp);
     renderer.domElement.addEventListener('pointerleave', onLeave);
     renderer.domElement.addEventListener('contextmenu', onContext);
+    renderer.domElement.addEventListener('pointercancel', onCancel);
 
     // ---------------- preview
     let lastColorKey = '';
@@ -601,16 +742,28 @@ export function Viewport() {
     const syncPreview = () => {
       const s = useStore.getState();
       const preview = s.workspace === 'preview';
+      const live = s.workspace === 'prepare' && s.liveToolpaths && !!s.slice.result;
       objGroup.visible = !preview;
       selBoxes.visible = !preview;
-      toolpaths.group.visible = preview;
-      if (preview) {
+      toolpaths.group.visible = preview || live;
+      if (preview || live) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
         toolpaths.group.position.set(ox, oy, 0);
+      }
+      if (preview) {
         legendHook();
         toolpaths.setRange(s.layerRange[0], s.layerRange[1], s.moveCursor);
         toolpaths.showTravel(s.showTravel);
+      } else if (live) {
+        // Prepare shows the walls only, so the model stays readable under the lines
+        const key = `live|${s.slice.result!.moves.length}|${s.filaments.map((f) => f.color).join()}`;
+        if (key !== lastColorKey) {
+          lastColorKey = key;
+          toolpaths.colorize('feature', new Set(FEATURE_ORDER.filter((f) => !LIVE_FEATURES.has(f))), s.filaments.map((f) => f.color));
+        }
+        toolpaths.setRange(0, Math.max(0, s.slice.result!.layers.length - 1), -1);
+        toolpaths.showTravel(false);
       }
       syncGizmo();
       invalidate();
@@ -640,8 +793,10 @@ export function Viewport() {
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
-        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
-      if (s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
+        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace
+        || (s.slice.result !== prev.slice.result && s.liveToolpaths)) syncObjects();
+      if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
+      if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
       if (s.cutPlane !== prev.cutPlane || s.measurePoints !== prev.measurePoints || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) syncTools();
@@ -664,6 +819,7 @@ export function Viewport() {
       toolpaths.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
+      el.removeChild(overlay);
       viewApi.current = null;
     };
   }, []);

@@ -9,9 +9,11 @@ import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
-import { ActionBar, EmptyHint, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
+import { ActionBar, LiveChip, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
+import { ContextMenu } from './ui/ContextMenu';
+import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
 
 const TABS: { id: Workspace; label: string; icon: string }[] = [
@@ -123,6 +125,8 @@ function useShortcuts() {
       if (s.workspace !== 'prepare') return;
       if (mod && k === 'a') { s.set({ selected: s.objects.map((o) => o.id) }); e.preventDefault(); return; }
       if (mod && k === 'd') { s.duplicateSelected(); e.preventDefault(); return; }
+      if (mod && k === 'c') { if (s.selected.length) copyObjects(); e.preventDefault(); return; }
+      if (mod && k === 'v') { pasteObjects(); e.preventDefault(); return; }
       if (mod) return;
       if (k === 'delete' || k === 'backspace') s.removeSelected();
       else if (k === 'escape') s.set({ selected: [], selectedPart: null, tool: 'select' });
@@ -172,7 +176,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><EmptyHint /><ActionBar /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><ActionBar /><LiveChip /><ContextMenu /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />

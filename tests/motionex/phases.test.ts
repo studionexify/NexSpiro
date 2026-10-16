@@ -157,3 +157,58 @@ test("picked-surface target: pattern only inside the box, with a soft edge", () 
   assert.ok(outside.every((q) => Math.abs(q.y - 10) < 1e-9));
 });
 
+
+// ── merging: patterns hand over smoothly, close at the seam and stack layer to layer ──
+import { bondInnerWalls, composePath, type Weight } from "../../src/plugins/motionex/modifier";
+
+const square = (size: number, start: number, z = 1): Toolpath => {
+  // CCW square loop starting part-way along the bottom edge (the "seam")
+  const c: [number, number][] = [[start, 0], [size, 0], [size, size], [0, size], [0, 0], [start, 0]];
+  return { feature: "outer_wall", closed: true, points: c.map(([x, y]) => ({ x, y, z, f: 50, flow: 1, e: 0 })) };
+};
+const maxStep = (t: Toolpath) => Math.max(...t.points.slice(1).map((q, i) => Math.hypot(q.x - t.points[i].x, q.y - t.points[i].y)));
+
+test("pattern fades into the plain wall with no step", () => {
+  const sine = PRESETS.find((b) => b.id === "preset-sine")!;
+  const ramp: Weight = (x) => Math.min(1, Math.max(0, (x - 14) / 4));
+  const out = applyBrushToPath(line(16), sine, profiles(), DEFAULT_OPTIONS, ramp, () => {});
+  assert.ok(maxStep(out) < 0.35, `largest jump ${maxStep(out)}`);
+  assert.ok(out.points.filter((q) => q.x < 14).every((q) => Math.abs(q.y - 10) < 1e-9));
+});
+
+test("two patterns cross-fade where they meet instead of jumping", () => {
+  const sine = PRESETS.find((b) => b.id === "preset-sine")!;
+  const big = { ...sine, amplitude: 1.2, period_mm: 3 };
+  const a: Weight = (x) => 1 - Math.min(1, Math.max(0, (x - 17) / 2));
+  const b: Weight = (x) => Math.min(1, Math.max(0, (x - 17) / 2));
+  for (const blend of ["add", "override"] as const) {
+    const out = composePath(line(16), [{ brush: sine, weight: a, blend: "add" }, { brush: big, weight: b, blend }], profiles(), DEFAULT_OPTIONS, () => {});
+    assert.ok(maxStep(out) < 0.6, `${blend}: largest jump ${maxStep(out)}`);
+  }
+});
+
+test("closed loops: the pattern closes at the seam and lines up whatever the seam position", () => {
+  const sine = { ...PRESETS.find((b) => b.id === "preset-sine")!, repeat_mode: "tile" as const, period_mm: 3.3 };
+  const a = applyBrushToPath(square(20, 3), sine, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const b = applyBrushToPath(square(20, 11), sine, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const first = a.points[0], last = a.points[a.points.length - 1];
+  assert.ok(Math.hypot(first.x - last.x, first.y - last.y) < 1e-6, "loop stays closed");
+  // the same spot on the wall gets the same offset on both "layers"
+  const at = (t: Toolpath, x: number) => t.points.find((q) => Math.abs(q.x - x) < 0.05 && q.y < 2)!.y;
+  for (const x of [5, 12, 15.4]) assert.ok(Math.abs(at(a, x) - at(b, x)) < 0.02, `x=${x}: ${at(a, x)} vs ${at(b, x)}`);
+});
+
+test("inner walls follow the outer wall so the gap between them stays the same", () => {
+  const sine = PRESETS.find((b) => b.id === "preset-sine")!;
+  const p = profiles();
+  const lw = p.process.lineWidth;
+  const outer: Toolpath = { feature: "outer_wall", closed: false, points: [{ x: 0, y: 10, z: 1, f: 50, flow: 1, e: 0 }, { x: 16, y: 10, z: 1, f: 50, flow: 1, e: 0 }] };
+  const inner: Toolpath = { feature: "inner_wall", closed: false, points: [{ x: 0, y: 10 + lw, z: 1, f: 50, flow: 1, e: 0 }, { x: 16, y: 10 + lw, z: 1, f: 50, flow: 1, e: 0 }] };
+  const L = layerOf([applyBrushToPath(outer, sine, p, DEFAULT_OPTIONS, () => 1, () => {}), inner]);
+  assert.equal(bondInnerWalls(L, p, DEFAULT_OPTIONS), 1);
+  const [o, i] = L.paths;
+  for (const q of i.points.filter((_, k) => k % 10 === 0 && _.x > 1 && _.x < 15)) {
+    const near = o.points.reduce((b, c) => (Math.abs(c.x - q.x) < Math.abs(b.x - q.x) ? c : b));
+    assert.ok(Math.abs(q.y - near.y - lw) < 0.08, `gap ${q.y - near.y} at x=${q.x}`);
+  }
+});

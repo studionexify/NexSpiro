@@ -44,7 +44,7 @@ describe('face picking', () => {
 describe('Motionex in the slicer', () => {
   const mesh = () => ({ id: 'cube', name: 'cube', ...weld(box(100, 100, 0, 20, 20, 10)) });
 
-  it('whole body, outer wall: waves on every side; inner walls untouched; Nexspiro writes the G-code', () => {
+  it('whole body, outer wall: waves on every side; inner walls follow; Nexspiro writes the G-code', () => {
     const plain = slice([mesh()], cfg());
     const out = slice([mesh()], cfg(), () => {}, { plugins: { motionex: mx([app({ type: 'body', walls: 'outer' })]) } });
     const rep = out.pluginReports!.motionex as MotionexReport;
@@ -55,7 +55,12 @@ describe('Motionex in the slicer', () => {
     expect(outer.length).toBeGreaterThan(wallXY(plain.gcode, '5', 'outer wall').length * 5);
     // sine waves push the wall in and out of the flat 100..120 faces
     expect(outer.some(([x]) => x > 120.1)).toBe(true);
-    expect(wallXY(out.gcode, '5', 'inner wall')).toEqual(wallXY(plain.gcode, '5', 'inner wall'));
+    // the inner wall follows the outer wall's waves so the two stay fused, but stays inside the part
+    const inner = wallXY(out.gcode, '5', 'inner wall');
+    expect(inner).not.toEqual(wallXY(plain.gcode, '5', 'inner wall'));
+    expect(inner.every(([x, y]) => x > 99.5 && x < 120.5 && y > 99.5 && y < 120.5)).toBe(true);
+    const loose = slice([mesh()], cfg(), () => {}, { plugins: { motionex: { ...mx([app({ type: 'body', walls: 'outer' })]), options: { ...DEFAULT_OPTIONS, bondInnerWalls: false } } } });
+    expect(wallXY(loose.gcode, '5', 'inner wall')).toEqual(wallXY(plain.gcode, '5', 'inner wall'));
     // below the mask start the print is unchanged
     expect(wallXY(out.gcode, '1', 'outer wall')).toEqual(wallXY(plain.gcode, '1', 'outer wall'));
     expect(out.stats.filamentMm).toBeGreaterThan(plain.stats.filamentMm);

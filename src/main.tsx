@@ -8,3 +8,6 @@ createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictM
 // expose the store for end-to-end tests and debugging from the devtools console
 import { useStore } from './state/store';
 (window as any).__nxStore = useStore;
+
+import { startLiveSlicing } from './state/liveSlice';
+startLiveSlicing();

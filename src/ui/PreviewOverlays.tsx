@@ -184,7 +184,7 @@ export function MoveSlider() {
 
 export function SliceProgress() {
   const slice = useStore((s) => s.slice);
-  if (slice.status !== 'slicing') return null;
+  if (slice.status !== 'slicing' || slice.background) return null;
   return (
     <div className="float progress" role="status">
       <div className="row"><b>Slicing plate</b><span className="spacer" /><span className="mono">{Math.round(slice.progress * 100)}%</span></div>

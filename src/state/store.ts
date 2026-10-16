@@ -9,7 +9,7 @@ import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
@@ -42,6 +42,8 @@ export interface SceneObject {
   parts?: ScenePart[];
   paint?: ObjectPaint;
   layerHeights?: number[];
+  /** false: kept on the plate but left out of slicing. */
+  printable?: boolean;
 }
 
 /** Values found with the Calibration workspace, applied on top of the filament preset. */
@@ -51,6 +53,9 @@ export interface ProjectInfo { title: string; author: string; description: strin
 export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
 export interface Plate { id: string; name: string; layerActions: LayerAction[] }
 
+/** Right-click menu: where it opened and what was under the cursor. */
+export interface ContextMenuState { x: number; y: number; kind: 'plate' | 'object' | 'part'; plate: number; id?: string; partId?: string; world?: [number, number] }
+
 export interface SliceState {
   status: 'idle' | 'slicing' | 'done' | 'error';
   stage: string;
@@ -59,6 +64,8 @@ export interface SliceState {
   error: string | null;
   dirty: boolean; // scene/settings changed since last slice
   plate: number; // plate index the result belongs to
+  /** The running slice is a live-preview one started in the background. */
+  background?: boolean;
 }
 
 interface State {
@@ -92,6 +99,8 @@ interface State {
   motionSet: number;
   /** Click-to-pick spreads across edges flatter than this (degrees). */
   motionGrowAngle: number;
+  /** Draw tool shape for Motionex: freehand lasso or a box. */
+  motionDraw: 'lasso' | 'box';
   /** Installed plugins (ids) and the right dock. */
   plugins: string[];
   dock: { open: boolean; width: number; tab: string };
@@ -112,6 +121,9 @@ interface State {
   cutPlane: { height: number; tiltX: number; tiltY: number };
   /** Measure tool: picked world points (up to 2). */
   measurePoints: Vec3[];
+  contextMenu: ContextMenuState | null;
+  /** Show the sliced toolpath on the model in Prepare (re-slices in the background). */
+  liveToolpaths: boolean;
 
   set: (p: Partial<State>) => void;
   addObjects: (o: SceneObject[]) => void;
@@ -158,6 +170,8 @@ export const useStore = create<State>((set, get) => ({
   flushMultiplier: 1,
   cutPlane: { height: 10, tiltX: 0, tiltY: 0 },
   measurePoints: [],
+  contextMenu: null,
+  liveToolpaths: !!prefs.liveToolpaths,
 
   printerId: prefs.printerId ?? 'bbl-p1s',
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
@@ -175,6 +189,7 @@ export const useStore = create<State>((set, get) => ({
   paintColor: 2,
   motionSet: 1,
   motionGrowAngle: 15,
+  motionDraw: 'lasso',
   plugins: Array.isArray(prefs.plugins) ? prefs.plugins : [],
   dock: { open: true, width: 340, tab: 'motionex', ...(prefs.dock ?? {}) },
   overhangOnly: false,
@@ -258,7 +273,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths,
     }));
   } catch { /* storage unavailable */ }
 });

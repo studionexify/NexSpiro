@@ -8,7 +8,7 @@ import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
 export function Toolbar() {
-  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart } = useStore();
+  const { tool, set, selected, objects, removeSelected, duplicateSelected, showOverhangs, selectedPart, liveToolpaths } = useStore();
   const has = selected.length > 0 || !!selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string) => (
     <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label}
@@ -38,8 +38,17 @@ export function Toolbar() {
       {T('measure', 'measure', 'Measure', 'U')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
+      <button className={`icon-btn ${liveToolpaths ? 'active' : ''}`} title="Show toolpath on plate (walls, updated as you edit)" aria-label="Show toolpath on plate" onClick={() => set({ liveToolpaths: !liveToolpaths })}><Icon name="slice" /></button>
     </div>
   );
+}
+
+/** Status of the live toolpath shown on the model in Prepare. */
+export function LiveChip() {
+  const { liveToolpaths, slice, objects } = useStore();
+  if (!liveToolpaths || !objects.length) return null;
+  const busy = slice.status === 'slicing' || slice.dirty;
+  return <div className={`float live-chip ${busy ? 'busy' : ''}`} role="status"><i />{busy ? 'Updating toolpath…' : 'Toolpath shown on plate'}</div>;
 }
 
 export function ViewCube() {
@@ -133,19 +142,6 @@ function NumField({ value, onSet }: { value: number; onSet: (v: number) => void 
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (draft !== null) { const v = parseFloat(draft); if (isFinite(v)) onSet(v); setDraft(null); } }}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-  );
-}
-
-export function EmptyHint() {
-  const objects = useStore((s) => s.objects);
-  if (objects.length) return null;
-  return (
-    <div className="empty">
-      <div className="hint">
-        <b>Drop STL, OBJ or 3MF files here</b>
-        or <button className="btn-secondary btn-small" style={{ display: 'inline-flex', margin: '0 4px' }} onClick={importDialog}><Icon name="add" size={14} />Add model</button> · pick a sample on the Home tab
-      </div>
-    </div>
   );
 }
 
