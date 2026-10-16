@@ -341,3 +341,20 @@ export function applyCalibration(p: HanexProfile, r: CalibrationResults): HanexP
   if (errs.length) throw new Error(`calibrated profile is invalid: ${errs.join('; ')}`);
   return next;
 }
+
+// ---------------------------------------------------------------- specimens as meshes (for the plate)
+
+/** Triangle soup of rectangular prisms (axis-aligned 4-vertex outer rings; other rings are skipped). */
+export function prismsToSoup(prisms: Prism[]): Float32Array {
+  const out: number[] = [];
+  for (const p of prisms) {
+    const r = p.rings[0];
+    if (p.rings.length !== 1 || r.length !== 4) continue;
+    const xs = r.map((q) => q[0]), ys = r.map((q) => q[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), z0 = p.z0, z1 = p.z1;
+    const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+    const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
+    for (const t of f) for (const i of t) out.push(...v[i]);
+  }
+  return new Float32Array(out);
+}

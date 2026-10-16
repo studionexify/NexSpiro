@@ -1,11 +1,13 @@
-// Runs enabled plugins. Order is fixed by this list: Patternex shifts change points after Motionex
-// has changed path lengths (spec §8), so it comes last.
+// Runs enabled plugins. Order is fixed by this list: Hanex first (it replaces whole regions of a
+// layer, so Motionex must not have bent paths it then removes); Patternex shifts change points after
+// Motionex has changed path lengths (spec §8), so it comes last.
 import type { LayerOps } from '../engine/gcode';
 import type { EnginePlugin, PluginContext, PluginSession, PrepareContext } from './api';
 import { motionexEngine } from './motionex/engine';
 import { patternexEngine } from './patternex/engine';
+import { hanexEngine } from './hanex/engine';
 
-export const ENGINE_PLUGINS: EnginePlugin<any, any>[] = [motionexEngine, patternexEngine];
+export const ENGINE_PLUGINS: EnginePlugin<any, any>[] = [hanexEngine, motionexEngine, patternexEngine];
 
 export interface PluginRun { header: string[]; reports: Record<string, unknown> }
 export type Sessions = Map<string, PluginSession>;

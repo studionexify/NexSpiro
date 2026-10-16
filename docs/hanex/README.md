@@ -2,11 +2,13 @@
 
 Hanex is Nexspiro's third plugin. It prints flat (90°) and slightly rising (up to ~97°) overhangs in mid-air on a 3-axis FDM printer, with no support material. It does this with "wave" toolpaths: each new arc fuses sideways onto the previous one.
 
-Status: **core engine done and tested; calibration prints ready to run.** There is no UI panel yet, and Hanex is not yet connected to the slicer.
+Status: **installed in Nexspiro** (Plugins → Hanex). It plans in the slicing worker, shows as the *Wave overhang* line type in Preview, and is calibrated with the prints in `CALIBRATION.md`.
 
 ![Reference layer: point-seeded wavefronts diffracting round a Ø10 hole](screenshots/reference-layer.png)
 
 *Reference scenario (HNX-05). Colour shows print order, red is the rim and dashed lines are travels. The fronts start at a point inside the anchor (bottom), bend round the hole, and meet in a shock line behind it.*
+
+![Hanex panel after slicing a flat-tab specimen](screenshots/panel-sliced.png)
 
 ## Pipeline (one layer)
 
@@ -73,15 +75,24 @@ Status: **core engine done and tested; calibration prints ready to run.** There 
   - It is kept as an option for HNX-06 to compare against.
 - **Speed function F(x, y)** is supported by the solver (`PlanOptions.speed`) but is not exposed in profiles yet.
 
-## Next steps
+## Inside Nexspiro
 
-- Connect Hanex to the slicer as an `EnginePlugin`:
-  - `prepare` / `reshape` to remove the overhang from normal infill;
-  - `postToolpath` to insert the wave moves.
-- Add the right-dock panel with profile presets and the calibrated values.
+- **Engine** (`src/plugins/hanex/engine.ts`, runs first in `ENGINE_PLUGINS`):
+  - `prepare` runs detection and planning on every layer of every object, using the slicer's own cross-sections.
+  - `postToolpath` turns Nexspiro's extrusion inside each wave region into travel; this removes the bridge infill and overhang walls there.
+  - It then appends the waves after the rest of the layer, under the `wave_overhang` feature, with the Hanex fan and retraction/z-hop.
+  - It leaves the extruder in the retraction state the next layer expects.
+  - Wave moves are `fixed`, so cooling slowdown never changes their calibrated speed.
+- **Machine values** come from the printer and filament profiles: nozzle diameter, filament diameter, retraction, z-hop and travel speed. Line width scales with the fitted nozzle.
+- **Print head:**
+  - The flat land diameter of the nozzle tip comes from the print-head profile Nexspiro keeps per printer, shared with Motionex.
+  - It sets the minimum overlap, the widest ledge left to normal printing, and the face-angle limit `90° + atan(h / max(2w, land))`. That limit is about 101° for a 1.0 mm land at 0.2 mm layers.
+  - The panel can cap it lower.
+- **Panel** (`ui/HanexPanel.tsx`): material preset, wave settings, print head and face-angle limit, specimens you can add to the plate (flat tab, rising face 92.5–100°), and an after-slice report with a per-layer table.
+- **Supports:** with supports on, Hanex warns, because support under a wave region is wasted.
 
 ## Files
 
 - `src/plugins/hanex/core/*` — engine.
-- `tests/hanex/*` — 39 tests.
+- `tests/hanex/*` — 45 tests, including slicing a real T-shaped part with the plugin.
 - `docs/hanex/CALIBRATION.md` — printer calibration procedure.

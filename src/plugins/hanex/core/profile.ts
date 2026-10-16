@@ -49,7 +49,7 @@ export interface HanexProfile {
    * the trigger width are left to the normal slicer.
    */
   supportReach: number;
-  /** Wave layers above this many mm of unsupported width; default 2·lineWidth. */
+  /** Wave layers above this many mm of unsupported width; default max(2·lineWidth, tip land). */
   triggerWidth?: number;
   /** Grid step of the distance field, mm; default from waveStep(). */
   gridStep?: number;
@@ -64,7 +64,12 @@ export const waveStep = (p: HanexProfile) => p.lineWidth * (1 - p.overlap);
  */
 export const gridStep = (p: HanexProfile) => p.gridStep ?? Math.max(0.03, Math.min(waveStep(p) / 3, p.lineWidth / 4));
 
-export const triggerWidth = (p: HanexProfile) => p.triggerWidth ?? 2 * p.lineWidth;
+/**
+ * Unsupported width above which a layer is waved. The nozzle land presses a bead onto the edge below
+ * out to about its own diameter, so a wider land (toolhead) handles wider ledges by itself: the default
+ * is max(2w, tip land diameter).
+ */
+export const triggerWidth = (p: HanexProfile) => p.triggerWidth ?? Math.max(2 * p.lineWidth, p.toolhead.tipFlatDiameter);
 
 /** Filament cross-section, mm². */
 export const filamentArea = (p: HanexProfile) => Math.PI * (p.filamentDiameter / 2) ** 2;

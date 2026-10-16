@@ -19,6 +19,7 @@ export const FEATURE_COLORS: Record<FeatureType, string> = {
   support: '#219653',
   support_interface: '#0652DD',
   prime_tower: '#6FCF97',
+  wave_overhang: '#00BFA5',
   travel: '#1976D2',
 };
 
