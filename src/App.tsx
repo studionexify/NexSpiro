@@ -14,6 +14,7 @@ import { LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, Vl
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
+import { FillBedHost } from './ui/FillBedDialog';
 import { PlateList, PlateSettingsHost } from './ui/PlateControls';
 import { InstantTooltips } from './ui/Tooltip';
 import { arrangeAll, arrangeSelected } from './state/ops';
@@ -263,6 +264,7 @@ export default function App() {
       <ContextMenu />
       <PrintDialogHost />
       <PlateSettingsHost />
+      <FillBedHost />
       <InstantTooltips />
     </div>
   );
