@@ -1,6 +1,7 @@
 // Patternex UI-side state: patterns, placements (object-local), region actions and printer options.
 // Plain data with a tiny change signal, like Motionex. Converted to plate coordinates only for slicing.
 import { builtinPattern } from '../builtin';
+import { restoreFont, userFontData } from '../tools/text';
 import type { Pattern, Placement, RegionAction } from '../model';
 import type { PatternexConfig, SingleColourPolicy } from '../engine';
 import type { V3, WorldPlacement } from '../projection';
@@ -15,7 +16,19 @@ export interface ObjPlacement extends Placement {
 }
 
 /** What one scene object carries: its placements and their region actions. */
-export interface ObjectPatternex { placements: ObjPlacement[]; actions: RegionAction[]; /** Definitions of the patterns used, so a project opens anywhere. */ patterns?: Pattern[] }
+export interface ObjectPatternex {
+  placements: ObjPlacement[]; actions: RegionAction[];
+  /** Definitions of the patterns used, so a project opens anywhere. */
+  patterns?: Pattern[];
+  /** User fonts used by text artwork (font id → base64), so text can be edited and batched anywhere. */
+  fonts?: Record<string, string>;
+}
+
+/** Font id of generated text artwork, if it uses a user font. */
+const userFontOf = (p: Pattern): string | undefined => {
+  const f = p.meta?.kind === 'text' ? (p.meta.spec as { font?: string })?.font : undefined;
+  return f?.startsWith('user:') ? f : undefined;
+};
 
 /**
  * Collect placements from scene objects (deep copies, so the panel can edit them freely).
@@ -30,6 +43,7 @@ export function collectPlacements(objects: { id: string; patternex?: ObjectPatte
     const pe = o.patternex;
     if (!pe) continue;
     for (const pat of pe.patterns ?? []) if (!patterns.some((x) => x.id === pat.id)) patterns.push(pat);
+    for (const [id, data] of Object.entries(pe.fonts ?? {})) restoreFont(id, data);
     for (const p0 of pe.placements) {
       let id = p0.id;
       if (seen.has(id) || p0.object_id !== o.id) { id = `${p0.id.split('~')[0]}~${o.id}`; renamed = renamed || id !== p0.id; }
@@ -48,7 +62,11 @@ export function splitByObject(placements: ObjPlacement[], actions: RegionAction[
     let e = out.get(p.object_id); if (!e) out.set(p.object_id, (e = { placements: [], actions: [], patterns: [] }));
     e.placements.push(structuredClone(p));
     const pat = patterns.find((x) => x.id === p.pattern_id);
-    if (pat && !e.patterns!.some((x) => x.id === pat.id)) e.patterns!.push(pat);
+    if (pat && !e.patterns!.some((x) => x.id === pat.id)) {
+      e.patterns!.push(pat);
+      const font = userFontOf(pat), data = font && userFontData(font);
+      if (font && data) (e.fonts ??= {})[font] = data;
+    }
     for (const a of actions) if (a.region_ref.placement_id === p.id) e.actions.push(structuredClone(a));
   }
   return out;
@@ -83,6 +101,12 @@ export function reframePlacements(pe: ObjectPatternex, toWorld: M4, fromWorld: M
 
 export interface Overlays { outlines: boolean; transitions: boolean; swaps: boolean; bleed: boolean }
 
+/** A saved logo with its inks (brand kit). */
+export interface BrandItem { id: string; name: string; pattern: Pattern; inks: Record<string, number>; relief?: { mode: 'raise' | 'recess'; height_mm: number } | null }
+
+/** Surface brush: paints strokes into a placement's own pattern. */
+export interface BrushState { active: boolean; width: number; color: string }
+
 export interface PatternexState {
   patterns: Pattern[];
   placements: ObjPlacement[];
@@ -94,10 +118,20 @@ export interface PatternexState {
   armed: string | null;
   /** Inks chosen in the library for the armed pattern (group key colour → slot). */
   armedInks?: Record<string, number>;
+  /** Relief for the armed pattern (Create panel finish): applied to every group of the new placement. */
+  armedRelief?: { mode: 'raise' | 'recess'; height_mm: number } | null;
   /** Inks the user saved per library design (entry key → group key colour → slot). */
   savedInks: Record<string, Record<string, number>>;
   selected: string | null;
   overlays: Overlays;
+  /** Purge of full/reduced changes: tower only, or into infill / a sacrificial object first. */
+  purgeTarget: 'tower' | 'infill' | 'object';
+  /** Scene object id of the sacrificial purge object. */
+  purgeObjectId: string | null;
+  /** Single-colour bands: merge base gaps shorter than this many layers (0 = off). */
+  swapMergeLayers: number;
+  brandKit: BrandItem[];
+  brush: BrushState;
 }
 
 const KEY = 'nexspiro.patternex.v1';
@@ -106,10 +140,11 @@ export function createPatternexState(store: Pick<Storage, 'getItem'> | null): Pa
   const base: PatternexState = {
     patterns: [], placements: [], actions: [], singleColour: 'skip', transitionVolume: [], savedInks: {},
     armed: null, selected: null, overlays: { outlines: true, transitions: true, swaps: true, bleed: true },
+    purgeTarget: 'tower', purgeObjectId: null, swapMergeLayers: 0, brandKit: [], brush: { active: false, width: 1.2, color: '#2f2f33' },
   };
   try {
     const saved = JSON.parse(store?.getItem(KEY) ?? 'null');
-    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, placements: [], actions: [], selected: null, armed: null, armedInks: undefined };
+    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, placements: [], actions: [], selected: null, armed: null, armedInks: undefined, brush: { ...base.brush, ...saved.brush, active: false } };
   } catch { /* ignore broken storage */ }
   return base;
 }
@@ -118,7 +153,10 @@ export function savePatternexState(s: PatternexState, store: Pick<Storage, 'setI
   try {
     // placements live on the scene objects (project files); keep only the library, settings and saved inks here
     const patterns = s.patterns.filter((p) => p.source === 'svg');
-    store?.setItem(KEY, JSON.stringify({ patterns, singleColour: s.singleColour, transitionVolume: s.transitionVolume, savedInks: s.savedInks, overlays: s.overlays }));
+    store?.setItem(KEY, JSON.stringify({
+      patterns, singleColour: s.singleColour, transitionVolume: s.transitionVolume, savedInks: s.savedInks, overlays: s.overlays,
+      purgeTarget: s.purgeTarget, purgeObjectId: s.purgeObjectId, swapMergeLayers: s.swapMergeLayers, brandKit: s.brandKit, brush: s.brush,
+    }));
   } catch { /* quota or unavailable: keep in memory */ }
 }
 
@@ -199,6 +237,9 @@ export function toPatternexConfig(s: PatternexState, objects: { id: string; matr
     actions: s.actions.filter((a) => placements.some((p) => p.id === a.region_ref.placement_id)),
     singleColour: s.singleColour,
     transitionVolume: s.transitionVolume,
+    purgeTarget: s.purgeTarget,
+    purgeObject: s.purgeObjectId ? objects.findIndex((o) => o.id === s.purgeObjectId) : -1,
+    swapMergeLayers: s.swapMergeLayers,
   };
 }
 

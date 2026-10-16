@@ -43,7 +43,7 @@ export function planeBasis(n: V3): { u: V3; v: V3 } {
 
 export function frameOf(p: WorldPlacement, pattern: Pattern): Frame {
   const rot = (p.rotation * Math.PI) / 180;
-  const cx = (pattern.bounds[0] + pattern.bounds[2]) / 2, cy = (pattern.bounds[1] + pattern.bounds[3]) / 2;
+  const [cx, cy] = pattern.origin ?? [(pattern.bounds[0] + pattern.bounds[2]) / 2, (pattern.bounds[1] + pattern.bounds[3]) / 2];
   const sx = (p.scale_xy[0] || 1) * (p.flip ? -1 : 1), sy = p.scale_xy[1] || 1;
   const axis = norm(p.projection_axis);
   if (p.projection === 'cylindrical') {
@@ -88,6 +88,9 @@ export function fromPattern(f: Frame, px: number, py: number): V3 {
 }
 
 /** Does the surface at (x,y,z) with outward normal n face the projection? */
+/** Minimum cosine between surface normal and projection for a placement (surface-angle filter). */
+export const minCosOf = (p: { max_angle?: number }) => (p.max_angle === undefined ? 0.2 : Math.cos((Math.max(0, Math.min(89.9, p.max_angle)) * Math.PI) / 180));
+
 export function faces(f: Frame, x: number, y: number, z: number, n: V3, minCos = 0.2): boolean {
   if (f.kind === 'planar') return dot(n, f.axis) > minCos;
   const d: V3 = [x - f.origin[0], y - f.origin[1], z - f.origin[2]];

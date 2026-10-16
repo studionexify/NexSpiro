@@ -21,7 +21,20 @@ export interface Pattern {
   tolerance_mm: number;
   /** Bounding box of all shapes in pattern mm: [minX, minY, maxX, maxY]. */
   bounds: [number, number, number, number];
+  /** Fixed placement origin in pattern mm (brush strokes grow without moving what is already painted). Default: bounds centre. */
+  origin?: [number, number];
+  /** How the pattern was made, so the tool that made it can edit it again. */
+  meta?: PatternMeta;
 }
+
+/** Source settings of generated artwork (text, codes, braille, brush, trace, tiling). Plain data. */
+export type PatternMeta =
+  | { kind: 'text'; spec: unknown }
+  | { kind: 'code'; spec: unknown }
+  | { kind: 'braille'; spec: unknown }
+  | { kind: 'brush'; strokes: { pts: [number, number][]; width: number; color: string }[] }
+  | { kind: 'trace'; spec: unknown }
+  | { kind: 'tile'; spec: unknown; base: string };
 
 export type Projection = 'planar' | 'cylindrical';
 /** Region depth: follow the outer wall thickness, reuse mmu_paint_depth, or a fixed value. */
@@ -45,6 +58,8 @@ export interface Placement {
   through: boolean;
   locked: boolean;
   visible: boolean;
+  /** Surface-angle filter: only surfaces within this angle (degrees) of the projection get the artwork. Default ~78°. */
+  max_angle?: number;
 }
 
 export type PurgeMode = 'full' | 'reduced' | 'none';
@@ -54,10 +69,29 @@ export interface RegionAction {
   /**
    * slot: 0-based filament slot (AMS loads it automatically).
    * manual: single-colour printers — the slot still names the colour; swap_label is shown at the pause.
+   * keep: no material change (relief or print effects only).
    */
-  material: { mode: 'slot' | 'manual'; slot_index: number; swap_label?: string };
+  material: { mode: 'slot' | 'manual' | 'keep'; slot_index: number; swap_label?: string };
   purge: { mode: PurgeMode; volume_mm3?: number; change_point_shift_mm: number };
   motion: { motionex_brush_id: string } | null;
+  /** Geometry instead of (or as well as) colour: raised or recessed by height_mm. Single-colour printers use this for text and logos. */
+  relief?: { mode: 'raise' | 'recess'; height_mm: number } | null;
+  /** Print settings inside the region (multiplier/overrides; omitted = object settings). */
+  effects?: RegionEffects | null;
+  /** Mix two filaments: the region alternates between slot_index and this slot. */
+  dither?: { slot_index: number; ratio: number; mode: 'layer' | 'line' } | null;
+}
+
+export interface RegionEffects {
+  /** Speed factor for moves in the region (0.2–1.5). */
+  speed?: number;
+  /** Fuzzy skin on the outer wall inside the region. */
+  fuzzy?: boolean;
+  /** Sparse infill density in the region (%), and pattern. */
+  infill_density?: number;
+  infill_pattern?: string;
+  /** Translucent filament: 100% aligned infill, slower, so light passes evenly. */
+  transparency?: boolean;
 }
 
 export interface ResolvedRegion {
