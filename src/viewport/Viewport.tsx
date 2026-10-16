@@ -12,7 +12,10 @@ import {
 import { layOnFace } from '../state/ops';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
-import { FEATURE_ORDER } from '../engine/types';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { PLUGINS } from '../plugins/registry';
 
 export interface ViewApi { setView: (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => void; fit: () => void }
 export const viewApi: { current: ViewApi | null } = { current: null };
@@ -149,8 +152,7 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
 
 export const isMotionTool = (t: Tool) => t === 'paint_motion' || t === 'pick_motion' || t === 'lasso_motion' || t === 'band_motion' || t === 'object_motion';
 export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || isMotionTool(t);
-/** Features drawn on the model in Prepare when the live toolpath is on: the walls the patterns move. */
-const LIVE_FEATURES = new Set(['outer_wall', 'inner_wall', 'overhang_wall']);
+
 const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
 
 export function Viewport() {
@@ -321,7 +323,7 @@ export function Viewport() {
         mat.emissive.set(sel ? slotColor(s, o.filament ?? 0) : '#000000');
         mat.emissiveIntensity = sel ? 0.28 : 0;
         // see-through while the live toolpath is shown on it, and for objects left out of the print
-        const ghost = s.workspace === 'prepare' && s.liveToolpaths && !!s.slice.result ? 0.35 : o.printable === false ? 0.45 : 1;
+        const ghost = s.workspace === 'prepare' && s.liveToolpaths ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
@@ -728,6 +730,34 @@ export function Viewport() {
     renderer.domElement.addEventListener('contextmenu', onContext);
     renderer.domElement.addEventListener('pointercancel', onCancel);
 
+    // ---------------- pattern preview in Prepare: plugin lines drawn on the model, no slicing
+    const patternMat = new LineMaterial({ linewidth: 2, vertexColors: true, worldUnits: false, depthTest: true, transparent: true });
+    const patternLines = new LineSegments2(new LineSegmentsGeometry(), patternMat);
+    patternLines.renderOrder = 5;
+    patternLines.visible = false;
+    patternLines.frustumCulled = false;
+    scene.add(patternLines);
+    let previewTimer: ReturnType<typeof setTimeout> | null = null;
+    const rebuildPatternPreview = () => {
+      if (previewTimer) clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        previewTimer = null;
+        const s = useStore.getState();
+        if (!s.liveToolpaths || s.workspace !== 'prepare') return;
+        const t0 = performance.now();
+        let lines: { positions: Float32Array; colors: Float32Array } | null = null;
+        for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { lines = p.preview(); if (lines) break; }
+        const geo = new LineSegmentsGeometry();
+        if (lines && lines.positions.length) { geo.setPositions(lines.positions); geo.setColors(lines.colors); }
+        patternLines.geometry.dispose();
+        patternLines.geometry = geo;
+        (window as any).__nxPreviewMs = performance.now() - t0;
+        window.dispatchEvent(new Event('nx-preview-built'));
+        invalidate();
+      }, 120);
+    };
+    window.addEventListener('nx-plugin-preview', rebuildPatternPreview);
+
     // ---------------- preview
     let lastColorKey = '';
     const legendHook = () => {
@@ -742,28 +772,17 @@ export function Viewport() {
     const syncPreview = () => {
       const s = useStore.getState();
       const preview = s.workspace === 'preview';
-      const live = s.workspace === 'prepare' && s.liveToolpaths && !!s.slice.result;
       objGroup.visible = !preview;
       selBoxes.visible = !preview;
-      toolpaths.group.visible = preview || live;
-      if (preview || live) {
+      toolpaths.group.visible = preview;
+      patternLines.visible = !preview && s.liveToolpaths;
+      if (preview) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
         toolpaths.group.position.set(ox, oy, 0);
-      }
-      if (preview) {
         legendHook();
         toolpaths.setRange(s.layerRange[0], s.layerRange[1], s.moveCursor);
         toolpaths.showTravel(s.showTravel);
-      } else if (live) {
-        // Prepare shows the walls only, so the model stays readable under the lines
-        const key = `live|${s.slice.result!.moves.length}|${s.filaments.map((f) => f.color).join()}`;
-        if (key !== lastColorKey) {
-          lastColorKey = key;
-          toolpaths.colorize('feature', new Set(FEATURE_ORDER.filter((f) => !LIVE_FEATURES.has(f))), s.filaments.map((f) => f.color));
-        }
-        toolpaths.setRange(0, Math.max(0, s.slice.result!.layers.length - 1), -1);
-        toolpaths.showTravel(false);
       }
       syncGizmo();
       invalidate();
@@ -775,6 +794,7 @@ export function Viewport() {
       renderer.domElement.style.width = w + 'px';
       renderer.domElement.style.height = h + 'px';
       camera.aspect = w / Math.max(h, 1);
+      patternMat.resolution.set(w, h);
       camera.updateProjectionMatrix();
       invalidate();
     };
@@ -793,9 +813,10 @@ export function Viewport() {
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
-        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace
-        || (s.slice.result !== prev.slice.result && s.liveToolpaths)) syncObjects();
+        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
+      if (s.liveToolpaths && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins)) rebuildPatternPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
@@ -820,6 +841,8 @@ export function Viewport() {
       renderer.dispose();
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);
+      window.removeEventListener('nx-plugin-preview', rebuildPatternPreview);
+      patternLines.geometry.dispose(); patternMat.dispose();
       viewApi.current = null;
     };
   }, []);

@@ -4,7 +4,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore, type Tool } from '../../../state/store';
-import { currentConfig } from '../../../state/slicing';
+import * as THREE from 'three';
+import { currentConfig, plateObjects } from '../../../state/slicing';
+import { transformVertices } from '../../../engine/mesh';
+import { objectMatrix } from '../../../state/store';
+import { buildPreview, type PreviewApp, type PreviewLines } from '../preview';
 import { allTris, assignMotion, clearMotionSet, motionCounts, SURFACE_COLORS } from '../../../state/motionPaint';
 import { createMotionexState, defaultApplication, saveMotionexState, toConfig, type MotionexState } from '../index';
 import { profilesFromConfig, type MotionexConfig, type MotionexReport } from '../engine';
@@ -26,6 +30,26 @@ export function changed(): void {
   version++;
   listeners.forEach((l) => l());
   useStore.getState().markDirty();
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('nx-plugin-preview'));
+}
+
+/** Pattern preview lines for the active plate (see ../preview.ts), or null when nothing is switched on. */
+export function motionexPreview(): PreviewLines | null {
+  const s = useStore.getState();
+  const apps: PreviewApp[] = [];
+  for (const a of mx.applications) {
+    if (!a.enabled) continue;
+    const found = mx.library.get(a.brush_id);
+    if (!found) continue;
+    const k = a.scale ?? 1;
+    const brush = k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
+    const c = new THREE.Color(SURFACE_COLORS[surfaceOf(a) - 1]);
+    apps.push({ app: a, brush, surface: surfaceOf(a), color: [c.r, c.g, c.b] });
+  }
+  if (!apps.length) return null;
+  const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
+    .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
+  return buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId));
 }
 
 /** Slicer config, or undefined when no pattern is switched on. */
@@ -160,15 +184,14 @@ export function MotionexPanel() {
 }
 
 function LiveToggle() {
-  const { liveToolpaths, set, slice, objects } = useStore();
-  const busy = liveToolpaths && (slice.status === 'slicing' || slice.dirty);
+  const { liveToolpaths, set } = useStore();
   return (
     <section className="mx-card mx-live">
       <label className="row" style={{ gap: 8, margin: 0 }}>
-        <span style={{ flex: 1 }}><b>Show toolpath on plate</b>
-          <div className="mx-muted" style={{ margin: 0 }}>{!liveToolpaths ? 'See the real printed lines on the model while you work.' : !objects.length ? 'Add a model to see its toolpath.' : busy ? 'Updating…' : 'Showing the walls as they will print.'}</div>
+        <span style={{ flex: 1 }}><b>Show pattern path on model</b>
+          <div className="mx-muted" style={{ margin: 0 }}>{liveToolpaths ? 'Quick preview of the patterned walls only, updated as you edit. Slice for the exact G-code.' : 'Draws the patterned wall lines on the model, instantly, without slicing.'}</div>
         </span>
-        <button className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-label="Show toolpath on plate" onClick={() => set({ liveToolpaths: !liveToolpaths })} />
+        <button className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-label="Show pattern path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })} />
       </label>
     </section>
   );

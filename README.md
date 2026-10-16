@@ -46,7 +46,7 @@
 | --- | --- |
 | **Printers** | 44 profiles: all current Bambu Lab (incl. H2D single-nozzle), Creality K1/K2/Ender-3 V3 family, Elegoo Neptune 3/4 & Centauri, Prusa MK3S+/MK4S/MINI+/CORE One/XL, Anycubic Kobra, Voron, Qidi, Sovol, Artillery, generic Marlin/Klipper. |
 | **Tools** | Cut (tilted plane, capped), Mesh boolean (union/difference/intersection), Text (object/emboss/engrave), Measure, Flushing-volume matrix. |
-| **Motionex plugin** | Wall patterns from a library, placed by click, paint, lasso, box, height band, whole object or whole plate. Optional live toolpath on the model in Prepare. Patterns fade into plain walls and cross-fade into each other, close at the seam, line up layer to layer, and inner walls follow the outer wall so the skin stays fused. |
+| **Motionex plugin** | Wall patterns from a library, placed by click, paint, lasso, box, height band, whole object or whole plate. Instant pattern preview on the model in Prepare (patterned walls only, no slicing). Patterns fade into plain walls and cross-fade into each other, close at the seam, line up layer to layer, and inner walls follow the outer wall so the skin stays fused. |
 
 > Not covered yet: H2D dual-nozzle, Creality CFS / Anycubic ACE multi-colour, X1/H2 camera (RTSPS — open the shown URL in VLC). Profiles beyond the original four printers use generic start G-code — check the first print.
 

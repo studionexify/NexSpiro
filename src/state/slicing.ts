@@ -21,13 +21,11 @@ export const plateObjects = (plate = useStore.getState().activePlate) => {
   return s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate);
 };
 
-/** background: a live-preview slice (no empty-plate toast, no progress panel, warnings left to the panels). */
-export function sliceNow(opts: { background?: boolean } = {}): Promise<SliceOutput | null> {
+export function sliceNow(): Promise<SliceOutput | null> {
   const s = useStore.getState();
   const plate = s.activePlate;
   const objs = plateObjects(plate).filter((o) => o.printable !== false);
   if (!objs.length) {
-    if (opts.background) return Promise.resolve(null);
     s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
     return Promise.resolve(null);
   }
@@ -51,7 +49,7 @@ export function sliceNow(opts: { background?: boolean } = {}): Promise<SliceOutp
       vertices: transformVertices(p.mesh.vertices, toPlate.clone().multiply(partWorldMatrix(o, p)).elements),
     })),
   }));
-  s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate, background: opts.background, dirty: false } }); // edits during the slice mark it dirty again
+  s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate, dirty: false } }); // edits during the slice mark it dirty again
   return new Promise((done) => {
     const resolve = (r: SliceOutput | null) => { if (pending === resolve) pending = null; done(r); };
     pending = resolve;
@@ -65,11 +63,11 @@ export function sliceNow(opts: { background?: boolean } = {}): Promise<SliceOutp
         st.set({
           slice: { status: 'done', stage: 'Done', progress: 1, result: out, error: null, dirty: st.slice.dirty, plate },
           layerRange: [0, out.layers.length - 1], moveCursor: -1,
-          ...(opts.background ? {} : { toast: out.warnings.length ? { kind: 'warn' as const, text: out.warnings.join(' ') } : null }),
+          toast: out.warnings.length ? { kind: 'warn', text: out.warnings.join(' ') } : null,
         });
         resolve(out);
       } else {
-        st.set({ slice: { ...st.slice, status: 'error', error: m.message, dirty: true }, ...(opts.background ? {} : { toast: { kind: 'error' as const, text: `Slicing failed: ${m.message}` } }) });
+        st.set({ slice: { ...st.slice, status: 'error', error: m.message, dirty: true }, toast: { kind: 'error', text: `Slicing failed: ${m.message}` } });
         resolve(null);
       }
     };

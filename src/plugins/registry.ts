@@ -3,7 +3,7 @@
 import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
-import { motionexConfig, MotionexPanel } from './motionex/ui/MotionexPanel';
+import { motionexConfig, MotionexPanel, motionexPreview } from './motionex/ui/MotionexPanel';
 
 export interface UiPlugin {
   id: string;
@@ -14,6 +14,8 @@ export interface UiPlugin {
   Panel: ComponentType;
   /** Plain-data config for the slicer, or undefined when the plugin has nothing to do. */
   sliceConfig(): unknown;
+  /** Quick preview lines drawn on the model in Prepare (no slicing), or null for none. */
+  preview?(): { positions: Float32Array; colors: Float32Array } | null;
 }
 
 export const PLUGINS: UiPlugin[] = [
@@ -22,6 +24,7 @@ export const PLUGINS: UiPlugin[] = [
     description: 'Waves, loops, dots and textures on the walls of your print.',
     Panel: MotionexPanel,
     sliceConfig: () => motionexConfig(useStore.getState().printerId),
+    preview: motionexPreview,
   },
 ];
 

@@ -38,17 +38,22 @@ export function Toolbar() {
       {T('measure', 'measure', 'Measure', 'U')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
-      <button className={`icon-btn ${liveToolpaths ? 'active' : ''}`} title="Show toolpath on plate (walls, updated as you edit)" aria-label="Show toolpath on plate" onClick={() => set({ liveToolpaths: !liveToolpaths })}><Icon name="slice" /></button>
+      <button className={`icon-btn ${liveToolpaths ? 'active' : ''}`} title="Show pattern path on model (quick preview, no slicing)" aria-label="Show pattern path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })}><Icon name="slice" /></button>
     </div>
   );
 }
 
-/** Status of the live toolpath shown on the model in Prepare. */
+/** Shown while the pattern preview is drawn on the model. */
 export function LiveChip() {
-  const { liveToolpaths, slice, objects } = useStore();
+  const { liveToolpaths, objects } = useStore();
+  const [info, setInfo] = useState('');
+  useEffect(() => {
+    const on = () => setInfo(`${Math.round((window as any).__nxPreviewMs ?? 0)} ms`);
+    window.addEventListener('nx-preview-built', on);
+    return () => window.removeEventListener('nx-preview-built', on);
+  }, []);
   if (!liveToolpaths || !objects.length) return null;
-  const busy = slice.status === 'slicing' || slice.dirty;
-  return <div className={`float live-chip ${busy ? 'busy' : ''}`} role="status"><i />{busy ? 'Updating toolpath…' : 'Toolpath shown on plate'}</div>;
+  return <div className="float live-chip" role="status"><i />Pattern preview{info ? ` · ${info}` : ''} · slice for exact G-code</div>;
 }
 
 export function ViewCube() {

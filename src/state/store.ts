@@ -64,8 +64,6 @@ export interface SliceState {
   error: string | null;
   dirty: boolean; // scene/settings changed since last slice
   plate: number; // plate index the result belongs to
-  /** The running slice is a live-preview one started in the background. */
-  background?: boolean;
 }
 
 interface State {
@@ -122,7 +120,7 @@ interface State {
   /** Measure tool: picked world points (up to 2). */
   measurePoints: Vec3[];
   contextMenu: ContextMenuState | null;
-  /** Show the sliced toolpath on the model in Prepare (re-slices in the background). */
+  /** Draw the plugins' quick pattern preview on the model in Prepare (no slicing). */
   liveToolpaths: boolean;
 
   set: (p: Partial<State>) => void;

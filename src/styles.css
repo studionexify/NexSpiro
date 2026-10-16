@@ -194,8 +194,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .lasso-overlay polygon.erase { fill: rgba(128, 128, 128, .12); stroke: #999; }
 .live-chip { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 5; padding: 4px 10px; font-size: 12px; border-radius: 99px; display: flex; gap: 6px; align-items: center; }
 .live-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--success, #43A047); }
-.live-chip.busy i { background: var(--warning, #FFC107); animation: live-pulse 1s infinite; }
-@keyframes live-pulse { 50% { opacity: .3; } }
 .float {
   position: absolute; z-index: 5; background: var(--surface-overlay); border: 1px solid var(--border);
   border-radius: 8px; box-shadow: var(--shadow); backdrop-filter: blur(8px);
