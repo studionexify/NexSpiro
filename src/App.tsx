@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PluginsButton, RightDock } from './ui/RightDock';
 import { arrange, autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
@@ -75,6 +76,7 @@ function TopBar() {
         ))}
       </nav>
       <span className="spacer" />
+      <PluginsButton />
       <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
       </button>
@@ -154,6 +156,7 @@ export default function App() {
   useShortcuts();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
+  const hasDock = useStore((s) => s.plugins.length > 0);
 
   return (
     <div className="app"
@@ -165,7 +168,7 @@ export default function App() {
         if (files.length) importBuffers(files);
       }}>
       <TopBar />
-      <div className="workspace" style={is3d ? undefined : { gridTemplateColumns: '1fr' }}>
+      <div className="workspace" style={is3d ? { gridTemplateColumns: hasDock ? 'var(--sidebar-w, 360px) 1fr auto' : undefined } : { gridTemplateColumns: '1fr' }}>
         {is3d && <Sidebar />}
         <main className="stage" style={is3d ? undefined : { display: 'none' }}>
           <Viewport />
@@ -175,6 +178,7 @@ export default function App() {
           <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
+        {is3d && <RightDock />}
         {workspace === 'home' && <HomePage />}
         {workspace === 'device' && <DevicePage />}
         {workspace === 'project' && <ProjectPage />}

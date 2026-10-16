@@ -87,7 +87,7 @@ export interface PartInput {
 }
 
 /** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */
-export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array }
+export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
 
 export interface MeshInput {
   id: string;

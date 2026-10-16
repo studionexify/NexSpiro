@@ -342,3 +342,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .photo-grid figcaption { padding: 4px 8px; font-size: 11px; }
 .flush-table { border-collapse: collapse; }
 .flush-table th, .flush-table td { padding: 4px 6px; text-align: center; font-weight: 600; white-space: nowrap; }
+
+/* ---------- plugin dock (right) */
+.dock { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface-primary); border-left: 1px solid var(--border); }
+.dock.collapsed { width: 34px; align-items: center; padding-top: 8px; gap: 6px; }
+.dock-strip-tab { border: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; color: var(--text-muted); border-radius: 6px; width: 30px; }
+.dock-strip-tab:hover { background: var(--surface-hover); color: var(--text); }
+.dock-strip-label { writing-mode: vertical-rl; font-weight: 600; font-size: 12px; letter-spacing: .5px; }
+.dock-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 3; }
+.dock-resize:hover { background: var(--accent-tint); }
+.dock-tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.dock-tab { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-weight: 600; }
+.dock-tab.on { background: var(--accent-tint); color: var(--accent); }
+.dock-body { flex: 1; overflow-y: auto; padding: 8px; }
+.plugin-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.mx-badge { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; background: linear-gradient(135deg, #7c3aed, #2b6cb0); flex: none; }
+.mx-badge.sm { width: 22px; height: 22px; font-size: 12px; border-radius: 6px; }
+
+/* ---------- Motionex panel */
+.mx-panel { display: flex; flex-direction: column; gap: 8px; }
+.mx-head { display: flex; align-items: center; gap: 10px; padding: 2px 2px 4px; }
+.mx-title { font-weight: 700; color: var(--text-strong); }
+.mx-sub, .mx-muted { color: var(--text-muted); font-size: 12px; margin: 4px 0; }
+.mx-card { background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.mx-card-title { display: flex; align-items: center; font-size: 14px; font-weight: 700; color: var(--text-strong); }
+.mx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mx-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--surface-tertiary); border-radius: 99px; padding: 2px 9px 2px 5px; cursor: pointer; font-size: 12px; color: var(--text); }
+.mx-chip.on { border-color: var(--accent); background: var(--accent-tint); }
+.mx-chip i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.mx-chip input { display: none; }
+.mx-seg { display: flex; width: 100%; }
+.mx-seg button { flex: 1; }
+.mx-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-muted); }
+.mx-field input[type=range] { accent-color: var(--accent); width: 100%; }
+.mx-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.mx-two .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.mx-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-top: 2px; }
+.mx-app { border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--surface-primary); }
+.mx-app.off { opacity: .55; }
+.mx-app-top { display: flex; gap: 4px; align-items: center; }
+.mx-app-top .select { flex: 1; min-width: 0; }
+.mx-add { align-self: flex-start; }
+.mx-check { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.mx-check span { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 11px; flex: none; }
+.mx-check .ok { background: var(--accent-tint); color: var(--accent); }
+.mx-check .bad { background: color-mix(in srgb, var(--warning) 25%, transparent); color: var(--warning); }

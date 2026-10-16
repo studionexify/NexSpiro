@@ -141,13 +141,16 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
   version: '0.3.0',
   postToolpath(layerOps, config, ctx: PluginContext) {
     const check = emptyCheck();
-    const apps = config.applications.filter((a) => a.enabled);
+    const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
     if (!apps.length) return { check, movedPaths: 0 };
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);
     const regions = new RegionRegistry();
     for (const f of ctx.faceRegions) {
       regions.set({ region_id: f.id, name: f.name, layer_range: [0, layerOps.length - 1], polygon_mask_per_layer: (l) => f.polygonsAt(l), attributes: { source: 'faces' } });
     }
+    // A picked-surface number means that surface set on every object.
+    for (const a of apps) if (a.target.type === 'faces')
+      a.target = { ...a.target, faces: ctx.faceRegions.filter((f) => (a.target.faces ?? []).some((n) => f.id === n || f.id.endsWith(`:${n}`))).map((f) => f.id) };
     const { layers, runs } = opsToLayers(layerOps);
     const originals = runs.map((r) => ({ ...r.path.points[0] }));
     const brushes = new Map(config.brushes.map((b) => [b.id, b]));

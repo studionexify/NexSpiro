@@ -60,6 +60,11 @@ export async function exportGcode() {
   let r = s.slice.result;
   if (!r || s.slice.dirty) r = await sliceNow();
   if (!r) return;
+  const mx = r.pluginReports?.motionex as { check?: { blocking?: boolean; collisionCount?: number } } | undefined;
+  if (mx?.check?.blocking) {
+    s.set({ toast: { kind: 'error', text: `Motionex: the print head would hit the print in ${mx.check.collisionCount} spots. Export is stopped — see the Motionex panel.` } });
+    return;
+  }
   const base = (s.objects[0]?.name ?? 'plate').replace(/[^\w.-]+/g, '_');
   const p = printerById(s.printerId);
   const saved = await saveFile(`${base}_${p.model.replace(/\s+/g, '')}.gcode`, r.gcode, 'gcode');
