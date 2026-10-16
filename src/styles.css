@@ -447,3 +447,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pxl-ink-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--surface-primary); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; color: var(--text); }
 .pxl-ink-btn i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0, 0, 0, .2); }
 .pxl-ink-btn.on { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); font-weight: 600; }
+.pxl-win { position: relative; }
+.pxl-ask-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); display: grid; place-items: center; z-index: 5; }
+.pxl-ask { width: min(440px, 92%); background: var(--surface-primary); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
+.pxl-ask-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.pxl-inked { margin: 0 4px 0 0; color: var(--accent); }

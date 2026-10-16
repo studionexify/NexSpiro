@@ -64,7 +64,8 @@ Purge grams use the flush volumes actually applied (default `flush_volume` 280 m
 - Patterns, placements and region actions are saved in the `.3mf` project (`Metadata/nexspiro_project.json` → `patternex`) and restored on open; placements on objects missing from the project are dropped.
 
 ## 7. Pattern library (§11.1, started)
-- 47 original procedural families in 6 types (Geometric, Tiles, Shapes, Organic, Lines, Ornament) × presets × variants × seeds × 8 palettes = 4,816 library entries (`library/families.ts`, `library/catalog.ts`).
+- 64 original procedural families in 8 types (Geometric, Polygons, Tiles, Shapes, Math, Organic, Lines, Ornament) × presets × variants × densities × seeds = 2,755 uninked designs (`library/families.ts`, `library/catalog.ts`). Polygons include Archimedean tilings (4.8.8, 3.6.3.6, 3.12.12), rhombille and Cairo pentagons; Math includes superformula, rose, spirograph, Lissajous, phyllotaxis, Sierpinski, Koch and Hilbert.
+- Designs load uninked; the user inks each region (filament slot or base). Leaving a design with unsaved inks asks to save them — saved inks reload with the design, otherwise they are removed.
 - Library window at 98% of the screen: type and palette filters, search, lazy thumbnails, slider editor for every family parameter, seed and palette, live preview plus a cube showing the target.
 - Apply to: a picked face, one side (top/bottom/front/back/left/right), all four sides, or the whole body (cylindrical wrap). With *fit to target* the pattern is regenerated at the target's size so the cell size stays as set.
 

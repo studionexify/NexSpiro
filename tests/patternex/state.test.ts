@@ -77,3 +77,14 @@ describe('Patternex in project files', () => {
     expect(r.placements).toEqual([]);
   });
 });
+
+describe('saved inks', () => {
+  it('persist per library design', () => {
+    const store = mem();
+    const s = createPatternexState(store);
+    expect(s.savedInks).toEqual({});
+    s.savedInks['hex/tricolour/-/0/1'] = { '#2f2f33': 1 };
+    savePatternexState(s, store);
+    expect(createPatternexState(store).savedInks).toEqual({ 'hex/tricolour/-/0/1': { '#2f2f33': 1 } });
+  });
+});

@@ -27,6 +27,8 @@ export interface PatternexState {
   armed: string | null;
   /** Inks chosen in the library for the armed pattern (group key colour → slot). */
   armedInks?: Record<string, number>;
+  /** Inks the user saved per library design (entry key → group key colour → slot). */
+  savedInks: Record<string, Record<string, number>>;
   selected: string | null;
   overlays: Overlays;
 }
@@ -35,7 +37,7 @@ const KEY = 'nexspiro.patternex.v1';
 
 export function createPatternexState(store: Pick<Storage, 'getItem'> | null): PatternexState {
   const base: PatternexState = {
-    patterns: [], placements: [], actions: [], singleColour: 'skip', transitionVolume: [],
+    patterns: [], placements: [], actions: [], singleColour: 'skip', transitionVolume: [], savedInks: {},
     armed: null, selected: null, overlays: { outlines: true, transitions: true, swaps: true, bleed: true },
   };
   try {

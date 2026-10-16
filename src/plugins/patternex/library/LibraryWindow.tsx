@@ -51,12 +51,19 @@ function Thumb({ e, on, onPick }: { e: LibraryEntry; on: boolean; onPick: () => 
   return (
     <button ref={ref} className={`pxl-thumb ${on ? 'on' : ''}`} onClick={onPick} title={e.name}>
       {src ? <img src={src} alt="" draggable={false} /> : <span className="pxl-ph" />}
-      <span className="pxl-name">{e.name}</span>
+      <span className="pxl-name">{px.savedInks[e.key] ? <span className="px-tag pxl-inked">inked</span> : null}{e.name}</span>
     </button>
   );
 }
 
-export function LibraryWindow({ onClose }: { onClose: () => void }) {
+interface InkGuard { dirty(): boolean; save(): void; name: string }
+
+export function LibraryWindow({ onClose: close }: { onClose: () => void }) {
+  // unsaved inks: ask to save before leaving the design (switching, closing or applying)
+  const guard = useRef<InkGuard | null>(null);
+  const [ask, setAsk] = useState<{ then: () => void } | null>(null);
+  const request = (then: () => void) => { if (guard.current?.dirty()) setAsk({ then }); else then(); };
+  const onClose = () => request(close);
   const [cat, setCat] = useState<Category | 'All'>('All');
   const [q, setQ] = useState('');
   const [groups, setGroups] = useState<number>(0); // 0 = any number of colour groups
@@ -74,10 +81,10 @@ export function LibraryWindow({ onClose }: { onClose: () => void }) {
     return () => io.disconnect();
   }, [list]);
   useEffect(() => {
-    const k = (ev: KeyboardEvent) => { if (ev.key === 'Escape') onClose(); };
+    const k = (ev: KeyboardEvent) => { if (ev.key === 'Escape') { if (ask) setAsk(null); else onClose(); } };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
+  });
   useEffect(() => { if (!entry && list.length) setEntry(list[0]); }, [list, entry]);
 
   return createPortal(
@@ -103,19 +110,33 @@ export function LibraryWindow({ onClose }: { onClose: () => void }) {
           <section className="pxl-grid-wrap">
             <div className="mx-muted">{list.length.toLocaleString()} result(s)</div>
             <div className="pxl-grid">
-              {list.slice(0, limit).map((e) => <Thumb key={e.key} e={e} on={entry?.key === e.key} onPick={() => setEntry(e)} />)}
+              {list.slice(0, limit).map((e) => <Thumb key={e.key} e={e} on={entry?.key === e.key} onPick={() => { if (e.key !== entry?.key) request(() => setEntry(e)); }} />)}
             </div>
             {limit < list.length && <div ref={sentinel} className="pxl-more">Loading more…</div>}
           </section>
-          {entry && <Editor key={entry.key} entry={entry} onClose={onClose} />}
+          {entry && <Editor key={entry.key} entry={entry} onDone={close} guard={guard} request={request} />}
         </div>
+        {ask && (
+          <div className="pxl-ask-bg">
+            <div className="pxl-ask" role="alertdialog" aria-label="Save inks">
+              <b>Save inks for “{guard.current?.name}”?</b>
+              <p className="mx-muted">Saved inks come back every time you open this design. If you don't save, the inks you picked are removed.</p>
+              <div className="pxl-ask-btns">
+                <button className="btn-secondary" onClick={() => setAsk(null)}>Keep editing</button>
+                <button className="btn-secondary" onClick={() => { const t = ask.then; setAsk(null); t(); }}>Don't save</button>
+                <button className="btn-primary" onClick={() => { guard.current?.save(); const t = ask.then; setAsk(null); t(); }}>Save inks</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
   );
 }
 
-function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }) {
+function Editor({ entry, onDone, guard, request }: { entry: LibraryEntry; onDone: () => void; guard: { current: InkGuard | null }; request: (then: () => void) => void }) {
+  const onClose = () => request(onDone);
   const fam = familyById(entry.family)!;
   const [spec, setSpec] = useState<GenSpec>(() => specOf(entry));
   const [target, setTarget] = useState<Target>({ kind: 'side', side: 'top' });
@@ -124,7 +145,15 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
   const filaments = useStore((s) => s.filaments);
   const ams = useStore((s) => printerById(s.printerId).machine.has_ams === true);
   /** Ink per group key colour: filament slot index, or -1 = base / not inked. Nothing is inked to start with. */
-  const [inks, setInks] = useState<Record<string, number>>({});
+  const saved = px.savedInks[entry.key];
+  const [inks, setInks] = useState<Record<string, number>>(() => ({ ...(saved ?? {}) }));
+  const norm = (m: Record<string, number> | undefined) => JSON.stringify(Object.entries(m ?? {}).filter(([, v]) => v >= 0).sort());
+  const dirty = norm(inks) !== norm(saved);
+  const saveInks = () => {
+    if (Object.values(inks).some((v) => v >= 0)) px.savedInks[entry.key] = { ...inks }; else delete px.savedInks[entry.key];
+    changed(false);
+  };
+  guard.current = { dirty: () => dirty, save: saveInks, name: entry.name };
   const tsize = targetSize(obj, target);
   // the preview uses the size the pattern will have on the target
   const shown: GenSpec = fitTarget && tsize ? { ...spec, width: +tsize.width.toFixed(2), height: +tsize.height.toFixed(2) } : spec;
@@ -136,7 +165,8 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
   const svg = useMemo(() => svgUrl(patternSvg(pat, shown.width, shown.height, inkedCount && baseColor ? baseColor : undefined, 60_000, inkColors)), [pat, JSON.stringify(inkColors), baseColor, inkedCount]);
   const groups = keys.length;
   const set = (k: string, v: number) => setSpec((s) => ({ ...s, params: { ...s.params, [k]: v } }));
-  const apply = () => {
+  const apply = () => request(() => doApply());
+  const doApply = () => {
     const make = (w: number, h: number) => buildPattern({ ...spec, width: fitTarget ? w : spec.width, height: fitTarget ? h : spec.height }, entry.name);
     if (target.kind === 'face' || !obj) {
       const p = addPattern(px, buildPattern(spec, entry.name));
@@ -149,7 +179,7 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
       useStore.getState().set({ workspace: 'prepare' });
       changed(true);
     }
-    onClose();
+    onDone();
   };
   return (
     <aside className="pxl-editor">
@@ -199,7 +229,11 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
         })}
         {filaments.length < 2 && <p className="mx-muted px-warn">Only one filament slot is set up — add slots in the Filament panel to ink regions in other colours.</p>}
         {inkedCount > 0 && inkedCount === keys.length && keys.every((k) => inks[k] === inks[keys[0]]) && <p className="mx-muted">All regions use the same ink, so the pattern prints as one solid colour.</p>}
-        <div className="mx-chips"><button className="btn-secondary btn-small" onClick={() => setSpec(specOf(entry))}>Reset shape</button><button className="btn-secondary btn-small" onClick={() => setInks({})}>Clear inks</button></div>
+        <div className="mx-chips"><button className="btn-secondary btn-small" onClick={() => setSpec(specOf(entry))}>Reset shape</button><button className="btn-secondary btn-small" onClick={() => setInks({})}>Clear inks</button>
+          <button className="btn-primary btn-small" disabled={!dirty} onClick={saveInks}>{saved && !dirty ? 'Inks saved' : 'Save inks'}</button>
+          {saved && <button className="btn-secondary btn-small" onClick={() => { delete px.savedInks[entry.key]; setInks({}); changed(false); }}>Remove saved inks</button>}
+        </div>
+        {dirty && <p className="mx-muted px-warn">Inks not saved — you'll be asked to save them before leaving this design.</p>}
       </div>
       <footer className="pxl-ed-foot">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
