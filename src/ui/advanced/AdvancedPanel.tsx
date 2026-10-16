@@ -317,7 +317,8 @@ function EngineReport() {
         {sl.dirty && <span className="badge" title="Settings or scene changed since this slice">outdated</span>}
         <span className="spacer" /><span className="muted">{rep.ms} ms</span>
       </div>
-      <div className="adv-facts"><span>{applied.length} technologies ran</span><span>{rep.techs.filter((t) => t.status === 'unavailable').length} unavailable on this machine</span></div>
+      <div className="adv-facts"><span>{applied.length} technologies ran</span><span>{rep.techs.filter((t) => t.status === 'unavailable').length} unavailable on this machine</span>
+        {rep.clearance && <span title="Non-planar moves checked against the nozzle cone, heater block and fan duct">clearance: {rep.clearance.checked} checked, {rep.clearance.raised} lifted, {rep.clearance.unresolved} unresolved</span>}</div>
       <ul className="adv-notes">
         {applied.map((t) => <li key={t.id}><b>{techName(t.id)}</b>{t.stats && Object.keys(t.stats).length ? ` — ${Object.entries(t.stats).slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')} ${typeof v === 'number' ? +v.toFixed(2) : v}`).join(', ')}` : ''}</li>)}
         {rep.warnings.map((w) => <li key={w} className="warn-line">{w}</li>)}

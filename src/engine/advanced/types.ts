@@ -110,6 +110,8 @@ export interface AdvancedReport {
   machine: { name: string; kinematics: Kinematics; axes: number; maxSlopeDeg: number; firmware: string; notes: string[] };
   zones: ZoneStat[];
   techs: TechReport[];
+  /** Head-clearance check of the non-planar moves (when there were any). */
+  clearance?: { checked: number; collisions: number; raised: number; unresolved: number; worst: number };
   warnings: string[];
   ms: number;
 }

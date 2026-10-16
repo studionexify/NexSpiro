@@ -10,6 +10,8 @@ import { machineCaps, type MachineCaps } from './machine';
 import { resolveTechs, type ResolvedTech } from './techs';
 import type { AdvancedConfig, AdvancedReport, TechId, TechReport, ParamValue } from './types';
 import { MODULES } from './modules';
+import { unwarpLayers } from './warp';
+import { clearancePass, type ClearanceReport } from './clearance';
 
 export interface WallLoop { pts: number[]; closed: boolean; feature: 'outer_wall' | 'inner_wall'; width: number; flow: number }
 export interface WallResult { loops: WallLoop[][]; inner: Paths }
@@ -43,6 +45,10 @@ export interface SessionCtx {
   on(id: TechId): boolean;
   param(id: TechId, key: string): ParamValue;
   pnum(id: TechId, key: string): number;
+  /** Set by any pass that moves extrusions off their layer plane (triggers the clearance check). */
+  nonPlanar: boolean;
+  /** Curved-layer warp in effect, if any. */
+  warp?: Warp;
 }
 
 /** A technology implementation: any subset of the stage hooks. */
@@ -51,8 +57,8 @@ export interface TechModule {
   /** Adds this technology's field to a part analysis for the Zone Inspector (no slicing). */
   inspect?(a: PartAnalysis): void;
   prepare?(s: SessionCtx): void;
-  /** Z displacement field for curved layers: real z = z′ + dz(x, y, z′). */
-  warp?(s: SessionCtx): Warp | undefined;
+  /** Z displacement field for curved layers: real z = z′ + dz(x, y, z′). `base` is the warp so far. */
+  warp?(s: SessionCtx, base?: Warp): Warp | undefined;
   reshape?(s: SessionCtx, object: number, layer: number, slice: Paths, z: number): Paths;
   walls?(s: SessionCtx, object: number, ex: ExPolygon, c: WallCtx): WallResult | undefined;
   infill?(s: SessionCtx, object: number, region: Paths, c: InfillCtx): InfillPath[] | undefined;
@@ -112,6 +118,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     on(id) { const t = techs.get(id); return !!t && t.enabled && t.verdict.status !== 'unavailable'; },
     param(id, key) { return techs.get(id)!.params[key]; },
     pnum(id, key) { return Number(techs.get(id)!.params[key]); },
+    nonPlanar: false,
   };
   const active = MODULES.filter((m) => ctx.on(m.id));
   const timed = <T>(id: TechId, fn: () => T): T => {
@@ -119,13 +126,12 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     try { return fn(); } finally { const r = ctx.report(id); r.ms = (r.ms ?? 0) + (now() - s); }
   };
   for (const m of active) if (m.prepare) timed(m.id, () => m.prepare!(ctx));
-  // curved layers: the first layer technology that yields a warp wins (dome slicing before SGD)
+  // curved layers: each layer technology refines the warp of the ones before it (dome field, then SGD)
   let warp: Warp | undefined;
-  for (const m of active) {
-    if (warp || !m.warp) continue;
-    warp = timed(m.id, () => m.warp!(ctx));
-  }
+  for (const m of active) if (m.warp) warp = timed(m.id, () => m.warp!(ctx, warp));
+  ctx.warp = warp;
   const sliceMeshes = warp ? meshes.map((m) => warpMesh(m, warp!)) : meshes;
+  let clearance: ClearanceReport | undefined;
 
   const reshapers = active.filter((m) => m.reshape);
   const wallers = active.filter((m) => m.walls);
@@ -144,7 +150,16 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
 
   return {
     ctx, meshes: sliceMeshes, warp, plugin, walls, infill,
-    post(layers, c) { for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c)); },
+    post(layers, c) {
+      // curved layers back to real space first, then every geometry pass, then the head-clearance check
+      if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
+      for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
+      if (ctx.nonPlanar) {
+        clearance = clearancePass(layers, caps.toolhead, caps.bed, true);
+        if (clearance.raised) ctx.warn(`Head clearance: lifted ${clearance.raised} non-planar points so the ${caps.toolhead.name} clears the print.`);
+        if (clearance.unresolved) ctx.warn(`Head clearance: ${clearance.unresolved} non-planar points may touch the print with the ${caps.toolhead.name} (worst ${clearance.worst.toFixed(2)} mm). Check the toolhead shape in Machine capabilities.`);
+      }
+    },
     finalize(layers, c) { for (const m of active) if (m.finalize) timed(m.id, () => m.finalize!(ctx, layers, c)); },
     report() {
       const zoneTotals = new Map<string, { kind: any; areaMm2: number; volumeMm3: number; triangles: number }>();
@@ -172,6 +187,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
         machine: { name: caps.name, kinematics: caps.kinematics, axes: caps.axes, maxSlopeDeg: +caps.maxSlopeDeg.toFixed(1), firmware: caps.firmware, notes: caps.notes },
         zones: [...zoneTotals.values()],
         techs: techReports,
+        ...(clearance ? { clearance } : {}),
         warnings,
         ms: Math.round(now() - t0),
       };

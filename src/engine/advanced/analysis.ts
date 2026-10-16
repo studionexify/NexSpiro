@@ -140,11 +140,17 @@ export function toObjectAnalysis(id: string, name: string, a: PartAnalysis, maxP
     ...a.extra,
   };
   const ranges: ObjectAnalysis['ranges'] = {};
+  const area = a.surf.area;
   for (const [k, arr] of Object.entries(fields) as [FieldId, Float32Array][]) {
     if (k === 'zones') { ranges.zones = [0, ZONE_KINDS.length - 1]; continue; }
-    // robust range: 2nd–98th percentile
-    const s = Array.from(arr).filter(Number.isFinite).sort((x, y) => x - y);
-    ranges[k] = s.length ? [s[Math.floor(s.length * 0.02)], s[Math.floor(s.length * 0.98)] ?? s[s.length - 1]] : [0, 1];
+    if (k === 'harmonic') { ranges.harmonic = [0, 1]; continue; }
+    // robust range: 2nd–98th area-weighted percentile (a few huge triangles count as much as many small ones)
+    const idx = Array.from(arr.keys()).filter((t) => Number.isFinite(arr[t])).sort((x, y) => arr[x] - arr[y]);
+    const total = idx.reduce((s, t) => s + area[t], 0);
+    let acc = 0, lo = NaN, hi = NaN;
+    for (const t of idx) { acc += area[t]; if (Number.isNaN(lo) && acc >= 0.02 * total) lo = arr[t]; if (Number.isNaN(hi) && acc >= 0.98 * total) hi = arr[t]; }
+    ranges[k] = idx.length ? [Number.isNaN(lo) ? arr[idx[0]] : lo, Number.isNaN(hi) ? arr[idx[idx.length - 1]] : hi] : [0, 1];
+    if (ranges[k]![1] <= ranges[k]![0]) ranges[k] = [arr[idx[0]] ?? 0, arr[idx[idx.length - 1]] ?? 1];
   }
   let inside = 0;
   for (let q = 0; q < g.n; q++) if (a.voxZone[q] !== 255 && a.voxZone[q] !== zoneIndex('plain')) inside++;
