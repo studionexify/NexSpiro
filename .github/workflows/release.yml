@@ -12,7 +12,28 @@ permissions:
   contents: write
 
 jobs:
+  # Create the release once, before the three builds upload into it (avoids racing duplicates).
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "tag=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+          else node -e "console.log('tag=v'+require('./package.json').version)" >> $GITHUB_OUTPUT; fi
+      - name: Remove a broken release named "v" left by an earlier run
+        run: gh release delete v --cleanup-tag -y || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+
   build:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -31,8 +52,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: echo "APP_VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_ENV
-        shell: bash
       - run: npm test
       - run: npm run build
       - run: npx electron-builder ${{ matrix.target }} --publish never
@@ -48,11 +67,9 @@ jobs:
             release/*.AppImage
             release/*.deb
           if-no-files-found: error
-      - if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          # manual runs publish under the package.json version (the tag is created if missing)
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', env.APP_VERSION) }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
           target_commitish: ${{ github.sha }}
           files: |
             release/*.exe
