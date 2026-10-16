@@ -216,6 +216,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const modifierPlugins = [...sessions.values()].filter((x) => x.modifiersAt);
   const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
   const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
+  const supportBlockPlugins = [...sessions.values()].filter((x) => x.supportBlockersAt);
   const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
   const paintOverlapWarned = new Set<number>();
   const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
@@ -438,6 +439,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (add.length) over[i] = union(over[i], add);
       if (sub.length && over[i].length) over[i] = difference(over[i], union(sub));
       if (blkVol[i].length) blocked[i] = union(blkVol[i]);
+      // plugins that print an overhang themselves (Hanex) keep support from starting under it
+      for (const x of supportBlockPlugins) { const b = x.supportBlockersAt!(i); if (b.length && over[i].length) over[i] = difference(over[i], b); }
     }
     const common = {
       topZDistance: num('support_top_z_distance'), xyDistance: num('support_object_xy_distance'),

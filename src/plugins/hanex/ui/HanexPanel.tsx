@@ -186,6 +186,7 @@ function Report() {
         ? <p className="mx-muted">No overhang on this plate needs waves.</p>
         : <p className="mx-muted">{rep.layers.length} wave layer(s) · {rep.arcs} arcs · {Math.round(rep.area)} mm² in mid-air · +{Math.round(rep.timeS / 60)} min</p>}
       {rep.warnings.map((w, i) => <p key={i} className="mx-muted px-warn">⚠ {w}</p>)}
+      {rep.pastLimit.length > 0 && <p className="mx-muted">Past-limit layers: {rep.pastLimit.slice(0, 12).map((l) => <button key={l.layer} className="btn-secondary btn-small" style={{ margin: 2 }} onClick={() => set({ workspace: 'preview', layerRange: [0, l.layer] })}>{l.layer + 1}</button>)}{rep.pastLimit.length > 12 ? ' …' : ''}</p>}
       {rep.layers.length > 0 && (
         <table className="px-table">
           <thead><tr><th>Layer</th><th>Z (mm)</th><th>Regions</th><th>Arcs</th></tr></thead>

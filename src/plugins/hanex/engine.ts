@@ -4,6 +4,9 @@
 //  postToolpath — on those layers removes Nexspiro's own extrusion inside the region (bridge infill,
 //                 overhang walls) and appends the waves after the rest of the layer, with fan and retraction
 import type { EnginePlugin, PluginSession, PrepareContext } from '../api';
+import type { Paths } from '../../engine/types';
+import { areaTotal, offset, union } from '../../engine/clipper';
+import { toPaths } from './core/geom';
 import type { LayerOps, Op } from '../../engine/gcode';
 import { pointInRings, type Ring } from './core/geom';
 import { planLayer } from './core/layer';
@@ -29,10 +32,12 @@ export interface HanexReport {
   /** Face-angle limit used for the first layer height, °. */
   maxFaceAngleDeg: number;
   removedMm: number;
+  /** Layers with overhang past the face-angle limit (printed normally), with the area in mm². */
+  pastLimit: { layer: number; z: number; area: number }[];
   warnings: string[];
 }
 
-interface HanexSession extends PluginSession { byLayer: Map<number, RegionPlan[]>; profiles: Map<number, HanexProfile>; warnings: string[]; faceLimit: number }
+interface HanexSession extends PluginSession { byLayer: Map<number, RegionPlan[]>; profiles: Map<number, HanexProfile>; blockers: Map<number, Paths>; pastLimit: HanexReport['pastLimit']; warnings: string[]; faceLimit: number }
 
 export const WAVE_FEATURE = 'wave_overhang' as const;
 
@@ -65,9 +70,9 @@ function prepare(c: HanexConfig, ctx: PrepareContext): HanexSession {
   const base = printProfile(c, ctx.cfg as Record<string, unknown>);
   const warnings: string[] = [];
   for (const e of validateProfile(base)) warnings.push(`Hanex profile: ${e}`);
-  if (ctx.cfg.enable_support === true) warnings.push('Hanex: supports are on — support under wave overhangs is wasted; turn supports off or block them there.');
   const byLayer = new Map<number, RegionPlan[]>();
   const profiles = new Map<number, HanexProfile>();
+  const pastArea = new Map<number, number>();
   const N = ctx.layerZ.length;
   for (let o = 0; o < ctx.meshes.length; o++) {
     for (let i = 1; i < N; i++) {
@@ -79,13 +84,27 @@ function prepare(c: HanexConfig, ctx: PrepareContext): HanexSession {
       const res = planLayer(cur, below, p);
       const plans = res.plans.filter((pl) => pl.stats.overhangArea >= c.minArea && pl.moves.length);
       for (const w of res.warnings) warnings.push(`Hanex, layer ${i + 1}: ${w}`);
+      const past = areaTotal(res.pastLimit);
+      if (past >= c.minArea) pastArea.set(i, (pastArea.get(i) ?? 0) + past);
       if (!plans.length) continue;
       byLayer.set(i, [...(byLayer.get(i) ?? []), ...plans]);
       profiles.set(i, p);
     }
   }
+  const faceLimit = c.maxFaceAngleDeg ?? maxWaveFaceAngle(ctx.layerH[1] ?? ctx.layerH[0] ?? 0.2, base);
+  const pastLimit = [...pastArea].sort((a, b) => a[0] - b[0]).map(([layer, area]) => ({ layer, z: ctx.layerZ[layer], area }));
+  if (pastLimit.length) {
+    const first = pastLimit[0], last = pastLimit[pastLimit.length - 1];
+    warnings.push(`Hanex: ${pastLimit.length} layer(s) (z ${first.z.toFixed(2)}–${last.z.toFixed(2)} mm) have rising undersides past this print head's ${faceLimit.toFixed(1)}° limit. They print normally and may droop; you can continue.`);
+  }
+  // keep support from starting under every wave region (a bead's width of margin)
+  const blockers = new Map<number, Paths>();
+  for (const [i, plans] of byLayer) blockers.set(i, union(offset(union(plans.flatMap((pl) => toPaths(pl.overhangRings))), base.lineWidth)));
   for (const w of new Set(warnings)) ctx.warn(w);
-  return { byLayer, profiles, warnings: [...new Set(warnings)], faceLimit: c.maxFaceAngleDeg ?? maxWaveFaceAngle(ctx.layerH[1] ?? ctx.layerH[0] ?? 0.2, base) };
+  return {
+    byLayer, profiles, blockers, pastLimit, warnings: [...new Set(warnings)], faceLimit,
+    supportBlockersAt: (i: number) => blockers.get(i) ?? [],
+  };
 }
 
 /** Split extrusion moves at the wave regions: inside parts become travel (the waves replace them). */
@@ -121,7 +140,7 @@ function stripInside(L: LayerOps, rings: Ring[]): number {
 
 function postToolpath(layers: LayerOps[], c: HanexConfig, ctx: Parameters<EnginePlugin['postToolpath']>[2]): HanexReport {
   const s = ctx.session as HanexSession | undefined;
-  const rep: HanexReport = { layers: [], arcs: 0, area: 0, timeS: 0, maxFaceAngleDeg: s?.faceLimit ?? 90, removedMm: 0, warnings: s?.warnings ?? [] };
+  const rep: HanexReport = { layers: [], arcs: 0, area: 0, timeS: 0, maxFaceAngleDeg: s?.faceLimit ?? 90, removedMm: 0, pastLimit: s?.pastLimit ?? [], warnings: s?.warnings ?? [] };
   if (!s) return rep;
   let retracted = false;
   for (let li = 0; li < layers.length; li++) {

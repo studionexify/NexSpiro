@@ -89,7 +89,11 @@ Status: **installed in Nexspiro** (Plugins → Hanex). It plans in the slicing w
   - It sets the minimum overlap, the widest ledge left to normal printing, and the face-angle limit `90° + atan(h / max(2w, land))`. That limit is about 101° for a 1.0 mm land at 0.2 mm layers.
   - The panel can cap it lower.
 - **Panel** (`ui/HanexPanel.tsx`): material preset, wave settings, print head and face-angle limit, specimens you can add to the plate (flat tab, rising face 92.5–100°), and an after-slice report with a per-layer table.
-- **Supports:** with supports on, Hanex warns, because support under a wave region is wasted.
+- **Supports:** Hanex publishes its wave regions through the new `PluginSession.supportBlockersAt(layer)` hook, so support never starts under them. Supports elsewhere on the model work as usual.
+- **Past the face-angle limit:**
+  - A rising underside steeper than the print head's limit leaves a band per layer narrower than the trigger width.
+  - When that band is still at least a bead wide, Hanex lists the layers in its report and shows a warning, but the slice continues.
+  - Those layers print normally.
 
 ## Files
 

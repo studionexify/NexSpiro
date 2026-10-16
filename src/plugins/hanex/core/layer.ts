@@ -5,14 +5,14 @@ import { planComponent, type RegionPlan } from './plan';
 import type { HanexProfile } from './profile';
 import type { Vec2 } from './geom';
 
-export interface LayerPlan { plans: RegionPlan[]; floating: Paths; warnings: string[] }
+export interface LayerPlan { plans: RegionPlan[]; floating: Paths; pastLimit: Paths; warnings: string[] }
 
 /**
  * current / below: cross-sections of layer Z and Z−1 (Clipper paths). Components are planned in order
  * of nearest start, each continuing from where the previous one ended.
  */
 export function planLayer(current: Paths, below: Paths, p: HanexProfile, start?: Vec2): LayerPlan {
-  const { components, floating } = detectOverhangs(current, below, p);
+  const { components, floating, pastLimit } = detectOverhangs(current, below, p);
   const plans: RegionPlan[] = [];
   let at = start;
   for (const c of components) {
@@ -23,5 +23,5 @@ export function planLayer(current: Paths, below: Paths, p: HanexProfile, start?:
   }
   const warnings = plans.flatMap((pl) => pl.warnings);
   if (floating.length) warnings.push(`${floating.length} unsupported island(s) with no anchor on this layer`);
-  return { plans, floating, warnings };
+  return { plans, floating, pastLimit, warnings };
 }

@@ -7,6 +7,7 @@ import { weld } from '../../src/engine/mesh';
 import { resolveConfig } from '../../src/profiles/resolve';
 import { box, tee } from '../fixtures';
 import { preset } from '../../src/plugins/hanex/core/profile';
+import { angleSpecimen, prismsToSoup } from '../../src/plugins/hanex/core/calibration';
 import { layerTrigger, printProfile, type HanexConfig, type HanexReport } from '../../src/plugins/hanex/engine';
 
 const cfg = (o = {}) => resolveConfig({ printerId: 'bbl-p1s', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: { enable_support: false, ...o } });
@@ -79,4 +80,25 @@ test('toolhead sets the face-angle limit; a user limit narrows what is waved', (
   // 95° rising face at 0.2 mm: band 2.29 mm is waved by default, not when the user caps at 93°
   assert.ok(layerTrigger(p, 0.2) < 2.28);
   assert.ok(layerTrigger(p, 0.2, 93) > 2.29);
+});
+
+describe('support blocking and face-angle limit', () => {
+  test('with supports on, no support is generated under the wave regions', () => {
+    const c = cfg({ enable_support: true });
+    const plain = slice([mesh(tee(120, 120))], c);
+    const out = slice([mesh(tee(120, 120))], c, () => {}, { plugins: { hanex: config() } });
+    const sup = (o: typeof out) => (o.stats.byFeature.support?.filamentMm ?? 0) + (o.stats.byFeature.support_interface?.filamentMm ?? 0);
+    assert.ok(sup(plain) > 10, `plain support ${sup(plain)}`);
+    assert.ok(sup(out) < 0.05 * sup(plain), `hanex support ${sup(out)} vs ${sup(plain)}`);
+    assert.ok(out.gcode.includes(';TYPE:wave overhang'));
+  });
+
+  test('a rising underside past the print head limit warns but still slices', () => {
+    // 110°: each layer adds 0.2/tan 20° = 0.55 mm — a whole bead in the air, below the 1.0 mm trigger
+    const out = slice([mesh(prismsToSoup(angleSpecimen(110, 0.2)).map((v, i) => (i % 3 === 2 ? v : v + 100)))], cfg(), () => {}, { plugins: { hanex: config() } });
+    const rep = out.pluginReports?.hanex as HanexReport;
+    assert.ok(rep.pastLimit.length >= 3, `${rep.pastLimit.length} past-limit layers`);
+    assert.ok(out.warnings.some((w) => w.includes('past this print head') && w.includes('continue')));
+    assert.ok(out.gcode.length > 1000);
+  });
 });
