@@ -206,6 +206,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
     filamentCount: filaments.length, hasAms: bool('has_ams'), warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); },
   });
+  // raised / recessed artwork changes the cross-sections themselves, before walls, surfaces and support
+  const reshapers = [...sessions.values()].filter((x) => x.reshape);
+  if (reshapers.length) {
+    const next = objSlices.map((sl, o) => sl.map((p, i) => reshapers.reduce((acc, x) => x.reshape!(o, i, acc), p)));
+    next.forEach((sl, o) => sl.forEach((p, i) => { objSlices[o][i] = p; }));
+    for (let i = 0; i < N; i++) layerSlices[i] = union(objSlices.flatMap((sl) => sl[i]));
+  }
+  const modifierPlugins = [...sessions.values()].filter((x) => x.modifiersAt);
   const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
   const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
   const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
@@ -386,6 +394,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         sparse = difference(sparse, mod.slices[i]);
         const d = mod.ov.sparse_infill_density !== undefined ? Number(mod.ov.sparse_infill_density) / 100 : density;
         const pat = (mod.ov.sparse_infill_pattern ?? ostr(o, 'sparse_infill_pattern')) as SparsePattern;
+        if (d >= 0.999) solid = union(solid, r);
+        else if (d > 0) sparseMods.push({ paths: r, density: d, pattern: pat });
+      }
+      // plugin regions with their own infill (Patternex effects) work the same way
+      for (const x of modifierPlugins) for (const mod of x.modifiersAt!(o, i)) {
+        if (!sparse.length) break;
+        const r = intersection(sparse, mod.paths);
+        if (!r.length) continue;
+        sparse = difference(sparse, mod.paths);
+        const d = mod.overrides.sparse_infill_density !== undefined ? Number(mod.overrides.sparse_infill_density) / 100 : density;
+        const pat = (mod.overrides.sparse_infill_pattern ?? ostr(o, 'sparse_infill_pattern')) as SparsePattern;
         if (d >= 0.999) solid = union(solid, r);
         else if (d > 0) sparseMods.push({ paths: r, density: d, pattern: pat });
       }

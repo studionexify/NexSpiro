@@ -67,8 +67,18 @@ export interface TransitionPlan {
   label?: string;
 }
 
+/** Print settings for part of a layer (sparse infill keys, like a modifier volume). */
+export interface ModifierContribution { overrides: Record<string, unknown>; paths: Paths }
+
 export interface PluginSession {
+  /**
+   * Geometry: change an object's cross-section before anything else uses it (raised / recessed artwork).
+   * `slice` is the unmodified cross-section; return it unchanged when nothing applies.
+   */
+  reshape?(object: number, layer: number, slice: Paths): Paths;
   regionsAt?(object: number, layer: number): RegionContribution[];
+  /** Sparse-infill settings inside regions (applied like modifier volumes). */
+  modifiersAt?(object: number, layer: number): ModifierContribution[];
   transition?(t: { layer: number; from: number; to: number; flushVolume?: number }): TransitionPlan | undefined;
   /** Regions to share with other plugins (published before postToolpath runs). */
   sharedRegions?(): PatternexRegion[];

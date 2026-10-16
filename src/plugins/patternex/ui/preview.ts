@@ -8,7 +8,7 @@ import { transformVertices, type IndexedMesh } from '../../../engine/mesh';
 import { objectMatrix, useStore } from '../../../state/store';
 import { plateObjects } from '../../../state/slicing';
 import type { Pattern } from '../model';
-import { faces, frameOf, ShapeIndex, toPattern, type Frame, type V3, type WorldPlacement } from '../projection';
+import { faces, frameOf, minCosOf, ShapeIndex, toPattern, type Frame, type V3, type WorldPlacement } from '../projection';
 import { toWorldPlacements, type PatternexState } from './state';
 
 export interface PreviewLines { positions: Float32Array; colors: Float32Array; layers: number }
@@ -16,7 +16,7 @@ export interface PreviewLines { positions: Float32Array; colors: Float32Array; l
 const MAX_LAYERS = 140;
 const STEP = 0.4; // mm between samples along a wall
 
-interface Group { f: Frame; idx: ShapeIndex; slot: number; key: string; motion: boolean }
+interface Group { f: Frame; idx: ShapeIndex; slot: number; key: string; motion: boolean; minCos: number; relief: number }
 
 const rgb = (hex: string): [number, number, number] => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
 
@@ -30,7 +30,7 @@ function groupsFor(px: PatternexState, wps: WorldPlacement[]): Group[] {
     for (const a of px.actions) {
       if (a.region_ref.placement_id !== wp.id || !a.region_ref.color_group) continue;
       const shapes = pat.shapes.filter((s) => s.fill_color === a.region_ref.color_group);
-      if (shapes.length) out.push({ f, idx: new ShapeIndex(shapes), slot: a.material.slot_index, key: `${wp.id}:${a.region_ref.color_group}`, motion: !!a.motion });
+      if (shapes.length) out.push({ f, idx: new ShapeIndex(shapes), slot: a.material.slot_index, key: `${wp.id}:${a.region_ref.color_group}`, motion: !!a.motion, minCos: minCosOf(wp), relief: a.relief ? (a.relief.mode === 'raise' ? 1 : -1) * a.relief.height_mm : 0 });
     }
   }
   return out;
@@ -102,15 +102,17 @@ export function patternexPreview(px: PatternexState): PreviewLines | null {
             const t0 = st / steps, t1 = (st + 1) / steps, tm = (t0 + t1) / 2;
             const mx = ax + (bx - ax) * tm, my = ay + (by - ay) * tm;
             // the last matching group wins, as in the slicer (later placements override earlier ones)
-            let c = base, motion = false;
+            let c = base, motion = false, off = 0;
             for (const g of groups) {
-              if (!faces(g.f, mx, my, z, nrm)) continue;
+              if (!faces(g.f, mx, my, z, nrm, g.minCos)) continue;
               const [px2, py2] = toPattern(g.f, mx, my, z);
-              if (g.idx.contains(px2, py2)) { c = slotRgb[g.slot] ?? base; motion = g.motion; }
+              if (g.idx.contains(px2, py2)) { c = slotRgb[g.slot] ?? base; motion = g.motion; off = g.relief; }
             }
             // Motionex draws the moved path for regions with motion, in the same ink colour
             if (motion) continue;
-            pos.push(ax + (bx - ax) * t0, ay + (by - ay) * t0, z, ax + (bx - ax) * t1, ay + (by - ay) * t1, z);
+            // relief: the wall moves out (raised) or in (recessed) where the artwork is
+            const ox = nrm[0] * off, oy = nrm[1] * off;
+            pos.push(ax + (bx - ax) * t0 + ox, ay + (by - ay) * t0 + oy, z, ax + (bx - ax) * t1 + ox, ay + (by - ay) * t1 + oy, z);
             col.push(...c, ...c);
             drew = true;
           }
@@ -143,7 +145,7 @@ export function regionTriangles(px: PatternexState, regionId: string): Map<strin
       const cx = (v[a] + v[b] + v[c]) / 3, cy = (v[a + 1] + v[b + 1] + v[c + 1]) / 3, cz = (v[a + 2] + v[b + 2] + v[c + 2]) / 3;
       const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2], wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
       const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx, l = Math.hypot(nx, ny, nz);
-      if (l < 1e-12 || !faces(f, cx, cy, cz, [nx / l, ny / l, nz / l])) continue;
+      if (l < 1e-12 || !faces(f, cx, cy, cz, [nx / l, ny / l, nz / l], minCosOf(wp))) continue;
       const [qx, qy] = toPattern(f, cx, cy, cz);
       if (idx.contains(qx, qy)) tris.push(t);
     }

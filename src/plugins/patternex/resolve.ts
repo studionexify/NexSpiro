@@ -8,7 +8,7 @@ import ClipperLib from 'clipper-lib';
 import { difference, intersection, SCALE, union } from '../../engine/clipper';
 import type { Path, Paths } from '../../engine/types';
 import type { Pattern } from './model';
-import { faces, fromPattern, frameOf, ShapeIndex, toPattern, type Frame, type V3, type WorldPlacement } from './projection';
+import { faces, fromPattern, frameOf, minCosOf, ShapeIndex, toPattern, type Frame, type V3, type WorldPlacement } from './projection';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -22,6 +22,13 @@ export interface GroupResolver {
   layerRange: [number, number];
   /** Region paths at a layer (already clipped to the slice). */
   at(layer: number): Paths;
+  /**
+   * Relief: the object's cross-section with the artwork raised (grown outward by h) or recessed (cut in by h).
+   * `slice` is the unmodified cross-section. Returns null when the artwork does not touch this layer.
+   */
+  relief(layer: number, slice: Paths, mode: 'raise' | 'recess', h: number): Paths | null;
+  /** Whether the artwork lies on a flat (top/bottom) face. */
+  flat: boolean;
 }
 
 export interface ResolveContext {
@@ -36,7 +43,7 @@ export interface ResolveContext {
 const SAMPLE = 0.2; // mm between wall samples
 
 /** Wall pieces of a slice whose surface point lies in the pattern, as open polylines (int coords). */
-function wallPieces(slice: Paths, z: number, f: Frame, idx: ShapeIndex): Paths {
+function wallPieces(slice: Paths, z: number, f: Frame, idx: ShapeIndex, minCos = 0.2): Paths {
   const out: Paths = [];
   for (const path of slice) {
     const n = path.length;
@@ -54,7 +61,7 @@ function wallPieces(slice: Paths, z: number, f: Frame, idx: ShapeIndex): Paths {
       for (let s = 0; s < steps; s++) {
         const t0 = s / steps, t1 = (s + 1) / steps, tm = (t0 + t1) / 2;
         const mx = ax + (bx - ax) * tm, my = ay + (by - ay) * tm;
-        const hit = faces(f, mx, my, z, nrm) && (() => { const [px, py] = toPattern(f, mx, my, z); return idx.contains(px, py); })();
+        const hit = faces(f, mx, my, z, nrm, minCos) && (() => { const [px, py] = toPattern(f, mx, my, z); return idx.contains(px, py); })();
         if (hit) {
           const p0 = { X: Math.round((ax + (bx - ax) * t0) * SCALE), Y: Math.round((ay + (by - ay) * t0) * SCALE) };
           const p1 = { X: Math.round((ax + (bx - ax) * t1) * SCALE), Y: Math.round((ay + (by - ay) * t1) * SCALE) };
@@ -154,6 +161,7 @@ export function placementGroups(p: WorldPlacement, pattern: Pattern, depth: numb
     range = f.axis[2] > 0 ? layersIn(ctx.layerZ, ctx.layerH, az - depth, az + 1e-3) : layersIn(ctx.layerZ, ctx.layerH, az - 1e-3, az + depth);
   } else range = layersIn(ctx.layerZ, ctx.layerH, zLo - depth, zHi + depth);
 
+  const minCos = minCosOf(p);
   return [...groups].map(([color, shapes]) => {
     const idx = new ShapeIndex(shapes);
     const cache = new Map<number, Paths>();
@@ -183,12 +191,31 @@ export function placementGroups(p: WorldPlacement, pattern: Pattern, depth: numb
         } else if (p.through && f.kind === 'planar') {
           r = intersection(footprint(f, idx, z), sl);
         } else {
-          r = intersection(union(strip(wallPieces(sl, z, f, idx), depth)), sl);
+          r = intersection(union(strip(wallPieces(sl, z, f, idx, minCos), depth)), sl);
         }
       }
       cache.set(li, r);
       return r;
     };
-    return { regionId, placementId: p.id, color, object: p.object, layerRange: range, at };
+    const relief = (li: number, sl: Paths, mode: 'raise' | 'recess', h: number): Paths | null => {
+      if (!sl.length || !p.visible || h <= 0) return null;
+      const z = ctx.planes[li];
+      if (vertical) {
+        // flat faces: recess cuts the footprint out of the top (or bottom) h mm; raising needs layers above the
+        // model, which the layer plan does not have, so it is reported instead
+        if (mode !== 'recess') return null;
+        const az = p.position_xyz[2];
+        const inBand = f.axis[2] > 0 ? z > az - h - 1e-6 && z <= az + 1e-3 : z >= az - 1e-3 && z < az + h + 1e-6;
+        if (!inBand) return null;
+        const cut = intersection(footprint(f, idx, z), sl);
+        return cut.length ? difference(sl, cut) : null;
+      }
+      if (li < range[0] || li > range[1]) return null;
+      const lines = wallPieces(sl, z, f, idx, minCos);
+      if (!lines.length) return null;
+      const band = union(strip(lines, h));
+      return mode === 'raise' ? union(sl, band) : difference(sl, band);
+    };
+    return { regionId, placementId: p.id, color, object: p.object, layerRange: range, at, relief, flat: vertical };
   });
 }
