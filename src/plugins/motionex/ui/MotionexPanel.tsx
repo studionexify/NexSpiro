@@ -187,7 +187,7 @@ export function MotionexPanel() {
         <div className="mx-card-title">Motions<span className="spacer" />
           <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own motions">Edit library…</button>
         </div>
-        {!apps.length && !picking && <p className="mx-muted">Pick a motion, then click, paint or draw where it goes on the model.</p>}
+        {!apps.length && !picking && <p className="mx-muted">Pick a motion, or go straight to a tool below: it starts with a Wave you can change later.</p>}
         <div className="mx-layers">
           {apps.map((a, i) => <LayerRow key={i} a={a} i={i} active={a === act} onChange={() => setPicking('change')} />)}
         </div>
@@ -195,7 +195,7 @@ export function MotionexPanel() {
         {picking ? <Library current={picking === 'change' ? act?.brush_id : undefined} onPick={choose} onCancel={() => setPicking(null)} />
           : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add motion</button>}
       </section>
-      {act && !picking && <Placement a={act} />}
+      {!picking && <Placement a={act} />}
       {act && !picking && <MoreOptions a={act} first={apps.indexOf(act) === 0} />}
       <Report />
       {editing !== undefined && <EditorHost startId={editing} onClose={() => setEditing(undefined)} />}
@@ -333,7 +333,34 @@ const PLACE_TOOLS: { tool: Tool | 'box' | 'plate'; label: string; icon: string; 
   { tool: 'plate', label: 'All', icon: '▦', hint: 'The motion goes on every object on the plate.' },
 ];
 
-function Placement({ a }: { a: MotionApplication }) {
+/** Where the active motion goes. With no motion yet the tools still show; picking one starts a Wave. */
+function Placement({ a: active }: { a?: MotionApplication }) {
+  const set = useStore((s) => s.set);
+  if (!active) {
+    return (
+      <section className="mx-card">
+        <div className="mx-card-title">Where it goes</div>
+        <div className="mx-tools">
+          {PLACE_TOOLS.map((p) => (
+            <button key={p.label} className="mx-tool" title={p.hint} onClick={() => {
+              const a = addApplication('preset-sine');
+              if (p.tool === 'plate') a.target = { ...a.target, type: 'body' };
+              else if (p.tool === 'box' || p.tool === 'lasso_motion') set({ tool: 'lasso_motion', motionDraw: p.tool === 'box' ? 'box' : 'lasso' });
+              else set({ tool: p.tool });
+              changed();
+            }}>
+              <span className="ic">{p.icon}</span>{p.label}
+            </button>
+          ))}
+        </div>
+        <p className="mx-muted" style={{ margin: 0 }}>Choose how to pick faces on the model: click a surface, paint, lasso or box an area, drag a height band, or take a whole object or the whole plate.</p>
+      </section>
+    );
+  }
+  return <PlacementFor a={active} />;
+}
+
+function PlacementFor({ a }: { a: MotionApplication }) {
   const { tool, set, motionGrowAngle, brushSize, motionDraw, objects } = useStore();
   const current = a.target.type === 'body' ? 'plate' : tool === 'lasso_motion' && motionDraw === 'box' ? 'box' : tool;
   const pick = (t: (typeof PLACE_TOOLS)[number]['tool']) => {
