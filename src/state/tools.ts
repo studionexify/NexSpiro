@@ -119,13 +119,25 @@ export interface TextOptions { text: string; font: string; size: number; depth: 
 export async function addText(o: TextOptions) {
   const s = useStore.getState();
   if (!o.text.trim()) return;
-  const t = await textMesh(o.text, o.font, o.size, o.mode === 'engrave' ? o.depth + 0.01 : o.depth);
+  let t: IndexedMesh;
+  try {
+    t = await textMesh(o.text, o.font, o.size, o.mode === 'engrave' ? o.depth + 0.01 : o.depth);
+    if (!t.indices.length) throw new Error(`the font has no shapes for "${o.text}"`);
+  } catch (e: any) {
+    console.error('Text failed', e);
+    s.set({ toast: { kind: 'error', text: `Text failed: ${e?.message ?? e}` } });
+    return;
+  }
   const target = s.objects.find((x) => x.id === s.selected[0]);
   if (o.mode === 'object' || !target) {
-    const obj = objectFromWorld(`Text "${o.text}"`, t);
-    const { centreOnBed } = await import('./ops');
-    s.addObjects([centreOnBed(obj, s.printerId)]);
-    s.set({ selected: [obj.id] });
+    try {
+      const { centreOnBed } = await import('./ops');
+      const obj = centreOnBed(objectFromWorld(`Text "${o.text}"`, t), useStore.getState().printerId);
+      useStore.getState().addObjects([obj]);
+    } catch (e: any) {
+      console.error('Text failed', e);
+      s.set({ toast: { kind: 'error', text: `Text failed: ${e?.message ?? e}` } });
+    }
     return;
   }
   // place on the top face of the target, centred

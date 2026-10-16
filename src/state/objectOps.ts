@@ -1,39 +1,41 @@
-// Object commands used by the right-click menus: mirror, split, clone, fill bed, export STL, copy/paste.
+// Object commands used by the right-click menus: mirror, split, clone, export STL, copy/paste.
 import * as THREE from 'three';
 import { reframePlacements } from '../plugins/patternex/ui/state';
 import { openEdgeCount, transformVertices, type IndexedMesh } from '../engine/mesh';
 import { centreMesh } from '../io/load';
 import { saveFile } from '../platform';
-import { printerById } from '../profiles/printers';
 import { arrange, centreOnBed, primitive, SHAPES, type ShapeKind } from './ops';
 import { objectFromWorld } from './tools';
-import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
+import { dropToBed, newId, objectMatrix, objectPlate, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
 
 const worldMesh = (o: SceneObject): IndexedMesh => ({ vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices });
 
-/** Mirror the object along a world axis. Baked into the mesh so triangle winding stays outward. */
+/** The object mirrored along a world axis through its centre. Baked into the mesh so triangle winding stays outward. */
+export function mirroredObject(o: SceneObject, axis: 0 | 1 | 2): SceneObject {
+  const b = worldBounds(o);
+  const c = (b.min[axis] + b.max[axis]) / 2;
+  const w = worldMesh(o);
+  const v = w.vertices;
+  for (let i = axis; i < v.length; i += 3) v[i] = 2 * c - v[i];
+  const ix = w.indices.slice();
+  for (let t = 0; t < ix.length; t += 3) { const k = ix[t + 1]; ix[t + 1] = ix[t + 2]; ix[t + 2] = k; }
+  const m = { vertices: v, indices: ix };
+  const [cx, cy, cz] = centreMesh(m);
+  // paint is per triangle and the triangle order is kept, so it stays valid
+  const next = dropToBed({ ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], parts: undefined, layerHeights: undefined });
+  // Patternex artwork is mirrored with the object (same reflection, re-expressed in the new frame)
+  if (o.patternex) {
+    const reflect = (p: Vec3, isDir: boolean): Vec3 => { const q = [...p] as Vec3; q[axis] = isDir ? -q[axis] : 2 * c - q[axis]; return q; };
+    next.patternex = reframePlacements(o.patternex, objectMatrix(o).elements, objectMatrix(next).invert().elements, reflect);
+  }
+  return next;
+}
+
+/** Mirror the object along a world axis. */
 export function mirrorObjects(axis: 0 | 1 | 2, ids = useStore.getState().selected) {
   const s = useStore.getState();
   if (s.objects.some((o) => ids.includes(o.id) && o.parts?.length)) s.set({ toast: { kind: 'warn', text: 'Mirroring removed the parts and modifiers on the object. Add them again if you need them.' } });
-  s.updateObjects((o) => {
-    const b = worldBounds(o);
-    const c = (b.min[axis] + b.max[axis]) / 2;
-    const w = worldMesh(o);
-    const v = w.vertices;
-    for (let i = axis; i < v.length; i += 3) v[i] = 2 * c - v[i];
-    const ix = w.indices.slice();
-    for (let t = 0; t < ix.length; t += 3) { const k = ix[t + 1]; ix[t + 1] = ix[t + 2]; ix[t + 2] = k; }
-    const m = { vertices: v, indices: ix };
-    const [cx, cy, cz] = centreMesh(m);
-    // paint is per triangle and the triangle order is kept, so it stays valid
-    const next = dropToBed({ ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], parts: undefined, layerHeights: undefined });
-    // Patternex artwork is mirrored with the object (same reflection, re-expressed in the new frame)
-    if (o.patternex) {
-      const reflect = (p: Vec3, isDir: boolean): Vec3 => { const q = [...p] as Vec3; q[axis] = isDir ? -q[axis] : 2 * c - q[axis]; return q; };
-      next.patternex = reframePlacements(o.patternex, objectMatrix(o).elements, objectMatrix(next).invert().elements, reflect);
-    }
-    return next;
-  }, ids);
+  s.updateObjects((o) => mirroredObject(o, axis), ids);
 }
 
 /** Connected pieces of a mesh, as triangle lists. */
@@ -110,25 +112,6 @@ export function cloneObjects(count: number, ids = useStore.getState().selected) 
   const copies = src.flatMap((o) => Array.from({ length: count }, (_, k) => ({ ...o, id: newId(), name: `${o.name} (${k + 2})`, position: [o.position[0] + 6 * (k + 1), o.position[1] + 6 * (k + 1), o.position[2]] as Vec3 })));
   s.addObjects(copies);
   arrange();
-}
-
-/** Add copies of the object until the plate is full (by footprint area), then arrange. */
-export function fillBed(id: string) {
-  const s = useStore.getState();
-  const o = s.objects.find((x) => x.id === id);
-  if (!o) return;
-  const p = printerById(s.printerId);
-  const plate = objectPlate(o, s.printerId, s.plates.length);
-  const foot = (x: SceneObject) => { const b = worldBounds(x); return (b.max[0] - b.min[0] + 6) * (b.max[1] - b.min[1] + 6); };
-  const used = s.objects.filter((x) => objectPlate(x, s.printerId, s.plates.length) === plate).reduce((a, x) => a + foot(x), 0);
-  const n = Math.floor((p.bed.x * p.bed.y * 0.8 - used) / foot(o));
-  if (n < 1) { s.set({ toast: { kind: 'info', text: 'The plate has no room for another copy.' } }); return; }
-  cloneObjects(n, [id]);
-  // arrange can push copies past the edge on awkward shapes; drop those back off
-  const st = useStore.getState();
-  const [ox, oy] = plateOrigin(plate, st.printerId);
-  const off = st.objects.filter((x) => x.name.startsWith(`${o.name} (`) && (() => { const b = worldBounds(x); return b.min[0] < ox - 0.01 || b.min[1] < oy - 0.01 || b.max[0] > ox + p.bed.x + 0.01 || b.max[1] > oy + p.bed.y + 0.01; })());
-  if (off.length) st.set({ objects: st.objects.filter((x) => !off.includes(x)), selected: st.selected.filter((x) => !off.some((y) => y.id === x)) });
 }
 
 export function setObjectFilament(slot: number, ids = useStore.getState().selected) {
