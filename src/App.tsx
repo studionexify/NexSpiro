@@ -3,17 +3,18 @@ import { PluginsButton, RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
+import { printerById } from './profiles/printers';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
 import { DevicePage } from './ui/DevicePage';
 import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
-import { ActionBar, LiveChip, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
+import { LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
-import { PlateControls, PlateSettingsHost } from './ui/PlateControls';
+import { PlateList, PlateSettingsHost } from './ui/PlateControls';
 import { InstantTooltips } from './ui/Tooltip';
 import { arrangeAll, arrangeSelected } from './state/ops';
 import { copyObjects, pasteObjects } from './state/objectOps';
@@ -32,6 +33,7 @@ const TABS: { id: Workspace; label: string; icon: string }[] = [
 
 function FileMenu() {
   const [open, setOpen] = useState(false);
+  const sliced = useSliced();
   const { objects } = useStore();
   useEffect(() => {
     if (!open) return;
@@ -54,9 +56,9 @@ function FileMenu() {
           {item('New project', 'Ctrl+N', newProject)}
           {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
           {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length)}
-          {item('Export G-code…', 'Ctrl+G', exportGcode, !objects.length)}
-          {item('Export plate as .gcode.3mf…', '', () => exportPlateFile('3mf'), !objects.length)}
-          {item('Print plate…', 'Ctrl+P', openPrintDialog, !objects.length)}
+          {item('Export G-code…', 'Ctrl+G', exportGcode, !sliced)}
+          {item('Export plate sliced file (.gcode.3mf)…', '', () => exportPlateFile('3mf'), !sliced)}
+          {item('Print plate…', 'Ctrl+P', openPrintDialog, !sliced)}
           <div className="sep" style={{ width: '100%', height: 1, margin: '4px 0' }} />
           {item('Open project (.3mf)…', 'Ctrl+O', openProjectDialog)}
           {item('Save project…', 'Ctrl+S', saveProject, !objects.length)}
@@ -71,7 +73,7 @@ function TopBar() {
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
-      <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" />NexSpiro</div>
+      <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
       <FileMenu />
       <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
       <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
@@ -88,14 +90,61 @@ function TopBar() {
         <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
           title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
           onClick={() => set({ liveToolpaths: !liveToolpaths })}>
-          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" />Toolpath view
+          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
         </button>
       )}
       <PluginsButton />
       <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
       </button>
+      {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
     </header>
+  );
+}
+
+/** True when the active plate has a slice that matches the current scene and settings. */
+const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.result && !s.slice.dirty && s.slice.plate === s.activePlate);
+
+/** Bambu Studio's top-right buttons: Slice plate, then Print plate / export, which only work once the plate is sliced. */
+function SliceControls() {
+  const { slice, objects, printerId } = useStore();
+  const sliced = useSliced();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
+  const bambu = printerById(printerId).flavor === 'bambu';
+  const busy = slice.status === 'slicing';
+  const main = bambu
+    ? { label: 'Print plate', run: openPrintDialog }
+    : { label: 'Export G-code file', run: exportGcode };
+  const item = (label: string, kbd: string, fn: () => void) => (
+    <button className="menu-item" disabled={!sliced} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setOpen(false); fn(); }}><span>{label}</span><kbd>{kbd}</kbd></button>
+  );
+  return (
+    <div className="slice-controls">
+      <button className="btn-primary slice-btn" disabled={!objects.length || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
+        <Icon name="slice" size={16} />{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : 'Slice plate'}
+      </button>
+      <div className="split-btn menu">
+        <button className="btn-secondary slice-btn" disabled={!sliced} onClick={() => void main.run()}
+          title={sliced ? main.label : 'Slice the plate first'}>
+          <Icon name={bambu ? 'print' : 'download'} size={16} />{main.label}
+        </button>
+        <button className="btn-secondary slice-btn caret" disabled={!sliced} aria-label="More print and export options" title={sliced ? 'More options' : 'Slice the plate first'}
+          onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)}><Icon name="chevronDown" size={14} /></button>
+        {open && (
+          <div className="menu-pop" role="menu" style={{ right: 0, left: 'auto' }}>
+            {item('Print plate', 'Ctrl+P', () => void openPrintDialog())}
+            {item('Export plate sliced file (.gcode.3mf)', '', () => void exportPlateFile('3mf'))}
+            {item('Export G-code file', 'Ctrl+G', exportGcode)}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -130,8 +179,13 @@ function useShortcuts() {
       if (mod && k === 'i') { importDialog(); e.preventDefault(); return; }
       if (mod && k === 'n') { newProject(); e.preventDefault(); return; }
       if (mod && k === 'r') { sliceAndPreview(); e.preventDefault(); return; }
-      if (mod && k === 'g') { exportGcode(); e.preventDefault(); return; }
-      if (mod && k === 'p') { void openPrintDialog(); e.preventDefault(); return; }
+      if (mod && (k === 'g' || k === 'p')) {
+        e.preventDefault();
+        const sl = s.slice;
+        if (!(sl.status === 'done' && sl.result && !sl.dirty && sl.plate === s.activePlate)) { s.set({ toast: { kind: 'info', text: 'Slice the plate first (Ctrl+R), then export or print it.' } }); return; }
+        if (k === 'g') exportGcode(); else void openPrintDialog();
+        return;
+      }
       if (mod && k === 's') { void saveProject(); e.preventDefault(); return; }
       if (mod && k === 'o') { void openProjectDialog(); e.preventDefault(); return; }
       if (mod && k === 'f') { s.set({ workspace: 'prepare' }); setTimeout(() => document.getElementById('param-search')?.focus(), 0); e.preventDefault(); return; }
@@ -192,7 +246,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><PlateControls /><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><ActionBar /><LiveChip /><ContextMenu /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -206,6 +260,7 @@ export default function App() {
         {workspace === 'calibration' && <CalibrationPage />}
       </div>
       <Toast />
+      <ContextMenu />
       <PrintDialogHost />
       <PlateSettingsHost />
       <InstantTooltips />

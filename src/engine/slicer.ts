@@ -511,7 +511,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const solidDir = num('solid_infill_direction');
   const wallSeq = str('wall_sequence');
 
+  let curObj = -1; // object being emitted: per-object speeds apply to its features
   const speedFor = (feat: FeatureType, layer: number): number => {
+    const num = (k: string) => (k in live ? live[k] : curObj >= 0 ? onum(curObj, k) : Number(cfg[k] ?? 0));
     if (layer === 0) {
       if (feat === 'outer_wall' || feat === 'inner_wall' || feat === 'overhang_wall' || feat === 'skirt' || feat === 'brim' || feat === 'prime_tower') return num('initial_layer_speed');
       return num('initial_layer_infill_speed');
@@ -720,6 +722,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         const objIslands = islands.filter((s) => s.obj === o && s.fil === fil);
         if (!objIslands.length) continue;
         objFlow = onum(o, 'flow_ratio_scale') || 1;
+        curObj = o;
         const rg = regions[i][o];
         const sw = lw('internal_solid_infill_line_width'), twid = lw('top_surface_line_width'), spw = lw('sparse_infill_line_width');
         const w0 = lw('initial_layer_line_width');
@@ -821,6 +824,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       }
     }
     objFlow = 1;
+    curObj = -1;
 
     // --- support
     if (support && (support.base[i].length || support.iface[i].length)) {

@@ -1,7 +1,7 @@
 // Minimal stroke icon set (24px grid, currentColor).
 import type { SVGProps } from 'react';
 
-const paths: Record<string, string> = {
+export const ICON_PATHS: Record<string, string> = {
   add: 'M12 5v14M5 12h14',
   file: 'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zM14 3v5h5',
   open: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
@@ -40,6 +40,7 @@ const paths: Record<string, string> = {
   overhang: 'M4 20h16M7 20V10l10-6v6',
   chevron: 'M9 6l6 6-6 6',
   chevronDown: 'M6 9l6 6 6-6',
+  minus: 'M5 12h14',
   close: 'M6 6l12 12M18 6 6 18',
   info: 'M12 8h.01M11 12h1v5h1M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
   warn: 'M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
@@ -66,11 +67,11 @@ const paths: Record<string, string> = {
   flush: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11zM9 15a3 3 0 0 0 3 3',
 };
 
-export function Icon({ name, size = 18, ...rest }: { name: keyof typeof paths | string; size?: number } & SVGProps<SVGSVGElement>) {
+export function Icon({ name, size = 18, ...rest }: { name: keyof typeof ICON_PATHS | string; size?: number } & SVGProps<SVGSVGElement>) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>
-      <path d={paths[name] ?? paths.info} />
+      <path d={ICON_PATHS[name] ?? ICON_PATHS.info} />
     </svg>
   );
 }

@@ -172,6 +172,9 @@ export const OBJECT_KEYS = [
   'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'top_surface_pattern', 'bottom_surface_pattern',
   'sparse_infill_density', 'sparse_infill_pattern', 'infill_direction', 'seam_position',
   'ironing_type', 'fuzzy_skin', 'fuzzy_skin_thickness', 'infill_wall_overlap', 'flow_ratio_scale',
+  'top_shell_thickness', 'bottom_shell_thickness',
+  'outer_wall_speed', 'inner_wall_speed', 'overhang_speed', 'sparse_infill_speed', 'internal_solid_infill_speed', 'top_surface_speed',
+  'bridge_speed', 'ironing_speed', 'initial_layer_speed', 'initial_layer_infill_speed',
 ];
 /** Settings a modifier volume may change inside its region. */
 export const MODIFIER_KEYS = ['sparse_infill_density', 'sparse_infill_pattern'];

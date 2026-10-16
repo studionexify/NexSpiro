@@ -206,7 +206,7 @@ function revolve(profile: [number, number][], seg: number, a0 = 0): number[] {
   return out;
 }
 
-function signedVolume(m: IndexedMesh) {
+export function signedVolume(m: IndexedMesh) {
   const v = m.vertices, ix = m.indices;
   let vol = 0;
   for (let t = 0; t < ix.length; t += 3) {

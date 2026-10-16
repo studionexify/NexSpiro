@@ -4,9 +4,9 @@ import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { printerById, type PrinterProfile } from '../profiles/printers';
+import { printerById } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
+  dropToBed, isOutOfBounds, newId, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace } from '../state/ops';
@@ -18,7 +18,10 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PLUGINS } from '../plugins/registry';
-import { plateAnchors } from '../ui/PlateControls';
+import { buildPlate, iconTexture, type PlateIcon } from './plate';
+import { arrange, deletePlate, orientPlate, updatePlate } from '../state/ops';
+import { selectPlate } from '../state/objectOps';
+import { openPlateSettings } from '../ui/PlateControls';
 
 export type ViewName = 'iso' | 'top' | 'bottom' | 'front' | 'left' | 'right' | 'back';
 export interface ViewApi {
@@ -32,9 +35,10 @@ export interface ViewApi {
 /** cameraListeners get the camera's world-to-view matrix (column-major) after each frame drawn. */
 export const viewApi: { current: ViewApi | null; cameraListeners: Set<(m: ArrayLike<number>) => void> } = { current: null, cameraListeners: new Set() };
 
+// Bambu Studio's neutral viewport background
 const THEMES = {
-  dark: { zenith: '#1E3442', nadir: '#0B1520', plate: '#1B2E3D', minor: '#284355', major: '#3B5F78', border: '#85A3B2', label: '#85A3B2' },
-  light: { zenith: '#F7F1EA', nadir: '#DCC9B6', plate: '#E7D9CB', minor: '#CDB8A4', major: '#A88F7A', border: '#5E7684', label: '#4F6877' },
+  dark: { zenith: '#2F3236', nadir: '#1F2124' },
+  light: { zenith: '#EDEDEE', nadir: '#D9DADC' },
 };
 
 const PART_COLORS: Record<string, string> = { negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
@@ -51,69 +55,6 @@ function backgroundTexture(theme: 'dark' | 'light') {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
-}
-
-/** Bed type name printed along the plate's left edge, as on Bambu Studio's plates. */
-function bedLabel(text: string, color: string, length: number) {
-  const c = document.createElement('canvas');
-  c.width = 1024; c.height = 64;
-  const g = c.getContext('2d')!;
-  g.font = 'italic 700 40px "Segoe UI", system-ui, sans-serif';
-  g.fillStyle = color;
-  g.globalAlpha = 0.55;
-  g.textBaseline = 'middle';
-  g.fillText(text, 12, 34);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(length, length / 16), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
-  m.userData.surface = true;
-  return m;
-}
-
-function buildPlate(p: PrinterProfile, theme: 'dark' | 'light', index: number, active: boolean, multi: boolean, bedName: string): THREE.Group {
-  const t = THEMES[theme];
-  const g = new THREE.Group();
-  const { x: X, y: Y } = p.bed;
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(X, Y, 1.2), new THREE.MeshStandardMaterial({ color: t.plate, roughness: 0.75, metalness: 0.2 }));
-  plate.position.set(X / 2, Y / 2, -0.62);
-  plate.userData.plateIndex = index;
-  // the solid plate is hidden while the camera is below it, leaving only the grid and outline (as in Bambu Studio)
-  plate.userData.surface = true;
-  g.add(plate);
-  const name = bedLabel(bedName, t.label, Math.min(Y * 0.8, 220));
-  name.rotation.z = Math.PI / 2;
-  name.position.set(9, Y / 2, 0.015);
-  g.add(name);
-  const minor: number[] = [], major: number[] = [];
-  for (let x = 0; x <= X + 1e-6; x += 10) (x % 50 === 0 ? major : minor).push(x, 0, 0.01, x, Y, 0.01);
-  for (let y = 0; y <= Y + 1e-6; y += 10) (y % 50 === 0 ? major : minor).push(0, y, 0.01, X, y, 0.01);
-  const lines = (pts: number[], color: string, opacity: number) => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
-  };
-  g.add(lines(minor, t.minor, 0.9));
-  g.add(lines(major, t.major, 1));
-  g.add(lines([0, 0, 0.02, X, 0, 0.02, X, 0, 0.02, X, Y, 0.02, X, Y, 0.02, 0, Y, 0.02, 0, Y, 0.02, 0, 0, 0.02], active && multi ? '#FF5C8D' : t.border, 1));
-  const axis = (to: [number, number, number], color: string) => {
-    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0.03), new THREE.Vector3(...to)]);
-    return new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
-  };
-  g.add(axis([20, 0, 0.03], '#E53935'), axis([0, 20, 0.03], '#43A047'), axis([0, 0, 20], '#1E88E5'));
-  for (const area of p.excludedAreas ?? []) {
-    const shape = new THREE.Shape(area.map(([x, y]) => new THREE.Vector2(x, y)));
-    const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: '#FF3B30', transparent: true, opacity: 0.25, depthWrite: false }));
-    m.position.z = 0.02;
-    g.add(m);
-  }
-  const box = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, p.bed.z)),
-    new THREE.LineBasicMaterial({ color: t.border, transparent: true, opacity: active ? 0.18 : 0.07 }),
-  );
-  box.position.set(X / 2, Y / 2, p.bed.z / 2);
-  g.add(box);
-  return g;
 }
 
 function overhangMaterial(): THREE.MeshStandardMaterial {
@@ -175,6 +116,50 @@ export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_se
 
 const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
 
+/** Screen-space silhouette outline of a selected object: an inverted hull pushed out a fixed number of pixels. */
+function outlineMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uWidth: { value: 2 }, uRes: { value: new THREE.Vector2(1, 1) }, uColor: { value: new THREE.Color('#FFFFFF') } },
+    vertexShader: `
+      uniform float uWidth; uniform vec2 uRes;
+      void main() {
+        vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vec2 n = (projectionMatrix * vec4(normalMatrix * normal, 0.0)).xy;
+        float l = length(n);
+        if (l > 1e-6) clip.xy += n / l * uWidth * 2.0 / uRes * clip.w;
+        gl_Position = clip;
+      }`,
+    fragmentShader: 'uniform vec3 uColor; void main() { gl_FragColor = vec4(uColor, 1.0); }',
+    side: THREE.BackSide,
+  });
+}
+function hullGeometry(m: SceneObject['mesh']) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(m.vertices, 3));
+  g.setIndex(new THREE.BufferAttribute(m.indices, 1));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Bambu Studio's selection box: short white brackets at the eight corners of the bounding box. */
+function cornerBrackets(min: number[], max: number[]): number[] {
+  const out: number[] = [];
+  const len = [0, 1, 2].map((k) => Math.max(0.6, (max[k] - min[k]) * 0.22));
+  const pad = 1.2;
+  const lo = min.map((v) => v - pad), hi = max.map((v, k) => (k === 2 ? v + pad : v + pad));
+  lo[2] = min[2];
+  for (const cx of [0, 1]) for (const cy of [0, 1]) for (const cz of [0, 1]) {
+    const c = [cx ? hi[0] : lo[0], cy ? hi[1] : lo[1], cz ? hi[2] : lo[2]];
+    const dir = [cx ? -1 : 1, cy ? -1 : 1, cz ? -1 : 1];
+    for (let k = 0; k < 3; k++) {
+      const e = [...c];
+      e[k] += dir[k] * len[k];
+      out.push(...c, ...e);
+    }
+  }
+  return out;
+}
+
 export function Viewport() {
   const host = useRef<HTMLDivElement>(null);
 
@@ -191,6 +176,7 @@ export function Viewport() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.15;
     controls.screenSpacePanning = true;
+    controls.zoomToCursor = true; // zoom towards the point under the cursor, as Bambu Studio does
     // One set of mouse controls everywhere, painting tools included:
     // left drag rotates, middle drag pans, right drag pans, wheel zooms.
     // While a painting tool is on, a left press that lands on the model paints instead of rotating
@@ -212,7 +198,9 @@ export function Viewport() {
     let printer = printerById(useStore.getState().printerId);
     const objGroup = new THREE.Group();
     scene.add(objGroup);
-    const meshes = new Map<string, { mesh: THREE.Mesh; src: SceneObject['mesh']; colorKey: string }>();
+    const meshes = new Map<string, { mesh: THREE.Mesh; src: SceneObject['mesh']; colorKey: string; hull?: THREE.Mesh }>();
+    const outlineMat = outlineMaterial();
+    let hoverId: string | null = null;
     const partMeshes = new Map<string, { mesh: THREE.Mesh; src: ScenePart['mesh'] }>();
     const selBoxes = new THREE.Group();
     scene.add(selBoxes);
@@ -335,16 +323,22 @@ export function Viewport() {
     };
     const emitCamera = () => { camera.updateMatrixWorld(); for (const l of viewApi.cameraListeners) l(camera.matrixWorldInverse.elements); };
     viewApi.current = { setView, fit, orbit, emitCamera };
-    (window as any).__nx = { camera, controls, invalidate, THREE, store: useStore };
+    (window as any).__nx = { camera, controls, invalidate, THREE, store: useStore, scene };
 
+    let plateIcons: PlateIcon[] = [];
     const rebuildPlates = () => {
+      hoverIcon = null;
       plateGroup.traverse((o: any) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
       plateGroup.clear();
       const s = useStore.getState();
       printer = printerById(s.printerId);
+      plateIcons = [];
       s.plates.forEach((pl, i) => {
         const bed = pl.bedType ?? s.plate;
-        const g = buildPlate(printer, s.theme, i, i === s.activePlate, s.plates.length > 1, printer.plates.find((x) => x.type === bed)?.label ?? '');
+        const built = buildPlate(printer, bed, printer.plates.find((x) => x.type === bed)?.label ?? '', i,
+          { plates: s.plates.length, locked: !!pl.locked, name: pl.name, dark: s.theme === 'dark', active: i === s.activePlate });
+        plateIcons.push(...built.icons);
+        const g = built.group;
         const [ox, oy] = plateOrigin(i, s.printerId);
         g.position.set(ox, oy, 0);
         plateGroup.add(g);
@@ -353,7 +347,21 @@ export function Viewport() {
       invalidate();
     };
 
-    const disposeMesh = (m: THREE.Mesh) => { m.parent?.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); };
+    const disposeMesh = (m: THREE.Mesh) => {
+      m.parent?.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose();
+      for (const c of m.children) (c as THREE.Mesh).geometry?.dispose();
+    };
+    /** Hovered objects brighten slightly, like Bambu Studio's hover highlight. */
+    const applyHover = () => {
+      const s = useStore.getState();
+      for (const [id, e] of meshes) {
+        const mat = e.mesh.material as THREE.MeshStandardMaterial;
+        const hov = id === hoverId && s.workspace === 'prepare' && !isPaintTool(s.tool);
+        mat.emissive.set(hov ? '#FFFFFF' : '#000000');
+        mat.emissiveIntensity = hov ? 0.12 : 0;
+      }
+      invalidate();
+    };
 
     const syncObjects = () => {
       const s = useStore.getState();
@@ -380,8 +388,13 @@ export function Viewport() {
         }
         const mat = entry.mesh.material as THREE.MeshStandardMaterial;
         const sel = s.workspace === 'prepare' && s.selected.includes(o.id) && !s.selectedPart && !isPaintTool(s.tool);
-        mat.emissive.set(sel ? slotColor(s, o.filament ?? 0) : '#000000');
-        mat.emissiveIntensity = sel ? 0.28 : 0;
+        // selected: white silhouette outline (as in Bambu Studio)
+        if (sel && !entry.hull) {
+          entry.hull = new THREE.Mesh(hullGeometry(o.mesh), outlineMat);
+          entry.hull.raycast = () => {};
+          entry.mesh.add(entry.hull);
+        }
+        if (entry.hull) entry.hull.visible = sel;
         // see-through while the live toolpath is shown on it, and for objects left out of the print
         const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
@@ -421,13 +434,22 @@ export function Viewport() {
           }
         }
       }
+      selBoxes.traverse((o: any) => o.geometry?.dispose?.());
       selBoxes.clear();
-      if (!isPaintTool(s.tool)) for (const id of s.selected) {
-        const e = meshes.get(id);
-        if (!e) continue;
-        e.mesh.updateMatrixWorld();
-        selBoxes.add(new THREE.BoxHelper(e.mesh, s.theme === 'dark' ? '#E9D8C8' : '#142030'));
+      selBoxes.position.set(0, 0, 0);
+      if (!isPaintTool(s.tool) && s.selected.length && !s.selectedPart) {
+        const pts: number[] = [];
+        for (const id of s.selected) {
+          const o = s.objects.find((x) => x.id === id);
+          if (!o) continue;
+          const b = worldBounds(o);
+          pts.push(...cornerBrackets(b.min, b.max));
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+        selBoxes.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: s.theme === 'dark' ? '#FFFFFF' : '#FFFFFF' })));
       }
+      applyHover();
       syncPatternex();
       if (!isPaintTool(s.tool)) brush.visible = false;
       syncGizmo();
@@ -457,10 +479,24 @@ export function Viewport() {
       if (gizmo.object !== proxy) gizmo.attach(proxy);
     };
 
+    // Shift while dragging a handle snaps (1 mm, 15°, 5 %); Alt on a scale handle scales uniformly
+    let altDown = false;
+    let scaleStart = new THREE.Vector3(1, 1, 1);
+    const setSnap = (on: boolean) => {
+      gizmo.setTranslationSnap(on ? 1 : null);
+      gizmo.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null);
+      gizmo.setScaleSnap(on ? 0.05 : null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setSnap(e.type === 'keydown');
+      if (e.key === 'Alt') { altDown = e.type === 'keydown'; if (dragging) e.preventDefault(); }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
     gizmo.addEventListener('dragging-changed', (e: any) => {
       controls.enabled = !e.value;
       dragging = e.value;
-      if (e.value) return;
+      if (e.value) { scaleStart = proxy.scale.clone(); return; }
       const s = useStore.getState();
       const t = gizmoTarget();
       if (!t) return;
@@ -492,6 +528,11 @@ export function Viewport() {
     gizmo.addEventListener('objectChange', () => {
       const t = gizmoTarget();
       if (!t) return;
+      if (gizmo.mode === 'scale' && altDown && gizmo.axis) {
+        const k = 'XYZ'.indexOf(gizmo.axis[0]);
+        const f = proxy.scale.getComponent(k) / (scaleStart.getComponent(k) || 1);
+        proxy.scale.copy(scaleStart).multiplyScalar(f);
+      }
       proxy.updateMatrixWorld();
       const e = t.part ? partMeshes.get(t.part.id) : meshes.get(t.o.id);
       if (!e) return;
@@ -684,6 +725,22 @@ export function Viewport() {
     };
     const onMove = (ev: PointerEvent) => {
       if (objDrag) { moveObjectDrag(ev); return; }
+      if (boxSel) { boxSel.x1 = ev.clientX; boxSel.y1 = ev.clientY; showBox(); return; }
+      if (pressedIcon) return;
+      {
+        const st = useStore.getState();
+        if (ev.buttons === 0 && st.workspace === 'prepare') {
+          const icon = iconAt(ev);
+          setIconHover(icon, ev);
+          // hover highlight on objects
+          let h: string | null = null;
+          if (!icon && !isPaintTool(st.tool)) {
+            ray.setFromCamera(ndc(ev), camera);
+            h = (ray.intersectObjects(objectMeshes(), false)[0]?.object.userData.id as string | undefined) ?? null;
+          }
+          if (h !== hoverId) { hoverId = h; applyHover(); }
+        }
+      }
       const s = useStore.getState();
       if (placeDragging()) {
         ray.setFromCamera(ndc(ev), camera);
@@ -710,6 +767,14 @@ export function Viewport() {
       s.markDirty();
     };
     const onUp = (ev: PointerEvent) => {
+      if (pressedIcon) {
+        const pi = pressedIcon;
+        pressedIcon = null;
+        downAt = null;
+        if (iconAt(ev) === pi) runIcon(pi);
+        return;
+      }
+      if (boxSel && finishBoxSelect(ev)) return;
       if (endObjectDrag()) return;
       if (placeUp()) { downAt = null; return; }
       if (useStore.getState().tool === 'place_pattern') { downAt = null; return; }
@@ -826,15 +891,20 @@ export function Viewport() {
     const FREE_MOVE_TOOLS: Tool[] = ['select', 'move', 'rotate', 'scale'];
     const startObjectDrag = (ev: PointerEvent): boolean => {
       const s = useStore.getState();
-      if (ev.button !== 0 || s.workspace !== 'prepare' || !FREE_MOVE_TOOLS.includes(s.tool) || ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+      if (ev.button !== 0 || s.workspace !== 'prepare' || !FREE_MOVE_TOOLS.includes(s.tool) || ev.shiftKey || ev.ctrlKey || ev.metaKey) return false;
       if (gizmo.object && gizmo.axis) return false; // the gizmo handle under the cursor wins
       ray.setFromCamera(ndc(ev), camera);
       const parts = [...partMeshes.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
       const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
       if (!hit || hit.object.userData.partId) return false;
       const id = hit.object.userData.id as string;
-      const ids = s.selected.includes(id) && !s.selectedPart ? s.selected : [id];
-      if (ids !== s.selected || s.selectedPart) s.set({ selected: ids, selectedPart: null });
+      let ids = s.selected.includes(id) && !s.selectedPart ? s.selected : [id];
+      if (ev.altKey) {
+        // Alt + drag: duplicate the selection and move the copies, leaving the originals in place
+        const copies = s.objects.filter((o) => ids.includes(o.id)).map((o) => ({ ...o, id: newId() }));
+        s.addObjects(copies);
+        ids = copies.map((o) => o.id);
+      } else if (ids !== s.selected || s.selectedPart) s.set({ selected: ids, selectedPart: null });
       const base = new Map<THREE.Mesh, THREE.Matrix4>();
       for (const oid of ids) {
         const e = meshes.get(oid);
@@ -861,7 +931,7 @@ export function Viewport() {
       if (!d.moved) { d.moved = true; dragging = true; renderer.domElement.style.cursor = 'move'; }
       const t = new THREE.Matrix4().makeTranslation(d.delta.x, d.delta.y, 0);
       for (const [m, b] of d.base) { m.matrix.multiplyMatrices(t, b); m.matrixWorldNeedsUpdate = true; m.updateMatrixWorld(); }
-      for (const b of selBoxes.children) (b as THREE.BoxHelper).update();
+      selBoxes.position.set(d.delta.x, d.delta.y, 0);
       if (gizmo.object === proxy) { proxy.position.copy(d.proxy).add(d.delta); proxy.updateMatrixWorld(); }
       invalidate();
     };
@@ -884,19 +954,131 @@ export function Viewport() {
     };
     // Runs before the camera controls see the press: a left press with a painting or placing tool that
     // lands on the model (or anywhere, for the lasso) paints or places; elsewhere the left button rotates.
+    // ---------------- Shift + drag: box selection. Left to right selects objects entirely inside the box (window);
+    // right to left selects anything the box touches (crossing).
+    let boxSel: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    const startBoxSelect = (ev: PointerEvent): boolean => {
+      const s = useStore.getState();
+      if (ev.button !== 0 || !ev.shiftKey || s.workspace !== 'prepare' || !FREE_MOVE_TOOLS.includes(s.tool)) return false;
+      if (gizmo.object && gizmo.axis) return false;
+      boxSel = { x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY };
+      capture(ev);
+      return true;
+    };
+    const showBox = () => {
+      const r = renderer.domElement.getBoundingClientRect();
+      if (!boxSel || Math.hypot(boxSel.x1 - boxSel.x0, boxSel.y1 - boxSel.y0) < 4) { outline.setAttribute('points', ''); return; }
+      const { x0, y0, x1, y1 } = boxSel;
+      outline.setAttribute('points', [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => `${x - r.left},${y - r.top}`).join(' '));
+      outline.setAttribute('class', x1 < x0 ? 'box-cross' : 'box-window');
+    };
+    const finishBoxSelect = (ev: PointerEvent): boolean => {
+      const b = boxSel!;
+      boxSel = null;
+      showBox();
+      if (Math.hypot(b.x1 - b.x0, b.y1 - b.y0) < 4) return false; // a Shift+click: normal toggle selection
+      downAt = null;
+      const s = useStore.getState();
+      const r = renderer.domElement.getBoundingClientRect();
+      const xa = Math.min(b.x0, b.x1), xb = Math.max(b.x0, b.x1), ya = Math.min(b.y0, b.y1), yb = Math.max(b.y0, b.y1);
+      const crossing = b.x1 < b.x0;
+      camera.updateMatrixWorld();
+      const v = new THREE.Vector3();
+      const picked: string[] = [];
+      for (const o of s.objects) {
+        const m = objectMatrix(o);
+        const vs = o.mesh.vertices;
+        const n = vs.length / 3, step = Math.max(1, Math.floor(n / 60000));
+        let inside = 0, total = 0;
+        for (let i = 0; i < n; i += step) {
+          v.set(vs[i * 3], vs[i * 3 + 1], vs[i * 3 + 2]).applyMatrix4(m).project(camera);
+          total++;
+          const sx = r.left + (v.x + 1) / 2 * r.width, sy = r.top + (1 - v.y) / 2 * r.height;
+          if (v.z <= 1 && sx >= xa && sx <= xb && sy >= ya && sy <= yb) inside++;
+        }
+        let hit = crossing ? inside > 0 : inside === total && total > 0;
+        if (crossing && !hit) {
+          // the box can sit inside the object's outline without containing a vertex
+          const e = meshes.get(o.id);
+          for (const [px, py] of [[xa, ya], [xb, ya], [xa, yb], [xb, yb], [(xa + xb) / 2, (ya + yb) / 2]]) {
+            ray.setFromCamera(new THREE.Vector2(((px - r.left) / r.width) * 2 - 1, -((py - r.top) / r.height) * 2 + 1), camera);
+            if (e && ray.intersectObject(e.mesh, false).length) { hit = true; break; }
+          }
+        }
+        if (hit) picked.push(o.id);
+      }
+      const add = ev.ctrlKey || ev.metaKey;
+      s.set({ selected: add ? [...new Set([...s.selected, ...picked])] : picked, selectedPart: null });
+      return true;
+    };
+
+    // ---------------- plate icons (remove, orient, arrange, lock, settings, number, name) drawn on the bed plane
+    let hoverIcon: PlateIcon | null = null;
+    let pressedIcon: PlateIcon | null = null;
+    const tip = document.createElement('div');
+    tip.className = 'instant-tip';
+    tip.style.display = 'none';
+    document.body.appendChild(tip);
+    const iconAt = (ev: PointerEvent): PlateIcon | null => {
+      ray.setFromCamera(ndc(ev), camera);
+      const hit = ray.intersectObjects(plateIcons.map((i) => i.mesh), false)[0];
+      return (hit?.object.userData.plateIcon as PlateIcon | undefined) ?? null;
+    };
+    const setIconHover = (icon: PlateIcon | null, ev?: PointerEvent) => {
+      if (icon !== hoverIcon) {
+        const swap = (pi: PlateIcon, hover: boolean) => {
+          if (!pi.icon || !pi.enabled) return;
+          const mat = pi.mesh.material as THREE.MeshBasicMaterial;
+          const key = hover ? 'hoverTex' : 'baseTex';
+          if (!pi.mesh.userData.baseTex) pi.mesh.userData.baseTex = mat.map;
+          if (!pi.mesh.userData.hoverTex) pi.mesh.userData.hoverTex = iconTexture(pi.icon, 'hover', useStore.getState().theme === 'dark');
+          mat.map = pi.mesh.userData[key];
+          mat.needsUpdate = true;
+        };
+        if (hoverIcon) swap(hoverIcon, false);
+        if (icon) swap(icon, true);
+        hoverIcon = icon;
+        renderer.domElement.style.cursor = icon && icon.enabled ? 'pointer' : '';
+        invalidate();
+      }
+      if (icon && ev) {
+        tip.textContent = icon.enabled ? icon.tip : `${icon.tip} (not available)`;
+        tip.style.display = '';
+        tip.style.left = `${ev.clientX + 14}px`;
+        tip.style.top = `${ev.clientY + 16}px`;
+      } else tip.style.display = 'none';
+    };
+    const runIcon = (pi: PlateIcon) => {
+      if (!pi.enabled) return;
+      const s = useStore.getState();
+      if (s.activePlate !== pi.plate && pi.action !== 'remove') s.set({ activePlate: pi.plate });
+      switch (pi.action) {
+        case 'remove': deletePlate(pi.plate); break;
+        case 'orient': orientPlate(pi.plate); break;
+        case 'arrange': arrange(6, pi.plate); break;
+        case 'lock': updatePlate(pi.plate, { locked: !s.plates[pi.plate]?.locked }); break;
+        case 'settings': case 'name': openPlateSettings(pi.plate); break;
+        case 'number': selectPlate(pi.plate); break;
+      }
+    };
+
     const onPressCapture = (ev: PointerEvent) => {
       const s = useStore.getState();
       let paints = false;
-      if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
+      pressedIcon = null;
+      if (ev.button === 0 && ev.target === renderer.domElement && s.workspace === 'prepare' && (pressedIcon = iconAt(ev))) {
+        paints = true;
+        capture(ev);
+      } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
         if (s.tool === 'lasso_motion') paints = true;
         else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
-      } else if (ev.target === renderer.domElement && startObjectDrag(ev)) paints = true;
+      } else if (ev.target === renderer.domElement && (startBoxSelect(ev) || startObjectDrag(ev))) paints = true;
       controls.mouseButtons = paints ? { ...paintButtons } : { ...normalButtons };
     };
     el.addEventListener('pointerdown', onPressCapture, true);
-    const onLeave = () => { brush.visible = false; invalidate(); };
+    const onLeave = () => { brush.visible = false; setIconHover(null); if (hoverId) { hoverId = null; applyHover(); } invalidate(); };
     const onCancel = () => {
-      drawing = null; band = null; showOutline(); showBand();
+      drawing = null; band = null; boxSel = null; pressedIcon = null; showOutline(); showBand();
       if (objDrag) { objDrag = null; dragging = false; renderer.domElement.style.cursor = ''; syncObjects(); }
     };
     renderer.domElement.addEventListener('pointerdown', onDown);
@@ -994,6 +1176,7 @@ export function Viewport() {
       renderer.domElement.style.height = h + 'px';
       camera.aspect = w / Math.max(h, 1);
       motionMat.resolution.set(w, h);
+      outlineMat.uniforms.uRes.value.set(w, h);
       camera.updateProjectionMatrix();
       invalidate();
     };
@@ -1022,24 +1205,6 @@ export function Viewport() {
       if (s.cutPlane !== prev.cutPlane || s.measurePoints !== prev.measurePoints || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) syncTools();
     });
 
-    // screen anchors for the per-plate icon column (back-right corner) and the plate number (front-right)
-    const anchorV = new THREE.Vector3();
-    const toScreen = (x: number, y: number): [number, number] | null => {
-      anchorV.set(x, y, 0).project(camera);
-      if (anchorV.z > 1 || anchorV.z < -1) return null;
-      const r = renderer.domElement;
-      return [(anchorV.x + 1) / 2 * r.clientWidth, (1 - anchorV.y) / 2 * r.clientHeight];
-    };
-    const placePlateAnchors = () => {
-      const s = useStore.getState();
-      const { x: X, y: Y } = printer.bed;
-      plateAnchors.current = s.plates.map((_, i) => {
-        const [ox, oy] = plateOrigin(i, s.printerId);
-        return { icons: toScreen(ox + X + 6, oy + Y), label: toScreen(ox + X + 10, oy - 8) };
-      });
-      for (const l of plateAnchors.listeners) l();
-    };
-
     let raf = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -1050,7 +1215,6 @@ export function Viewport() {
         renderer.render(scene, camera);
         needsRender = false;
         emitCamera();
-        placePlateAnchors();
       }
     };
     loop();
@@ -1067,6 +1231,9 @@ export function Viewport() {
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);
       window.removeEventListener('nx-plugin-preview', rebuildMotionPreview);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      tip.remove();
       el.removeEventListener('pointerdown', onPressCapture, true);
       motionLines.geometry.dispose(); motionMat.dispose();
       viewApi.current = null;

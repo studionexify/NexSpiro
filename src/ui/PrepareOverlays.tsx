@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { arrange, autoOrient, exportGcode, importDialog, sliceAndPreview } from '../state/actions';
+import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
-import { openPrintDialog } from './PrintModal';
 import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
-import { addPlate, arrangeAll, arrangeSelected, currentProfile, deletePlate, orientPlate, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
-import { plateObjects } from '../state/slicing';
+import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
@@ -118,19 +116,31 @@ export function ViewCube() {
   );
 }
 
-export function ActionBar() {
-  const { slice, objects } = useStore();
+/** Bambu Studio's object info box (bottom right) for the selected object: name, size, volume, triangles, mesh errors. */
+export function ObjectInfo() {
+  const { objects, selected, selectedPart } = useStore();
+  const [closedFor, setClosedFor] = useState<string | null>(null);
+  const [mini, setMini] = useState(false);
+  const o = selected.length === 1 && !selectedPart ? objects.find((x) => x.id === selected[0]) : undefined;
+  const volume = useMemo(() => (o ? Math.abs(signedVolume(o.mesh) * o.scale[0] * o.scale[1] * o.scale[2]) : 0), [o?.mesh, o?.scale]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!o || closedFor === o.id) return null;
+  const b = worldBounds(o);
+  const size = [0, 1, 2].map((k) => (b.max[k] - b.min[k]).toFixed(2));
   return (
-    <div className="float actionbar">
-      <button className="btn-secondary" onClick={exportGcode} disabled={!objects.length || slice.status === 'slicing'} title="Slice (if needed) and export G-code (Ctrl+G)">
-        <Icon name="download" />Export G-code
-      </button>
-      <button className="btn-secondary" onClick={openPrintDialog} disabled={!objects.length || slice.status === 'slicing'} title="Slice (if needed) and send to a printer (Ctrl+P)">
-        <Icon name="print" />Print
-      </button>
-      <button className="btn-primary" onClick={sliceAndPreview} disabled={!objects.length || slice.status === 'slicing'} title="Slice plate (Ctrl+R)">
-        <Icon name="slice" />{slice.status === 'slicing' ? 'Slicing…' : 'Slice plate'}
-      </button>
+    <div className={`float object-info ${mini ? 'mini' : ''}`} role="status" aria-label="Object info">
+      <div className="oi-head">
+        <span className="oi-title">{mini ? o.name : 'Object info'}</span>
+        <button className="oi-btn" title={mini ? 'Expand' : 'Minimize'} onClick={() => setMini(!mini)}><Icon name={mini ? 'chevronDown' : 'minus'} size={13} /></button>
+        <button className="oi-btn" title="Close" onClick={() => setClosedFor(o.id)}><Icon name="close" size={13} /></button>
+      </div>
+      {!mini && <div className="oi-body">
+        <span>Object name:</span><b>{o.name}</b>
+        <span>Size:</span><b>{size[0]} x {size[1]} x {size[2]} mm</b>
+        <span>Volume:</span><b>{volume.toFixed(2)} mm³</b>
+        <span>Triangles:</span><b>{(o.mesh.indices.length / 3).toLocaleString()}</b>
+        {o.openEdges > 0 && <><span>Errors:</span><b className="oi-warn">{o.openEdges} open edges</b></>}
+        {o.printable === false && <><span>Printable:</span><b>No</b></>}
+      </div>}
     </div>
   );
 }
@@ -295,24 +305,6 @@ export function VlhPanel() {
         <button className="btn-secondary btn-small" disabled={!o.layerHeights} onClick={() => vlhReset(o.id)}>Reset</button>
       </div>
       <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{prof.length} layers · {pb.minHeight}–{pb.maxHeight} mm allowed{o.layerHeights ? '' : ' · uniform'}</div>
-    </div>
-  );
-}
-
-/** Plate selector and plate actions. */
-export function PlateBar() {
-  const s = useStore();
-  const count = plateObjects(s.activePlate).length;
-  void objectPlate;
-  return (
-    <div className="float platebar">
-      <button className="icon-btn" disabled={s.activePlate === 0} onClick={() => s.set({ activePlate: s.activePlate - 1 })} aria-label="Previous plate"><Icon name="chevron" style={{ transform: 'rotate(180deg)' }} /></button>
-      <span className="mono" style={{ minWidth: 90, textAlign: 'center' }}>{s.plates[s.activePlate].name} · {count}</span>
-      <button className="icon-btn" disabled={s.activePlate >= s.plates.length - 1} onClick={() => s.set({ activePlate: s.activePlate + 1 })} aria-label="Next plate"><Icon name="chevron" /></button>
-      <span className="sep" />
-      <button className="icon-btn" title="Add plate" onClick={addPlate}><Icon name="add" /></button>
-      <button className="icon-btn" title="Delete plate" disabled={s.plates.length < 2} onClick={() => deletePlate()}><Icon name="trash" /></button>
-      <button className="icon-btn" title="Arrange this plate" onClick={() => arrange()} disabled={!count}><Icon name="arrange" /></button>
     </div>
   );
 }

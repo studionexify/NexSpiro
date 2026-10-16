@@ -1,61 +1,30 @@
-// Per-plate controls, after Bambu Studio: the icon column beside each plate (remove, orient,
-// arrange, lock, settings), the plate number, and the plate settings dialog.
-import { useEffect, useRef, useState } from 'react';
+// Plate list and the plate settings dialog (the per-plate icons are drawn on the bed, see viewport/plate.ts).
+import { useState } from 'react';
 import { create } from 'zustand';
 import { printerById, type PlateType } from '../profiles/printers';
 import { useStore } from '../state/store';
-import { deletePlate, arrange, orientPlate, updatePlate } from '../state/ops';
-import { selectPlate } from '../state/objectOps';
+import { updatePlate } from '../state/ops';
 import { plateObjects } from '../state/slicing';
 import { Icon } from './icons';
 import { Modal } from './Modals';
 
-/** Screen anchors of each plate, written by the viewport after every frame it draws. */
-export interface PlateAnchor { icons: [number, number] | null; label: [number, number] | null }
-export const plateAnchors: { current: PlateAnchor[]; listeners: Set<() => void> } = { current: [], listeners: new Set() };
-
 const usePlateDialog = create<{ index: number | null }>(() => ({ index: null }));
 export const openPlateSettings = (index: number) => usePlateDialog.setState({ index });
 
-export function PlateControls() {
+/** Plate list down the right edge of the 3D view when the project has more than one plate (Bambu Studio's plate thumbnails). */
+export function PlateList() {
   const s = useStore();
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
-  const labels = useRef<(HTMLButtonElement | null)[]>([]);
-  useEffect(() => {
-    const place = () => {
-      plateAnchors.current.forEach((a, i) => {
-        const el = refs.current[i], lb = labels.current[i];
-        if (el) { el.style.display = a.icons ? '' : 'none'; if (a.icons) el.style.transform = `translate(${a.icons[0]}px, ${a.icons[1]}px)`; }
-        if (lb) { lb.style.display = a.label ? '' : 'none'; if (a.label) lb.style.transform = `translate(${a.label[0]}px, ${a.label[1]}px) translate(-50%, -50%)`; }
-      });
-    };
-    plateAnchors.listeners.add(place);
-    place();
-    return () => { plateAnchors.listeners.delete(place); };
-  }, [s.plates.length]);
+  if (s.plates.length < 2) return null;
   return (
-    <div className="plate-controls">
+    <div className="float plate-list" aria-label="Plates">
       {s.plates.map((p, i) => {
-        const active = i === s.activePlate;
-        const lockTip = p.locked ? 'Unlock plate' : 'Lock plate: arrange and auto orient leave it alone';
+        const n = plateObjects(i).length;
         return (
-          <div key={p.id}>
-            <div ref={(el) => { refs.current[i] = el; }} className={`plate-icons ${active ? 'active' : ''}`} style={{ display: 'none' }}
-              onPointerDown={(e) => { e.stopPropagation(); if (!active) s.set({ activePlate: i }); }}>
-              {s.plates.length > 1 && <button className="plate-icon" title="Remove plate" onClick={() => deletePlate(i)}><Icon name="close" size={15} /></button>}
-              <button className="plate-icon" title="Auto orient objects on this plate" disabled={!!p.locked} onClick={() => orientPlate(i)}><Icon name="orient" size={15} /></button>
-              <button className="plate-icon" title="Arrange objects on this plate" disabled={!!p.locked} onClick={() => arrange(6, i)}><Icon name="arrange" size={15} /></button>
-              <button className={`plate-icon ${p.locked ? 'on' : ''}`} title={lockTip} onClick={() => updatePlate(i, { locked: !p.locked })}><Icon name={p.locked ? 'lock' : 'unlock'} size={15} /></button>
-              <button className="plate-icon" title="Plate settings: name, bed type, spiral vase" onClick={() => openPlateSettings(i)}><Icon name="gear" size={15} /></button>
-            </div>
-            <button ref={(el) => { labels.current[i] = el; }} className={`plate-num ${active ? 'active' : ''}`} style={{ display: 'none' }}
-              title={`${p.name}${p.bedType ? ` · ${printerById(s.printerId).plates.find((x) => x.type === p.bedType)?.label ?? ''}` : ''} — click to select its objects, double-click for settings`}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => { s.set({ activePlate: i }); selectPlate(i); }}
-              onDoubleClick={() => openPlateSettings(i)}>
-              {String(i + 1).padStart(2, '0')}{p.locked && <Icon name="lock" size={11} />}
-            </button>
-          </div>
+          <button key={p.id} className={`plate-tile ${i === s.activePlate ? 'active' : ''}`} title={`${p.name} · ${n} object${n === 1 ? '' : 's'}${p.locked ? ' · locked' : ''}`}
+            onClick={() => s.set({ activePlate: i })} onDoubleClick={() => openPlateSettings(i)}>
+            <span className="plate-tile-num">{String(i + 1).padStart(2, '0')}</span>
+            <span className="plate-tile-count">{n}{p.locked && <Icon name="lock" size={10} />}</span>
+          </button>
         );
       })}
     </div>
