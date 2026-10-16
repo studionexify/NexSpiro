@@ -1,0 +1,159 @@
+// NexSpiro project files: a standard 3MF (meshes + build transforms, so any slicer can open it)
+// plus Metadata/nexspiro_project.json with the full scene state, settings and project notes.
+import JSZip from 'jszip';
+import { saveFile } from '../platform';
+import { emptyProject, newId, objectMatrix, useStore, type ProjectInfo, type SceneObject } from './store';
+import type { LayerAction } from '../engine/types';
+import type { Config } from '../profiles/settings';
+
+const VERSION = 1;
+
+const b64 = (a: Uint8Array) => { let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode(...a.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const f32 = (a: Float32Array) => b64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));
+const u32 = (a: Uint32Array) => b64(new Uint8Array(a.buffer, a.byteOffset, a.byteLength));
+const toF32 = (s: string) => { const b = unb64(s); return new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4); };
+const toU32 = (s: string) => { const b = unb64(s); return new Uint32Array(b.buffer, b.byteOffset, b.byteLength / 4); };
+
+interface ProjectJson {
+  version: number;
+  app: 'NexSpiro';
+  printerId: string; plate: string; presetId: string;
+  overrides: Config; machineOverrides: Config;
+  filaments: { presetId: string; color: string }[];
+  plates: { id: string; name: string; layerActions: LayerAction[] }[];
+  project: ProjectInfo;
+  objects: (Omit<SceneObject, 'mesh' | 'parts' | 'paint'> & {
+    meshIndex: number;
+    parts?: { id: string; name: string; type: string; position: number[]; rotation: number[]; scale: number[]; overrides: Config; v: string; i: string }[];
+    paint?: Record<string, string>;
+  })[];
+}
+
+const meshXml = (o: SceneObject, id: number) => {
+  const v = o.mesh.vertices, ix = o.mesh.indices;
+  const parts: string[] = [`  <object id="${id}" name="${o.name.replace(/[<>&"]/g, '_')}" type="model"><mesh><vertices>`];
+  for (let k = 0; k < v.length; k += 3) parts.push(`<vertex x="${+v[k].toFixed(5)}" y="${+v[k + 1].toFixed(5)}" z="${+v[k + 2].toFixed(5)}"/>`);
+  parts.push('</vertices><triangles>');
+  for (let k = 0; k < ix.length; k += 3) parts.push(`<triangle v1="${ix[k]}" v2="${ix[k + 1]}" v3="${ix[k + 2]}"/>`);
+  parts.push('</triangles></mesh></object>');
+  return parts.join('');
+};
+/** 3MF build transform (row-vector 3x4) from a THREE column-major matrix. */
+const xform = (o: SceneObject) => {
+  const e = objectMatrix(o).elements;
+  return [e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10], e[12], e[13], e[14]].map((x) => +x.toFixed(6)).join(' ');
+};
+
+export async function buildProject(): Promise<Uint8Array> {
+  const s = useStore.getState();
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+ <Default Extension="json" ContentType="application/json"/>
+ <Default Extension="png" ContentType="image/png"/>
+ <Default Extension="jpg" ContentType="image/jpeg"/>
+</Types>`);
+  zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`);
+  const objs = s.objects;
+  const meta = (k: string, v: string) => (v ? ` <metadata name="${k}">${v.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</metadata>\n` : '');
+  zip.file('3D/3dmodel.model', `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+ <metadata name="Application">NexSpiro-0.1.0</metadata>
+${meta('Title', s.project.title)}${meta('Designer', s.project.author)}${meta('Description', s.project.description)}${meta('License', s.project.license)} <resources>
+${objs.map((o, i) => meshXml(o, i + 1)).join('\n')}
+ </resources>
+ <build>
+${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).join('\n')}
+ </build>
+</model>`);
+  const project: ProjectInfo = { ...s.project, photos: [] };
+  s.project.photos.forEach((p, i) => {
+    const m = /^data:image\/(png|jpe?g);base64,(.*)$/.exec(p.dataUrl);
+    if (!m) return;
+    const path = `Metadata/photos/${i + 1}.${m[1] === 'png' ? 'png' : 'jpg'}`;
+    zip.file(path, unb64(m[2]));
+    project.photos.push({ name: p.name, dataUrl: path });
+  });
+  const json: ProjectJson = {
+    version: VERSION, app: 'NexSpiro',
+    printerId: s.printerId, plate: s.plate, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
+    filaments: s.filaments, plates: s.plates, project,
+    objects: objs.map((o, i) => ({
+      id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
+      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, meshIndex: i,
+      parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type, position: p.position, rotation: p.rotation, scale: p.scale, overrides: p.overrides, v: f32(p.mesh.vertices), i: u32(p.mesh.indices) })),
+      paint: o.paint ? Object.fromEntries(Object.entries(o.paint).filter(([, a]) => a).map(([k, a]) => [k, b64(a as Uint8Array)])) : undefined,
+    })),
+  };
+  zip.file('Metadata/nexspiro_project.json', JSON.stringify(json));
+  return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+}
+
+export async function saveProject() {
+  const s = useStore.getState();
+  if (!s.objects.length) return;
+  const bytes = await buildProject();
+  const name = (s.project.title || s.objects[0].name || 'project').replace(/[^\w.-]+/g, '_');
+  const saved = await saveFile(`${name}.3mf`, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, '3mf');
+  if (saved) s.set({ toast: { kind: 'info', text: `Project saved: ${saved}` } });
+}
+
+/** True if the buffer is a NexSpiro project (has our metadata). */
+export async function isProject(data: ArrayBuffer) {
+  try { return !!(await JSZip.loadAsync(data)).file('Metadata/nexspiro_project.json'); } catch { return false; }
+}
+
+export async function loadProject(data: ArrayBuffer) {
+  const zip = await JSZip.loadAsync(data);
+  const json = JSON.parse(await zip.file('Metadata/nexspiro_project.json')!.async('string')) as ProjectJson;
+  if (json.app !== 'NexSpiro') throw new Error('Not a NexSpiro project');
+  const doc = new DOMParser().parseFromString(await zip.file('3D/3dmodel.model')!.async('string'), 'application/xml');
+  const objEls = Array.from(doc.getElementsByTagNameNS('*', 'object'));
+  const meshes = objEls.map((el) => {
+    const vs = Array.from(el.getElementsByTagNameNS('*', 'vertex'));
+    const ts = Array.from(el.getElementsByTagNameNS('*', 'triangle'));
+    const vertices = new Float32Array(vs.length * 3);
+    vs.forEach((v, k) => { vertices[k * 3] = +v.getAttribute('x')!; vertices[k * 3 + 1] = +v.getAttribute('y')!; vertices[k * 3 + 2] = +v.getAttribute('z')!; });
+    const indices = new Uint32Array(ts.length * 3);
+    ts.forEach((t, k) => { indices[k * 3] = +t.getAttribute('v1')!; indices[k * 3 + 1] = +t.getAttribute('v2')!; indices[k * 3 + 2] = +t.getAttribute('v3')!; });
+    return { vertices, indices };
+  });
+  const photos: ProjectInfo['photos'] = [];
+  for (const p of json.project?.photos ?? []) {
+    const f = zip.file(p.dataUrl);
+    if (f) photos.push({ name: p.name, dataUrl: `data:image/${p.dataUrl.endsWith('png') ? 'png' : 'jpeg'};base64,${await f.async('base64')}` });
+  }
+  const objects: SceneObject[] = json.objects.map((o) => ({
+    id: o.id || newId(), name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges ?? 0,
+    filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights,
+    mesh: meshes[o.meshIndex],
+    parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type as any, position: p.position as any, rotation: p.rotation as any, scale: p.scale as any, overrides: p.overrides ?? {}, mesh: { vertices: toF32(p.v), indices: toU32(p.i) } })),
+    paint: o.paint ? Object.fromEntries(Object.entries(o.paint).map(([k, v]) => [k, unb64(v)])) : undefined,
+  }));
+  useStore.getState().set({
+    objects, selected: [], selectedPart: null, undoStack: [], redoStack: [],
+    printerId: json.printerId, plate: json.plate as any, presetId: json.presetId, overrides: json.overrides ?? {}, machineOverrides: json.machineOverrides ?? {},
+    filaments: json.filaments, plates: json.plates?.length ? json.plates : [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0,
+    project: { ...emptyProject(), ...json.project, photos },
+    slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
+    workspace: 'prepare',
+  });
+}
+
+export async function openProjectDialog() {
+  const { openFiles } = await import('../platform');
+  const files = await openFiles([{ name: 'NexSpiro project / 3MF', extensions: ['3mf'] }], false);
+  const f = files[0];
+  if (!f) return;
+  const { importBuffers } = await import('./actions');
+  if (await isProject(f.data)) {
+    try { await loadProject(f.data); useStore.getState().set({ toast: { kind: 'info', text: `Opened ${f.name}` } }); }
+    catch (e: any) { useStore.getState().set({ toast: { kind: 'error', text: `Could not open ${f.name}: ${e?.message ?? e}` } }); }
+  } else await importBuffers([f]);
+}

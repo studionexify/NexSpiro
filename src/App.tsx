@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { arrange, autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
-import { CalibrationPage, DevicePage, HomePage, ProjectPage } from './ui/Pages';
+import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
+import { DevicePage } from './ui/DevicePage';
+import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
+import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
+import { exportPlateFile } from './state/printjob';
+import { openProjectDialog, saveProject } from './state/project';
 import { ActionBar, EmptyHint, PaintPanel, PlateBar, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
@@ -42,6 +47,11 @@ function FileMenu() {
           {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
           {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length)}
           {item('Export G-code…', 'Ctrl+G', exportGcode, !objects.length)}
+          {item('Export plate as .gcode.3mf…', '', () => exportPlateFile('3mf'), !objects.length)}
+          {item('Print plate…', 'Ctrl+P', openPrintDialog, !objects.length)}
+          <div className="sep" style={{ width: '100%', height: 1, margin: '4px 0' }} />
+          {item('Open project (.3mf)…', 'Ctrl+O', openProjectDialog)}
+          {item('Save project…', 'Ctrl+S', saveProject, !objects.length)}
         </div>
       )}
     </div>
@@ -104,6 +114,9 @@ function useShortcuts() {
       if (mod && k === 'n') { newProject(); e.preventDefault(); return; }
       if (mod && k === 'r') { sliceAndPreview(); e.preventDefault(); return; }
       if (mod && k === 'g') { exportGcode(); e.preventDefault(); return; }
+      if (mod && k === 'p') { void openPrintDialog(); e.preventDefault(); return; }
+      if (mod && k === 's') { void saveProject(); e.preventDefault(); return; }
+      if (mod && k === 'o') { void openProjectDialog(); e.preventDefault(); return; }
       if (mod && k === 'f') { s.set({ workspace: 'prepare' }); setTimeout(() => document.getElementById('param-search')?.focus(), 0); e.preventDefault(); return; }
       if (s.workspace !== 'prepare') return;
       if (mod && k === 'a') { s.set({ selected: s.objects.map((o) => o.id) }); e.preventDefault(); return; }
@@ -115,6 +128,10 @@ function useShortcuts() {
       else if (k === 'p') s.set({ tool: s.tool === 'paint_seam' ? 'select' : 'paint_seam' });
       else if (k === 'n') s.set({ tool: s.tool === 'paint_color' ? 'select' : 'paint_color' });
       else if (k === 'h') s.set({ tool: s.tool === 'vlh' ? 'select' : 'vlh' });
+      else if (k === 'c') s.set({ tool: s.tool === 'cut' ? 'select' : 'cut' });
+      else if (k === 't') s.set({ tool: s.tool === 'text' ? 'select' : 'text' });
+      else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measurePoints: [] });
+      else if (k === 'b') s.set({ tool: s.tool === 'boolean' ? 'select' : 'boolean' });
       else if (s.tool === 'paint_color' && k >= '1' && k <= '9' && +k <= s.filaments.length) s.set({ paintColor: +k });
       else if (k === 'm') s.set({ tool: s.tool === 'move' ? 'select' : 'move' });
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
@@ -152,7 +169,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><PlateBar /><EmptyHint /><ActionBar /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateBar /><EmptyHint /><ActionBar /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -164,6 +181,7 @@ export default function App() {
         {workspace === 'calibration' && <CalibrationPage />}
       </div>
       <Toast />
+      <PrintDialogHost />
     </div>
   );
 }

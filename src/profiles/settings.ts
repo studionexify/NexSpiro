@@ -49,6 +49,9 @@ export const PROCESS_PARAMS: ParamDef[] = [
   { key: 'seam_position', label: 'Seam position', tab: 'Quality', group: 'Seam', type: 'enum', def: 'aligned', options: [
     { value: 'aligned', label: 'Aligned' }, { value: 'nearest', label: 'Nearest' }, { value: 'back', label: 'Back' }, { value: 'random', label: 'Random' }],
     tip: 'Where each perimeter loop starts and ends. Aligned stacks seams into one vertical line; Back hides them at the rear; Random scatters them.' },
+  { key: 'wall_generator', label: 'Wall generator', tab: 'Quality', group: 'Wall generator', type: 'enum', def: 'classic', options: [{ value: 'classic', label: 'Classic' }, { value: 'arachne', label: 'Arachne (variable width)' }], tip: 'Arachne varies the line width so thin walls and narrow gaps are filled by a single bead instead of being skipped or overlapped.' },
+  { key: 'enable_arc_fitting', label: 'Arc fitting', tab: 'Quality', group: 'Precision', type: 'bool', def: false, tip: 'Replaces chains of short segments on curves with G2/G3 arc moves. Smaller G-code and smoother curves on firmware that supports arcs.' },
+  { key: 'flow_ratio_scale', label: 'Flow ratio scale', tab: 'Quality', group: 'Advanced', type: 'float', min: 0.5, max: 1.5, step: 0.01, def: 1, advanced: true, tip: 'Multiplies the filament flow ratio for this object. Used by the flow-rate calibration.' },
   { key: 'resolution', label: 'Resolution', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: 0, max: 0.2, step: 0.001, def: 0.012, advanced: true, tip: 'Paths are simplified by removing points that deviate less than this distance. Reduces G-code size.' },
   { key: 'xy_hole_compensation', label: 'X-Y hole compensation', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: -2, max: 2, step: 0.01, def: 0, tip: 'Grows (+) or shrinks (−) holes in the XY plane to correct for shrinkage.' },
   { key: 'xy_contour_compensation', label: 'X-Y contour compensation', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: -2, max: 2, step: 0.01, def: 0, tip: 'Grows (+) or shrinks (−) outer contours in the XY plane.' },
@@ -168,7 +171,7 @@ export const PROCESS_PRESETS: { id: string; name: string; values: Config }[] = [
 export const OBJECT_KEYS = [
   'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'top_surface_pattern', 'bottom_surface_pattern',
   'sparse_infill_density', 'sparse_infill_pattern', 'infill_direction', 'seam_position',
-  'ironing_type', 'fuzzy_skin', 'fuzzy_skin_thickness', 'infill_wall_overlap',
+  'ironing_type', 'fuzzy_skin', 'fuzzy_skin_thickness', 'infill_wall_overlap', 'flow_ratio_scale',
 ];
 /** Settings a modifier volume may change inside its region. */
 export const MODIFIER_KEYS = ['sparse_infill_density', 'sparse_infill_pattern'];

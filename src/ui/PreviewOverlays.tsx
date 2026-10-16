@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { FEATURE_LABELS, FEATURE_ORDER, type FeatureType } from '../engine/types';
-import { exportGcode, sliceAndPreview } from '../state/actions';
+import { sliceAndPreview } from '../state/actions';
+import { exportPlateFile } from '../state/printjob';
+import { openPrintDialog } from './PrintModal';
+import { printerById } from '../profiles/printers';
 import { useStore, type ColorScheme } from '../state/store';
 import { FEATURE_COLORS, RAMP_CSS } from '../viewport/toolpaths';
 import { Icon } from './icons';
@@ -100,7 +103,8 @@ export function Legend() {
         </div>
       )}
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn-primary" style={{ flex: 1, minWidth: 0 }} onClick={exportGcode}><Icon name="download" />Export G-code</button>
+        <button className="btn-secondary" style={{ flex: 1, minWidth: 0 }} onClick={() => exportPlateFile(printerById(useStore.getState().printerId).flavor === 'bambu' ? '3mf' : 'gcode')} title="Bambu printers: .gcode.3mf with thumbnail; others: G-code with thumbnails"><Icon name="download" />Export</button>
+        <button className="btn-primary" style={{ flex: 1, minWidth: 0 }} onClick={openPrintDialog}><Icon name="print" />Print plate</button>
       </div>
     </div>
   );

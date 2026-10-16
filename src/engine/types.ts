@@ -117,13 +117,20 @@ export interface FilamentSlot {
   nozzleTempInitial: number;
   flowRatio: number;
   maxVolumetricSpeed: number;
+  pressureAdvance?: number;
 }
 
 /** Actions inserted at a layer height (from the preview slider). */
-export interface LayerAction { z: number; type: 'pause' | 'color' | 'custom'; filament?: number; gcode?: string }
+export interface LayerAction {
+  z: number; type: 'pause' | 'color' | 'custom' | 'config'; filament?: number; gcode?: string;
+  /** 'config': a numeric setting changed from this layer on (e.g. nozzle temperature, retraction, speed). */
+  key?: string; value?: number;
+}
 
 export interface SliceOptions {
   filaments?: FilamentSlot[];
+  /** Flush volume (mm³) for each [from][to] filament pair; overrides flush_volume. */
+  flushMatrix?: number[][];
   layerActions?: LayerAction[];
 }
 

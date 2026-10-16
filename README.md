@@ -32,7 +32,22 @@
 | **Multi-plate** | Add / delete / switch plates, move objects between plates, slice the active plate. |
 | **Layer actions** | Pause, filament change or custom G-code at any layer from the Preview slider. |
 
-Planned: **Phase 3** — Device (Bambu LAN, Klipper/Moonraker, OctoPrint, USB), Project and Calibration workspaces, `.gcode.3mf` export for Bambu network printing, Arachne variable-width walls. The connection interface is already defined in `src/connect/types.ts`.
+### Phase 3 — devices, project & calibration
+| Area | Features |
+| --- | --- |
+| **Devices** | Bambu Lab LAN (MQTT/TLS status & control, FTPS upload, A1/P1 camera, AMS & HMS), Klipper/Moonraker, OctoPrint/PrusaLink, USB serial (Marlin host with checksums & resend). Saved printers (access codes encrypted on desktop), live temps, job control, jog, console, file manager. Network Bambu connections need the desktop app. |
+| **Print** | *Print plate* dialog: slice → `.gcode.3mf` (Bambu, with thumbnail, MD5, slice info, AMS mapping) or G-code with embedded thumbnails → upload → start. |
+| **Project** | Save/open `.3mf` projects (whole scene, settings, paint, parts, plates) readable by other slicers; title, designer, licence, notes, photos, bill of materials. |
+| **Calibration** | Temperature tower, pressure advance, flow (coarse/fine), max volumetric speed, retraction — results saved per filament slot and used when slicing. |
+| **Engine** | Arachne-style variable-width walls, G2/G3 arc fitting, per-layer setting changes. |
+
+### Phase 4 — catalogue & tools
+| Area | Features |
+| --- | --- |
+| **Printers** | 44 profiles: all current Bambu Lab (incl. H2D single-nozzle), Creality K1/K2/Ender-3 V3 family, Elegoo Neptune 3/4 & Centauri, Prusa MK3S+/MK4S/MINI+/CORE One/XL, Anycubic Kobra, Voron, Qidi, Sovol, Artillery, generic Marlin/Klipper. |
+| **Tools** | Cut (tilted plane, capped), Mesh boolean (union/difference/intersection), Text (object/emboss/engrave), Measure, Flushing-volume matrix. |
+
+> Not covered yet: H2D dual-nozzle, Creality CFS / Anycubic ACE multi-colour, X1/H2 camera (RTSPS — open the shown URL in VLC). Profiles beyond the original four printers use generic start G-code — check the first print.
 
 > Painting resolution follows the model's triangles; very coarse meshes paint in large facets.
 

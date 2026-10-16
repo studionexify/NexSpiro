@@ -71,6 +71,8 @@ export function orderPaths<T extends Polyline2>(paths: T[], sx: number, sy: numb
       const r: number[] = [];
       for (let i = p.pts.length - 2; i >= 0; i -= 2) r.push(p.pts[i], p.pts[i + 1]);
       p.pts = r;
+      const w = (p as { widths?: number[] }).widths;
+      if (w) (p as { widths?: number[] }).widths = w.slice().reverse();
     }
     out.push(p);
     const n = p.pts.length;

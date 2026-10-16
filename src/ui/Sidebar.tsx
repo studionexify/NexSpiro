@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
+import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess } from '../profiles/resolve';
 import { MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ParamDef, type ProcessTab } from '../profiles/settings';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { addPart, moveToPlate, PART_LABELS, updatePart } from '../state/ops';
 import { Icon } from './icons';
-import { FilamentModal, PrinterModal } from './Modals';
+import { FilamentModal, Modal, PrinterModal } from './Modals';
 
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 
@@ -60,6 +61,7 @@ function PrinterCard() {
 function FilamentCard() {
   const { filaments, plate, printerId, set, markDirty } = useStore();
   const [edit, setEdit] = useState<number | null>(null);
+  const [flush, setFlush] = useState(false);
   const ams = !!printerById(printerId).machine.has_ams;
   const update = (k: number, patch: Partial<{ presetId: string; color: string }>) => {
     set({ filaments: filaments.map((f, i) => (i === k ? { ...f, ...patch } : f)) });
@@ -73,7 +75,7 @@ function FilamentCard() {
       filament: o.filament === k ? 0 : o.filament !== undefined && o.filament > k ? o.filament - 1 : o.filament,
       paint: o.paint?.color ? { ...o.paint, color: o.paint.color.map((c) => (c === k + 1 ? 0 : c > k + 1 ? c - 1 : c)) } : o.paint,
     }), st.objects.map((o) => o.id));
-    set({ filaments: filaments.filter((_, i) => i !== k) });
+    set({ filaments: filaments.filter((_, i) => i !== k), flushMatrix: null });
   };
   return (
     <section className="card">
@@ -81,8 +83,9 @@ function FilamentCard() {
         <span className="card-title"><Icon name="filament" />Filament</span>
         <span className="spacer" />
         <span className="badge" title={ams ? 'Automatic filament changes' : 'Manual filament changes (M600 pause)'}>{ams ? 'AMS' : 'Manual swap'}</span>
+        {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
-          onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }] }); }}>
+          onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
           <Icon name="add" />
         </button>
       </div>
@@ -107,6 +110,7 @@ function FilamentCard() {
         })}
       </div>
       {edit !== null && <FilamentModal slot={edit} onClose={() => setEdit(null)} />}
+      {flush && <FlushModal onClose={() => setFlush(false)} />}
     </section>
   );
 }
@@ -393,5 +397,43 @@ function OverrideRow({ def, value, cfg, onSet, onRemove, modified = true }: { de
       {modified ? <button className="reset" title="Remove override" onClick={onRemove}><Icon name="close" size={14} /></button> : <span />}
       {control}
     </div>
+  );
+}
+
+function FlushModal({ onClose }: { onClose: () => void }) {
+  const { filaments, flushMatrix, flushMultiplier, set, markDirty } = useStore();
+  const colors = filaments.map((f) => f.color);
+  const auto = autoFlushMatrix(colors);
+  const val = (i: number, j: number) => flushMatrix?.[i]?.[j] ?? auto[i][j];
+  const setVal = (i: number, j: number, v: number) => {
+    const m = colors.map((_, a) => colors.map((__, b) => val(a, b)));
+    m[i][j] = v;
+    set({ flushMatrix: m }); markDirty();
+  };
+  return (
+    <Modal title="Flushing volumes (mm³)" onClose={onClose} footer={<>
+      <button className="btn-secondary btn-small" onClick={() => { set({ flushMatrix: null }); markDirty(); }}>Auto-calculate</button>
+      <span className="spacer" />
+      <span className="muted" style={{ fontSize: 12 }}>Multiplier</span>
+      <input className="input mono" style={{ width: 60 }} type="number" step="0.1" min="0" value={flushMultiplier} onChange={(e) => { set({ flushMultiplier: Math.max(0, Number(e.target.value) || 0) }); markDirty(); }} />
+      <button className="btn-primary btn-small" onClick={onClose}>Done</button>
+    </>}>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Purge needed when changing from the filament in a row to the filament in a column. Dark → light needs the most. {flushMatrix ? 'Edited values are used.' : 'Values are calculated from the colours.'}</p>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="flush-table">
+          <thead><tr><th>From \ To</th>{filaments.map((f, j) => <th key={j}><span className="swatch" style={{ background: f.color, display: 'inline-block' }} /> {j + 1}</th>)}</tr></thead>
+          <tbody>
+            {filaments.map((f, i) => (
+              <tr key={i}>
+                <th><span className="swatch" style={{ background: f.color, display: 'inline-block' }} /> {i + 1}</th>
+                {filaments.map((_, j) => <td key={j}>{i === j ? <span className="muted">—</span> : (
+                  <input className="input mono" style={{ width: 64 }} value={val(i, j)} onChange={(e) => setVal(i, j, Math.max(0, Number(e.target.value.replace(/[^\d]/g, '')) || 0))} />
+                )}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   );
 }

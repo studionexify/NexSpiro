@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { transformVertices } from '../engine/mesh';
 import type { MeshInput, SliceOutput } from '../engine/types';
-import { filamentSlots, resolveConfig } from '../profiles/resolve';
+import { filamentSlots, resolveConfig, tuningConfig } from '../profiles/resolve';
+import { effectiveFlush } from '../profiles/flush';
 import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } from './store';
 
 let worker: Worker | null = null;
@@ -10,7 +11,7 @@ let seq = 0;
 
 export function currentConfig() {
   const s = useStore.getState();
-  return resolveConfig({ printerId: s.printerId, plate: s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides });
+  return { ...resolveConfig({ printerId: s.printerId, plate: s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides }), ...tuningConfig(s.filaments[0].tuning) };
 }
 
 export const plateObjects = (plate = useStore.getState().activePlate) => {
@@ -66,7 +67,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     };
     worker!.postMessage({
       id, meshes, cfg: currentConfig(),
-      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions },
+      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
 }

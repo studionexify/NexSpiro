@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { arrange, autoOrient, exportGcode, importDialog, sliceAndPreview } from '../state/actions';
+import { openPrintDialog } from './PrintModal';
 import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
 import { addPlate, currentProfile, deletePlate, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { plateObjects } from '../state/slicing';
@@ -31,6 +32,11 @@ export function Toolbar() {
       {T('paint_color', 'brushColor', 'Colour painting', 'N')}
       {T('vlh', 'vlh', 'Variable layer height', 'H')}
       <span className="sep" />
+      {T('cut', 'cut', 'Cut', 'C')}
+      {T('boolean', 'boolean', 'Mesh boolean', 'B')}
+      {T('text', 'text', 'Text', 'T')}
+      {T('measure', 'measure', 'Measure', 'U')}
+      <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
     </div>
   );
@@ -52,6 +58,9 @@ export function ActionBar() {
     <div className="float actionbar">
       <button className="btn-secondary" onClick={exportGcode} disabled={!objects.length || slice.status === 'slicing'} title="Slice (if needed) and export G-code (Ctrl+G)">
         <Icon name="download" />Export G-code
+      </button>
+      <button className="btn-secondary" onClick={openPrintDialog} disabled={!objects.length || slice.status === 'slicing'} title="Slice (if needed) and send to a printer (Ctrl+P)">
+        <Icon name="print" />Print
       </button>
       <button className="btn-primary" onClick={sliceAndPreview} disabled={!objects.length || slice.status === 'slicing'} title="Slice plate (Ctrl+R)">
         <Icon name="slice" />{slice.status === 'slicing' ? 'Slicing…' : 'Slice plate'}

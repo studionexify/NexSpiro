@@ -54,6 +54,11 @@ const paths: Record<string, string> = {
   brushSeam: 'M12 3v18M8 7l4-4 4 4M6 21h12',
   brushColor: 'M18 3a3 3 0 0 1 3 3c0 4-9 11-9 11l-3-3S14 3 18 3zM9 14l-3 3a3 3 0 0 0-3 4 3 3 0 0 0 4-3l3-3',
   vlh: 'M4 4h16M4 8h16M4 11h16M4 13h16M4 15h16M4 18h16M4 21h16',
+  cut: 'M6 6a3 3 0 1 0 0 .01M6 18a3 3 0 1 0 0 .01M8.1 8.1 20 20M8.1 15.9 20 4M2 12h4M10 12h2',
+  text: 'M5 6V4h14v2M12 4v16M9 20h6',
+  measure: 'M3 17 17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
+  boolean: 'M9 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM15 8a6 6 0 1 1 0 12 6 6 0 0 1 0-12z',
+  flush: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11zM9 15a3 3 0 0 0 3 3',
 };
 
 export function Icon({ name, size = 18, ...rest }: { name: keyof typeof paths | string; size?: number } & SVGProps<SVGSVGElement>) {

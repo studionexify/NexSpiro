@@ -9,7 +9,7 @@ import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'vlh';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
@@ -43,7 +43,11 @@ export interface SceneObject {
   layerHeights?: number[];
 }
 
-export interface FilamentSlotState { presetId: string; color: string }
+/** Values found with the Calibration workspace, applied on top of the filament preset. */
+export interface FilamentTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
+export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning }
+export interface ProjectInfo { title: string; author: string; description: string; license: string; notes: string; photos: { name: string; dataUrl: string }[] }
+export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
 export interface Plate { id: string; name: string; layerActions: LayerAction[] }
 
 export interface SliceState {
@@ -92,6 +96,14 @@ interface State {
   layerRange: [number, number];
   moveCursor: number; // index within top layer, -1 = all
   toast: { kind: 'info' | 'error' | 'warn'; text: string } | null;
+  project: ProjectInfo;
+  /** Flushing volumes [from][to] in mm³; null = calculated from the filament colours. */
+  flushMatrix: number[][] | null;
+  flushMultiplier: number;
+  /** Cut tool plane: world height and tilt (degrees). */
+  cutPlane: { height: number; tiltX: number; tiltY: number };
+  /** Measure tool: picked world points (up to 2). */
+  measurePoints: Vec3[];
 
   set: (p: Partial<State>) => void;
   addObjects: (o: SceneObject[]) => void;
@@ -133,6 +145,11 @@ export const useStore = create<State>((set, get) => ({
 
   plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }],
   activePlate: 0,
+  project: emptyProject(),
+  flushMatrix: null,
+  flushMultiplier: 1,
+  cutPlane: { height: 10, tiltX: 0, tiltY: 0 },
+  measurePoints: [],
 
   printerId: prefs.printerId ?? 'bbl-p1s',
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',

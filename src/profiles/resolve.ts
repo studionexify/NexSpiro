@@ -72,12 +72,27 @@ export function validate(sel: ProfileSelection): string[] {
 }
 
 /** Engine filament slots from the UI slot list (preset + colour). */
-export function filamentSlots(slots: { presetId: string; color: string }[]): FilamentSlot[] {
+export interface SlotTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
+export function filamentSlots(slots: { presetId: string; color: string; tuning?: SlotTuning }[]): FilamentSlot[] {
   return slots.map((s) => {
     const f = filamentById(s.presetId);
+    const t = s.tuning ?? {};
     return {
       name: f.name, type: f.type, color: s.color, diameter: f.diameter, density: f.density, cost: f.cost,
-      nozzleTemp: f.nozzleTemp, nozzleTempInitial: f.nozzleTempInitial, flowRatio: f.flowRatio, maxVolumetricSpeed: f.maxVolumetricSpeed,
+      nozzleTemp: t.nozzleTemp ?? f.nozzleTemp, nozzleTempInitial: t.nozzleTemp ?? f.nozzleTempInitial,
+      flowRatio: t.flowRatio ?? f.flowRatio, maxVolumetricSpeed: t.maxVolumetricSpeed ?? f.maxVolumetricSpeed, pressureAdvance: t.pressureAdvance,
     };
   });
+}
+
+/** Config keys overridden by the tuning of the first filament slot. */
+export function tuningConfig(t: SlotTuning | undefined): Config {
+  if (!t) return {};
+  const c: Config = {};
+  if (t.flowRatio !== undefined) c.filament_flow_ratio = t.flowRatio;
+  if (t.pressureAdvance !== undefined) c.pressure_advance = t.pressureAdvance;
+  if (t.maxVolumetricSpeed !== undefined) c.filament_max_volumetric_speed = t.maxVolumetricSpeed;
+  if (t.nozzleTemp !== undefined) { c.nozzle_temperature = t.nozzleTemp; c.nozzle_temperature_initial_layer = t.nozzleTemp; }
+  if (t.retractionLength !== undefined) c.retraction_length = t.retractionLength;
+  return c;
 }

@@ -22,13 +22,15 @@ export async function saveFile(defaultName: string, data: string | ArrayBuffer, 
   return defaultName;
 }
 
-export async function openModelFiles(): Promise<{ name: string; data: ArrayBuffer }[]> {
-  if (window.nexspiro) return window.nexspiro.openFiles({ filters: [{ name: '3D models', extensions: ['stl', 'obj', '3mf'] }] });
+export const openModelFiles = () => openFiles([{ name: '3D models', extensions: ['stl', 'obj', '3mf'] }]);
+
+export async function openFiles(filters: { name: string; extensions: string[] }[], multiple = true): Promise<{ name: string; data: ArrayBuffer }[]> {
+  if (window.nexspiro) return window.nexspiro.openFiles({ filters });
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.multiple = true;
-    input.accept = '.stl,.obj,.3mf';
+    input.multiple = multiple;
+    input.accept = filters.flatMap((f) => f.extensions.map((e) => `.${e}`)).join(',');
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
       resolve(await Promise.all(files.map(async (f) => ({ name: f.name, data: await f.arrayBuffer() }))));

@@ -1,16 +1,21 @@
 // NexSpiro desktop shell. Serves the built app over a privileged app:// protocol
-// (so module workers and fetch behave exactly as on the web) and exposes native file dialogs.
-const { app, BrowserWindow, dialog, ipcMain, protocol, net, shell, Menu } = require('electron');
-const path = require('node:path');
-const fs = require('node:fs/promises');
-const { pathToFileURL } = require('node:url');
+// (so module workers and fetch behave exactly as on the web), exposes native file dialogs,
+// printer connections (devices.ts) and USB serial port selection.
+import { app, BrowserWindow, dialog, ipcMain, protocol, net, shell, Menu } from 'electron';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import { disconnectAll, registerDeviceIpc } from './devices';
 
+const ROOT = path.join(__dirname, '..', '..');
 const DEV_URL = process.env.NEXSPIRO_DEV_URL;
-const DIST = path.join(__dirname, '..', 'dist');
+const DIST = path.join(ROOT, 'dist');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
+
+let serialPick: ((portId: string) => void) | null = null;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -20,15 +25,25 @@ function createWindow() {
     minHeight: 720,
     backgroundColor: '#142030',
     title: 'NexSpiro',
-    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    icon: path.join(ROOT, 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(ROOT, 'electron', 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
+  // USB serial (Web Serial API): let the renderer choose the port
+  const ses = win.webContents.session;
+  ses.on('select-serial-port', (event, portList, _wc, callback) => {
+    event.preventDefault();
+    serialPick = callback;
+    win.webContents.send('nx:serial:ports', portList.map((p) => ({ portId: p.portId, portName: p.portName, displayName: p.displayName, vendorId: p.vendorId, productId: p.productId })));
+  });
+  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial' || permission === 'clipboard-sanitized-write' || permission === 'fullscreen');
+  ses.setDevicePermissionHandler((d) => d.deviceType === 'serial');
+
   win.loadURL(DEV_URL || 'app://nexspiro/index.html');
   // open external links in the system browser
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -48,7 +63,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('nx:saveFile', async (ev, { defaultName, data, filters }) => {
-    const win = BrowserWindow.fromWebContents(ev.sender);
+    const win = BrowserWindow.fromWebContents(ev.sender)!;
     const r = await dialog.showSaveDialog(win, { defaultPath: defaultName, filters });
     if (r.canceled || !r.filePath) return null;
     await fs.writeFile(r.filePath, typeof data === 'string' ? data : Buffer.from(data));
@@ -56,7 +71,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('nx:openFiles', async (ev, { filters }) => {
-    const win = BrowserWindow.fromWebContents(ev.sender);
+    const win = BrowserWindow.fromWebContents(ev.sender)!;
     const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters });
     if (r.canceled) return [];
     return Promise.all(r.filePaths.map(async (p) => {
@@ -64,6 +79,13 @@ app.whenReady().then(() => {
       return { name: path.basename(p), data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
     }));
   });
+
+  ipcMain.handle('nx:serial:pick', (_e, portId: string) => {
+    serialPick?.(portId ?? '');
+    serialPick = null;
+  });
+
+  registerDeviceIpc();
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
@@ -75,4 +97,5 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+app.on('before-quit', () => { void disconnectAll(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

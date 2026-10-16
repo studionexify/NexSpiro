@@ -5,7 +5,7 @@ import { openModelFiles, saveFile } from '../platform';
 import { printerById } from '../profiles/printers';
 import { arrange, autoOrient, centreOnBed } from './ops';
 import { sliceNow } from './slicing';
-import { newId, useStore, type SceneObject } from './store';
+import { emptyProject, newId, useStore, type SceneObject } from './store';
 import { centreMesh } from '../io/load';
 
 export async function importBuffers(files: { name: string; data: ArrayBuffer }[]) {
@@ -13,6 +13,15 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
   const added: SceneObject[] = [];
   for (const f of files) {
     try {
+      if (/\.3mf$/i.test(f.name)) {
+        const { isProject, loadProject } = await import('./project');
+        if (await isProject(f.data)) {
+          if (s.objects.length && !confirm(`Open project ${f.name}? The current plate will be replaced.`)) continue;
+          await loadProject(f.data);
+          useStore.getState().set({ toast: { kind: 'info', text: `Opened project ${f.name}` } });
+          return;
+        }
+      }
       const models = await loadModelFile(f.name, f.data);
       for (const m of models) {
         let o: SceneObject = { id: newId(), name: m.name, mesh: m.mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: m.openEdges };
@@ -38,7 +47,7 @@ export async function importDialog() {
 export function newProject() {
   const s = useStore.getState();
   if (s.objects.length && !confirm('Start a new project? Unsaved changes on the plate will be lost.')) return;
-  s.set({ objects: [], selected: [], selectedPart: null, undoStack: [], redoStack: [], workspace: 'prepare', plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0, slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 } });
+  s.set({ objects: [], selected: [], selectedPart: null, undoStack: [], redoStack: [], workspace: 'prepare', project: emptyProject(), plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0, slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 } });
 }
 
 export async function sliceAndPreview() {

@@ -2,6 +2,7 @@
 import type { Config } from '../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from './types';
 import { FEATURE_ORDER } from './types';
+import { fitArc } from './arc';
 
 export type Op =
   | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean }
@@ -62,6 +63,7 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
   const minSpeed = num('slow_down_min_speed');
   const filArea = Math.PI * (num('filament_diameter') / 2) ** 2;
   const byFeature: SliceStats['byFeature'] = {};
+  const arcs = cfg.enable_arc_fitting === true && !cfg.spiral_mode;
 
   // 1) timing + cooling slowdown per layer
   const layerTimes: number[] = [];
@@ -130,6 +132,7 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
     }
   }
   out.push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '') out.push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
   out.push('G90 ; absolute XYZ');
   out.push('M83 ; relative E');
   out.push('G92 E0');
@@ -148,6 +151,8 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
     out.push(`;Z:${n(L.z)}`);
     out.push(`;HEIGHT:${n(L.h)}`);
     if (flavor !== 'klipper') out.push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
+    if (flavor === 'bambu') out.push(`M73 L${li + 1}`);
+    else if (flavor === 'klipper') out.push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
     if (lc) out.push(expandMacro(lc, cfg, { layer_num: li, layer_z: n(L.z) }));
     if (L.temp !== undefined) out.push(`M104 S${L.temp}`);
@@ -157,7 +162,35 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
       out.push(fan > 0 ? `M106 S${Math.round((fan / 100) * 255)}` : 'M107');
     }
     let curFeature: FeatureType | null = null;
-    for (const op of L.ops) {
+    for (let oi = 0; oi < L.ops.length; oi++) {
+      const op = L.ops[oi];
+      if (arcs && op.k === 'move' && !op.travel && op.e > 0 && op.z === z && !isNaN(x)) {
+        const fit = fitArc(L.ops, oi, x, y);
+        if (fit) {
+          if (curFeature !== op.feature) { curFeature = op.feature; out.push(`;TYPE:${op.feature.replace(/_/g, ' ')}`); }
+          const last = L.ops[fit.end] as Extract<Op, { k: 'move' }>;
+          let e = 0;
+          const i0 = fit.cx - x, j0 = fit.cy - y;
+          for (let k = oi; k <= fit.end; k++) {
+            const m = L.ops[k] as Extract<Op, { k: 'move' }>;
+            e += m.e;
+            x = m.x; y = m.y;
+            const t = m.t ?? 0;
+            elapsed += t;
+            pushMove(m.feature, m.w, m.h, m.f, t);
+            const bf = byFeature[m.feature] ?? (byFeature[m.feature] = { time: 0, filamentMm: 0 });
+            bf.time += t; bf.filamentMm += m.e;
+          }
+          const parts = [fit.cw ? 'G2' : 'G3', `X${n(last.x)}`, `Y${n(last.y)}`, `I${n(i0)}`, `J${n(j0)}`, `E${n(e, 5)}`];
+          if (op.f !== f) { parts.push(`F${fmtF(op.f)}`); f = op.f; }
+          out.push(parts.join(' '));
+          filamentMm += e;
+          perFil[tool] += e;
+          if (op.feature === 'prime_tower') towerMm += e;
+          oi = fit.end;
+          continue;
+        }
+      }
       switch (op.k) {
         case 'raw':
           out.push(op.text);

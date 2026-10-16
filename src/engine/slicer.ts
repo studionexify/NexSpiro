@@ -7,6 +7,7 @@ import ClipperLib from 'clipper-lib';
 import { concentricFill, linesFill, sparseFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import type { IndexedMesh } from './mesh';
+import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh } from './slice';
@@ -17,7 +18,7 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export type ProgressFn = (stage: string, pct: number) => void;
 
-interface PathItem extends Polyline2 { feature: FeatureType; width: number; flow: number; spiral?: boolean }
+interface PathItem extends Polyline2 { feature: FeatureType; width: number; flow: number; spiral?: boolean; widths?: number[] }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
 
@@ -101,11 +102,16 @@ export function slotFromConfig(cfg: Config): FilamentSlot {
   };
 }
 
-interface Island { obj: number; fil: number; ex: ExPolygon; loops: PathItem[][]; inner: Paths }
+interface Island { obj: number; fil: number; ex: ExPolygon; loops: PathItem[][]; inner: Paths; thin: PathItem[] }
 type Regions = { top: Paths; bottom: Paths; bridge: Paths; solid: Paths; sparse: Paths; sparseMods: { paths: Paths; density: number; pattern: SparsePattern }[] };
 
+/** Pressure advance command for the firmware flavour. */
+export const paLine = (flavor: string, k: number) => (flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${k}` : `M900 K${k}`);
+
 export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}, opts: SliceOptions = {}): SliceOutput {
-  const num = (k: string) => Number(cfg[k] ?? 0);
+  // values changed mid-print by 'config' layer actions (calibration towers etc.)
+  const live: Record<string, number> = {};
+  const num = (k: string) => (k in live ? live[k] : Number(cfg[k] ?? 0));
   const str = (k: string) => String(cfg[k] ?? '');
   const bool = (k: string) => cfg[k] === true;
   const warnings: string[] = [];
@@ -219,6 +225,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   // ---------- stage 4: perimeters (classic), per object & filament region
   progress('Generating perimeters', 0.2);
   const wo0 = lw('outer_wall_line_width'), wi0 = lw('inner_wall_line_width');
+  const arachne = str('wall_generator') === 'arachne' && !vase;
   const layerIslands: Island[][] = [];
   const layerInner: Paths[][] = []; // [layer][obj]
   const filInner: Map<number, Paths>[][] = []; // [layer][obj] fil -> inner
@@ -239,6 +246,23 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         for (const ex of toExPolygons(reg.paths)) {
           const ip = exToPaths(ex);
           const loops: PathItem[][] = [];
+          if (arachne && walls > 0) {
+            // variable-width walls: narrow areas get one bead whose width follows the region
+            const thin: PathItem[] = [];
+            let A = ip;
+            for (let k = 0; k < walls && A.length; k++) {
+              const w = k === 0 ? wo : wi, sp = k === 0 ? so : si;
+              const sn = splitNarrow(A, w, nozzle * 0.3, Math.min(2 * w, nozzle * 2));
+              const feature: FeatureType = k === 0 ? 'outer_wall' : 'inner_wall';
+              for (const t of sn.thin) thin.push({ ...t, feature, width: t.widths.reduce((a, b) => a + b, 0) / t.widths.length, flow: 1 });
+              const ps = sn.wide.length ? offset(sn.wide, -w / 2).filter((p) => p.length >= 3) : [];
+              if (ps.length) loops.push(ps.map((p) => ({ pts: pathToPoly(p), closed: true, feature, width: w, flow: 1 })));
+              A = sn.wide.length ? offset(sn.wide, -sp) : [];
+            }
+            regInner.push(...A);
+            islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: A, thin });
+            continue;
+          }
           let boundary = 0;
           for (let k = 0; k < walls; k++) {
             const d = k === 0 ? wo / 2 : wo / 2 + (so + si) / 2 + (k - 1) * si;
@@ -252,7 +276,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           }
           const inner = walls > 0 ? (loops.length === walls ? offset(ip, -boundary) : []) : ip;
           regInner.push(...inner);
-          islands.push({ obj: oi, fil: reg.fil, ex, loops, inner });
+          islands.push({ obj: oi, fil: reg.fil, ex, loops, inner, thin: [] });
         }
         const u = union(regInner);
         fmap.set(reg.fil, u);
@@ -483,8 +507,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     return num('default_acceleration');
   };
 
-  const retractLen = num('retraction_length'), retractSpeed = num('retraction_speed'), deretractSpeed = num('deretraction_speed') || retractSpeed;
-  const zHop = num('z_hop'), minTravel = num('retraction_minimum_travel');
+  let retractLen = num('retraction_length'), retractSpeed = num('retraction_speed'), deretractSpeed = num('deretraction_speed') || retractSpeed;
+  let zHop = num('z_hop');
+  const minTravel = num('retraction_minimum_travel');
+  let objFlow = 1; // per-object flow multiplier (flow calibration)
   const travelSpeed = num('travel_speed');
   const reduceInfillRetract = bool('reduce_infill_retraction');
   const fanOffLayers = num('close_fan_the_first_x_layers');
@@ -494,6 +520,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const actionsByLayer = new Map<number, typeof opts.layerActions>();
   for (const a of opts.layerActions ?? []) {
     if (a.type === 'color') continue;
+    if (a.type === 'config' && a.key) { (a as any)._v = Number(a.value); }
     const li = zs.findIndex((zz) => zz >= a.z - 1e-6);
     if (li < 0) continue;
     actionsByLayer.set(li, [...(actionsByLayer.get(li) ?? []), a]);
@@ -549,9 +576,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const xs = it.feature === 'bridge'
         ? Math.PI * (nozzle / 2) ** 2
         : it.width > hEff ? (it.width - hEff) * hEff + Math.PI * (hEff / 2) ** 2 : it.width * hEff;
-      const ePerMm = (xs / filArea) * (fl.flowRatio || 1) * it.flow;
+      const ePerMm = (xs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow;
+      const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
+      const xsOf = (w: number) => (w > h ? (w - h) * h + Math.PI * (h / 2) ** 2 : w * h);
       let v = speedFor(it.feature, i);
-      v = Math.min(v, (fl.maxVolumetricSpeed || 1e9) / Math.max(xs, 1e-6));
+      const maxVol = 'filament_max_volumetric_speed' in live ? live.filament_max_volumetric_speed : fl.maxVolumetricSpeed;
+      v = Math.min(v, (maxVol || 1e9) / Math.max(xs, 1e-6));
       if (it.closed) pts = [...pts, pts[0], pts[1]];
       let totalLen = 0;
       if (it.spiral) for (let k = 2; k < pts.length; k += 2) totalLen += Math.hypot(pts[k] - pts[k - 2], pts[k + 1] - pts[k - 1]);
@@ -562,6 +592,11 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (len < 1e-5) continue;
         run += len;
         const zz = it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : zTop;
+        if (varW) {
+          const sw = (varW[k / 2 - 1] + varW[k / 2]) / 2, sxs = xsOf(sw);
+          const sv = Math.min(v * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
+          ops.push({ k: 'move', x, y, z: zz, e: len * (sxs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow, f: sv, feature: it.feature, w: sw, h: hEff, travel: false });
+        } else
         ops.push({ k: 'move', x, y, z: zz, e: len * ePerMm, f: v, feature: it.feature, w: it.width, h: hEff, travel: false });
         px = x; py = y; curZ = zz;
       }
@@ -594,8 +629,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (next === curTool) return;
       if (curTool === -1 && (!hasAms || (usedFils.size <= 1 && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
       const fl = filaments[next];
-      const flushLen = (num('flush_volume') || 0) / (Math.PI * (fl.diameter / 2) ** 2);
       const prev = curTool < 0 ? 0 : curTool;
+      const flushVol = opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      const flushLen = (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
       if (!retracted && curTool >= 0) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
@@ -606,6 +642,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         }),
       });
       if (layerFan > 0) ops.push({ k: 'raw', text: `M106 S${Math.round((layerFan / 100) * 255)} ; restore part fan` });
+      if (fl.pressureAdvance !== undefined) ops.push({ k: 'raw', text: paLine(flavor, fl.pressureAdvance) });
       ops.push({ k: 'tool', tool: next });
       retracted = hasAms; // the AMS sequence ends with a retraction; M600 leaves the nozzle primed
       px = NaN; py = NaN;
@@ -614,8 +651,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (towerActive && !wasFirst) { towerOutline(); towerBand(bandsDone++, true); }
     };
 
-    // --- layer actions (pause / custom G-code)
+    // --- layer actions (pause / custom G-code / setting change)
     for (const a of actionsByLayer.get(i) ?? []) {
+      if (a.type === 'config' && a.key) {
+        live[a.key] = Number(a.value);
+        retractLen = num('retraction_length'); retractSpeed = num('retraction_speed'); deretractSpeed = num('deretraction_speed') || retractSpeed; zHop = num('z_hop');
+        if (a.gcode) ops.push({ k: 'raw', text: a.gcode });
+        continue;
+      }
       if (a.type === 'pause') ops.push({ k: 'raw', text: `; PAUSE at layer ${i + 1}\n${str('machine_pause_gcode') || 'M601'}`, resetPos: true });
       else if (a.type === 'custom' && a.gcode) ops.push({ k: 'raw', text: `; custom G-code at layer ${i + 1}\n${a.gcode}` });
     }
@@ -640,6 +683,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       for (let o = 0; o < meshes.length; o++) {
         const objIslands = islands.filter((s) => s.obj === o && s.fil === fil);
         if (!objIslands.length) continue;
+        objFlow = onum(o, 'flow_ratio_scale') || 1;
         const rg = regions[i][o];
         const sw = lw('internal_solid_infill_line_width'), twid = lw('top_surface_line_width'), spw = lw('sparse_infill_line_width');
         const w0 = lw('initial_layer_line_width');
@@ -726,6 +770,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
               wallItems.push(...(i > 0 && !vase ? splitOverhang(item, lowerSupport) : [item]));
             }
           }
+          if (isl.thin.length) wallItems.push(...orderPaths(isl.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice() })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
           const isFill = byIsland.get(isl) ?? [];
           const fillOrdered = () => {
             const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
@@ -739,6 +784,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_END NAME=${labelName(o)}` : 'M486 S-1' });
       }
     }
+    objFlow = 1;
 
     // --- support
     if (support && (support.base[i].length || support.iface[i].length)) {

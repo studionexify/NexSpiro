@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById, type PrinterProfile } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
-  type ObjectPaint, type SceneObject, type ScenePart, type Tool,
+  dropToBed, isOutOfBounds, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
+  type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace } from '../state/ops';
 import { ToolpathView } from './toolpaths';
@@ -199,6 +199,43 @@ export function Viewport() {
 
     let needsRender = true;
     const invalidate = () => { needsRender = true; };
+
+    // ---------------- cut plane & measure overlays
+    const cutPlaneMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#FF5C8D', transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+    const cutEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), new THREE.LineBasicMaterial({ color: '#FF5C8D' }));
+    cutPlaneMesh.add(cutEdge);
+    cutPlaneMesh.visible = false;
+    scene.add(cutPlaneMesh);
+    const measureGroup = new THREE.Group();
+    scene.add(measureGroup);
+    const syncTools = () => {
+      const s = useStore.getState();
+      const o = s.objects.find((x) => x.id === s.selected[0]);
+      cutPlaneMesh.visible = s.workspace === 'prepare' && s.tool === 'cut' && !!o;
+      if (cutPlaneMesh.visible && o) {
+        const b = worldBounds(o);
+        const size = Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 1.4 + 10;
+        const d = Math.PI / 180;
+        cutPlaneMesh.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, s.cutPlane.height);
+        cutPlaneMesh.rotation.set(s.cutPlane.tiltX * d, s.cutPlane.tiltY * d, 0, 'XYZ');
+        cutPlaneMesh.scale.set(size, size, 1);
+      }
+      measureGroup.clear();
+      if (s.workspace === 'prepare' && s.tool === 'measure') {
+        const pts = s.measurePoints.map((p) => new THREE.Vector3(...p));
+        for (const p of pts) {
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 12), new THREE.MeshBasicMaterial({ color: '#FF5C8D', depthTest: false }));
+          dot.position.copy(p); dot.renderOrder = 10;
+          measureGroup.add(dot);
+        }
+        if (pts.length === 2) {
+          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#FF5C8D', depthTest: false }));
+          line.renderOrder = 10;
+          measureGroup.add(line);
+        }
+      }
+      invalidate();
+    };
     controls.addEventListener('change', invalidate);
 
     const setView = (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => {
@@ -217,7 +254,7 @@ export function Viewport() {
       invalidate();
     };
     viewApi.current = { setView, fit: () => setView('iso') };
-    (window as any).__nx = { camera, controls, invalidate };
+    (window as any).__nx = { camera, controls, invalidate, THREE };
 
     const rebuildPlates = () => {
       plateGroup.traverse((o: any) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
@@ -510,6 +547,11 @@ export function Viewport() {
       }
       const id = hit.object.userData.id as string;
       const partId = hit.object.userData.partId as string | undefined;
+      if (s.tool === 'measure') {
+        const p: Vec3 = [hit.point.x, hit.point.y, hit.point.z];
+        s.set({ measurePoints: s.measurePoints.length >= 2 ? [p] : [...s.measurePoints, p] });
+        return;
+      }
       if (s.tool === 'face' && hit.face && !partId) {
         layOnFace(id, hit.face.normal.clone().transformDirection(hit.object.matrixWorld));
         s.set({ selected: [id], selectedPart: null });
@@ -586,6 +628,7 @@ export function Viewport() {
       if (s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
+      if (s.cutPlane !== prev.cutPlane || s.measurePoints !== prev.measurePoints || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) syncTools();
     });
 
     let raf = 0;
