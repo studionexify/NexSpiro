@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FAMILIES, CATEGORIES } from '../../src/plugins/patternex/library/families';
-import { buildPattern, libraryCounts, libraryEntries, patternSvg, searchLibrary, specOf } from '../../src/plugins/patternex/library/catalog';
+import { buildPattern, GROUP_KEYS, libraryCounts, libraryEntries, patternSvg, searchLibrary, specOf } from '../../src/plugins/patternex/library/catalog';
 import { ShapeIndex } from '../../src/plugins/patternex/projection';
 
 describe('pattern library', () => {
@@ -32,11 +32,14 @@ describe('pattern library', () => {
     }
   });
 
-  it('seeds and palettes change the result; size follows the spec', () => {
+  it('seeds change the result; inks do not change the id; size follows the spec', () => {
     const e = libraryEntries().find((x) => x.family === 'voronoi')!;
     const a = buildPattern(specOf(e)), b = buildPattern({ ...specOf(e), seed: 99 });
     expect(a.id).not.toBe(b.id);
     expect(JSON.stringify(a.shapes)).not.toBe(JSON.stringify(b.shapes));
+    expect(buildPattern({ ...specOf(e), inks: [-1, 1, 2] }).id).toBe(a.id);
+    // library patterns are uninked: only neutral group keys
+    expect(a.shapes.every((s) => GROUP_KEYS.includes(s.fill_color))).toBe(true);
     const big = buildPattern(specOf(e, 120, 30));
     expect(big.bounds[2]).toBeGreaterThan(100);
     expect(big.bounds[3]).toBeLessThanOrEqual(30 + 1e-6);
@@ -45,12 +48,12 @@ describe('pattern library', () => {
   it('search filters by words, tags and category', () => {
     expect(searchLibrary('voronoi', 'All').every((e) => e.family === 'voronoi')).toBe(true);
     expect(searchLibrary('', 'Tiles').every((e) => e.category === 'Tiles')).toBe(true);
-    expect(searchLibrary('maze ocean', 'All').length).toBeGreaterThan(0);
+    expect(searchLibrary('maze fine', 'All').length).toBeGreaterThan(0);
     expect(searchLibrary('zzzz', 'All')).toEqual([]);
   });
 
   it('renders an SVG preview', () => {
     const p = buildPattern(specOf(libraryEntries()[0]));
-    expect(patternSvg(p, 40, 40, '#fff')).toMatch(/^<svg[^>]*viewBox="0 0 40 40".*<path/);
+    expect(patternSvg(p, 40, 40)).toMatch(/^<svg[^>]*viewBox="0 0 40 40".*<path/);
   });
 });

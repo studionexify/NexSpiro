@@ -5,25 +5,22 @@ import { hashStr } from '../svg';
 import { CATEGORIES, defaults, FAMILIES, familyById, type Category, type Family } from './families';
 import { rng, SHAPE_NAMES } from './geom';
 
-export interface Palette { id: string; name: string; colors: string[] }
-/** Colour 0 is the base material (background); the others become region groups. */
-export const PALETTES: Palette[] = [
-  { id: 'ink', name: 'Ink', colors: ['#f4f1ea', '#1b1b1f', '#8c8c94'] },
-  { id: 'ember', name: 'Ember', colors: ['#f6ead7', '#d1495b', '#edae49'] },
-  { id: 'ocean', name: 'Ocean', colors: ['#e8f1f2', '#00798c', '#003d5b'] },
-  { id: 'forest', name: 'Forest', colors: ['#f1ede0', '#2e7d32', '#a1c181'] },
-  { id: 'candy', name: 'Candy', colors: ['#fff4f8', '#ff5c8d', '#7b5cff'] },
-  { id: 'sunset', name: 'Sunset', colors: ['#fff1e0', '#ff7a45', '#7a1f5c'] },
-  { id: 'mono', name: 'Mono', colors: ['#ffffff', '#000000', '#7f7f7f'] },
-  { id: 'gold', name: 'Gold', colors: ['#141414', '#d4af37', '#7a6a3a'] },
-];
+/**
+ * Library patterns are not inked: each region group gets a neutral key colour and the user picks the
+ * ink (a filament slot, or the base material) per group. Group 0 is drawn in the base material.
+ */
+export const GROUP_KEYS = ['#ffffff', '#2f2f33', '#7d7d85', '#b9b9c0'];
+export const GROUP_NAMES = ['Base', 'Ink A', 'Ink B', 'Ink C'];
+export const NEUTRAL_BG = '#ecebe8';
+export const groupOfKey = (color: string) => GROUP_KEYS.indexOf(color);
 
 export interface LibraryEntry {
   key: string;
   family: string;
   preset: string;
   seed: number;
-  palette: string;
+  /** Density step: cell / count scaled by DENSITY[density]. */
+  density: number;
   /** Value of the family's variant parameter, when it has one. */
   variant?: number;
   name: string;
@@ -31,7 +28,11 @@ export interface LibraryEntry {
   tags: string[];
 }
 
-const SEEDS_PER_PRESET = 6;
+const SEEDS_PER_PRESET = 12;
+export const DENSITY = [1, 0.6, 1.6];
+const DENSITY_NAMES = ['', ' fine', ' coarse'];
+/** Parameters scaled by the density step: bigger cell = coarser, more items = finer. */
+const DENSITY_KEY: Record<string, 'up' | 'down'> = { cell: 'up', n: 'down', count: 'down', rays: 'down' };
 
 let cache: LibraryEntry[] | null = null;
 /** All library entries (thousands), in a stable order. */
@@ -42,10 +43,12 @@ export function libraryEntries(): LibraryEntry[] {
     const seeds = f.seeded ? SEEDS_PER_PRESET : 1;
     const vars: (number | undefined)[] = f.variants ? f.variants.values : [undefined];
     const vlabel = (v: number | undefined) => (v === undefined ? '' : ` ${f.variants!.key === 'shape' ? SHAPE_NAMES[v] : `${v} ${f.params.find((d) => d.key === f.variants!.key)?.label.toLowerCase().split(' ')[0]}`}`);
-    for (const variant of vars) for (let seed = 1; seed <= seeds; seed++) for (const pal of PALETTES) {
+    const dens = f.params.some((d) => d.key in DENSITY_KEY) ? DENSITY.map((_, i) => i) : [0];
+    for (const variant of vars) for (const density of dens) for (let seed = 1; seed <= seeds; seed++) {
       out.push({
-        key: `${f.id}/${preset}/${variant ?? '-'}/${seed}/${pal.id}`, family: f.id, preset, seed, palette: pal.id, variant,
-        name: `${f.name} · ${preset}${vlabel(variant)}${f.seeded ? ` #${seed}` : ''}`, category: f.category, tags: [...f.tags, preset, pal.name.toLowerCase()],
+        key: `${f.id}/${preset}/${variant ?? '-'}/${density}/${seed}`, family: f.id, preset, seed, density, variant,
+        name: `${f.name} · ${preset}${vlabel(variant)}${DENSITY_NAMES[density]}${f.seeded ? ` #${seed}` : ''}`, category: f.category,
+        tags: [...f.tags, preset, ...(density ? [DENSITY_NAMES[density].trim()] : []), `${f.colors} colour`],
       });
     }
   }
@@ -67,30 +70,43 @@ export function searchLibrary(q: string, category: Category | 'All'): LibraryEnt
 }
 
 /** Everything that defines a generated pattern; editable in the library window. */
-export interface GenSpec { family: string; params: Record<string, number>; seed: number; palette: string; width: number; height: number }
+export interface GenSpec {
+  family: string; params: Record<string, number>; seed: number; width: number; height: number;
+  /** Ink per region group (index = group): a 0-based filament slot, or -1 = base material / not inked. */
+  inks?: number[];
+}
 
 export function specOf(e: LibraryEntry, width = 40, height = 40): GenSpec {
   const f = familyById(e.family)!;
-  return { family: e.family, params: { ...defaults(f), ...f.presets[e.preset], ...(e.variant !== undefined && f.variants ? { [f.variants.key]: e.variant } : {}) }, seed: e.seed, palette: e.palette, width, height };
+  const params: Record<string, number> = { ...defaults(f), ...f.presets[e.preset], ...(e.variant !== undefined && f.variants ? { [f.variants.key]: e.variant } : {}) };
+  const k = DENSITY[e.density ?? 0];
+  if (k !== 1) for (const d of f.params) {
+    const dir = DENSITY_KEY[d.key];
+    if (!dir) continue;
+    const v = dir === 'up' ? params[d.key] * k : params[d.key] / k;
+    params[d.key] = Math.max(d.min, Math.min(d.max, Math.round(v / d.step) * d.step));
+  }
+  return { family: e.family, params, seed: e.seed, width, height };
 }
 
 /** Build the pattern for a spec. Deterministic: same spec → same geometry and id. */
 export function buildPattern(spec: GenSpec, name?: string): Pattern {
   const f: Family = familyById(spec.family)!;
-  const pal = PALETTES.find((p) => p.id === spec.palette) ?? PALETTES[0];
   const params = { ...defaults(f), ...spec.params };
   const raw = f.gen(params, spec.width, spec.height, rng(spec.seed * 7919 + 17));
   const byColor = new Map<string, PatternShape[]>();
   for (const s of raw) {
     if (!s.rings.length) continue;
-    const color = pal.colors[Math.min(pal.colors.length - 1, Math.max(0, s.c))];
+    const color = GROUP_KEYS[Math.min(GROUP_KEYS.length - 1, Math.max(0, s.c))];
     const shape: PatternShape = { polygon_rings: s.rings.map(clean).filter((r) => r.length >= 3), fill_color: color, fill_rule: s.evenodd ? 'evenodd' : 'nonzero' };
     if (!shape.polygon_rings.length) continue;
     const l = byColor.get(color); if (l) l.push(shape); else byColor.set(color, [shape]);
   }
   // colour 0 is the background: drawn shapes in it are kept (they print in the base material)
   const shapes = [...byColor.values()].flat();
-  const id = `gen:${spec.family}:${hashStr(JSON.stringify(spec))}`;
+  // inks do not change geometry, so they are not part of the id
+  const { inks: _inks, ...geom } = spec;
+  const id = `gen:${spec.family}:${hashStr(JSON.stringify(geom))}`;
   return { id, name: name ?? `${f.name}`, source: 'builtin', shapes, tolerance_mm: 0.05, bounds: shapes.length ? boundsOf(shapes) : [0, 0, spec.width, spec.height] };
 }
 
@@ -100,8 +116,11 @@ const clean = (r: Ring): Ring => {
   return out;
 };
 
-/** SVG markup for previews. Background = palette colour 0, viewBox = the pattern area. */
-export function patternSvg(pat: Pattern, w: number, h: number, bg: string, maxPoints = 60_000): string {
+/**
+ * SVG markup for previews, viewBox = the pattern area. `inkColors` maps a group key colour to the colour to draw
+ * (the chosen filament); groups without an ink keep their neutral grey.
+ */
+export function patternSvg(pat: Pattern, w: number, h: number, bg = NEUTRAL_BG, maxPoints = 60_000, inkColors: Record<string, string> = {}): string {
   const total = pat.shapes.reduce((n, s) => n + s.polygon_rings.reduce((a, r) => a + r.length, 0), 0);
   const step = Math.max(1, Math.ceil(total / maxPoints));
   const paths = pat.shapes.map((s) => {
@@ -110,9 +129,8 @@ export function patternSvg(pat: Pattern, w: number, h: number, bg: string, maxPo
       for (let k = 0; k < r.length; k += step) out += `${k ? 'L' : 'M'}${r[k][0].toFixed(2)} ${(h - r[k][1]).toFixed(2)}`;
       return out + 'Z';
     }).join('');
-    return `<path fill="${s.fill_color}" fill-rule="${s.fill_rule}" d="${d}"/>`;
+    return `<path fill="${inkColors[s.fill_color] ?? s.fill_color}" fill-rule="${s.fill_rule}" d="${d}"/>`;
   }).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice"><rect width="${w}" height="${h}" fill="${bg}"/>${paths}</svg>`;
 }
 
-export const paletteOf = (id: string) => PALETTES.find((p) => p.id === id) ?? PALETTES[0];

@@ -14,13 +14,13 @@ export interface Family {
   name: string;
   category: Category;
   tags: string[];
-  /** How many palette colours the family uses (1 = shapes on the base material). */
+  /** How many colour groups the family uses, counting the base (1 = shapes on the base material). */
   colors: number;
   seeded?: boolean;
   params: ParamDef[];
   /** Extra library variety: each preset is also listed for every value of this parameter. */
   variants?: { key: string; values: number[] };
-  /** Named starting points; the library shows each preset with several seeds and palettes. */
+  /** Named starting points; the library shows each preset at several densities and seeds. */
   presets: Record<string, Record<string, number>>;
   gen(p: Record<string, number>, W: number, H: number, rnd: Rnd): GenShape[];
 }

@@ -13,7 +13,7 @@ import { addPattern, createPatternexState, ensureBuiltin, savePatternexState, to
 import type { MotionApplication } from '../../motionex/model';
 import { mx } from '../../motionex/ui/MotionexPanel';
 import { LibraryWindow } from '../library/LibraryWindow';
-import { libraryCounts } from '../library/catalog';
+import { GROUP_KEYS, GROUP_NAMES, libraryCounts } from '../library/catalog';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 export const px: PatternexState = createPatternexState(storage);
@@ -218,15 +218,15 @@ function PlacementEditor({ p, slots, ams }: { p: ObjPlacement; slots: string[]; 
         const a = actionFor(color);
         return (
           <div key={color} className="px-region">
-            <div className="px-row"><span className="px-swatch" style={{ background: color }} /><b>{color}</b>
+            <div className="px-row"><span className="px-swatch" style={{ background: a ? slots[a.material.slot_index] ?? color : color }} /><b>{GROUP_NAMES[GROUP_KEYS.indexOf(color)] ?? color}</b>
               <span className="spacer" />
               <select className="select" value={a ? a.material.slot_index : -1} aria-label="Material" onChange={(e) => {
                 const v = Number(e.target.value);
                 if (v < 0) { px.actions = px.actions.filter((x) => x !== a); changed(); return; }
                 setAction(color, (x) => { x.material.slot_index = v; x.material.mode = ams ? 'slot' : 'manual'; });
               }}>
-                <option value={-1}>Base material</option>
-                {slots.map((c, k) => <option key={k} value={k}>Slot {k + 1}</option>)}
+                <option value={-1}>Not inked (base)</option>
+                {slots.map((c, k) => <option key={k} value={k}>Ink: slot {k + 1}</option>)}
               </select>
             </div>
             {a && (
@@ -270,7 +270,7 @@ function Report() {
         · full {rep.transitions.full} / reduced {rep.transitions.reduced} / none {rep.transitions.none}{rep.shifted ? ` · ${rep.shifted} shifted` : ''}
       </p>
       {rep.warnings.map((w, i) => <p key={i} className="mx-muted px-warn">⚠ {w}</p>)}
-      {rep.regions.map((r) => <p key={r.id} className="mx-muted"><span className="px-swatch" style={{ background: r.color }} /> {r.id} → slot {r.fil + 1}, {r.layerCount} layer(s){r.motion ? `, motion ${r.motion}` : ''}</p>)}
+      {rep.regions.map((r) => <p key={r.id} className="mx-muted"><span className="px-swatch" style={{ background: useStore.getState().filaments[r.fil]?.color ?? r.color }} /> {px.patterns.find((x) => x.id === px.placements.find((q) => q.id === r.placementId)?.pattern_id)?.name ?? r.placementId} · {GROUP_NAMES[GROUP_KEYS.indexOf(r.color)] ?? r.color} → slot {r.fil + 1}, {r.layerCount} layer(s){r.motion ? `, motion ${r.motion}` : ''}</p>)}
       {rep.swaps.length > 0 && (
         <table className="px-table">
           <thead><tr><th>Layer</th><th>Z (mm)</th><th>Load</th></tr></thead>

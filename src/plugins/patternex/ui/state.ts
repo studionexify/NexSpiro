@@ -25,6 +25,8 @@ export interface PatternexState {
   transitionVolume: (number | null)[];
   /** Pattern waiting to be placed with the next click on the model. */
   armed: string | null;
+  /** Inks chosen in the library for the armed pattern (group key colour → slot). */
+  armedInks?: Record<string, number>;
   selected: string | null;
   overlays: Overlays;
 }
@@ -38,7 +40,7 @@ export function createPatternexState(store: Pick<Storage, 'getItem'> | null): Pa
   };
   try {
     const saved = JSON.parse(store?.getItem(KEY) ?? 'null');
-    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, armed: null };
+    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, armed: null, armedInks: undefined };
   } catch { /* ignore broken storage */ }
   return base;
 }

@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { objectMatrix, useStore, worldBounds, type SceneObject } from '../../../state/store';
 import { newPlacement, type Pattern } from '../model';
 import type { V3 } from '../projection';
-import { addPattern, defaultActions, type ObjPlacement, type PatternexState } from '../ui/state';
+import type { RegionAction } from '../model';
+import { addPattern, type ObjPlacement, type PatternexState } from '../ui/state';
 
 export type Side = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
 export type Target = { kind: 'face' } | { kind: 'side'; side: Side } | { kind: 'sides' } | { kind: 'wrap' };
@@ -34,11 +35,11 @@ function mkPlacement(o: SceneObject, pattern: Pattern, at: V3, n: V3, over: Part
  * Place `make(width, height)` on the target. For sides the pattern is rebuilt to each side's size,
  * so tiles keep their cell size. Returns the new placement ids.
  */
-export function applyToObject(px: PatternexState, o: SceneObject, t: Target, make: (w: number, h: number) => Pattern, slots: number): string[] {
+export function applyToObject(px: PatternexState, o: SceneObject, t: Target, make: (w: number, h: number) => Pattern, actions: (placementId: string, p: Pattern) => RegionAction[]): string[] {
   const b = worldBounds(o);
   const c: V3 = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
   const ids: string[] = [];
-  const add = (p: ObjPlacement, pat: Pattern) => { px.placements.push(p); px.actions.push(...defaultActions(p.id, pat, slots)); ids.push(p.id); };
+  const add = (p: ObjPlacement, pat: Pattern) => { px.placements.push(p); px.actions.push(...actions(p.id, pat)); ids.push(p.id); };
   const side = (s: Side) => {
     const n = NORMAL[s];
     const at: V3 = [c[0] + n[0] * (b.max[0] - b.min[0]) / 2, c[1] + n[1] * (b.max[1] - b.min[1]) / 2, c[2] + n[2] * (b.max[2] - b.min[2]) / 2];
@@ -65,4 +66,15 @@ export function applyToObject(px: PatternexState, o: SceneObject, t: Target, mak
 export function targetObject(): SceneObject | undefined {
   const s = useStore.getState();
   return s.objects.find((o) => o.id === s.selected[0]) ?? s.objects[0];
+}
+
+/** Region actions from the user's inks: one per inked group key colour (uninked groups stay base material). */
+export function inkActions(placementId: string, pattern: Pattern, inkByKey: Record<string, number>, ams: boolean): RegionAction[] {
+  const keys = [...new Set(pattern.shapes.map((s) => s.fill_color))];
+  return keys.filter((k) => (inkByKey[k] ?? -1) >= 0).map((k) => ({
+    region_ref: { placement_id: placementId, color_group: k },
+    material: { mode: ams ? 'slot' : 'manual', slot_index: inkByKey[k] },
+    purge: { mode: 'full', change_point_shift_mm: 0 },
+    motion: null,
+  }));
 }

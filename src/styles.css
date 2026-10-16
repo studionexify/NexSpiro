@@ -442,3 +442,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pxl-face { position: absolute; inset: 0; border: 1px solid rgba(0, 0, 0, .25); background: rgba(160, 160, 160, .55); background-size: cover; display: grid; place-items: center; font-size: 10px; color: #222; backface-visibility: visible; }
 .pxl-face.on { background-color: transparent; }
 @keyframes pxl-spin { from { transform: rotateX(-25deg) rotateY(0); } to { transform: rotateX(-25deg) rotateY(360deg); } }
+.pxl-ink { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-secondary); font-size: 13px; }
+.pxl-ink-opts { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.pxl-ink-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--surface-primary); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; color: var(--text); }
+.pxl-ink-btn i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0, 0, 0, .2); }
+.pxl-ink-btn.on { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); font-weight: 600; }

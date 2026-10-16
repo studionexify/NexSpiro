@@ -6,7 +6,9 @@ import { objectMatrix } from '../../../state/store';
 import { frameOf, fromPattern, type V3 } from '../projection';
 import { newPlacement } from '../model';
 import type { PatternexReport } from '../engine';
-import { toWorldPlacements, defaultActions, type ObjPlacement } from './state';
+import { toWorldPlacements, type ObjPlacement } from './state';
+import { inkActions } from '../library/apply';
+import { printerById } from '../../../profiles/printers';
 import { px, changed } from './PatternexPanel';
 import { useStore } from '../../../state/store';
 
@@ -95,7 +97,9 @@ export function placeDown(objectId: string, pointWorld: THREE.Vector3, normalWor
     const objSize = dims[1] || size; // the middle dimension: a face of a box, not its thinnest side
     if (size > objSize * 0.8) { const k = +(objSize * 0.6 / size).toFixed(3); p.scale_xy = [k, k]; }
     px.placements.push(p);
-    px.actions.push(...defaultActions(id, pat, Math.max(1, s.filaments.length)));
+    // patterns arrive uninked unless inks were chosen in the library; the user inks each region
+    px.actions.push(...inkActions(id, pat, px.armedInks ?? {}, printerById(s.printerId).machine.has_ams === true));
+    px.armedInks = undefined;
     px.selected = id;
     px.armed = null;
     dragId = id;

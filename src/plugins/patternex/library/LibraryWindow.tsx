@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../../state/store';
+import { printerById } from '../../../profiles/printers';
 import { CATEGORIES, familyById, type Category } from './families';
-import { buildPattern, libraryCounts, paletteOf, PALETTES, patternSvg, searchLibrary, specOf, type GenSpec, type LibraryEntry } from './catalog';
-import { applyToObject, SIDES, targetObject, targetSize, type Side, type Target } from './apply';
+import { buildPattern, GROUP_KEYS, GROUP_NAMES, libraryCounts, patternSvg, searchLibrary, specOf, type GenSpec, type LibraryEntry } from './catalog';
+import { applyToObject, inkActions, SIDES, targetObject, targetSize, type Side, type Target } from './apply';
 import { px, changed } from '../ui/PatternexPanel';
 import { addPattern } from '../ui/state';
 
@@ -38,7 +39,7 @@ function Thumb({ e, on, onPick }: { e: LibraryEntry; on: boolean; onPick: () => 
       if (!hit.isIntersecting || job) return;
       job = { key: e.key, run: () => {
         const pat = buildPattern(specOf(e));
-        const url = svgUrl(patternSvg(pat, 40, 40, paletteOf(e.palette).colors[0], 8000));
+        const url = svgUrl(patternSvg(pat, 40, 40, undefined, 8000));
         thumbCache.set(e.key, url);
         setSrc(url);
       } };
@@ -58,13 +59,13 @@ function Thumb({ e, on, onPick }: { e: LibraryEntry; on: boolean; onPick: () => 
 export function LibraryWindow({ onClose }: { onClose: () => void }) {
   const [cat, setCat] = useState<Category | 'All'>('All');
   const [q, setQ] = useState('');
-  const [palette, setPalette] = useState<string>('any');
+  const [groups, setGroups] = useState<number>(0); // 0 = any number of colour groups
   const [limit, setLimit] = useState(PAGE);
   const [entry, setEntry] = useState<LibraryEntry | null>(null);
   const counts = useMemo(() => libraryCounts(), []);
-  const list = useMemo(() => searchLibrary(q, cat).filter((e) => palette === 'any' || e.palette === palette), [q, cat, palette]);
+  const list = useMemo(() => searchLibrary(q, cat).filter((e) => !groups || familyById(e.family)!.colors === groups), [q, cat, groups]);
   const sentinel = useRef<HTMLDivElement>(null);
-  useEffect(() => setLimit(PAGE), [q, cat, palette]);
+  useEffect(() => setLimit(PAGE), [q, cat, groups]);
   useEffect(() => {
     const el = sentinel.current;
     if (!el) return;
@@ -85,7 +86,7 @@ export function LibraryWindow({ onClose }: { onClose: () => void }) {
         <header className="pxl-head">
           <span className="mx-badge">P</span>
           <div className="pxl-title">Pattern library<span className="mx-muted"> · {counts.All.toLocaleString()} patterns in {CATEGORIES.length} types</span></div>
-          <input className="input pxl-search" placeholder="Search: hex, maze, waves, ocean…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+          <input className="input pxl-search" placeholder="Search: hex, maze, waves, fine, coarse…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
           <button className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={onClose}>✕</button>
         </header>
         <div className="pxl-body">
@@ -93,13 +94,11 @@ export function LibraryWindow({ onClose }: { onClose: () => void }) {
             {(['All', ...CATEGORIES] as const).map((c) => (
               <button key={c} className={`pxl-cat ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{c}<span>{counts[c].toLocaleString()}</span></button>
             ))}
-            <div className="mx-label" style={{ marginTop: 12 }}>Palette</div>
-            <button className={`pxl-cat ${palette === 'any' ? 'on' : ''}`} onClick={() => setPalette('any')}>Any</button>
-            {PALETTES.map((p) => (
-              <button key={p.id} className={`pxl-cat ${palette === p.id ? 'on' : ''}`} onClick={() => setPalette(p.id)}>
-                <span className="pxl-pal">{p.colors.map((c) => <i key={c} style={{ background: c }} />)}</span>{p.name}
-              </button>
+            <div className="mx-label" style={{ marginTop: 12 }}>Colour groups</div>
+            {[0, 1, 2, 3].map((n) => (
+              <button key={n} className={`pxl-cat ${groups === n ? 'on' : ''}`} onClick={() => setGroups(n)}>{n === 0 ? 'Any' : n === 1 ? '1 ink on base' : `${n} colours`}</button>
             ))}
+            <p className="mx-muted" style={{ marginTop: 12 }}>Patterns come uninked. Pick a design, then choose the ink (filament) for each region.</p>
           </nav>
           <section className="pxl-grid-wrap">
             <div className="mx-muted">{list.length.toLocaleString()} result(s)</div>
@@ -122,24 +121,31 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
   const [target, setTarget] = useState<Target>({ kind: 'side', side: 'top' });
   const [fitTarget, setFitTarget] = useState(true);
   const obj = targetObject();
-  const slots = useStore((s) => s.filaments.length);
+  const filaments = useStore((s) => s.filaments);
+  const ams = useStore((s) => printerById(s.printerId).machine.has_ams === true);
+  /** Ink per group key colour: filament slot index, or -1 = base / not inked. Nothing is inked to start with. */
+  const [inks, setInks] = useState<Record<string, number>>({});
   const tsize = targetSize(obj, target);
   // the preview uses the size the pattern will have on the target
   const shown: GenSpec = fitTarget && tsize ? { ...spec, width: +tsize.width.toFixed(2), height: +tsize.height.toFixed(2) } : spec;
   const pat = useMemo(() => buildPattern(shown, `${entry.name}`), [JSON.stringify(shown)]);
-  const pal = paletteOf(spec.palette);
-  const svg = useMemo(() => svgUrl(patternSvg(pat, shown.width, shown.height, pal.colors[0])), [pat]);
-  const groups = new Set(pat.shapes.map((s) => s.fill_color)).size;
+  const keys = GROUP_KEYS.filter((k) => pat.shapes.some((s) => s.fill_color === k));
+  const inkColors = Object.fromEntries(keys.map((k) => [k, (inks[k] ?? -1) >= 0 ? filaments[inks[k]]?.color ?? k : k]));
+  const baseColor = filaments[0]?.color;
+  const inkedCount = keys.filter((k) => (inks[k] ?? -1) >= 0).length;
+  const svg = useMemo(() => svgUrl(patternSvg(pat, shown.width, shown.height, inkedCount && baseColor ? baseColor : undefined, 60_000, inkColors)), [pat, JSON.stringify(inkColors), baseColor, inkedCount]);
+  const groups = keys.length;
   const set = (k: string, v: number) => setSpec((s) => ({ ...s, params: { ...s.params, [k]: v } }));
   const apply = () => {
     const make = (w: number, h: number) => buildPattern({ ...spec, width: fitTarget ? w : spec.width, height: fitTarget ? h : spec.height }, entry.name);
     if (target.kind === 'face' || !obj) {
       const p = addPattern(px, buildPattern(spec, entry.name));
       px.armed = p.id;
+      px.armedInks = { ...inks };
       useStore.getState().set({ tool: 'place_pattern', workspace: 'prepare' });
       changed(false);
     } else {
-      applyToObject(px, obj, target, make, slots);
+      applyToObject(px, obj, target, make, (id, p) => inkActions(id, p, inks, ams));
       useStore.getState().set({ workspace: 'prepare' });
       changed(true);
     }
@@ -174,19 +180,30 @@ function Editor({ entry, onClose }: { entry: LibraryEntry; onClose: () => void }
           <div className="px-row"><Slider label="Seed" min={1} max={9999} step={1} value={spec.seed} onChange={(v) => setSpec((s) => ({ ...s, seed: v }))} />
             <button className="btn-secondary btn-small" title="Random seed" onClick={() => setSpec((s) => ({ ...s, seed: 1 + Math.floor(Math.random() * 9999) }))}>🎲</button></div>
         )}
-        <div className="mx-label">Palette (colour 1 = base material)</div>
-        <div className="mx-chips">
-          {PALETTES.map((p) => (
-            <button key={p.id} className={`btn-secondary btn-small ${spec.palette === p.id ? 'on' : ''}`} onClick={() => setSpec((s) => ({ ...s, palette: p.id }))}>
-              <span className="pxl-pal">{p.colors.map((c) => <i key={c} style={{ background: c }} />)}</span>{p.name}
-            </button>
-          ))}
-        </div>
-        <button className="btn-secondary btn-small" onClick={() => setSpec(specOf(entry))}>Reset to preset</button>
+        <div className="mx-label">Inks {inkedCount ? <span className="mx-muted">· {inkedCount} of {keys.length} region(s) inked</span> : <span className="mx-muted">· not inked yet</span>}</div>
+        {keys.map((k) => {
+          const g = GROUP_KEYS.indexOf(k), cur = inks[k] ?? -1;
+          return (
+            <div key={k} className="pxl-ink">
+              <span className="px-swatch" style={{ background: k }} /><b>{GROUP_NAMES[g]}</b>
+              <div className="pxl-ink-opts">
+                <button className={`pxl-ink-btn ${cur < 0 ? 'on' : ''}`} title="Base material (no change)" onClick={() => setInks((m) => ({ ...m, [k]: -1 }))}>Base</button>
+                {filaments.map((f, i) => (
+                  <button key={i} className={`pxl-ink-btn ${cur === i ? 'on' : ''}`} title={`Slot ${i + 1}`} onClick={() => setInks((m) => ({ ...m, [k]: i }))}>
+                    <i style={{ background: f.color }} />{i + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {filaments.length < 2 && <p className="mx-muted px-warn">Only one filament slot is set up — add slots in the Filament panel to ink regions in other colours.</p>}
+        {inkedCount > 0 && inkedCount === keys.length && keys.every((k) => inks[k] === inks[keys[0]]) && <p className="mx-muted">All regions use the same ink, so the pattern prints as one solid colour.</p>}
+        <div className="mx-chips"><button className="btn-secondary btn-small" onClick={() => setSpec(specOf(entry))}>Reset shape</button><button className="btn-secondary btn-small" onClick={() => setInks({})}>Clear inks</button></div>
       </div>
       <footer className="pxl-ed-foot">
         <button className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" disabled={!obj && target.kind !== 'face'} onClick={apply}>Apply{target.kind === 'face' ? ' — then click a face' : ''}</button>
+        <button className="btn-primary" disabled={!obj && target.kind !== 'face'} onClick={apply} title={inkedCount ? '' : 'No region is inked yet: the pattern is placed, and you can ink it later in the Patternex panel'}>Apply{inkedCount ? '' : ' (uninked)'}{target.kind === 'face' ? ' — then click a face' : ''}</button>
       </footer>
     </aside>
   );
