@@ -209,6 +209,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
   const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
   const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
+  const paintOverlapWarned = new Set<number>();
   const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
     const key = o * 1_000_000 + i;
     const hit = filRegionsCache.get(key);
@@ -239,6 +240,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     for (const c of contribs) {
       const r = intersection(c.paths, sl);
       if (!r.length) continue;
+      if (taken.length && !paintOverlapWarned.has(o) && intersection(r, taken).length) {
+        paintOverlapWarned.add(o);
+        warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
+      }
       out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
       out.push({ fil: clampFil(c.fil), paths: r });
     }

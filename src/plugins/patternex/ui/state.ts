@@ -14,6 +14,73 @@ export interface ObjPlacement extends Placement {
   anchor_normal?: V3;
 }
 
+/** What one scene object carries: its placements and their region actions. */
+export interface ObjectPatternex { placements: ObjPlacement[]; actions: RegionAction[]; /** Definitions of the patterns used, so a project opens anywhere. */ patterns?: Pattern[] }
+
+/**
+ * Collect placements from scene objects (deep copies, so the panel can edit them freely).
+ * Copies of an object (clone, paste, fill bed) carry the same placement ids; each duplicate gets a
+ * stable id derived from its object so region ids stay unique. `renamed` says whether that happened.
+ */
+export function collectPlacements(objects: { id: string; patternex?: ObjectPatternex }[]): { placements: ObjPlacement[]; actions: RegionAction[]; patterns: Pattern[]; renamed: boolean } {
+  const seen = new Set<string>();
+  const placements: ObjPlacement[] = [], actions: RegionAction[] = [], patterns: Pattern[] = [];
+  let renamed = false;
+  for (const o of objects) {
+    const pe = o.patternex;
+    if (!pe) continue;
+    for (const pat of pe.patterns ?? []) if (!patterns.some((x) => x.id === pat.id)) patterns.push(pat);
+    for (const p0 of pe.placements) {
+      let id = p0.id;
+      if (seen.has(id) || p0.object_id !== o.id) { id = `${p0.id.split('~')[0]}~${o.id}`; renamed = renamed || id !== p0.id; }
+      seen.add(id);
+      for (const a of pe.actions) if (a.region_ref.placement_id === p0.id) actions.push(structuredClone({ ...a, region_ref: { ...a.region_ref, placement_id: id } }));
+      placements.push(structuredClone({ ...p0, id, object_id: o.id }));
+    }
+  }
+  return { placements, actions, patterns, renamed };
+}
+
+/** Group placements and actions back by object. */
+export function splitByObject(placements: ObjPlacement[], actions: RegionAction[], patterns: Pattern[] = []): Map<string, ObjectPatternex> {
+  const out = new Map<string, ObjectPatternex>();
+  for (const p of placements) {
+    let e = out.get(p.object_id); if (!e) out.set(p.object_id, (e = { placements: [], actions: [], patterns: [] }));
+    e.placements.push(structuredClone(p));
+    const pat = patterns.find((x) => x.id === p.pattern_id);
+    if (pat && !e.patterns!.some((x) => x.id === pat.id)) e.patterns!.push(pat);
+    for (const a of actions) if (a.region_ref.placement_id === p.id) e.actions.push(structuredClone(a));
+  }
+  return out;
+}
+
+type M4 = ArrayLike<number>;
+const apply4 = (m: M4, [x, y, z]: V3): V3 => [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]];
+const dir4 = (m: M4, [x, y, z]: V3): V3 => { const v: V3 = [m[0] * x + m[4] * y + m[8] * z, m[1] * x + m[5] * y + m[9] * z, m[2] * x + m[6] * y + m[10] * z]; const l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+
+/**
+ * Re-express placements after an object's local frame changed (mirror, split, …).
+ * `toWorld`: old local → world, `fromWorld`: world → new local, `reflect`: optional mirror applied in world.
+ * A reflection reverses handedness, so the artwork is flipped and its rotation negated: a true mirror image.
+ * (Directions use the linear part only; the object matrices here are rigid or uniformly scaled.)
+ */
+export function reframePlacements(pe: ObjectPatternex, toWorld: M4, fromWorld: M4, reflect?: (v: V3, isDir: boolean) => V3): ObjectPatternex {
+  const R = reflect ?? ((v: V3) => v);
+  const wp = (v: V3) => apply4(fromWorld, R(apply4(toWorld, v), false));
+  const wd = (v: V3) => dir4(fromWorld, R(dir4(toWorld, v), true));
+  return {
+    actions: structuredClone(pe.actions),
+    placements: pe.placements.map((p) => ({
+      ...structuredClone(p),
+      position_xyz: wp(p.position_xyz),
+      projection_axis: wd(p.projection_axis),
+      anchor_normal: p.anchor_normal ? wd(p.anchor_normal) : undefined,
+      axis_origin: p.axis_origin ? wp(p.axis_origin) : undefined,
+      ...(reflect ? { flip: !p.flip, rotation: -p.rotation } : {}),
+    })),
+  };
+}
+
 export interface Overlays { outlines: boolean; transitions: boolean; swaps: boolean; bleed: boolean }
 
 export interface PatternexState {
@@ -42,17 +109,16 @@ export function createPatternexState(store: Pick<Storage, 'getItem'> | null): Pa
   };
   try {
     const saved = JSON.parse(store?.getItem(KEY) ?? 'null');
-    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, armed: null, armedInks: undefined };
+    if (saved && Array.isArray(saved.patterns)) return { ...base, ...saved, placements: [], actions: [], selected: null, armed: null, armedInks: undefined };
   } catch { /* ignore broken storage */ }
   return base;
 }
 
 export function savePatternexState(s: PatternexState, store: Pick<Storage, 'setItem'> | null): void {
   try {
-    // built-in patterns are rebuilt on demand; keep only the ones in use
-    const used = new Set(s.placements.map((p) => p.pattern_id));
-    const patterns = s.patterns.filter((p) => p.source === 'svg' || used.has(p.id));
-    store?.setItem(KEY, JSON.stringify({ ...s, patterns, armed: null }));
+    // placements live on the scene objects (project files); keep only the library, settings and saved inks here
+    const patterns = s.patterns.filter((p) => p.source === 'svg');
+    store?.setItem(KEY, JSON.stringify({ patterns, singleColour: s.singleColour, transitionVolume: s.transitionVolume, savedInks: s.savedInks, overlays: s.overlays }));
   } catch { /* quota or unavailable: keep in memory */ }
 }
 
@@ -143,27 +209,6 @@ export interface PatternexProjectData {
   singleColour: SingleColourPolicy; transitionVolume: (number | null)[];
 }
 
-export function projectData(s: PatternexState): PatternexProjectData | undefined {
-  if (!s.placements.length) return undefined;
-  const used = new Set(s.placements.map((p) => p.pattern_id));
-  return {
-    version: 1, patterns: s.patterns.filter((p) => used.has(p.id)), placements: s.placements, actions: s.actions,
-    singleColour: s.singleColour, transitionVolume: s.transitionVolume,
-  };
-}
-
-/** Replace the current placements with a project's (patterns are merged into the library). */
-export function restoreProject(s: PatternexState, d: PatternexProjectData | undefined, objectIds: string[]): void {
-  s.placements = []; s.actions = []; s.selected = null; s.armed = null;
-  if (!d || d.version !== 1) return;
-  for (const p of d.patterns ?? []) addPattern(s, p);
-  const ids = new Set(objectIds);
-  s.placements = (d.placements ?? []).filter((p) => ids.has(p.object_id));
-  const kept = new Set(s.placements.map((p) => p.id));
-  s.actions = (d.actions ?? []).filter((a) => kept.has(a.region_ref.placement_id));
-  s.singleColour = d.singleColour ?? s.singleColour;
-  s.transitionVolume = d.transitionVolume ?? s.transitionVolume;
-}
 
 /** Key under which inks saved for a whole pattern (from the panel) are stored in `savedInks`. */
 export const patternInkKey = (patternId: string) => `pattern:${patternId}`;

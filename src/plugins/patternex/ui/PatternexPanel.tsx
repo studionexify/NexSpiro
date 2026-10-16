@@ -1,6 +1,6 @@
 // Patternex panel in Nexspiro's right dock: import or pick a pattern, click the model to place it,
 // set what happens inside each colour region, and read the pre-export report after slicing.
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { useStore, objectMatrix, plateOrigin } from '../../../state/store';
 import { plateObjects } from '../../../state/slicing';
@@ -9,7 +9,7 @@ import { parseSvg } from '../svg';
 import { BUILTIN_KINDS } from '../builtin';
 import { colorGroups, type PurgeMode, type RegionAction } from '../model';
 import { DEFAULT_TRANSITION_VOLUME, type PatternexConfig, type PatternexReport, type SingleColourPolicy } from '../engine';
-import { addPattern, createPatternexState, patternInkKey, ensureBuiltin, savePatternexState, toPatternexConfig, type ObjPlacement, type PatternexState } from './state';
+import { addPattern, collectPlacements, createPatternexState, patternInkKey, splitByObject, ensureBuiltin, savePatternexState, toPatternexConfig, type ObjPlacement, type PatternexState } from './state';
 import type { MotionApplication } from '../../motionex/model';
 import { mx } from '../../motionex/ui/MotionexPanel';
 import { LibraryWindow } from '../library/LibraryWindow';
@@ -21,13 +21,48 @@ export const px: PatternexState = createPatternexState(storage);
 let version = 0;
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
-/** Call after editing `px`. `dirty` = the change affects slicing. */
-export function changed(dirty = true): void {
-  savePatternexState(px, storage);
+const notify = () => {
   version++;
   listeners.forEach((l) => l());
-  window.dispatchEvent(new Event('nx-patternex'));
-  if (dirty) useStore.getState().markDirty();
+  if (typeof window !== 'undefined') { window.dispatchEvent(new Event('nx-patternex')); window.dispatchEvent(new Event('nx-plugin-preview')); }
+};
+
+/**
+ * Placements and region actions live on the scene objects (`SceneObject.patternex`): undo/redo,
+ * project files, delete, clone, mirror and split all carry them. `px.placements` / `px.actions` are a
+ * working copy the panel edits; `changed()` writes it back, and any change to the objects re-reads it.
+ */
+let writing = false;
+function pull(): void {
+  const objs = useStore.getState().objects;
+  const { placements, actions, patterns, renamed } = collectPlacements(objs);
+  for (const pat of patterns) if (!px.patterns.some((x) => x.id === pat.id)) addPattern(px, pat);
+  px.placements = placements;
+  px.actions = actions;
+  if (px.selected && !placements.some((p) => p.id === px.selected)) px.selected = null;
+  // copies got unique ids: store them so later edits address the right placement (not an undo step)
+  if (renamed) push(false);
+}
+function push(record: boolean): void {
+  const s = useStore.getState();
+  const by = splitByObject(px.placements, px.actions, px.patterns);
+  const ids = s.objects.filter((o) => by.has(o.id) || o.patternex).map((o) => o.id);
+  if (!ids.length) return;
+  writing = true;
+  try { s.updateObjects((o) => ({ ...o, patternex: by.get(o.id) }), ids, record); }
+  finally { writing = false; }
+}
+useStore.subscribe((s, prev) => {
+  if (s.objects === prev.objects || writing) return;
+  pull();
+  notify();
+});
+
+/** Call after editing `px`. `dirty` = the change affects slicing (and is recorded for undo). */
+export function changed(dirty = true, record = dirty): void {
+  if (dirty) push(record);
+  savePatternexState(px, storage);
+  notify();
 }
 export const usePatternex = () => useSyncExternalStore(subscribe, () => version);
 
@@ -41,7 +76,13 @@ export function sliceObjects() {
 }
 
 export function patternexConfig(): PatternexConfig | undefined {
-  return toPatternexConfig(px, sliceObjects());
+  const c = toPatternexConfig(px, sliceObjects());
+  if (!c) return c;
+  // regions a Motionex motion is aimed at are shared even when not inked
+  const targets = useStore.getState().plugins.includes('motionex')
+    ? mx.applications.filter((a) => a.enabled && a.target.type === 'faces').flatMap((a) => (a.target.faces ?? []).filter((f) => f.includes(':')))
+    : [];
+  return targets.length ? { ...c, motionTargets: [...new Set(targets)] } : c;
 }
 
 /** Motionex applications for regions that carry a motion (spec §8: Patternex passes the region id as the target). */
@@ -53,6 +94,22 @@ export function patternexMotionApps(): MotionApplication[] {
     mask: { z_start: 0, z_end: 1e4, fade_in_mm: 0, fade_out_mm: 0 },
     order: 1000 + k, blend: 'add', enabled: true,
   }));
+}
+
+/** Open the dock on Patternex and the pattern library (from the right-click menu). */
+export function openPatternLibrary(): void {
+  const s = useStore.getState();
+  s.set({ dock: { ...s.dock, open: true, tab: 'patternex' } });
+  // the panel may mount on this tab switch; let it subscribe first
+  setTimeout(() => window.dispatchEvent(new Event('nx-patternex-library')), 60);
+}
+
+/** Show an object's artwork in the panel: select its first placement. */
+export function editObjectArtwork(objectId: string): void {
+  const s = useStore.getState();
+  s.set({ dock: { ...s.dock, open: true, tab: 'patternex' }, selected: [objectId] });
+  const p = px.placements.find((x) => x.object_id === objectId);
+  if (p) { px.selected = p.id; changed(false); }
 }
 
 const PURGE: [PurgeMode, string][] = [['full', 'Full purge'], ['reduced', 'Reduced'], ['none', 'No purge (bleed)']];
@@ -109,6 +166,7 @@ function Patterns() {
   const [autoClose, setAutoClose] = useState(false);
   const [msg, setMsg] = useState<string[]>([]);
   const [lib, setLib] = useState(false);
+  useEffect(() => { const on = () => setLib(true); window.addEventListener('nx-patternex-library', on); return () => window.removeEventListener('nx-patternex-library', on); }, []);
   const arm = (id: string) => { px.armed = id; useStore.getState().set({ tool: 'place_pattern', workspace: 'prepare' }); changed(false); };
   const onFile = async (f: File) => {
     const text = await f.text();

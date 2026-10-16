@@ -24,6 +24,8 @@ export interface PatternexConfig {
   singleColour: SingleColourPolicy;
   /** mm³ of mixed output when changing without purge, per slot. Missing/null = estimate (uncalibrated). */
   transitionVolume: (number | null | undefined)[];
+  /** Regions another plugin (Motionex) targets: shared even when not inked, without a material change. */
+  motionTargets?: string[];
 }
 
 /** Default transition volume (mm³) when uncalibrated: a typical 0.4 mm hotend melt zone. */
@@ -61,6 +63,8 @@ interface ChangeRec { layer: number; from: number; to: number; mode: PurgeMode; 
 
 export class PatternexSession implements PluginSession {
   readonly groups: Group[] = [];
+  /** Uninked regions that only carry a motion: shared, no material change. */
+  readonly motionOnly: GroupResolver[] = [];
   private cache = new Map<string, RegionContribution[]>();
   readonly unsupported = new Map<string, Set<number>>();
   readonly used = new Map<string, Set<number>>();
@@ -77,7 +81,11 @@ export class PatternexSession implements PluginSession {
       for (const g of placementGroups(p, pat, depth, ctx)) {
         const action = config.actions.find((a) => a.region_ref.placement_id === p.id && a.region_ref.color_group === g.color)
           ?? config.actions.find((a) => a.region_ref.placement_id === p.id && !a.region_ref.color_group);
-        if (!action) continue; // unassigned regions keep the base material
+        if (!action) {
+          // unassigned regions keep the base material; still share them when a motion is aimed at them
+          if (config.motionTargets?.includes(g.regionId)) this.motionOnly.push(g);
+          continue;
+        }
         const fil = clamp(action.material.slot_index);
         if (action.material.slot_index >= ctx.filamentCount)
           this.warn(`Patternex: region ${g.regionId} uses slot ${action.material.slot_index + 1}, but only ${ctx.filamentCount} filament slot(s) are set up.`);
@@ -144,13 +152,19 @@ export class PatternexSession implements PluginSession {
   }
 
   sharedRegions(): PatternexRegion[] {
-    return this.groups.map(({ g, action, fil }) => ({
+    return this.groups.map(({ g, action, fil }): PatternexRegion => ({
       region_id: g.regionId,
       name: g.regionId,
       layer_range: g.layerRange,
       polygon_mask_per_layer: (l: number) => toRings(this.regionsAt(g.object, l).filter((r) => r.regionId === g.regionId).flatMap((r) => r.paths)),
       attributes: { source: 'patternex', placement_id: g.placementId, color: g.color, material: fil, motion: action.motion?.motionex_brush_id ?? null },
-    }));
+    })).concat(this.motionOnly.map((g) => ({
+      region_id: g.regionId,
+      name: g.regionId,
+      layer_range: g.layerRange,
+      polygon_mask_per_layer: (l: number) => toRings(g.at(l)),
+      attributes: { source: 'patternex', placement_id: g.placementId, color: g.color, material: null, motion: null },
+    })));
   }
 }
 

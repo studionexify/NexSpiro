@@ -10,6 +10,7 @@ import { addPart, addPlate, deletePlate, moveToPlate, PART_LABELS } from '../sta
 import { useStore, type ContextMenuState } from '../state/store';
 import type { PartType } from '../engine/types';
 import { applyPatternToObjects } from '../plugins/motionex/ui/MotionexPanel';
+import { editObjectArtwork, openPatternLibrary } from '../plugins/patternex/ui/PatternexPanel';
 
 export interface MenuItem {
   label?: string;
@@ -81,7 +82,15 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paint colour', kbd: 'N', disabled: s.filaments.length < 2, onClick: () => s.set({ selected: ids, tool: 'paint_color' }) },
     { label: 'Cut', kbd: 'C', disabled: !one, onClick: () => s.set({ selected: ids, tool: 'cut' }) },
   ];
-  if (s.plugins.includes('motionex')) items.push({ label: 'Motionex pattern on whole object', onClick: () => applyPatternToObjects(ids) });
+  if (s.plugins.includes('motionex')) items.push({ label: 'Motion on whole object (Motionex)', onClick: () => applyPatternToObjects(ids) });
+  if (s.plugins.includes('patternex')) {
+    const placed = s.objects.filter((o) => ids.includes(o.id)).reduce((n, o) => n + (o.patternex?.placements.length ?? 0), 0);
+    items.push({ label: 'Artwork (Patternex)', sub: [
+      { label: 'Add from pattern library…', onClick: () => { s.set({ selected: ids }); openPatternLibrary(); } },
+      { label: `Edit inks and placement${placed ? ` (${placed})` : ''}`, disabled: !placed, onClick: () => editObjectArtwork(ids[0]) },
+      { label: 'Remove artwork', disabled: !placed, onClick: () => s.updateObjects((o) => ({ ...o, patternex: undefined }), ids) },
+    ] });
+  }
   items.push({ sep: true }, { label: 'Export as STL…', onClick: () => exportStl(ids) });
   return items;
 }

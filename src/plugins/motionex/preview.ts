@@ -17,7 +17,11 @@ export interface PreviewObject {
   motion?: Uint8Array;
 }
 
-export interface PreviewApp { app: MotionApplication; brush: MotionBrush; surface: number; color: [number, number, number] }
+export interface PreviewApp {
+  app: MotionApplication; brush: MotionBrush; surface: number; color: [number, number, number];
+  /** Region targets from other plugins (Patternex): the triangles each object has in the region. */
+  trisByObject?: Map<string, number[]>;
+}
 
 export interface PreviewLines {
   /** Segment end points, xyz xyz per segment. */
@@ -90,8 +94,8 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
     // which patterns touch this object, and which of its triangles each one covers
     const mine = apps.map((a) => {
       if (a.app.target.type === 'body') return { ...a, tris: null as number[] | null };
-      const tris: number[] = [];
-      o.motion?.forEach((v, t) => { if (v === a.surface) tris.push(t); });
+      const tris: number[] = a.trisByObject ? [...(a.trisByObject.get(o.id) ?? [])] : [];
+      if (!a.trisByObject) o.motion?.forEach((v, t) => { if (v === a.surface) tris.push(t); });
       return tris.length ? { ...a, tris } : null;
     }).filter((a): a is PreviewApp & { tris: number[] | null } => !!a);
     if (!mine.length) continue;

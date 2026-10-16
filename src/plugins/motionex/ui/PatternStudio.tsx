@@ -39,10 +39,10 @@ const SHAPES: { id: string; label: string; make: () => MotionBrush['curves']['la
 const STACKS: { id: string; label: string; hint: string; make: (b: MotionBrush) => LayerEffect | null }[] = [
   { id: 'aligned', label: 'Lined up', hint: 'Every layer sits exactly on the one below.', make: () => null },
   { id: 'twist', label: 'Twist', hint: 'Each layer leads the one below a little, so the ridges climb round the part.', make: () => ({ shift_deg: 6, mode: 'steady', every: 1, band_on: 0, band_off: 0 }) },
-  { id: 'bricks', label: 'Bricks', hint: 'Every few layers the pattern moves half a step, like brickwork.', make: () => ({ shift_deg: 180, mode: 'alternate', every: 4, band_on: 0, band_off: 0 }) },
+  { id: 'bricks', label: 'Bricks', hint: 'Every few layers the motion moves half a step, like brickwork.', make: () => ({ shift_deg: 180, mode: 'alternate', every: 4, band_on: 0, band_off: 0 }) },
   { id: 'zigzag', label: 'Zigzag', hint: 'Layers lead for a while, then lag back.', make: () => ({ shift_deg: 6, mode: 'back_and_forth', every: 15, band_on: 0, band_off: 0 }) },
   { id: 'diamond', label: 'Diamonds', hint: 'Slants both ways at once for a diamond grid.', make: () => ({ shift_deg: 6, mode: 'back_and_forth', every: 15, band_on: 0, band_off: 0, cross: true }) },
-  { id: 'bands', label: 'Bands', hint: 'Pattern for some layers, then plain wall.', make: (b) => ({ shift_deg: 0, mode: 'steady', every: 1, ...b.layers, band_on: 10, band_off: 6 }) },
+  { id: 'bands', label: 'Bands', hint: 'Motion for some layers, then plain wall.', make: (b) => ({ shift_deg: 0, mode: 'steady', every: 1, ...b.layers, band_on: 10, band_off: 6 }) },
 ];
 const MODES: [LayerMode, string, string][] = [
   ['steady', 'Keep going', 'Each step leads (or lags) further: a twist.'],
@@ -68,8 +68,8 @@ export function PatternStudio() {
     return (
       <aside className="studio">
         <div className="studio-empty">
-          <b>No pattern on the plate yet</b>
-          <p className="mx-muted">Add a pattern in Prepare and choose where it goes. Then come back here to change how it looks.</p>
+          <b>No motion on the plate yet</b>
+          <p className="mx-muted">Add a motion in Prepare and choose where it goes. Then come back here to change how it looks.</p>
           <button className="btn-primary btn-small" onClick={() => set({ workspace: 'prepare', dock: { ...useStore.getState().dock, open: true, tab: 'motionex' } })}>Go to Prepare</button>
         </div>
       </aside>
@@ -84,18 +84,18 @@ export function PatternStudio() {
   };
   const base = mx.library.get(a.brush_id);
   const libGroups = new Map<string, MotionBrush[]>();
-  for (const b of mx.library.all()) { const g = mx.library.isPreset(b.id) ? b.category ?? 'Other' : 'My patterns'; libGroups.set(g, [...(libGroups.get(g) ?? []), b]); }
+  for (const b of mx.library.all()) { const g = mx.library.isPreset(b.id) ? b.category ?? 'Other' : 'My motions'; libGroups.set(g, [...(libGroups.get(g) ?? []), b]); }
   const saveToLibrary = () => {
-    const name = prompt('Name for the new pattern', `${draft.name} (mine)`)?.trim();
+    const name = prompt('Name for the new motion', `${draft.name} (mine)`)?.trim();
     if (!name) return;
     const saved = mx.library.save({ ...structuredClone(draft), id: `user-${Date.now().toString(36)}`, name, version: 1, tags: ['custom'], category: undefined });
     a.brush_id = saved.id; a.brush = undefined; a.scale = 1;
     changed();
-    useStore.getState().set({ toast: { kind: 'info', text: `Saved “${name}” under My patterns.` } });
+    useStore.getState().set({ toast: { kind: 'info', text: `Saved “${name}” under My motions.` } });
   };
 
   return (
-    <aside className="studio" aria-label="Pattern editor">
+    <aside className="studio" aria-label="Motion editor">
       <div className="studio-head">
         {apps.length > 1 && (
           <div className="studio-places">
@@ -109,14 +109,14 @@ export function PatternStudio() {
         <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
           <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} />
           <select className="select" style={{ flex: 1 }} value={a.brush_id} aria-label="Pattern"
-            onChange={(e) => { if (a.brush && !confirm('Switching pattern drops your changes to this one. Switch anyway?')) return; a.brush_id = e.target.value; a.brush = undefined; changed(); }}>
+            onChange={(e) => { if (a.brush && !confirm('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = e.target.value; a.brush = undefined; changed(); }}>
             {[...libGroups].map(([g, bs]) => <optgroup key={g} label={g}>{bs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</optgroup>)}
           </select>
         </div>
         <div className="row" style={{ gap: 6, margin: 0, alignItems: 'center' }}>
           <span className="mx-muted" style={{ flex: 1, margin: 0 }}>{a.brush ? `Changed for this placement · library “${base?.name ?? a.brush_id}” is unchanged` : 'As in the library · any change applies to this placement only'}</span>
-          <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (confirm('Go back to the library pattern?')) { a.brush = undefined; changed(); } }}>Reset</button>
-          <button className="btn-secondary btn-small" onClick={saveToLibrary} title="Keep these changes as a new pattern in My patterns">Save to library</button>
+          <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (confirm('Go back to the library motion?')) { a.brush = undefined; changed(); } }}>Reset</button>
+          <button className="btn-secondary btn-small" onClick={saveToLibrary} title="Keep these changes as a new motion in My motions">Save to library</button>
         </div>
       </div>
 
@@ -222,7 +222,7 @@ function LeadLag({ b, layerHeight, onEdit }: { b: MotionBrush; layerHeight: numb
   return (
     <section className="mx-card">
       <div className="mx-card-title">Lead and lag between layers</div>
-      <p className="mx-muted" style={{ margin: 0 }}>Moves each layer's pattern along the wall compared with the layer below. 0 lines the layers up exactly. Plus leads, minus lags.</p>
+      <p className="mx-muted" style={{ margin: 0 }}>Moves each layer's motion along the wall compared with the layer below. 0 lines the layers up exactly. Plus leads, minus lags.</p>
       <Slider label="Each step leads by" unit="mm" min={-b.period_mm / 2} max={b.period_mm / 2} step={0.01} value={mm} onChange={setShift} />
       <div className="studio-slider">
         <span className="studio-slider-label">One step every</span>
@@ -299,7 +299,7 @@ function Advanced({ b, onEdit }: { b: MotionBrush; onEdit: (fn: (b: MotionBrush)
         <>
           <Slider label="Roughness size" unit="×" min={0.05} max={4} step={0.05} value={n.scale} onChange={(v) => onEdit((x) => { x.noise = { ...x.noise!, scale: v }; })} />
           <Slider label="Bumpiness" unit="" min={0.1} max={0.9} step={0.05} value={n.persistence} onChange={(v) => onEdit((x) => { x.noise = { ...x.noise!, persistence: v }; })} />
-          <Slider label="Pattern number" unit="" min={1} max={9999} step={1} value={n.seed} onChange={(v) => onEdit((x) => { x.noise = { ...x.noise!, seed: Math.round(v) }; })} />
+          <Slider label="Motion number" unit="" min={1} max={9999} step={1} value={n.seed} onChange={(v) => onEdit((x) => { x.noise = { ...x.noise!, seed: Math.round(v) }; })} />
         </>
       )}
       <div className="mx-label">Pauses, blobs and lift-offs</div>

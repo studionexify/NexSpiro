@@ -38,7 +38,6 @@ export function Toolbar() {
       {T('measure', 'measure', 'Measure', 'U')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
-      <button className={`icon-btn ${liveToolpaths ? 'active' : ''}`} title="Show pattern path on model (quick preview, no slicing)" aria-label="Show pattern path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })}><Icon name="slice" /></button>
     </div>
   );
 }
@@ -53,7 +52,7 @@ export function LiveChip() {
     return () => window.removeEventListener('nx-preview-built', on);
   }, []);
   if (!liveToolpaths || !objects.length) return null;
-  return <div className="float live-chip" role="status"><i />Pattern preview{info ? ` · ${info}` : ''} · slice for exact G-code</div>;
+  return <div className="float live-chip" role="status"><i />Toolpath view (quick){info ? ` · ${info}` : ''} · slice for exact G-code</div>;
 }
 
 export function ViewCube() {

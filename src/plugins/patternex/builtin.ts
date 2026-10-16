@@ -11,7 +11,8 @@ const ngon = (cx: number, cy: number, r: number, n: number, a0 = 0): Ring =>
 
 export function builtinPattern(kind: BuiltinKind, o: BuiltinOptions = {}): Pattern {
   const W = o.width ?? 40, H = o.height ?? 40, c = o.cell ?? 5;
-  const [a, b] = o.colors ?? ['#ffffff', '#000000'];
+  // default colours are the library's neutral ink keys (Ink A / Ink B), uninked until the user picks a filament
+  const [a, b] = o.colors ?? ['#2f2f33', '#7d7d85'];
   const A: Ring[] = [], B: Ring[] = [];
   if (kind === 'stripes') {
     for (let k = 0, x = 0; x < W - 1e-9; k++, x += c) (k % 2 ? B : A).push(rect(x, 0, Math.min(W, x + c), H));

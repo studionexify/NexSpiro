@@ -521,3 +521,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pxl-ask { width: min(440px, 92%); background: var(--surface-primary); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
 .pxl-ask-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .pxl-inked { margin: 0 4px 0 0; color: var(--accent); }
+.tb-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
+.tb-toggle .toggle { pointer-events: none; }

@@ -6,7 +6,8 @@ import { useStore } from '../state/store';
 import { motionexConfig, MotionexPanel, motionexPreview, mx } from './motionex/ui/MotionexPanel';
 import { PatternStudio } from './motionex/ui/PatternStudio';
 import { toConfig } from './motionex';
-import { patternexConfig, patternexMotionApps, PatternexPanel } from './patternex/ui/PatternexPanel';
+import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patternex/ui/PatternexPanel';
+import { patternexPreview } from './patternex/ui/preview';
 
 export interface UiPlugin {
   id: string;
@@ -47,6 +48,7 @@ export const PLUGINS: UiPlugin[] = [
     description: 'SVG and pattern artwork on the surface, with a filament change (AMS) or a manual swap inside each region.',
     Panel: PatternexPanel,
     sliceConfig: () => patternexConfig(),
+    preview: () => patternexPreview(px),
   },
 ];
 

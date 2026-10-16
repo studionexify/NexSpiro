@@ -73,6 +73,8 @@ function radial(o: V3, a: V3, p: V3): V3 {
 }
 
 let dragId: string | null = null;
+/** The drag changed the placement; `dragCreated`: it was just placed (that press already recorded the undo step). */
+let dragMoved = false, dragCreated = false;
 
 /**
  * Place tool: pointer down on an object. Places the armed pattern there, or starts moving the selected
@@ -103,12 +105,12 @@ export function placeDown(objectId: string, pointWorld: THREE.Vector3, normalWor
     px.armedInks = undefined;
     px.selected = id;
     px.armed = null;
-    dragId = id;
+    dragId = id; dragMoved = false; dragCreated = true;
     changed();
     return true;
   }
   const sel = px.placements.find((p) => p.id === px.selected);
-  if (sel && !sel.locked && sel.object_id === objectId) { dragId = sel.id; movePlacement(sel, local, nLocal, faceIndex); return true; }
+  if (sel && !sel.locked && sel.object_id === objectId) { dragId = sel.id; dragCreated = false; movePlacement(sel, local, nLocal, faceIndex); dragMoved = true; return true; }
   // clicking another placement's object selects the nearest placement on it
   const near = px.placements.filter((p) => p.object_id === objectId).sort((a, b) => dist(a.position_xyz, local) - dist(b.position_xyz, local))[0];
   if (near) { px.selected = near.id; changed(false); return true; }
@@ -133,12 +135,14 @@ export function placeMove(objectId: string, pointWorld: THREE.Vector3, normalWor
   if (!p || !o || p.object_id !== objectId) return;
   const inv = objectMatrix(o).invert();
   movePlacement(p, pointWorld.clone().applyMatrix4(inv), normalWorld.clone().transformDirection(inv).normalize(), faceIndex);
+  dragMoved = true;
 }
 
 export function placeUp(): boolean {
   if (!dragId) return false;
   dragId = null;
-  changed(true);
+  // one undo step per gesture: a new placement was recorded on press; a move records on release
+  if (dragMoved) changed(true, !dragCreated);
   return true;
 }
 export const placeDragging = () => dragId !== null;

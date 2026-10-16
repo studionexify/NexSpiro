@@ -6,6 +6,7 @@ import type { LayerAction, PartType, SliceOutput } from '../engine/types';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
 import type { Config, ProcessTab } from '../profiles/settings';
+import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'pattern' | 'device' | 'project' | 'calibration';
@@ -44,6 +45,8 @@ export interface SceneObject {
   layerHeights?: number[];
   /** false: kept on the plate but left out of slicing. */
   printable?: boolean;
+  /** Patternex artwork on this object (object-local), so undo, project files and object operations carry it. */
+  patternex?: ObjectPatternex;
 }
 
 /** Values found with the Calibration workspace, applied on top of the filament preset. */

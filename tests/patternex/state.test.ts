@@ -38,43 +38,56 @@ describe('Patternex UI state', () => {
   });
 
   it('default actions: the first colour stays base, others take slots 2, 3…; one colour goes on slot 2', () => {
-    expect(defaultActions('a', pat, 3).map((a) => [a.region_ref.color_group, a.material.slot_index])).toEqual([['#000000', 1]]);
+    expect(defaultActions('a', pat, 3).map((a) => [a.region_ref.color_group, a.material.slot_index])).toEqual([['#7d7d85', 1]]);
     expect(defaultActions('a', builtinPattern('dots'), 3).map((a) => a.material.slot_index)).toEqual([1]);
     expect(defaultActions('a', pat, 1)).toEqual([]);
   });
 
-  it('persists and restores (without the armed pattern)', () => {
+  it('persists settings, not placements (those live on scene objects)', () => {
     const store = mem();
     const s = createPatternexState(store);
     s.patterns.push(pat); s.placements.push(place()); s.armed = pat.id; s.singleColour = 'band';
     savePatternexState(s, store);
     const r = createPatternexState(store);
-    expect(r.placements.length).toBe(1);
+    expect(r.placements.length).toBe(0);
     expect(r.singleColour).toBe('band');
     expect(r.armed).toBeNull();
   });
 });
 
-describe('Patternex in project files', () => {
-  it('round-trips placements, patterns and actions; drops placements on missing objects', async () => {
-    const { projectData, restoreProject } = await import('../../src/plugins/patternex/ui/state');
-    const s = createPatternexState(null);
-    s.patterns.push(pat, builtinPattern('hex'));
-    s.placements.push(place(), place({ id: 'z', object_id: 'gone' }));
-    s.actions.push(...defaultActions('a', pat, 3), ...defaultActions('z', pat, 3));
-    s.singleColour = 'band'; s.transitionVolume = [30, null];
-    const d = JSON.parse(JSON.stringify(projectData(s)));
-    expect(d.patterns.map((p: { id: string }) => p.id)).toEqual([pat.id]); // only used patterns are saved
-    const r = createPatternexState(null);
-    r.placements.push(place({ id: 'old' }));
-    restoreProject(r, d, ['o1']);
-    expect(r.placements.map((p) => p.id)).toEqual(['a']);
-    expect(r.actions.every((a) => a.region_ref.placement_id === 'a')).toBe(true);
-    expect(r.singleColour).toBe('band');
-    expect(r.transitionVolume).toEqual([30, null]);
-    expect(projectData(createPatternexState(null))).toBeUndefined();
-    restoreProject(r, undefined, ['o1']); // a project without Patternex clears placements
-    expect(r.placements).toEqual([]);
+describe('placements live on scene objects', () => {
+  it('collect and split round-trip; copies of an object get unique, stable placement ids', async () => {
+    const { collectPlacements, splitByObject } = await import('../../src/plugins/patternex/ui/state');
+    const pe = { placements: [place()], actions: defaultActions('a', pat, 3), patterns: [pat] };
+    const objs = [{ id: 'o1', patternex: pe }, { id: 'o2', patternex: structuredClone(pe) }];
+    const c = collectPlacements(objs);
+    expect(c.renamed).toBe(true);
+    expect(c.placements.map((p) => [p.id, p.object_id])).toEqual([['a', 'o1'], ['a~o2', 'o2']]);
+    expect(c.actions.map((x) => x.region_ref.placement_id)).toEqual(['a', 'a~o2']);
+    expect(c.patterns.map((p) => p.id)).toEqual([pat.id]);
+    const by = splitByObject(c.placements, c.actions, c.patterns);
+    expect(by.get('o2')!.placements[0].id).toBe('a~o2');
+    expect(by.get('o2')!.patterns!.map((p) => p.id)).toEqual([pat.id]);
+    // stable: collecting again renames nothing
+    const again = collectPlacements([{ id: 'o1', patternex: by.get('o1')! }, { id: 'o2', patternex: by.get('o2')! }]);
+    expect(again.renamed).toBe(false);
+  });
+
+  it('mirroring an object mirrors its placements: position, normal, flip and rotation', async () => {
+    const { reframePlacements } = await import('../../src/plugins/patternex/ui/state');
+    const I = new THREE.Matrix4().elements;
+    const pe = { placements: [place({ position_xyz: [5, 10, 2], projection_axis: [1, 0, 0], rotation: 30 })], actions: [] };
+    const m = reframePlacements(pe, I, I, (v, isDir) => (isDir ? [-v[0], v[1], v[2]] : [-v[0], v[1], v[2]]));
+    const p = m.placements[0];
+    expect(p.position_xyz).toEqual([-5, 10, 2]);
+    expect(p.projection_axis.map((v) => +v.toFixed(6))).toEqual([-1, 0, 0]);
+    expect(p.flip).toBe(true);
+    expect(p.rotation).toBe(-30);
+    // moving to a new frame without a reflection keeps flip and rotation
+    const t = new THREE.Matrix4().makeTranslation(-5, 0, 0);
+    const q = reframePlacements(pe, I, t.elements).placements[0];
+    expect(q.position_xyz).toEqual([0, 10, 2]);
+    expect(q.flip).toBe(false);
   });
 });
 

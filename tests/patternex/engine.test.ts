@@ -269,6 +269,31 @@ describe('Motionex hand-off', () => {
   });
 });
 
+describe('Motionex on uninked artwork, and paint overlap', () => {
+  it('a motion aimed at an uninked region still moves only that region, with no material change', () => {
+    const c = cfg('bbl-x1c');
+    const sine = PRESETS.find((b) => b.id === 'preset-sine')!;
+    const regionId = 'p1:#000000';
+    const mx: MotionexConfig = {
+      applications: [{ brush_id: sine.id, target: { type: 'faces', walls: 'outer', faces: [regionId] }, mask: { z_start: 0, z_end: 1e4, fade_in_mm: 0, fade_out_mm: 0 }, order: 0, blend: 'add', enabled: true }],
+      brushes: [sine], options: DEFAULT_OPTIONS, collisionMode: 'clamp', toolhead: defaultToolhead('bbl-x1c'), printerId: 'bbl-x1c',
+    };
+    const m = mesh(box(100, 100, 0, 20, 20, 10));
+    const pc = { ...pcfg([place({ position_xyz: [110, 100, 5], projection_axis: [0, -1, 0] })], []), motionTargets: [regionId] };
+    const out = slice([m], c, () => {}, { filaments: slots(c), plugins: { motionex: mx, patternex: pc } });
+    expect((out.pluginReports!.motionex as MotionexReport).movedPaths).toBeGreaterThan(0);
+    expect(out.stats.toolChanges).toBe(0);
+  });
+
+  it('warns when artwork covers colour paint (artwork wins)', () => {
+    const c = cfg();
+    const m = mesh(box(60, 60, 0, 20, 20, 10));
+    const color = new Uint8Array(m.indices.length / 3).fill(3); // everything painted slot 3
+    const out = slice([{ ...m, paint: { color } }], c, () => {}, { filaments: slots(c), plugins: { patternex: pcfg([place({ position_xyz: [70, 70, 10], projection_axis: [0, 0, 1] })], [act()]) } });
+    expect(out.warnings.some((w) => /covers colour paint/.test(w))).toBe(true);
+  });
+});
+
 describe('scale', () => {
   it('50 placements of a 40-shape pattern resolve without stalling', () => {
     const c = cfg();
