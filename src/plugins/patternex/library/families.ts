@@ -6,8 +6,11 @@ import { circle, clipRect, ngon, noise1, polar, rect, shrink, star, stroke, tran
 
 export interface GenShape { rings: Ring[]; c: number; evenodd?: boolean }
 export interface ParamDef { key: string; label: string; min: number; max: number; step: number; def: number }
-export type Category = 'Geometric' | 'Tiles' | 'Shapes' | 'Organic' | 'Lines' | 'Ornament';
-export const CATEGORIES: Category[] = ['Geometric', 'Tiles', 'Shapes', 'Organic', 'Lines', 'Ornament'];
+export type Category = 'Geometric' | 'Polygons' | 'Tiles' | 'Shapes' | 'Math' | 'Organic' | 'Lines' | 'Ornament';
+export const CATEGORIES: Category[] = ['Geometric', 'Polygons', 'Tiles', 'Shapes', 'Math', 'Organic', 'Lines', 'Ornament'];
+
+/** Centre of tile i of size `size`. */
+const cx = (i: number, size: number) => (i + 0.5) * size;
 
 export interface Family {
   id: string;
@@ -721,6 +724,300 @@ export const FAMILIES: Family[] = [
       return fit(W, H, [{ rings, c: 1 }]);
     },
   },
+  // ---------------- Polygons (mathematically generated tilings and polygon sets)
+  {
+    id: 'polygon-grid', name: 'Regular polygons', category: 'Polygons', tags: ['polygon', 'grid', 'n-gon'], colors: 2,
+    variants: { key: 'sides', values: [3, 4, 5, 6, 7, 8, 9, 10, 12, 16] },
+    params: [CELL, P('sides', 'Sides', 3, 24, 1, 6), P('size', 'Size (share)', 0.2, 0.7, 0.01, 0.42), P('turn', 'Turn per cell (°)', 0, 45, 1, 0), P('offset', 'Offset rows', 0, 1, 1, 1)],
+    presets: { grid: { offset: 0 }, offset: {}, twisting: { turn: 12 }, large: { size: 0.6 } },
+    gen: (p, W, H) => {
+      const rings: Ring[] = [];
+      let k = 0;
+      for (let j = 0, y = p.cell / 2; y < H + p.cell; j++, y += p.cell) for (let x = p.cell / 2 + (p.offset && j % 2 ? p.cell / 2 : 0); x < W + p.cell; x += p.cell, k++)
+        rings.push(ngon(x, y, p.cell * p.size, p.sides, -Math.PI / 2 + k * p.turn * D2R));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'polygon-tunnel', name: 'Polygon tunnel', category: 'Polygons', tags: ['polygon', 'nested', 'vortex', 'op art'], colors: 3,
+    variants: { key: 'sides', values: [3, 4, 5, 6, 8, 12] },
+    params: [P('sides', 'Sides', 3, 16, 1, 4), P('rings', 'Rings', 3, 40, 1, 14), P('twist', 'Twist per ring (°)', 0, 30, 0.5, 6), P('w', 'Line share', 0.1, 0.9, 0.05, 0.5), P('size', 'Size (share)', 0.3, 0.75, 0.01, 0.7)],
+    presets: { vortex: {}, straight: { twist: 0 }, tight: { rings: 28, twist: 3 }, bold: { w: 0.8 } },
+    gen: (p, W, H) => {
+      const shapes: GenShape[] = [], R = Math.min(W, H) * p.size, cx = W / 2, cy = H / 2;
+      for (let k = p.rings; k >= 1; k--) {
+        const r0 = (R * k) / p.rings, r1 = (R * (k - p.w)) / p.rings, a = k * p.twist * D2R - Math.PI / 2;
+        shapes.push({ rings: [ngon(cx, cy, r0, p.sides, a), ngon(cx, cy, Math.max(0.05, r1), p.sides, a)], c: 1 + (k % 2), evenodd: true });
+      }
+      return fit(W, H, shapes);
+    },
+  },
+  {
+    id: 'octagon-square', name: 'Octagons & squares (4.8.8)', category: 'Polygons', tags: ['archimedean', 'tiling', 'octagon'], colors: 3,
+    params: [P('cell', 'Pitch (mm)', 2, 20, 0.5, 6), GAP],
+    presets: { classic: {}, tight: { gap: 0.1 }, large: { cell: 12 } },
+    gen: (p, W, H) => {
+      // regular octagons on a square lattice; the leftover holes are squares rotated 45°
+      const s = p.cell / (1 + Math.SQRT2), R = s / (2 * Math.sin(Math.PI / 8));
+      const oct: Ring[] = [], sq: Ring[] = [];
+      for (let y = 0; y < H + p.cell; y += p.cell) for (let x = 0; x < W + p.cell; x += p.cell) {
+        oct.push(shrink(ngon(x, y, R, 8, Math.PI / 8), p.gap / 2));
+        sq.push(shrink(ngon(x + p.cell / 2, y + p.cell / 2, s / Math.SQRT2, 4, 0), p.gap / 2));
+      }
+      return fit(W, H, [{ rings: oct, c: 1 }, { rings: sq, c: 2 }]);
+    },
+  },
+  {
+    id: 'trihexagonal', name: 'Trihexagonal (3.6.3.6)', category: 'Polygons', tags: ['archimedean', 'tiling', 'kagome', 'hexagon', 'triangle'], colors: 3,
+    params: [P('cell', 'Hexagon side (mm)', 1, 12, 0.25, 3), GAP],
+    presets: { kagome: {}, large: { cell: 6 }, open: { gap: 0.8 } },
+    gen: (p, W, H) => {
+      // hexagons meet at their corners on a triangular lattice of spacing 2s; the gaps are triangles
+      const s = p.cell, d = 2 * s, dy = d * Math.sqrt(3) / 2, hex: Ring[] = [], tri: Ring[] = [];
+      for (let j = -1, y = 0; y < H + d; j++, y += dy) for (let x = (j & 1) ? s : 0; x < W + d; x += d) {
+        hex.push(shrink(ngon(x, y, s, 6, 0), p.gap / 2));
+        tri.push(shrink([[x + s, y], [x + 2 * s, y], [x + 1.5 * s, y + dy / 2 * 1.0 / 1]].map(([a, b]) => [a, b] as [number, number]), p.gap / 2));
+        tri.push(shrink([[x + s, y], [x + 1.5 * s, y - dy / 2], [x + 2 * s, y]], p.gap / 2));
+      }
+      return fit(W, H, [{ rings: hex, c: 1 }, { rings: tri, c: 2 }]);
+    },
+  },
+  {
+    id: 'truncated-hex', name: 'Dodecagons & triangles (3.12.12)', category: 'Polygons', tags: ['archimedean', 'tiling', 'dodecagon'], colors: 3,
+    params: [P('cell', 'Pitch (mm)', 2, 20, 0.5, 6), GAP],
+    presets: { classic: {}, large: { cell: 12 }, open: { gap: 0.6 } },
+    gen: (p, W, H) => {
+      // dodecagons share edges on a triangular lattice; each gap is a small triangle
+      const d = p.cell, dy = d * Math.sqrt(3) / 2, R = d / 2 / Math.cos(Math.PI / 12), s = 2 * R * Math.sin(Math.PI / 12);
+      const dod: Ring[] = [], tri: Ring[] = [];
+      for (let j = -1, y = 0; y < H + d; j++, y += dy) for (let x = (j & 1) ? d / 2 : 0; x < W + d; x += d) {
+        dod.push(shrink(ngon(x, y, R, 12, Math.PI / 12), p.gap / 2));
+        const tr = s / Math.sqrt(3);
+        tri.push(shrink(ngon(x + d / 2, y + dy / 3, tr, 3, Math.PI / 2), p.gap / 2), shrink(ngon(x + d / 2, y - dy / 3, tr, 3, -Math.PI / 2), p.gap / 2));
+      }
+      return fit(W, H, [{ rings: dod, c: 1 }, { rings: tri, c: 2 }]);
+    },
+  },
+  {
+    id: 'rhombille', name: 'Tumbling blocks (rhombille)', category: 'Polygons', tags: ['cubes', 'isometric', 'rhombus', '3d illusion'], colors: 4,
+    params: [P('cell', 'Block size (mm)', 1.5, 20, 0.25, 5), GAP],
+    presets: { classic: {}, large: { cell: 10 }, small: { cell: 2.5 } },
+    gen: (p, W, H) => {
+      // each hexagon split into three 120° rhombi, one per ink: the classic cube illusion
+      const r = p.cell, dx = Math.sqrt(3) * r, dy = 1.5 * r, out: GenShape[] = [{ rings: [], c: 1 }, { rings: [], c: 2 }, { rings: [], c: 3 }];
+      for (let j = -1, y = 0; y < H + r * 2; j++, y += dy) for (let x = (j & 1) ? dx / 2 : 0; x < W + dx; x += dx) {
+        const v = (k: number): [number, number] => [x + r * Math.cos(Math.PI / 6 + (k * Math.PI) / 3), y + r * Math.sin(Math.PI / 6 + (k * Math.PI) / 3)];
+        const c: [number, number] = [x, y];
+        out[0].rings.push(shrink([c, v(0), v(1), v(2)], p.gap / 2));
+        out[1].rings.push(shrink([c, v(2), v(3), v(4)], p.gap / 2));
+        out[2].rings.push(shrink([c, v(4), v(5), v(0)], p.gap / 2));
+      }
+      return fit(W, H, out);
+    },
+  },
+  {
+    id: 'cairo', name: 'Cairo pentagons', category: 'Polygons', tags: ['pentagon', 'tiling', 'cairo'], colors: 3,
+    params: [P('cell', 'Pitch (mm)', 2, 20, 0.5, 8), GAP],
+    presets: { classic: {}, large: { cell: 14 }, open: { gap: 0.6 } },
+    gen: (p, W, H) => {
+      // four congruent pentagons per square cell around its centre (a = cell/4), alternating pairs rotated 90°
+      const a = p.cell / 4, out: GenShape[] = [{ rings: [], c: 1 }, { rings: [], c: 2 }];
+      const base: [number, number][] = [[0, 0], [a, -a * 0.6], [2 * a, 0], [2 * a, 2 * a * 0.0 + a * 1.4], [0, a * 1.4]];
+      for (let j = 0, y = 0; y < H + p.cell; j++, y += p.cell) for (let i = 0, x = 0; x < W + p.cell; i++, x += p.cell) {
+        for (let k = 0; k < 4; k++) {
+          const rot = (k * Math.PI) / 2 + ((i + j) % 2 ? Math.PI / 4 : 0) * 0;
+          const pent = transform(base.map(([u, v]) => [u - a, v - a * 1.6] as [number, number]), x + p.cell / 2, y + p.cell / 2, rot);
+          out[k % 2].rings.push(shrink(pent, p.gap / 2));
+        }
+      }
+      return fit(W, H, out);
+    },
+  },
+
+  // ---------------- Math curves and fractals
+  {
+    id: 'superformula', name: 'Superformula', category: 'Math', tags: ['gielis', 'supershape', 'curve'], colors: 2,
+    variants: { key: 'm', values: [3, 4, 5, 6, 7, 8, 10, 12] },
+    params: [P('m', 'Symmetry m', 1, 24, 1, 6), P('n1', 'n1', 0.2, 12, 0.1, 1), P('n2', 'n2', 0.2, 12, 0.1, 1.7), P('n3', 'n3', 0.2, 12, 0.1, 1.7), P('size', 'Size (share)', 0.2, 0.5, 0.01, 0.45), P('tile', 'Tile (0 = single)', 0, 6, 1, 0)],
+    presets: { flower: {}, star: { n1: 0.3, n2: 0.3, n3: 0.3 }, rounded: { n1: 2, n2: 4, n3: 4 }, spiky: { n1: 0.5, n2: 1, n3: 2.5 }, tiled: { tile: 4 } },
+    gen: (p, W, H) => {
+      const sf = (a: number) => {
+        const t = (p.m * a) / 4;
+        const v = Math.abs(Math.cos(t)) ** p.n2 + Math.abs(Math.sin(t)) ** p.n3;
+        return v === 0 ? 1 : v ** (-1 / p.n1);
+      };
+      const samples = Array.from({ length: 720 }, (_, k) => sf((2 * Math.PI * k) / 720));
+      const mx = Math.max(...samples.filter(Number.isFinite));
+      const rings: Ring[] = [];
+      const n = p.tile || 1, cw = W / n, ch = H / n;
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+        const R = Math.min(cw, ch) * p.size;
+        rings.push(polar(cx(i, cw), cx(j, ch), (a) => (R * sf(a)) / mx, 720));
+      }
+      return fit(W, H, [{ rings, c: 1, evenodd: true }]);
+    },
+  },
+  {
+    id: 'rose', name: 'Rose curves', category: 'Math', tags: ['rhodonea', 'petals', 'curve'], colors: 2,
+    variants: { key: 'k', values: [2, 3, 4, 5, 6, 7, 8] },
+    params: [P('k', 'Petal number k', 1, 12, 1, 5), P('d', 'Denominator d', 1, 7, 1, 1), P('w', 'Line width (mm, 0 = filled)', 0, 3, 0.1, 0), P('size', 'Size (share)', 0.2, 0.5, 0.01, 0.46)],
+    presets: { filled: {}, outline: { w: 0.8 }, nested: { d: 3, w: 0.6 }, wide: { d: 2, w: 0.6 } },
+    gen: (p, W, H) => {
+      // r = cos(k/d · θ), closed after π·d (odd k·d) or 2π·d
+      const k = p.k / p.d, R = Math.min(W, H) * p.size, T = Math.PI * p.d * ((p.k * p.d) % 2 ? 1 : 2), cxx = W / 2, cyy = H / 2;
+      const pts: [number, number][] = [];
+      for (let t = 0; t <= T; t += T / 1600) { const r = R * Math.cos(k * t); pts.push([cxx + r * Math.cos(t), cyy + r * Math.sin(t)]); }
+      if (p.w <= 0) return fit(W, H, [{ rings: [pts], c: 1, evenodd: true }]);
+      const rings: Ring[] = [];
+      for (let i = 0; i < pts.length - 1; i += 20) rings.push(stroke(pts.slice(i, i + 21), p.w));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'spirograph', name: 'Spirograph', category: 'Math', tags: ['hypotrochoid', 'epitrochoid', 'guilloche', 'curve'], colors: 2,
+    variants: { key: 'r', values: [3, 5, 7, 9, 11, 13] },
+    params: [P('R', 'Ring teeth R', 10, 40, 1, 24), P('r', 'Wheel teeth r', 1, 30, 1, 7), P('d', 'Pen offset', 0.1, 1.5, 0.05, 0.8), P('epi', 'Outside (epitrochoid)', 0, 1, 1, 0), P('w', 'Line width (mm)', 0.2, 2, 0.05, 0.5), P('size', 'Size (share)', 0.2, 0.5, 0.01, 0.46)],
+    presets: { classic: {}, guilloche: { R: 36, d: 1.2, w: 0.3 }, epicycle: { epi: 1 }, bold: { w: 1.2 } },
+    gen: (p, W, H) => {
+      const g = (a: number, b: number): number => (b ? g(b, a % b) : a);
+      const R = p.R, r = p.r, d = p.d * r, turns = r / g(R, r), s = p.epi ? 1 : -1;
+      const pts: [number, number][] = [];
+      let mx = 0;
+      for (let t = 0; t <= 2 * Math.PI * turns; t += 0.01) {
+        const x = (R - s * -r) * 0 + (p.epi ? (R + r) * Math.cos(t) - d * Math.cos(((R + r) / r) * t) : (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t));
+        const y = p.epi ? (R + r) * Math.sin(t) - d * Math.sin(((R + r) / r) * t) : (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
+        pts.push([x, y]); mx = Math.max(mx, Math.hypot(x, y));
+      }
+      const k = (Math.min(W, H) * p.size) / (mx || 1);
+      const sc = pts.map(([x, y]) => [W / 2 + x * k, H / 2 + y * k] as [number, number]);
+      const rings: Ring[] = [];
+      for (let i = 0; i < sc.length - 1; i += 16) rings.push(stroke(sc.slice(i, i + 17), p.w));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'lissajous', name: 'Lissajous', category: 'Math', tags: ['harmonic', 'oscillator', 'curve'], colors: 2,
+    variants: { key: 'a', values: [1, 2, 3, 4, 5] },
+    params: [P('a', 'Frequency X', 1, 9, 1, 3), P('b', 'Frequency Y', 1, 9, 1, 4), P('phase', 'Phase (°)', 0, 180, 1, 90), P('w', 'Line width (mm)', 0.2, 3, 0.05, 0.8)],
+    presets: { classic: {}, knot: { b: 2 }, fine: { a: 5, b: 6, w: 0.4 } },
+    gen: (p, W, H) => {
+      const pts: [number, number][] = [];
+      for (let t = 0; t <= 2 * Math.PI + 1e-9; t += 0.004) pts.push([W / 2 + (W * 0.46) * Math.sin(p.a * t + p.phase * D2R), H / 2 + (H * 0.46) * Math.sin(p.b * t)]);
+      const rings: Ring[] = [];
+      for (let i = 0; i < pts.length - 1; i += 16) rings.push(stroke(pts.slice(i, i + 17), p.w));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'phyllotaxis', name: 'Phyllotaxis (golden angle)', category: 'Math', tags: ['sunflower', 'fibonacci', 'golden ratio', 'dots'], colors: 3,
+    params: [P('n', 'Seeds', 50, 2000, 10, 500), P('size', 'Seed size', 0.2, 1, 0.02, 0.6), P('angle', 'Divergence (°)', 130, 145, 0.01, 137.51), P('grow', 'Grow outward', 0, 1, 0.05, 0.5), P('shape', 'Seed shape', 0, 7, 1, 0)],
+    presets: { sunflower: {}, dense: { n: 1500, size: 0.5 }, spiral: { angle: 137.3 }, hex: { shape: 6 } },
+    gen: (p, W, H) => {
+      const R = Math.min(W, H) * 0.48, c = R / Math.sqrt(p.n), out: GenShape[] = [{ rings: [], c: 1 }, { rings: [], c: 2 }];
+      const base = unitShape(p.shape);
+      for (let i = 1; i <= p.n; i++) {
+        const r = c * Math.sqrt(i), a = i * p.angle * D2R, s = c * p.size * (1 - p.grow + p.grow * (r / R) * 1.5);
+        out[i % 13 < 8 ? 0 : 1].rings.push(transform(base, W / 2 + r * Math.cos(a), H / 2 + r * Math.sin(a), a, s / 2 + 0.05));
+      }
+      return fit(W, H, out);
+    },
+  },
+  {
+    id: 'sierpinski', name: 'Sierpinski triangle', category: 'Math', tags: ['fractal', 'triangle', 'self-similar'], colors: 2,
+    variants: { key: 'depth', values: [2, 3, 4, 5, 6] },
+    params: [P('depth', 'Depth', 0, 7, 1, 4), GAP],
+    presets: { classic: {}, gapped: { gap: 0.3 } },
+    gen: (p, W, H) => {
+      const rings: Ring[] = [];
+      const sub = (a: [number, number], b: [number, number], c: [number, number], d: number) => {
+        if (!d) { rings.push(shrink([a, b, c], p.gap)); return; }
+        const m = (u: [number, number], v: [number, number]): [number, number] => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2];
+        sub(a, m(a, b), m(a, c), d - 1); sub(m(a, b), b, m(b, c), d - 1); sub(m(a, c), m(b, c), c, d - 1);
+      };
+      const s = Math.min(W, H / 0.866);
+      sub([(W - s) / 2, (H - s * 0.866) / 2], [(W + s) / 2, (H - s * 0.866) / 2], [W / 2, (H + s * 0.866) / 2], p.depth);
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'carpet', name: 'Sierpinski carpet', category: 'Math', tags: ['fractal', 'square', 'self-similar'], colors: 2,
+    variants: { key: 'depth', values: [1, 2, 3, 4] },
+    params: [P('depth', 'Depth', 1, 5, 1, 3)],
+    presets: { classic: {} },
+    gen: (p, W, H) => {
+      // holes of a Menger-sponge face: removed squares are the inked region
+      const rings: Ring[] = [];
+      const go = (x: number, y: number, w: number, h: number, d: number) => {
+        if (!d) return;
+        const tw = w / 3, th = h / 3;
+        rings.push(rect(x + tw, y + th, x + 2 * tw, y + 2 * th));
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (i !== 1 || j !== 1) go(x + i * tw, y + j * th, tw, th, d - 1);
+      };
+      go(0, 0, W, H, p.depth);
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'koch', name: 'Koch snowflake', category: 'Math', tags: ['fractal', 'snowflake', 'winter'], colors: 2,
+    variants: { key: 'depth', values: [1, 2, 3, 4, 5] },
+    params: [P('depth', 'Depth', 0, 6, 1, 3), P('size', 'Size (share)', 0.2, 0.5, 0.01, 0.42), P('tile', 'Tile (0 = single)', 0, 6, 1, 0)],
+    presets: { single: {}, tiled: { tile: 3, depth: 3 } },
+    gen: (p, W, H) => {
+      const flake = (cxx: number, cyy: number, R: number): Ring => {
+        let pts: [number, number][] = ngon(cxx, cyy, R, 3, Math.PI / 2);
+        for (let d = 0; d < p.depth; d++) {
+          const next: [number, number][] = [];
+          for (let i = 0; i < pts.length; i++) {
+            const a = pts[i], b = pts[(i + 1) % pts.length], dx = (b[0] - a[0]) / 3, dy = (b[1] - a[1]) / 3;
+            const p1: [number, number] = [a[0] + dx, a[1] + dy], p2: [number, number] = [a[0] + 2 * dx, a[1] + 2 * dy];
+            const peak: [number, number] = [p1[0] + dx * 0.5 + dy * 0.866, p1[1] + dy * 0.5 - dx * 0.866];
+            next.push(a, p1, peak, p2);
+          }
+          pts = next;
+        }
+        return pts;
+      };
+      const n = p.tile || 1, cw = W / n, ch = H / n, rings: Ring[] = [];
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) rings.push(flake(cx(i, cw), cx(j, ch), Math.min(cw, ch) * p.size));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'hilbert', name: 'Hilbert curve', category: 'Math', tags: ['space-filling', 'fractal', 'maze'], colors: 2,
+    variants: { key: 'order', values: [2, 3, 4, 5] },
+    params: [P('order', 'Order', 1, 6, 1, 4), P('w', 'Line share', 0.15, 0.8, 0.05, 0.4)],
+    presets: { classic: {} },
+    gen: (p, W, H) => {
+      const n = 2 ** p.order, pts: [number, number][] = [];
+      for (let i = 0; i < n * n; i++) {
+        // standard d → (x, y)
+        let x = 0, y = 0, t = i;
+        for (let s = 1; s < n; s *= 2) {
+          const rx = 1 & (t / 2), ry = 1 & (t ^ rx);
+          if (ry === 0) { if (rx === 1) { x = s - 1 - x; y = s - 1 - y; } [x, y] = [y, x]; }
+          x += s * rx; y += s * ry; t = Math.floor(t / 4);
+        }
+        pts.push([((x + 0.5) / n) * W, ((y + 0.5) / n) * H]);
+      }
+      const w = (Math.min(W, H) / n) * p.w, rings: Ring[] = [];
+      for (let i = 0; i < pts.length - 1; i++) rings.push(stroke([pts[i], pts[i + 1]], w), ngon(pts[i][0], pts[i][1], w / Math.SQRT2, 4, Math.PI / 4));
+      return fit(W, H, [{ rings, c: 1 }]);
+    },
+  },
+  {
+    id: 'moire', name: 'Moiré rings', category: 'Math', tags: ['interference', 'op art', 'circles'], colors: 3,
+    params: [P('cell', 'Ring pitch (mm)', 0.8, 6, 0.1, 2), P('shift', 'Centre offset (share)', 0, 0.5, 0.01, 0.15)],
+    presets: { classic: {}, wide: { shift: 0.35 }, fine: { cell: 1.2 } },
+    gen: (p, W, H) => {
+      const shapes: GenShape[] = [], R = Math.hypot(W, H);
+      for (const [k, ox] of [[1, -p.shift], [2, p.shift]] as const) {
+        const cxx = W / 2 + ox * W;
+        for (let r = p.cell; r < R; r += p.cell * 2) shapes.push({ rings: [circle(cxx, H / 2, r + p.cell / 2, 96), circle(cxx, H / 2, r, 96)], c: k, evenodd: true });
+      }
+      return fit(W, H, shapes);
+    },
+  },
+
 ];
 
 export const familyById = (id: string) => FAMILIES.find((f) => f.id === id);

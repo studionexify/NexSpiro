@@ -27,7 +27,7 @@ describe('pattern library', () => {
       // something is actually filled
       const idx = new ShapeIndex(p.shapes);
       let hit = 0;
-      for (let i = 0; i < 160; i++) for (let j = 0; j < 160; j++) if (idx.contains(i * 0.25 + 0.13, j * 0.25 + 0.11)) hit++;
+      for (let i = 0; i < 160 && !hit; i++) for (let j = 0; j < 160; j++) if (idx.contains(i * 0.25 + 0.13, j * 0.25 + 0.11)) { hit++; break; }
       expect(hit, `${f.id}/${preset} fills nothing`).toBeGreaterThan(0);
     }
   });

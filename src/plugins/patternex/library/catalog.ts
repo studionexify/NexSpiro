@@ -98,7 +98,7 @@ export function buildPattern(spec: GenSpec, name?: string): Pattern {
   for (const s of raw) {
     if (!s.rings.length) continue;
     const color = GROUP_KEYS[Math.min(GROUP_KEYS.length - 1, Math.max(0, s.c))];
-    const shape: PatternShape = { polygon_rings: s.rings.map(clean).filter((r) => r.length >= 3), fill_color: color, fill_rule: s.evenodd ? 'evenodd' : 'nonzero' };
+    const shape: PatternShape = { polygon_rings: s.rings.map(clean).filter((r) => r.length >= 3).map((r) => (s.evenodd ? r : ccw(r))), fill_color: color, fill_rule: s.evenodd ? 'evenodd' : 'nonzero' };
     if (!shape.polygon_rings.length) continue;
     const l = byColor.get(color); if (l) l.push(shape); else byColor.set(color, [shape]);
   }
@@ -109,6 +109,13 @@ export function buildPattern(spec: GenSpec, name?: string): Pattern {
   const id = `gen:${spec.family}:${hashStr(JSON.stringify(geom))}`;
   return { id, name: name ?? `${f.name}`, source: 'builtin', shapes, tolerance_mm: 0.05, bounds: shapes.length ? boundsOf(shapes) : [0, 0, spec.width, spec.height] };
 }
+
+/** Counter-clockwise ring (non-zero fill: overlapping pieces add up instead of cancelling). */
+const ccw = (r: Ring): Ring => {
+  let a = 0;
+  for (let i = 0; i < r.length; i++) { const [x0, y0] = r[i], [x1, y1] = r[(i + 1) % r.length]; a += x0 * y1 - x1 * y0; }
+  return a < 0 ? r.slice().reverse() : r;
+};
 
 const clean = (r: Ring): Ring => {
   const out: Ring = [];
