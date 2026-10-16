@@ -21,7 +21,8 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export type ProgressFn = (stage: string, pct: number) => void;
 
-interface PathItem extends Polyline2 { feature: FeatureType; width: number; flow: number; spiral?: boolean; widths?: number[] }
+/** zs: per-point Z offsets (mm) from the layer top, for non-planar wall patterns (Advanced mode). */
+interface PathItem extends Polyline2 { feature: FeatureType; width: number; flow: number; spiral?: boolean; widths?: number[]; zs?: number[] }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
 
@@ -296,6 +297,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           const custom = adv?.walls && !vase && walls > 0 ? adv.walls(oi, ex, { walls, wo, wi, so, si, h, z: zs[i], layer: i }) : undefined;
           if (custom) {
             for (const ring of custom.loops) loops.push(ring.map((l) => ({ ...l })));
+            if (adv?.wallsPost) adv.wallsPost(oi, i, ex, loops);
             regInner.push(...custom.inner);
             islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: custom.inner, thin: [] });
             continue;
@@ -314,6 +316,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
               A = sn.wide.length ? offset(sn.wide, -sp) : [];
             }
             regInner.push(...A);
+            if (adv?.wallsPost) adv.wallsPost(oi, i, ex, loops);
             islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: A, thin });
             continue;
           }
@@ -329,6 +332,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             boundary = d + (k === 0 ? so : si) / 2;
           }
           const inner = walls > 0 ? (loops.length === walls ? offset(ip, -boundary) : []) : ip;
+          if (adv?.wallsPost && !vase) adv.wallsPost(oi, i, ex, loops);
           regInner.push(...inner);
           islands.push({ obj: oi, fil: reg.fil, ex, loops, inner, thin: [] });
         }
@@ -645,6 +649,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         : it.width > hEff ? (it.width - hEff) * hEff + Math.PI * (hEff / 2) ** 2 : it.width * hEff;
       const ePerMm = (xs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow;
       const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
+      const zoff = it.zs && it.zs.length * 2 === pts.length ? (it.closed ? [...it.zs, it.zs[0]] : it.zs) : null;
       const xsOf = (w: number) => (w > h ? (w - h) * h + Math.PI * (h / 2) ** 2 : w * h);
       let v = speedFor(it.feature, i);
       const maxVol = 'filament_max_volumetric_speed' in live ? live.filament_max_volumetric_speed : fl.maxVolumetricSpeed;
@@ -658,7 +663,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         const len = Math.hypot(x - px, y - py);
         if (len < 1e-5) continue;
         run += len;
-        const zz = it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : zTop;
+        const zz = (it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : zTop) + (zoff ? zoff[k / 2] : 0);
         if (varW) {
           const sw = (varW[k / 2 - 1] + varW[k / 2]) / 2, sxs = xsOf(sw);
           const sv = Math.min(v * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
@@ -836,16 +841,18 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           for (const k of seq) {
             const ordered = orderPaths(isl.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
             for (const loop of ordered) {
-              let pts = simplify(loop.pts, resolution, true);
+              // loops with per-point data (Z offsets) keep every point so the arrays stay aligned
+              let pts = loop.zs ? loop.pts : simplify(loop.pts, resolution, true);
               const prev = seamMode === 'aligned' && prevSeams.length
                 ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
                 : null;
               const si = pickSeam(pts, seamMode, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, prev, rnd, hints);
               pts = rotateLoop(pts, si);
+              const zs = loop.zs && loop.zs.length * 2 === loop.pts.length ? [...loop.zs.slice(si), ...loop.zs.slice(0, si)] : undefined;
               if (k === 0) seams.push([pts[0], pts[1]]);
-              if (fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
-              const item: PathItem = { ...loop, pts, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
-              wallItems.push(...(i > 0 && !vase ? splitOverhang(item, lowerSupport) : [item]));
+              if (!zs && fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
+              const item: PathItem = { ...loop, pts, zs, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
+              wallItems.push(...(i > 0 && !vase && !zs ? splitOverhang(item, lowerSupport) : [item]));
             }
           }
           if (isl.thin.length) wallItems.push(...orderPaths(isl.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice() })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);

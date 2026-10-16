@@ -31,6 +31,8 @@ export interface SnapOptions {
   reach?: number;
   /** Split moves so the bead follows the surface at this spacing (mm). */
   step?: number;
+  /** Only ever lower beads (anti-aliasing the outer edge), never raise them. */
+  lowerOnly?: boolean;
 }
 
 /** Returns the number of moved points. */
@@ -57,14 +59,19 @@ export function snapToSurface(layers: LayerOps[], parts: PartAnalysis[], o: Snap
         const h = op.h;
         const hit = surfaceAbove(parts, x, y, zl - h * (0.5 + reach), h * (2 * reach + 0.5));
         let z = zl, e = op.e / n;
-        if (hit && hit.slope > 0.5 && hit.slope <= o.maxSlope) {
-          const dz = Math.max(-reach * h, Math.min(reach * h, hit.z - zl));
+        // only where this layer's band contains the surface: elsewhere the bead is interior or below it
+        const prior = op.dev ?? 0;
+        let dev = prior;
+        if (hit && hit.slope > 0.5 && hit.slope <= o.maxSlope && Math.abs(hit.z - zl) <= reach * h && !(o.lowerOnly && hit.z >= zl)) {
+          // one budget for every pass: a bead never ends up more than half a layer off its surface
+          const dz = Math.max(-0.5 * h - prior, Math.min(0.5 * h - prior, hit.z - zl));
           const nh = Math.max(o.minH, h + dz);
           z = zl - h + nh;
           e *= nh / h;
+          dev = prior + (z - zl);
           if (Math.abs(z - zl) > 1e-4) moved++;
         }
-        const m: Move = { ...op, x, y, z: +z.toFixed(4), e, noArc: true };
+        const m: Move = { ...op, x, y, z: +z.toFixed(4), e, noArc: true, dev };
         out.push(m);
       }
       px = op.x; py = op.y; pz = op.z;

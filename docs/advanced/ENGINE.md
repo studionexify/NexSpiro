@@ -64,3 +64,21 @@ Every technology has a `mould()` rule returning *ok*, *adapted* (runs in a reduc
 | Clearance checker (Task 2.3) | `clearance.ts` | Height maps of finished layers and of the current layer (3 mm lag); a non-planar point must keep the nozzle cone, heater block, fan duct and carriage above printed plastic and its tip ≥ 0.03 mm above the finished layer under it. Lifts up to ½ layer, otherwise reports |
 
 Verification: `tests/advanced/phase2.test.ts` — PCG, Laplace linear solution, multigrid Poisson against the analytic square value, heat and Eikonal distance against the exact disk distance, isoline areas, dome-warp limits and inverse map, un-warp flow scaling, SGD loss decrease on a T, clearance lift/report, curved-layer slices with zero unresolved collisions.
+
+## Phase 3 — continuous helices, seam elimination & surface compilers
+
+| Technology | File | What the toolpath does |
+| --- | --- | --- |
+| #21 Thick-vase helix | `modules/thickVase.ts` | In helical bands (steady single-island stretches), each layer is rebuilt in a canonical loop order (outer walls by size, inner walls, infill) so every point sits at the same fraction of the turn each layer; z = layer surface − h·(1 − s/S), relative to the move's own z (curved layers stay curved); hops inside the part lose their retraction; infill becomes a connected spiral |
+| #3 Eulerian spiral | `eulerian.ts` | Concentric rings joined level by level into unbroken spirals (each ring stops one spacing short and steps in); the innermost ring widens (0.75–2.5 × nozzle) instead of gap fill |
+| #22 Tangential entry | `modules/seams.ts` | One-turn Archimedean spiral just inside the walls, an approach that merges into the wall at ≤ 3° (smoothstep inset over 1.5·D/tan α), the loop, and a mirrored lead-out; skipped when the spiral would leave the part (SDF check) |
+| #23 Scarf splice | `modules/seams.ts` | Wedge start half a layer low with E(s) = 3(s/L)² − 2(s/L)³, the loop, then the complementary wedge at full height at 60 % speed with the part fan off for 150 ms |
+| #8 Sub-voxel anti-aliasing | `modules/surfacePasses.ts` | Outer beads under shallow slopes are lowered onto the CAD surface inside their layer band (never raised: the flat of the tip spans the neighbour) |
+| #26 Perimeter feathering | `modules/surfacePasses.ts` | On rounded sides leaning in (30–80°), the outer bead drops by up to ½ layer and shifts outward along the surface normal (shingled) |
+| #25 Conformal ironing | `modules/surfacePasses.ts` | Up-facing surfaces within the head's slope limit, seen from above, are burnished by concentric isoline passes at the CAD height (1.5 % flow); points the head cannot reach are skipped |
+| #7 Z-weave & Z-pins | `modules/weave.ts` | Inner walls and infill follow an egg-crate offset A·h·sin kx·sin ky with alternating sign per layer; flow follows the real bead height against an offset map of what is below; speed capped by the Z axis (v ≤ v_z/(A·h·k·√2), v ≤ √(a_z/(2A·h·k²))). Pins: voids of r = 1.2 mm through N layers in deep cores, filled by a vertical extrusion; the dive depth comes from the nozzle cone and tip length |
+| #19 Knot braiding | `modules/weave.ts` | Walls 1 and 2 become two strands M ∓ n·(s/2)·cos ωs that swap sides at each crossing; the strand printed second lifts over the crossing (per-point Z offsets); strands swap slots every layer so over and under alternate |
+
+The slicer gained two generic hooks for this phase: per-point Z offsets on wall loops (`zs`, kept through seam rotation) and a walls post-edit hook.
+
+Verification: `tests/advanced/phase3.test.ts`. A fully combined Seamless Aesthetic compile on Bambu, Klipper and Marlin machines leaves at most 0.1 % of non-planar points reported (worst < 0.25 mm), all of them listed in the warnings.
