@@ -5,7 +5,7 @@ import { FEATURE_ORDER } from './types';
 import { fitArc } from './arc';
 
 export type Op =
-  | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean }
+  | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
   | { k: 'tool'; tool: number }
@@ -43,6 +43,8 @@ export interface EmitInput {
   filaments: FilamentSlot[];
   layers: LayerOps[];
   objectLabels: { name: string; cx: number; cy: number; polygon: [number, number][] }[];
+  /** Extra comment lines for the header (from plugins). */
+  headerLines?: string[];
 }
 
 export interface EmitOutput {
@@ -56,7 +58,7 @@ export interface EmitOutput {
 export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
-export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitOutput {
+export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const flavor = String(cfg.gcode_flavor);
   const minLayerTime = num('slow_down_layer_time');
@@ -123,6 +125,7 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
   out.push('; estimated printing time (normal mode) = __TIME__');
   out.push('; filament used [mm] = __FILMM__');
   out.push('; filament used [g] = __FILG__');
+  out.push(...headerLines);
   out.push('');
 
   if (cfg.label_objects && flavor === 'klipper') {
@@ -164,7 +167,7 @@ export function emit({ cfg, filaments, layers, objectLabels }: EmitInput): EmitO
     let curFeature: FeatureType | null = null;
     for (let oi = 0; oi < L.ops.length; oi++) {
       const op = L.ops[oi];
-      if (arcs && op.k === 'move' && !op.travel && op.e > 0 && op.z === z && !isNaN(x)) {
+      if (arcs && op.k === 'move' && !op.travel && !op.noArc && op.e > 0 && op.z === z && !isNaN(x)) {
         const fit = fitArc(L.ops, oi, x, y);
         if (fit) {
           if (curFeature !== op.feature) { curFeature = op.feature; out.push(`;TYPE:${op.feature.replace(/_/g, ' ')}`); }

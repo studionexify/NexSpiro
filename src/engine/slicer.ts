@@ -11,6 +11,8 @@ import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh } from './slice';
+import { runPlugins } from '../plugins/engine';
+import type { FaceRegion } from '../plugins/api';
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 
@@ -825,7 +827,38 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const x0 = b.minX / SCALE, y0 = b.minY / SCALE, x1 = b.maxX / SCALE, y1 = b.maxY / SCALE;
     return { name: labelName(o), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as [number, number][] };
   }).filter((l) => isFinite(l.cx));
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [] });
+  // ---------- plugins: post-toolpath, pre-G-code
+  let pluginRun: ReturnType<typeof runPlugins> = { header: [], reports: {} };
+  if (opts.plugins && Object.keys(opts.plugins).length) {
+    progress('Running plugins', 0.9);
+    const faceRegions: FaceRegion[] = [];
+    meshes.forEach((m, o) => (m.faceSets ?? []).forEach((fs) => {
+      if (!fs.tris.length) return;
+      const tris: PaintedTri[] = [];
+      const v = m.vertices, ix = m.indices;
+      for (const t of fs.tris) {
+        const za = v[ix[t * 3] * 3 + 2], zb = v[ix[t * 3 + 1] * 3 + 2], zc = v[ix[t * 3 + 2] * 3 + 2];
+        tris.push({ t, zmin: Math.min(za, zb, zc), zmax: Math.max(za, zb, zc), value: 1 });
+      }
+      // The strip reaches in far enough to cover every wall line under the picked surface.
+      const depth = Math.max(1, onum(o, 'wall_loops')) * lw('inner_wall_line_width') + lw('outer_wall_line_width');
+      const cache = new Map<number, [number, number][][]>();
+      faceRegions.push({
+        id: `${m.id}:${fs.id}`, name: fs.name,
+        polygonsAt(li) {
+          const hit = cache.get(li);
+          if (hit) return hit;
+          const sl = objSlices[o][li];
+          const map = sl?.length ? colorRegionsAtZ(m as IndexedMesh, tris, sl, planes[li], depth) : new Map();
+          const r = (map.get(1) ?? []).map((p: Paths[number]) => p.map((q) => [q.X / SCALE, q.Y / SCALE] as [number, number]));
+          cache.set(li, r);
+          return r;
+        },
+      });
+    }));
+    pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } });
+  }
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
@@ -835,5 +868,5 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   if (maxZ > num('bed_z')) warnings.push(`Model height ${maxZ.toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warnings.push(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
-  return { ...res, warnings };
+  return { ...res, warnings, pluginReports: pluginRun.reports };
 }
