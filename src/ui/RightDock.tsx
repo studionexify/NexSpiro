@@ -59,7 +59,7 @@ export function PluginsButton() {
       <button className="btn-secondary btn-small" title="Plugins" onClick={() => setOpen(true)}>Plugins{plugins.length ? ` (${plugins.length})` : ''}</button>
       {open && (
         <Modal title="Plugins" onClose={() => setOpen(false)}>
-          <p style={{ marginTop: 0, color: 'var(--text-muted)' }}>Plugins change the toolpaths after slicing. NexSpiro always writes the final G-code.</p>
+          <p style={{ marginTop: 0, color: 'var(--text-muted)' }}>Plugins add material regions and change the toolpaths while slicing. NexSpiro always writes the final G-code.</p>
           {PLUGINS.map((p) => {
             const on = plugins.includes(p.id);
             return (

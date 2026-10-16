@@ -47,6 +47,12 @@
 | **Printers** | 44 profiles: all current Bambu Lab (incl. H2D single-nozzle), Creality K1/K2/Ender-3 V3 family, Elegoo Neptune 3/4 & Centauri, Prusa MK3S+/MK4S/MINI+/CORE One/XL, Anycubic Kobra, Voron, Qidi, Sovol, Artillery, generic Marlin/Klipper. |
 | **Tools** | Cut (tilted plane, capped), Mesh boolean (union/difference/intersection), Text (object/emboss/engrave), Measure, Flushing-volume matrix. |
 
+### Plugins
+| Plugin | Features |
+| --- | --- |
+| **Motionex** | Waves, loops, dots and textures on walls, with a print-head collision check. |
+| **Patternex** | SVG or built-in patterns (stripes, checker, dots, hex) projected onto the model (planar or wrapped), a filament per colour region — AMS tool changes or manual swaps — with full / reduced / no purge, a movable change point for deliberate colour bleed, and a pre-export report. See `docs/patternex/`. |
+
 > Not covered yet: H2D dual-nozzle, Creality CFS / Anycubic ACE multi-colour, X1/H2 camera (RTSPS — open the shown URL in VLC). Profiles beyond the original four printers use generic start G-code — check the first print.
 
 > Painting resolution follows the model's triangles; very coarse meshes paint in large facets.

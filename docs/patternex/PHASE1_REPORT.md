@@ -1,6 +1,6 @@
 # Patternex — Phase 1: repo inspection and hook-point proposal
 
-Status: **awaiting approval** (spec §10 step 1). No engine code changed yet.
+Status: **approved** — hooks implemented as proposed (see VALIDATION.md for the as-built map).
 
 ## 1. Stack
 - TypeScript 5.6, React 18 + zustand UI, three.js viewport, Vite web build, Electron desktop shell.
