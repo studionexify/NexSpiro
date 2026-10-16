@@ -63,5 +63,10 @@ Purge grams use the flush volumes actually applied (default `flush_volume` 280 m
 - Region outlines in the preview are capped at 200k points.
 - Patterns, placements and region actions are saved in the `.3mf` project (`Metadata/nexspiro_project.json` → `patternex`) and restored on open; placements on objects missing from the project are dropped.
 
-## 7. Not started (spec §11 extended scope)
-Pattern library and text tool, raster tracing/halftone/dither, palette quantisation, paint brush, spherical/UV projection, tiling, angle filter, region booleans, edge treatments, non-colour region actions, dithered gradients, extra purge strategies (into infill/object), bleed calibration wizard, swap optimiser, waste/cost estimate per pattern, rule engine, style presets, per-order templates, project files, Emerald/Nexder/Nexcal integration, job logging.
+## 7. Pattern library (§11.1, started)
+- 47 original procedural families in 6 types (Geometric, Tiles, Shapes, Organic, Lines, Ornament) × presets × variants × seeds × 8 palettes = 4,816 library entries (`library/families.ts`, `library/catalog.ts`).
+- Library window at 98% of the screen: type and palette filters, search, lazy thumbnails, slider editor for every family parameter, seed and palette, live preview plus a cube showing the target.
+- Apply to: a picked face, one side (top/bottom/front/back/left/right), all four sides, or the whole body (cylindrical wrap). With *fit to target* the pattern is regenerated at the target's size so the cell size stays as set.
+
+## 8. Not started (spec §11 extended scope)
+Library categories for logos and text, user uploads with tags, the text tool, raster tracing/halftone/dither, palette quantisation, paint brush, spherical/UV projection, tiling, angle filter, region booleans, edge treatments, non-colour region actions, dithered gradients, extra purge strategies (into infill/object), bleed calibration wizard, swap optimiser, waste/cost estimate per pattern, rule engine, style presets, per-order templates, project files, Emerald/Nexder/Nexcal integration, job logging.

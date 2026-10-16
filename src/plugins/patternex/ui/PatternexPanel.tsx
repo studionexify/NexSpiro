@@ -12,6 +12,8 @@ import { DEFAULT_TRANSITION_VOLUME, type PatternexConfig, type PatternexReport, 
 import { addPattern, createPatternexState, ensureBuiltin, savePatternexState, toPatternexConfig, type ObjPlacement, type PatternexState } from './state';
 import type { MotionApplication } from '../../motionex/model';
 import { mx } from '../../motionex/ui/MotionexPanel';
+import { LibraryWindow } from '../library/LibraryWindow';
+import { libraryCounts } from '../library/catalog';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 export const px: PatternexState = createPatternexState(storage);
@@ -105,6 +107,7 @@ function Patterns() {
   const [tol, setTol] = useState(0.05);
   const [autoClose, setAutoClose] = useState(false);
   const [msg, setMsg] = useState<string[]>([]);
+  const [lib, setLib] = useState(false);
   const arm = (id: string) => { px.armed = id; useStore.getState().set({ tool: 'place_pattern', workspace: 'prepare' }); changed(false); };
   const onFile = async (f: File) => {
     const text = await f.text();
@@ -117,9 +120,11 @@ function Patterns() {
   return (
     <section className="mx-card">
       <div className="mx-card-title">Patterns<span className="spacer" />
-        <button className="btn-primary btn-small" onClick={() => file.current?.click()}>Import SVG…</button>
+        <button className="btn-secondary btn-small" onClick={() => file.current?.click()}>Import SVG…</button>
         <input ref={file} type="file" accept=".svg,image/svg+xml" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }} />
       </div>
+      <button className="btn-primary pxl-open" onClick={() => setLib(true)}>Open pattern library · {libraryCounts().All.toLocaleString()} patterns</button>
+      {lib && <LibraryWindow onClose={() => setLib(false)} />}
       <div className="mx-two">
         <label className="mx-field">Curve tolerance (mm)<input className="input" type="number" min={0.005} step={0.01} value={tol} onChange={(e) => setTol(Math.max(0.005, Number(e.target.value) || 0.05))} /></label>
         <label className="mx-field px-check"><input type="checkbox" checked={autoClose} onChange={(e) => setAutoClose(e.target.checked)} />Auto-close open paths</label>
