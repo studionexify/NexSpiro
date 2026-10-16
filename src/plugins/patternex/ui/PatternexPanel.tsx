@@ -14,6 +14,8 @@ import type { MotionApplication } from '../../motionex/model';
 import { mx } from '../../motionex/ui/MotionexPanel';
 import { LibraryWindow } from '../library/LibraryWindow';
 import { GROUP_KEYS, GROUP_NAMES, libraryCounts } from '../library/catalog';
+import { CreatePanel } from './CreatePanel';
+import { Calibration } from './Calibration';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 export const px: PatternexState = createPatternexState(storage);
@@ -127,9 +129,10 @@ export function PatternexPanel() {
         <div><div className="mx-title">Patternex</div><div className="mx-sub">Artwork on the surface, a material change inside it</div></div>
       </div>
       <Patterns />
+      <CreatePanel />
       <section className="mx-card">
         <div className="mx-card-title">Placements<span className="spacer" />
-          {tool === 'place_pattern' && <button className="btn-secondary btn-small" onClick={() => { px.armed = null; set({ tool: 'select' }); changed(false); }}>Done</button>}
+          {tool === 'place_pattern' && <button className="btn-secondary btn-small" onClick={() => { px.armed = null; px.brush.active = false; set({ tool: 'select' }); changed(false); }}>Done</button>}
         </div>
         {px.armed && <p className="mx-muted">Click (or drag across) the model to place <b>{px.patterns.find((p) => p.id === px.armed)?.name}</b>. It snaps to the face under the cursor.</p>}
         {!px.placements.length && !px.armed && <p className="mx-muted">Pick a pattern above, then click the model.</p>}
@@ -154,6 +157,32 @@ export function PatternexPanel() {
             {px.transitionVolume[k] == null && <span className="px-tag">uncalibrated</span>}
           </label>
         ))}
+        <Calibration />
+        {ams && (
+          <>
+            <label className="mx-field">Purge of full / reduced changes
+              <select className="select" value={px.purgeTarget} onChange={(e) => { px.purgeTarget = e.target.value as typeof px.purgeTarget; changed(); }}>
+                <option value="tower">Prime tower</option>
+                <option value="infill">Into the new filament's infill first</option>
+                <option value="object">Into a sacrificial object first</option>
+              </select>
+            </label>
+            {px.purgeTarget === 'object' && (
+              <label className="mx-field">Purge object
+                <select className="select" value={px.purgeObjectId ?? ''} onChange={(e) => { px.purgeObjectId = e.target.value || null; changed(); }}>
+                  <option value="">Pick an object…</option>
+                  {useStore.getState().objects.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </label>
+            )}
+            {px.purgeTarget !== 'tower' && <p className="mx-muted">The tower purge shrinks by what the new filament can print there; those moves are printed first, so the mixed colour lands inside, not on the surface.</p>}
+          </>
+        )}
+        {!ams && px.singleColour === 'band' && (
+          <label className="mx-field">Merge bands: fill base gaps shorter than (layers)
+            <input className="input" type="number" min={0} step={1} value={px.swapMergeLayers} onChange={(e) => { px.swapMergeLayers = Math.max(0, Math.round(Number(e.target.value) || 0)); changed(); }} />
+          </label>
+        )}
       </section>
       <Report />
     </div>
@@ -269,9 +298,20 @@ function PlacementEditor({ p, slots, ams }: { p: ObjPlacement; slots: string[]; 
         <button className={p.through ? 'on' : ''} onClick={() => upd(() => { p.through = !p.through; })}>Through</button>
       </div>
       {p.depth_mode === 'fixed' && !p.through && <label className="mx-field">Depth (mm)<input className="input" type="number" min={0.05} step={0.1} value={p.depth_mm} onChange={(e) => upd(() => { p.depth_mm = Math.max(0.05, num(e.target.value, 1.5)); })} /></label>}
-      <p className="mx-muted">Drag on the model with the place tool to move it; position snaps to the face under the cursor.</p>
+      <label className="mx-field">Surface angle filter: up to {p.max_angle ?? 78}° from the projection
+        <input type="range" min={5} max={89} step={1} value={p.max_angle ?? 78} onChange={(e) => upd(() => { p.max_angle = Number(e.target.value); })} />
+      </label>
+      <p className="mx-muted">Place tool: drag to move (snaps to faces) · Shift + drag to rotate · Alt + drag to scale.</p>
 
       <div className="mx-label">Regions<span className="spacer" />
+        <button className="btn-secondary btn-small" title="Keep this artwork with its inks for later" onClick={() => {
+          if (!pat) return;
+          const inks: Record<string, number> = {};
+          for (const a of px.actions) if (a.region_ref.placement_id === p.id && a.region_ref.color_group && a.material.mode !== 'keep') inks[a.region_ref.color_group] = a.material.slot_index;
+          const relief = px.actions.find((a) => a.region_ref.placement_id === p.id && a.relief)?.relief ?? null;
+          px.brandKit.push({ id: `brand-${Date.now().toString(36)}`, name: pat.name, pattern: structuredClone(pat), inks, relief });
+          changed(false);
+        }}>Save to brand kit</button>
         <button className="btn-secondary btn-small" title="Every new placement of this pattern starts with these inks" onClick={() => {
           const m: Record<string, number> = {};
           for (const a of px.actions) if (a.region_ref.placement_id === p.id && a.region_ref.color_group) m[a.region_ref.color_group] = a.material.slot_index;
@@ -286,16 +326,19 @@ function PlacementEditor({ p, slots, ams }: { p: ObjPlacement; slots: string[]; 
           <div key={color} className="px-region">
             <div className="px-row"><span className="px-swatch" style={{ background: a ? slots[a.material.slot_index] ?? color : color }} /><b>{GROUP_NAMES[GROUP_KEYS.indexOf(color)] ?? color}</b>
               <span className="spacer" />
-              <select className="select" value={a ? a.material.slot_index : -1} aria-label="Material" onChange={(e) => {
+              <select className="select" value={a ? (a.material.mode === 'keep' ? -2 : a.material.slot_index) : -1} aria-label="Material" onChange={(e) => {
                 const v = Number(e.target.value);
-                if (v < 0) { px.actions = px.actions.filter((x) => x !== a); changed(); return; }
+                if (v === -1) { px.actions = px.actions.filter((x) => x !== a); changed(); return; }
+                if (v === -2) { setAction(color, (x) => { x.material.mode = 'keep'; x.material.slot_index = 0; if (!x.relief && !x.effects) x.relief = { mode: 'raise', height_mm: 0.6 }; }); return; }
                 setAction(color, (x) => { x.material.slot_index = v; x.material.mode = ams ? 'slot' : 'manual'; });
               }}>
                 <option value={-1}>Not inked (base)</option>
+                <option value={-2}>Base · relief / effects only</option>
                 {slots.map((c, k) => <option key={k} value={k}>Ink: slot {k + 1}</option>)}
               </select>
             </div>
-            {a && (
+            {a && <RegionExtras a={a} slots={slots} ams={ams} set={(fn) => setAction(color, fn)} />}
+            {a && a.material.mode !== 'keep' && (
               <>
                 {!ams && <label className="mx-field">Swap label<input className="input" placeholder={`Filament ${a.material.slot_index + 1}`} value={a.material.swap_label ?? ''} onChange={(e) => setAction(color, (x) => { x.material.swap_label = e.target.value; })} /></label>}
                 <label className="mx-field">Purge
@@ -334,6 +377,7 @@ function Report() {
       <p className="mx-muted">
         {rep.manual ? `${rep.swaps.length} manual swap(s)` : `${rep.toolChanges} tool change(s)`} · purge {rep.purgeGrams.toFixed(2)} g ({Math.round(rep.purgeMm3)} mm³) · +{Math.round(rep.addedTimeS / 60)} min
         · full {rep.transitions.full} / reduced {rep.transitions.reduced} / none {rep.transitions.none}{rep.shifted ? ` · ${rep.shifted} shifted` : ''}
+        {rep.reliefs ? ` · ${rep.reliefs} raised/recessed region(s)` : ''}{rep.purgeAbsorbedMm3 ? ` · ${Math.round(rep.purgeAbsorbedMm3)} mm³ purged into ${px.purgeTarget === 'object' ? 'the purge object' : 'infill'}` : ''}{rep.swapsSaved ? ` · ${rep.swapsSaved} swap(s) saved by merging bands` : ''}
       </p>
       {rep.warnings.map((w, i) => <p key={i} className="mx-muted px-warn">⚠ {w}</p>)}
       {rep.regions.map((r) => <p key={r.id} className="mx-muted"><span className="px-swatch" style={{ background: useStore.getState().filaments[r.fil]?.color ?? r.color }} /> {px.patterns.find((x) => x.id === px.placements.find((q) => q.id === r.placementId)?.pattern_id)?.name ?? r.placementId} · {GROUP_NAMES[GROUP_KEYS.indexOf(r.color)] ?? r.color} → slot {r.fil + 1}, {r.layerCount} layer(s){r.motion ? `, motion ${r.motion}` : ''}</p>)}
@@ -349,5 +393,59 @@ function Report() {
         <button className="btn-secondary btn-small" onClick={() => set({ workspace: 'preview', colorScheme: 'filament' })}>Colour preview</button>
       </div>
     </section>
+  );
+}
+
+/** Relief, print effects and two-filament mixing for one region. */
+function RegionExtras({ a, slots, ams, set }: { a: RegionAction; slots: string[]; ams: boolean; set: (fn: (a: RegionAction) => void) => void }) {
+  const ef = a.effects ?? {};
+  const fx = (p: Partial<NonNullable<RegionAction['effects']>>) => set((x) => { const e = { ...(x.effects ?? {}), ...p }; x.effects = Object.values(e).some((v) => v !== undefined && v !== false && v !== 1) ? e : null; });
+  return (
+    <div className="px-extras">
+      <div className="mx-two">
+        <label className="mx-field">Relief
+          <select className="select" value={a.relief?.mode ?? ''} onChange={(e) => set((x) => { x.relief = e.target.value ? { mode: e.target.value as 'raise' | 'recess', height_mm: x.relief?.height_mm ?? 0.6 } : null; })}>
+            <option value="">Flat</option><option value="raise">Raised</option><option value="recess">Recessed</option>
+          </select>
+        </label>
+        {a.relief && <label className="mx-field">Height (mm)<input className="input" type="number" min={0.1} max={5} step={0.1} value={a.relief.height_mm} onChange={(e) => set((x) => { x.relief = { ...x.relief!, height_mm: Math.max(0.1, Number(e.target.value) || 0.6) }; })} /></label>}
+      </div>
+      <details className="px-more">
+        <summary>Print effects{a.effects ? ' · on' : ''}{a.dither ? ' · mixed' : ''}</summary>
+        <label className="mx-field">Speed × {(ef.speed ?? 1).toFixed(2)}<input type="range" min={0.2} max={1.5} step={0.05} value={ef.speed ?? 1} onChange={(e) => fx({ speed: Number(e.target.value) })} /></label>
+        <div className="mx-two">
+          <label className="mx-field px-check"><input type="checkbox" checked={!!ef.fuzzy} onChange={(e) => fx({ fuzzy: e.target.checked || undefined })} />Fuzzy skin</label>
+          <label className="mx-field px-check" title="Translucent filament: solid infill behind the region, slower, so light passes evenly"><input type="checkbox" checked={!!ef.transparency} onChange={(e) => fx({ transparency: e.target.checked || undefined })} />Transparency</label>
+        </div>
+        {!ef.transparency && (
+          <div className="mx-two">
+            <label className="mx-field">Infill behind (%)<input className="input" type="number" min={0} max={100} step={5} placeholder="object" value={ef.infill_density ?? ''} onChange={(e) => fx({ infill_density: e.target.value === '' ? undefined : Math.max(0, Math.min(100, Number(e.target.value))) })} /></label>
+            <label className="mx-field">Infill pattern
+              <select className="select" value={ef.infill_pattern ?? ''} onChange={(e) => fx({ infill_pattern: e.target.value || undefined })}>
+                <option value="">object</option>{['grid', 'gyroid', 'rectilinear', 'aligned_rectilinear', 'triangles', 'concentric'].map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+        {a.material.mode !== 'keep' && slots.length > 2 && (
+          <>
+            <div className="mx-two">
+              <label className="mx-field">Mix with
+                <select className="select" value={a.dither ? a.dither.slot_index : -1} onChange={(e) => set((x) => { const v = Number(e.target.value); x.dither = v < 0 ? null : { slot_index: v, ratio: x.dither?.ratio ?? 0.5, mode: x.dither?.mode ?? (ams ? 'line' : 'layer') }; })}>
+                  <option value={-1}>No</option>{slots.map((c, k) => (k !== a.material.slot_index ? <option key={k} value={k}>slot {k + 1}</option> : null))}
+                </select>
+              </label>
+              {a.dither && <label className="mx-field">Share {Math.round(a.dither.ratio * 100)}%<input type="range" min={0.05} max={0.95} step={0.05} value={a.dither.ratio} onChange={(e) => set((x) => { x.dither = { ...x.dither!, ratio: Number(e.target.value) }; })} /></label>}
+            </div>
+            {a.dither && (
+              <div className="seg mx-seg">
+                <button className={a.dither.mode === 'layer' ? 'on' : ''} onClick={() => set((x) => { x.dither = { ...x.dither!, mode: 'layer' }; })}>Alternate layers</button>
+                <button className={a.dither.mode === 'line' ? 'on' : ''} disabled={!ams} onClick={() => set((x) => { x.dither = { ...x.dither!, mode: 'line' }; })}>Alternate lines (AMS)</button>
+              </div>
+            )}
+          </>
+        )}
+      </details>
+    </div>
   );
 }
