@@ -124,7 +124,7 @@ function geometryFor(mesh: SceneObject['mesh']): THREE.BufferGeometry {
 }
 
 /** Per-triangle colours: base filament colour + the paint layer relevant to the current tool. */
-function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slots: string[]) {
+function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slots: string[], showMotion = motionShown()) {
   const attr = geo.getAttribute('color') as THREE.BufferAttribute;
   const arr = attr.array as Float32Array;
   const base = new THREE.Color(slots[Math.min(o.filament ?? 0, slots.length - 1)] ?? '#5DBE7A');
@@ -135,16 +135,22 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : motion ? p.motion : undefined;
   const layerC = (tool === 'paint_support' ? PAINT.support : motion ? SURFACE_COLORS : PAINT.seam).map((c) => new THREE.Color(c));
   const dim = tool === 'paint_support' || tool === 'paint_seam' || motion ? 0.55 : 1;
+  const motionC = SURFACE_COLORS.map((c) => new THREE.Color(c));
   const c = new THREE.Color();
   for (let t = 0; t < tris; t++) {
     const cv = p.color?.[t] ?? 0;
     c.copy(cv ? slotC[Math.min(cv - 1, slotC.length - 1)] ?? base : base).multiplyScalar(dim);
     const lv = layer?.[t] ?? 0;
     if (lv) c.copy(layerC[(lv - 1) % layerC.length]);
+    // Picked surfaces stay coloured with any tool while a surface plugin is installed.
+    else if (!motion && showMotion && p.motion?.[t]) c.copy(motionC[(p.motion[t] - 1) % motionC.length]);
     for (let k = 0; k < 3; k++) { arr[t * 9 + k * 3] = c.r; arr[t * 9 + k * 3 + 1] = c.g; arr[t * 9 + k * 3 + 2] = c.b; }
   }
   attr.needsUpdate = true;
 }
+
+/** True when an installed plugin uses picked surfaces. */
+const motionShown = () => useStore.getState().plugins.includes('motionex');
 
 export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || t === 'paint_motion' || t === 'pick_motion';
 const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
@@ -294,7 +300,7 @@ export function Viewport() {
           meshes.set(o.id, entry);
           objGroup.add(mesh);
         }
-        const colorKey = `${s.tool}|${slots.join()}|${o.filament ?? 0}`;
+        const colorKey = `${s.tool}|${slots.join()}|${o.filament ?? 0}|${motionShown()}`;
         if (colorKey !== entry.colorKey || entry.mesh.userData.paint !== o.paint) {
           paintColors(entry.mesh.geometry, o, s.tool, slots);
           entry.colorKey = colorKey;
@@ -640,7 +646,7 @@ export function Viewport() {
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
-        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
+        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins) syncObjects();
       if (s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }

@@ -3,7 +3,7 @@
 import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
-import { motionexConfig, MotionexPanel } from './motionex/ui/MotionexPanel';
+import { loadMotionexProject, motionexConfig, motionexProject, MotionexPanel } from './motionex/ui/MotionexPanel';
 
 export interface UiPlugin {
   id: string;
@@ -14,6 +14,9 @@ export interface UiPlugin {
   Panel: ComponentType;
   /** Plain-data config for the slicer, or undefined when the plugin has nothing to do. */
   sliceConfig(): unknown;
+  /** Plain data saved in the project file, and restored when the project is opened. */
+  projectData?(): unknown;
+  loadProjectData?(data: unknown): void;
 }
 
 export const PLUGINS: UiPlugin[] = [
@@ -22,6 +25,8 @@ export const PLUGINS: UiPlugin[] = [
     description: 'Waves, loops, dots and textures on the walls of your print.',
     Panel: MotionexPanel,
     sliceConfig: () => motionexConfig(useStore.getState().printerId),
+    projectData: () => motionexProject(),
+    loadProjectData: (d) => loadMotionexProject(d),
   },
 ];
 
@@ -37,6 +42,23 @@ export function pluginConfigs(): Record<string, unknown> | undefined {
     if (c !== undefined) out[p.id] = c;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** Data of every installed plugin, for the project file. */
+export function pluginProjectData(): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of installedPlugins()) if (p.projectData) out[p.id] = p.projectData();
+  return out;
+}
+
+/** Restore plugin data from a project; installs any plugin the project uses. */
+export function loadPluginProjectData(data: Record<string, unknown> | undefined) {
+  if (!data) return;
+  const s = useStore.getState();
+  const ids = Object.keys(data).filter((id) => PLUGINS.some((p) => p.id === id));
+  const missing = ids.filter((id) => !s.plugins.includes(id));
+  if (missing.length) s.set({ plugins: [...s.plugins, ...missing] });
+  for (const id of ids) PLUGINS.find((p) => p.id === id)!.loadProjectData?.(data[id]);
 }
 
 /** Surface sets painted or picked on an object (paint.motion values 1..n). */

@@ -23,6 +23,8 @@ interface ProjectJson {
   filaments: { presetId: string; color: string }[];
   plates: { id: string; name: string; layerActions: LayerAction[] }[];
   project: ProjectInfo;
+  /** Data of installed plugins, by plugin id. */
+  plugins?: Record<string, unknown>;
   objects: (Omit<SceneObject, 'mesh' | 'parts' | 'paint'> & {
     meshIndex: number;
     parts?: { id: string; name: string; type: string; position: number[]; rotation: number[]; scale: number[]; overrides: Config; v: string; i: string }[];
@@ -84,6 +86,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     version: VERSION, app: 'NexSpiro',
     printerId: s.printerId, plate: s.plate, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
     filaments: s.filaments, plates: s.plates, project,
+    plugins: (await import('../plugins/registry')).pluginProjectData(),
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
       filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, meshIndex: i,
@@ -144,6 +147,7 @@ export async function loadProject(data: ArrayBuffer) {
     slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
     workspace: 'prepare',
   });
+  (await import('../plugins/registry')).loadPluginProjectData(json.plugins);
 }
 
 export async function openProjectDialog() {
