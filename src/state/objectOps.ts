@@ -5,7 +5,7 @@ import { openEdgeCount, transformVertices, type IndexedMesh } from '../engine/me
 import { centreMesh } from '../io/load';
 import { saveFile } from '../platform';
 import { printerById } from '../profiles/printers';
-import { arrange, centreOnBed, primitive } from './ops';
+import { arrange, centreOnBed, primitive, SHAPES, type ShapeKind } from './ops';
 import { objectFromWorld } from './tools';
 import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
 
@@ -215,11 +215,11 @@ export function selectPlate(plate = useStore.getState().activePlate) {
 }
 
 /** Add a primitive shape as a new object on the plate (at a world point when given). */
-export function addShape(shape: 'box' | 'cylinder' | 'sphere', at?: [number, number]) {
+export function addShape(shape: ShapeKind, at?: [number, number]) {
   const s = useStore.getState();
   const mesh = primitive(shape, 20);
   centreMesh(mesh);
-  let o: SceneObject = { id: newId(), name: { box: 'Cube', cylinder: 'Cylinder', sphere: 'Sphere' }[shape], mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: openEdgeCount(mesh) };
+  let o: SceneObject = { id: newId(), name: SHAPES.find(([k]) => k === shape)?.[1] ?? 'Shape', mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: openEdgeCount(mesh) };
   o = centreOnBed(o, s.printerId);
   if (at) o = { ...o, position: [at[0], at[1], o.position[2]] };
   s.addObjects([o]);

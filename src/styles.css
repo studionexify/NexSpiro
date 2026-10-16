@@ -200,10 +200,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .toolbar { top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 0 6px; height: 42px; }
 .toolbar .icon-btn { height: 34px; min-width: 34px; }
-.viewcube { left: 12px; bottom: 12px; display: grid; grid-template-columns: repeat(3, 44px); gap: 2px; padding: 4px; }
-.viewcube button { height: 24px; border: 0; border-radius: 4px; background: var(--surface-tertiary); cursor: pointer; font-size: 10px; font-weight: 700; color: var(--text-muted); }
-.viewcube button:hover { color: var(--text); background: var(--surface-hover); }
-.actionbar { right: 20px; bottom: 20px; display: flex; gap: 8px; padding: 8px; }
+.viewcube { left: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 4px; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.cube-stage { position: relative; width: 104px; height: 104px; cursor: grab; touch-action: none; }
+.cube-stage:active { cursor: grabbing; }
+.cube { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+.cube-face {
+  position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  font-size: 11px; font-weight: 600; color: var(--text); user-select: none; cursor: pointer;
+  background: var(--surface-secondary); border: 1px solid var(--border-strong, var(--border)); box-shadow: inset 0 0 10px rgba(0, 0, 0, .08);
+}
+.cube-face:hover { background: var(--accent); color: var(--accent-ink); }
+.cube-face.top { background: color-mix(in srgb, var(--surface-secondary) 82%, var(--accent)); }
+.cube-face.top:hover { background: var(--accent); }
+.cube-fit { height: 30px; min-width: 30px; background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 6px; }
+
+/* Bambu-style instant tooltip */
+.instant-tip {
+  position: fixed; z-index: 200; pointer-events: none; max-width: 320px; padding: 5px 9px; font-size: 12px; line-height: 1.4;
+  color: var(--text-strong); background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); white-space: pre-line;
+}
+
+.form-grid.plate-form { grid-template-columns: 110px 1fr; align-items: center; }
 .btn-primary {
   height: 40px; min-width: 140px; padding: 0 18px; border: 0; border-radius: 8px; cursor: pointer;
   background: var(--brand-gradient); color: #FFF5F8; font-weight: 700; font-size: 14px;
@@ -314,7 +331,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .panel.vlh { width: 290px; }
 .vlh-body { display: flex; gap: 10px; }
 .vlh-chart { width: 60px; height: 220px; border-radius: 6px; background: var(--surface-tertiary); border: 1px solid var(--border); }
-.platebar { left: 50%; transform: translateX(-50%); bottom: 20px; display: flex; align-items: center; gap: 2px; padding: 4px 6px; }
 .vslider .marker { position: absolute; left: 14px; width: 12px; height: 12px; margin-top: -6px; border-radius: 3px; cursor: pointer; border: 2px solid var(--surface-secondary); }
 .vslider .marker.pause { background: var(--warning); }
 .vslider .marker.color { background: var(--accent); }
@@ -523,6 +539,74 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pxl-inked { margin: 0 4px 0 0; color: var(--accent); }
 .tb-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
 .tb-toggle .toggle { pointer-events: none; }
+
+/* ---------- top-right slice / print (Bambu Studio) */
+.slice-controls { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
+.slice-btn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font-weight: 600; white-space: nowrap; }
+.split-btn { display: flex; }
+.split-btn > .slice-btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn > .slice-btn.caret { flex: none; width: 30px; min-width: 0; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); }
+.split-btn .menu-pop { top: 38px; min-width: 290px; }
+
+/* ---------- object info box (bottom right of the 3D view) */
+.object-info { right: 12px; bottom: 12px; width: 300px; padding: 8px 10px 10px 13px; border-left: 4px solid #00AE42; font-size: 12px; }
+.object-info.mini { width: 220px; padding-bottom: 6px; }
+.oi-head { display: flex; align-items: center; gap: 2px; margin-bottom: 4px; }
+.oi-title { flex: 1; font-weight: 700; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oi-btn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--surface-hover); color: var(--text-muted); cursor: pointer; padding: 0; }
+.oi-btn:hover { color: var(--text-strong); }
+.oi-body { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; color: var(--text-muted); }
+.oi-body b { color: var(--text-strong); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oi-body .oi-warn { color: var(--warning); }
+
+/* ---------- plate list (right edge, several plates) */
+.plate-list { right: 12px; top: 66px; display: flex; flex-direction: column; gap: 6px; padding: 6px; max-height: calc(100% - 200px); overflow-y: auto; }
+.plate-tile { width: 58px; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-secondary); color: var(--text-muted); }
+.plate-tile.active { border: 2px solid #00AE42; color: var(--text-strong); }
+.plate-tile-num { font: italic 800 16px/1 "Segoe UI", system-ui, sans-serif; color: #00AE42; }
+.plate-tile-count { font-size: 10.5px; display: flex; align-items: center; gap: 3px; }
+
+/* ---------- box selection */
+.lasso-overlay polygon.box-window { fill: rgba(0, 174, 66, .10); stroke: #00AE42; stroke-dasharray: none; }
+.lasso-overlay polygon.box-cross { fill: rgba(0, 174, 66, .06); stroke: #00AE42; stroke-dasharray: 5 4; }
+
+/* ---------- object list card and Objects mode (Bambu Studio) */
+.objects-card { padding-bottom: 6px; }
+.objects-card .card-head { margin-bottom: 2px; }
+.objects-card .objlist { max-height: 168px; min-height: 34px; margin: 0 -12px; }
+.objrow { min-height: 26px; padding: 3px 12px; }
+.objrow.off .name { color: var(--text-disabled); text-decoration: line-through; }
+.objrow.sub { padding-left: 32px; font-size: 11.5px; color: var(--modified); min-height: 22px; }
+.objrow.sub svg { flex: none; }
+.obj-edit { width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-disabled); cursor: pointer; flex: none; }
+.objrow:hover .obj-edit { color: var(--text-muted); }
+.obj-edit.has { color: var(--modified); }
+.obj-edit:hover { background: var(--surface-hover); color: var(--text-strong) !important; }
+.obj-target { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px; border-radius: 6px; background: var(--accent-tint); }
+.obj-target .name { flex: 1; font-weight: 700; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.obj-target .muted { font-size: 11.5px; }
+.empty-hint { color: var(--text-muted); padding: 12px 4px; line-height: 1.5; font-size: 12.5px; }
+.slice-controls .slice-btn { min-width: 0; height: 32px; font-size: 13px; }
+.slice-controls .btn-primary.slice-btn { min-width: 118px; }
+
+/* top bar: compress instead of overflowing on narrower windows */
+.app { grid-template-columns: minmax(0, 1fr); }
+.topbar { min-width: 0; overflow: hidden; }
+.topbar > * { flex-shrink: 0; }
+.topbar .spacer { flex-shrink: 1; min-width: 0; }
+.tb-toggle { white-space: nowrap; min-width: 0; }
+@media (max-width: 1480px) {
+  .tab { padding: 0 10px; }
+  .tb-toggle .tb-label { display: none; }
+  .tb-toggle { padding: 0 10px; }
+}
+@media (max-width: 1280px) {
+  .brand-name { display: none; }
+  .tabs { margin-left: 4px; }
+  .tab { padding: 0 8px; font-size: 13px; }
+  .slice-controls .slice-btn { padding: 0 10px; }
+}
 
 /* Patternex · Create */
 .px-tabs { margin-bottom: 8px; }

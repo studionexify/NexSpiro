@@ -54,7 +54,14 @@ export interface FilamentTuning { flowRatio?: number; pressureAdvance?: number; 
 export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning }
 export interface ProjectInfo { title: string; author: string; description: string; license: string; notes: string; photos: { name: string; dataUrl: string }[] }
 export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
-export interface Plate { id: string; name: string; layerActions: LayerAction[] }
+/** A build plate. bedType / spiralVase override the global settings for this plate (undefined = same as global). */
+export interface Plate {
+  id: string; name: string; layerActions: LayerAction[];
+  /** Locked plates are skipped by arrange and auto orient. */
+  locked?: boolean;
+  bedType?: PlateType;
+  spiralVase?: boolean;
+}
 
 /** Right-click menu: where it opened and what was under the cursor. */
 export interface ContextMenuState { x: number; y: number; kind: 'plate' | 'object' | 'part'; plate: number; id?: string; partId?: string; world?: [number, number] }

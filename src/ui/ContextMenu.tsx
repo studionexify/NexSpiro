@@ -6,7 +6,8 @@ import {
   addShape, centreObjects, clearPlate, cloneObjects, copyObjects, dropObjects, exportStl, fillBed, hasClipboard, mirrorObjects,
   pasteObjects, renameObject, selectPlate, setObjectFilament, splitObject, togglePrintable,
 } from '../state/objectOps';
-import { addPart, addPlate, deletePlate, moveToPlate, PART_LABELS } from '../state/ops';
+import { addPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
+import { openPlateSettings } from './PlateControls';
 import { useStore, type ContextMenuState } from '../state/store';
 import type { PartType } from '../engine/types';
 import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
@@ -23,21 +24,26 @@ export interface MenuItem {
   swatch?: string;
 }
 
-const SHAPES: ['box' | 'cylinder' | 'sphere', string][] = [['box', 'Box'], ['cylinder', 'Cylinder'], ['sphere', 'Sphere']];
+/** Shapes offered for parts and modifiers. */
+const PART_SHAPES = SHAPES.filter(([k]) => ['box', 'cylinder', 'sphere', 'cone', 'disc', 'torus'].includes(k));
 
 function plateItems(m: ContextMenuState): MenuItem[] {
   const s = useStore.getState();
   const count = s.objects.length;
+  const pl = s.plates[m.plate];
   return [
     { label: 'Add model…', kbd: 'Ctrl+I', onClick: importDialog },
-    { label: 'Add shape', sub: [...SHAPES.map(([k, l]) => ({ label: l === 'Box' ? 'Cube' : l, onClick: () => addShape(k, m.world) })), { label: 'Text…', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
+    { label: 'Add primitive', sub: [...SHAPES.map(([k, l]) => ({ label: l, onClick: () => addShape(k, m.world) })), { sep: true }, { label: 'Text shape…', kbd: 'T', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
     { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
     { sep: true },
     { label: 'Select all on plate', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
-    { label: 'Arrange plate', kbd: 'A', disabled: !count, onClick: () => arrange(6, m.plate) },
-    { label: 'Auto orient all', disabled: !count, onClick: () => { selectPlate(m.plate); autoOrient(); } },
+    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(6, m.plate) },
+    { label: 'Arrange all plates', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
+    { label: 'Auto orient plate', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
     { label: 'Delete all on plate', disabled: !count, onClick: () => clearPlate(m.plate) },
     { sep: true },
+    { label: 'Lock plate', checked: !!pl?.locked, onClick: () => updatePlate(m.plate, { locked: !pl?.locked }) },
+    { label: 'Plate settings…', onClick: () => openPlateSettings(m.plate) },
     { label: 'Add plate', onClick: addPlate },
     { label: 'Delete plate', disabled: s.plates.length < 2, onClick: () => deletePlate(m.plate) },
   ];
@@ -50,7 +56,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
   const printable = !s.objects.filter((o) => ids.includes(o.id)).every((o) => o.printable === false);
   const partSub = (type: PartType): MenuItem => ({
     label: `Add ${PART_LABELS[type].toLowerCase()}`, disabled: !one,
-    sub: SHAPES.map(([k, l]) => ({ label: l, onClick: () => one && addPart(one.id, type, k) })),
+    sub: PART_SHAPES.map(([k, l]) => ({ label: l, onClick: () => one && addPart(one.id, type, k) })),
   });
   const items: MenuItem[] = [
     { label: one ? `Rename “${one.name}”…` : `${ids.length} objects`, disabled: !one, onClick: () => one && renameObject(one.id) },

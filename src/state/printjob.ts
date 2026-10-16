@@ -29,7 +29,7 @@ export async function buildPrintJob(format?: '3mf' | 'gcode'): Promise<PrintJob 
   const usedSlots = r.stats.perFilament.map((f, k) => (f.mm > 0 ? k : -1)).filter((k) => k >= 0);
   if (kind === '3mf') {
     const thumb = await renderThumbnail(objs, 512);
-    const cfg = currentConfig();
+    const cfg = currentConfig(s.slice.plate);
     const bytes = await buildGcode3mf([{
       gcode: r.gcode, stats: r.stats, thumbnail: thumb ?? undefined,
       objects: objs.map((o, i) => ({ id: i + 1, name: o.name })),
