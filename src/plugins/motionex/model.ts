@@ -99,6 +99,8 @@ export interface MotionApplication {
   label?: string;
   /** Surface set (1..n) this pattern's picked faces are stored in; the panel keeps one per pattern. */
   surface?: number;
+  /** This placement's own edited copy of the pattern (from the Pattern tab); the library one is left as it is. */
+  brush?: MotionBrush;
 }
 
 export const CURVE_KEYS: CurveKey[] = ["lateral_offset", "along_offset", "z_offset", "extrusion_mult", "speed_mult"];

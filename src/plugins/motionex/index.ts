@@ -51,7 +51,7 @@ export function saveMotionexState(state: MotionexState, store: KeyValueStore | n
 
 /** Plain-data snapshot for the slicing worker. */
 export function toConfig(state: MotionexState, printerId: string): MotionexConfig {
-  const used = new Set(state.applications.filter((a) => a.enabled).map((a) => a.brush_id));
+  const used = new Set(state.applications.filter((a) => a.enabled && !a.brush).map((a) => a.brush_id));
   return {
     applications: structuredClone(state.applications),
     brushes: [...used].map((id) => state.library.get(id)).filter((b): b is NonNullable<typeof b> => !!b).map((b) => structuredClone(b)),

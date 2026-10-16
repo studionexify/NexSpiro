@@ -150,6 +150,8 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   attr.needsUpdate = true;
 }
 
+/** Pattern lines drawn on the model: the Prepare toggle, and always in the Pattern tab. */
+const showsPattern = (s: { workspace: string; liveToolpaths: boolean }) => (s.workspace === 'prepare' && s.liveToolpaths) || s.workspace === 'pattern';
 export const isMotionTool = (t: Tool) => t === 'paint_motion' || t === 'pick_motion' || t === 'lasso_motion' || t === 'band_motion' || t === 'object_motion';
 export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || isMotionTool(t);
 
@@ -319,11 +321,11 @@ export function Viewport() {
           entry.mesh.userData.paint = o.paint;
         }
         const mat = entry.mesh.material as THREE.MeshStandardMaterial;
-        const sel = s.selected.includes(o.id) && !s.selectedPart && !isPaintTool(s.tool);
+        const sel = s.workspace === 'prepare' && s.selected.includes(o.id) && !s.selectedPart && !isPaintTool(s.tool);
         mat.emissive.set(sel ? slotColor(s, o.filament ?? 0) : '#000000');
         mat.emissiveIntensity = sel ? 0.28 : 0;
         // see-through while the live toolpath is shown on it, and for objects left out of the print
-        const ghost = s.workspace === 'prepare' && s.liveToolpaths ? 0.45 : o.printable === false ? 0.45 : 1;
+        const ghost = showsPattern(s) ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
@@ -743,7 +745,7 @@ export function Viewport() {
       previewTimer = setTimeout(() => {
         previewTimer = null;
         const s = useStore.getState();
-        if (!s.liveToolpaths || s.workspace !== 'prepare') return;
+        if (!showsPattern(s)) return;
         const t0 = performance.now();
         let lines: { positions: Float32Array; colors: Float32Array } | null = null;
         for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { lines = p.preview(); if (lines) break; }
@@ -773,9 +775,9 @@ export function Viewport() {
       const s = useStore.getState();
       const preview = s.workspace === 'preview';
       objGroup.visible = !preview;
-      selBoxes.visible = !preview;
+      selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
-      patternLines.visible = !preview && s.liveToolpaths;
+      patternLines.visible = showsPattern(s);
       if (preview) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
@@ -815,7 +817,7 @@ export function Viewport() {
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
-      if (s.liveToolpaths && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
+      if (showsPattern(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins)) rebuildPatternPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();

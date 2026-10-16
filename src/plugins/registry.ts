@@ -4,6 +4,7 @@ import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
 import { motionexConfig, MotionexPanel, motionexPreview } from './motionex/ui/MotionexPanel';
+import { PatternStudio } from './motionex/ui/PatternStudio';
 
 export interface UiPlugin {
   id: string;
@@ -16,6 +17,8 @@ export interface UiPlugin {
   sliceConfig(): unknown;
   /** Quick preview lines drawn on the model in Prepare (no slicing), or null for none. */
   preview?(): { positions: Float32Array; colors: Float32Array } | null;
+  /** Full-height editor shown beside the 3D view in the Pattern tab. */
+  Studio?: ComponentType;
 }
 
 export const PLUGINS: UiPlugin[] = [
@@ -25,6 +28,7 @@ export const PLUGINS: UiPlugin[] = [
     Panel: MotionexPanel,
     sliceConfig: () => motionexConfig(useStore.getState().printerId),
     preview: motionexPreview,
+    Studio: PatternStudio,
   },
 ];
 

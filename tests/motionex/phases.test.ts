@@ -212,3 +212,12 @@ test("inner walls follow the outer wall so the gap between them stays the same",
     assert.ok(Math.abs(q.y - near.y - lw) < 0.08, `gap ${q.y - near.y} at x=${q.x}`);
   }
 });
+
+test("a placement's own edited pattern is used instead of the library one, which stays as it was", () => {
+  const lib = brushes("preset-sine")!;
+  const own = { ...structuredClone(lib), amplitude: lib.amplitude * 2 };
+  const edited = applyMotion([layerOf([line(16)])], [app("preset-sine", { brush: own })], brushes, profiles()).layers[0].paths[0];
+  const plain = applyMotion([layerOf([line(16)])], [app("preset-sine")], brushes, profiles()).layers[0].paths[0];
+  assert.ok(Math.abs(maxY(edited) - 2 * maxY(plain)) < 0.03, `edited ${maxY(edited)} vs ${maxY(plain)}`);
+  assert.equal(brushes("preset-sine")!.amplitude, lib.amplitude);
+});

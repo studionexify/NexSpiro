@@ -25,6 +25,8 @@ export const mx: MotionexState = createMotionexState(storage);
 let version = 0;
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
+/** Re-render a component whenever the Motionex state changes. */
+export const useMx = () => useSyncExternalStore(subscribe, () => version);
 export function changed(): void {
   saveMotionexState(mx, storage);
   version++;
@@ -39,7 +41,7 @@ export function motionexPreview(): PreviewLines | null {
   const apps: PreviewApp[] = [];
   for (const a of mx.applications) {
     if (!a.enabled) continue;
-    const found = mx.library.get(a.brush_id);
+    const found = brushOf(a);
     if (!found) continue;
     const k = a.scale ?? 1;
     const brush = k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
@@ -61,8 +63,11 @@ const MAX_SURFACES = SURFACE_COLORS.length;
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
 const COLLIDE: [CollisionMode, string][] = [['clamp', 'Lower the movement there'], ['skip', 'Skip the movement there'], ['fail', 'Stop and show me']];
 
+/** The pattern a placement uses: its own edited copy, or the library pattern. */
+export const brushOf = (a: MotionApplication): MotionBrush | undefined => a.brush ?? mx.library.get(a.brush_id);
+
 /** The surface set (1..n) a pattern paints into. Older saves stored it only in target.faces. */
-function surfaceOf(a: MotionApplication): number {
+export function surfaceOf(a: MotionApplication): number {
   if (!a.surface) {
     const n = Number(a.target.faces?.[0]);
     a.surface = n >= 1 && n <= MAX_SURFACES ? n : freeSurface(a);
@@ -76,9 +81,9 @@ function freeSurface(except?: MotionApplication): number {
 }
 
 let activeIndex = 0;
-const activeApp = (): MotionApplication | undefined => mx.applications[Math.min(activeIndex, mx.applications.length - 1)];
+export const activeApp = (): MotionApplication | undefined => mx.applications[Math.min(activeIndex, mx.applications.length - 1)];
 
-function activate(i: number) {
+export function activate(i: number) {
   activeIndex = i;
   const a = mx.applications[i];
   if (a) useStore.getState().set({ motionSet: surfaceOf(a) });
@@ -138,14 +143,14 @@ if (typeof window !== 'undefined') window.addEventListener('nx-motion-band', (e)
 });
 
 export function MotionexPanel() {
-  useSyncExternalStore(subscribe, () => version);
+  useMx();
   const [editing, setEditing] = useState<string | null | undefined>(undefined);
   const [picking, setPicking] = useState<'add' | 'change' | null>(null);
   const apps = mx.applications;
   const act = activeApp();
   useEffect(() => { if (act) useStore.getState().set({ motionSet: surfaceOf(act) }); }, [act]);
   const choose = (b: MotionBrush) => {
-    if (picking === 'change' && act) act.brush_id = b.id;
+    if (picking === 'change' && act) { act.brush_id = b.id; act.brush = undefined; }
     else {
       const a = addApplication(b.id);
       // with an object selected, a new pattern starts on that whole object
@@ -172,6 +177,7 @@ export function MotionexPanel() {
         <div className="mx-layers">
           {apps.map((a, i) => <LayerRow key={i} a={a} i={i} active={a === act} onChange={() => setPicking('change')} />)}
         </div>
+        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => useStore.getState().set({ workspace: 'pattern', tool: 'select' })} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Edit {brushOf(act)?.name ?? 'pattern'} in Pattern tab →</button>}
         {picking ? <Library current={picking === 'change' ? act?.brush_id : undefined} onPick={choose} onCancel={() => setPicking(null)} />
           : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add pattern</button>}
       </section>
@@ -207,7 +213,7 @@ function coverage(a: MotionApplication, objects: ReturnType<typeof useStore.getS
 
 function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number; active: boolean; onChange: () => void }) {
   const objects = useStore((s) => s.objects);
-  const b = mx.library.get(a.brush_id);
+  const b = brushOf(a);
   const upd = (f: () => void) => { f(); changed(); };
   const remove = () => upd(() => {
     const n = surfaceOf(a);
@@ -222,7 +228,7 @@ function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number;
       <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} />
       <input type="checkbox" checked={a.enabled} aria-label="On" title="On / off" onClick={(e) => e.stopPropagation()} onChange={(e) => upd(() => { a.enabled = e.target.checked; })} />
       <div className="mx-layer-text">
-        <button className="mx-layer-name" title="Change pattern" onClick={(e) => { e.stopPropagation(); activate(i); onChange(); }}>{b?.name ?? a.brush_id} ▾</button>
+        <button className="mx-layer-name" title="Change pattern" onClick={(e) => { e.stopPropagation(); activate(i); onChange(); }}>{b?.name ?? a.brush_id}{a.brush ? ' (edited)' : ''} ▾</button>
         <div className="mx-muted" style={{ margin: 0 }}>{coverage(a, objects)}</div>
       </div>
       {b && <Wave b={b} small />}
@@ -232,7 +238,7 @@ function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number;
 }
 
 /** Pattern library as a grid of cards with a little drawing of each wave. */
-function Library({ current, onPick, onCancel }: { current?: string; onPick: (b: MotionBrush) => void; onCancel: () => void }) {
+export function Library({ current, onPick, onCancel }: { current?: string; onPick: (b: MotionBrush) => void; onCancel: () => void }) {
   const [q, setQ] = useState('');
   const groups = useMemo(() => {
     const g = new Map<string, MotionBrush[]>();
@@ -267,7 +273,7 @@ function Library({ current, onPick, onCancel }: { current?: string; onPick: (b: 
   );
 }
 
-function Wave({ b, small }: { b: MotionBrush; small?: boolean }) {
+export function Wave({ b, small }: { b: MotionBrush; small?: boolean }) {
   const d = useMemo(() => {
     const W = 100, H = 30, periods = 2, L = b.period_mm * periods;
     let lat = '', z = '';

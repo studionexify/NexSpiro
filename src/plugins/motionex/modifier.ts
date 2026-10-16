@@ -305,7 +305,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   interface Prepared { app: MotionApplication; brush: MotionBrush; faces: PatternexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
   const prepared: Prepared[] = [];
   for (const app of sorted) {
-    const found = brushes(app.brush_id);
+    const found = app.brush ?? brushes(app.brush_id);
     const k = app.scale ?? 1;
     const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Pattern ${app.brush_id} was not found` }); continue; }
