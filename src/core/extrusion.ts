@@ -15,7 +15,7 @@ export function beadArea(lineWidth: number, layerHeight: number): number {
 }
 
 /** Fill in e on every point and enforce the volumetric flow cap by lowering feedrate. */
-export function computeExtrusion(layers: Layer[], p: PrintProfiles): SliceWarning[] {
+export function computeExtrusion(layers: Layer[], p: PrintProfiles, check?: { flowCapHits: number }): SliceWarning[] {
   const warnings: SliceWarning[] = [], cap = flowCap(p);
   let capHits = 0;
   for (const layer of layers) for (const path of layer.paths) {
@@ -23,11 +23,13 @@ export function computeExtrusion(layers: Layer[], p: PrintProfiles): SliceWarnin
     for (let i = 1; i < path.points.length; i++) {
       const a = path.points[i - 1], b = path.points[i];
       const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+      if (b.travel) { b.e = 0; continue; }
       b.e = filamentForBead(len, p.process.lineWidth, layer.height, b.flow, p.filament.diameter);
       const vol = beadArea(p.process.lineWidth, layer.height) * b.flow * b.f;
       if (vol > cap) { b.f = cap / (beadArea(p.process.lineWidth, layer.height) * b.flow); capHits++; }
     }
   }
+  if (check) check.flowCapHits += capHits;
   if (capHits) warnings.push({ code: "flow_cap", message: `Slowed ${capHits} spots down so the nozzle can melt plastic fast enough` });
   return warnings;
 }

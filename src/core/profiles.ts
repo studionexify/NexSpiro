@@ -22,6 +22,7 @@ export interface ProcessProfile {
   layerHeight: number; firstLayerHeight: number; lineWidth: number;
   wallSpeed: number; firstLayerSpeed: number; travelSpeed: number;
   walls: number;
+  retractLength: number; retractSpeed: number;
 }
 
 export const MACHINES: MachineProfile[] = [
@@ -51,8 +52,8 @@ export const FILAMENTS: FilamentProfile[] = [
 ];
 
 export const PROCESSES: ProcessProfile[] = [
-  { id: "std-020", name: "0.20mm Standard", layerHeight: 0.2, firstLayerHeight: 0.2, lineWidth: 0.45, wallSpeed: 60, firstLayerSpeed: 25, travelSpeed: 200, walls: 2 },
-  { id: "tex-030", name: "0.30mm Texture Wall", layerHeight: 0.3, firstLayerHeight: 0.25, lineWidth: 0.5, wallSpeed: 30, firstLayerSpeed: 20, travelSpeed: 200, walls: 1 },
+  { id: "std-020", name: "0.20mm Standard", layerHeight: 0.2, firstLayerHeight: 0.2, lineWidth: 0.45, wallSpeed: 60, firstLayerSpeed: 25, travelSpeed: 200, walls: 2, retractLength: 0.8, retractSpeed: 35 },
+  { id: "tex-030", name: "0.30mm Texture Wall", layerHeight: 0.3, firstLayerHeight: 0.25, lineWidth: 0.5, wallSpeed: 30, firstLayerSpeed: 20, travelSpeed: 200, walls: 1, retractLength: 0.8, retractSpeed: 35 },
 ];
 
 export interface PrintProfiles { machine: MachineProfile; filament: FilamentProfile; process: ProcessProfile }

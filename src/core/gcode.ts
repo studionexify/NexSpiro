@@ -1,5 +1,5 @@
 // Deterministic G-code emitter with per-firmware start/end blocks.
-import type { Layer } from "./types.ts";
+import type { Layer, ToolpathPoint } from "./types.ts";
 import type { PrintProfiles } from "./profiles.ts";
 
 const fmt = (v: number, d: number) => { const s = v.toFixed(d); return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s; };
@@ -22,17 +22,31 @@ export function emitGcode(layers: Layer[], p: PrintProfiles, header: string[] = 
       let lastF = -1, lastZ = s.z;
       for (let i = 1; i < path.points.length; i++) {
         const q = path.points[i];
-        let line = `G1 X${fmt(q.x, 3)} Y${fmt(q.y, 3)}`;
+        let line = `${q.travel ? "G0" : "G1"} X${fmt(q.x, 3)} Y${fmt(q.y, 3)}`;
         if (Math.abs(q.z - lastZ) > 1e-4) { line += ` Z${fmt(q.z, 3)}`; lastZ = q.z; }
-        line += ` E${fmt(q.e, 5)}`;
-        const f = Math.round(q.f * 60);
-        if (f !== lastF) { line += ` F${f}`; lastF = f; }
+        if (q.travel) { line += ` F${Math.round(process.travelSpeed * 60)}`; lastF = -1; }
+        else {
+          line += ` E${fmt(q.e, 5)}`;
+          const f = Math.round(q.f * 60);
+          if (f !== lastF) { line += ` F${f}`; lastF = f; }
+        }
         out.push(line); filamentUsed += q.e;
+        if (q.post) { const lines = postLines(q.post, p); out.push(...lines); if (lines.length) lastF = -1; filamentUsed += (q.post.blob_mm ?? 0) + (q.post.unretract_mm ?? 0) - (q.post.retract_mm ?? 0); }
       }
     }
   }
   out.push(...endBlock(p), `; filament used [mm] = ${fmt(filamentUsed, 2)}`);
   return out.join("\n") + "\n";
+}
+
+/** Retract, blob, dwell and unretract commands. G4 P (milliseconds) and relative E work on Klipper, Marlin and Bambu. */
+function postLines(a: NonNullable<ToolpathPoint["post"]>, { process }: PrintProfiles): string[] {
+  const out: string[] = [], rs = Math.round(process.retractSpeed * 60);
+  if (a.retract_mm) out.push(`G1 E-${fmt(a.retract_mm, 4)} F${rs} ; motionex lift-off`);
+  if (a.blob_mm) out.push(`G1 E${fmt(a.blob_mm, 4)} F120 ; motionex blob`);
+  if (a.dwell_ms) out.push(`G4 P${Math.round(a.dwell_ms)} ; motionex pause`);
+  if (a.unretract_mm) out.push(`G1 E${fmt(a.unretract_mm, 4)} F${rs}`);
+  return out;
 }
 
 function startBlock({ machine, filament, process }: PrintProfiles): string[] {

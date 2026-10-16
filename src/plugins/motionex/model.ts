@@ -9,9 +9,16 @@ export interface Curve { points: CurvePoint[]; interpolation: Interpolation }
 export type RepeatMode = "tile" | "once" | "stretch";
 export type CurveKey = "lateral_offset" | "along_offset" | "z_offset" | "extrusion_mult" | "speed_mult";
 
+export type EventType = "dwell" | "flow_change" | "retract";
+
+/**
+ * Something that happens at a spot in each repeat.
+ * dwell: { ms, blob_mm3 } pause, optionally pushing out a blob · flow_change: { mult } plastic amount from here on ·
+ * retract: { length, travel_mm } lift off (pull filament back), move without printing, then carry on.
+ */
 export interface MotionEvent {
   at: { mode: "percent" | "mm"; value: number };
-  type: "dwell" | "flow_change" | "retract";
+  type: EventType;
   params: Record<string, number>;
   once?: boolean;
 }
@@ -47,8 +54,9 @@ export interface MotionBrush {
   phase_deg: number;
   repeat_mode: RepeatMode;
   curves: Record<CurveKey, Curve>;
-  /** Phase 5. Stored and round-tripped, not yet executed. */
   events: MotionEvent[];
+  /** Up-and-down movement in mm for a Z curve value of 1 (0 = flat). */
+  z_amplitude?: number;
   noise: NoiseSettings | null;
   limits: { min_flow_mult: number; max_flow_mult: number };
   layers?: LayerEffect | null;
@@ -64,12 +72,20 @@ export type TargetType = "model" | "feature" | "height_range" | "patternex_regio
 export interface MotionApplication {
   brush_id: string;
   target: { type: TargetType; ref?: string };
-  mask: { z_start: number; z_end: number; fade_in_mm: number; fade_out_mm: number };
+  mask: {
+    z_start: number; z_end: number; fade_in_mm: number; fade_out_mm: number;
+    /** Wall slope range in degrees (0 = straight up, + leans out). Omit for all slopes. */
+    angle_min?: number; angle_max?: number;
+    /** Soft edge in mm at region borders. */
+    blend_mm?: number;
+  };
   order: number;
   blend: "add" | "override";
   enabled: boolean;
   /** Size slider: scales wave height and wave length together (1 = as designed). */
   scale?: number;
+  /** Optional name shown in the list. */
+  label?: string;
 }
 
 export const CURVE_KEYS: CurveKey[] = ["lateral_offset", "along_offset", "z_offset", "extrusion_mult", "speed_mult"];
@@ -77,7 +93,7 @@ export const CURVE_KEYS: CurveKey[] = ["lateral_offset", "along_offset", "z_offs
 export const CURVE_INFO: Record<CurveKey, { label: string; unit: string; neutral: number; min: number; max: number; enabled: boolean }> = {
   lateral_offset: { label: "Side to side", unit: "in and out from the wall", neutral: 0, min: -1, max: 1, enabled: true },
   along_offset: { label: "Forward and back", unit: "ahead of or behind the nozzle", neutral: 0, min: -1, max: 1, enabled: true },
-  z_offset: { label: "Up and down", unit: "coming soon", neutral: 0, min: -1, max: 1, enabled: false },
+  z_offset: { label: "Up and down", unit: "× up-and-down height", neutral: 0, min: -1, max: 1, enabled: true },
   extrusion_mult: { label: "Plastic amount", unit: "1 = normal", neutral: 1, min: 0, max: 3, enabled: true },
   speed_mult: { label: "Speed", unit: "1 = normal", neutral: 1, min: 0.1, max: 2, enabled: true },
 };

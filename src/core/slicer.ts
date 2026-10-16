@@ -1,6 +1,6 @@
 // Minimal planar wall slicer: one closed perimeter loop per wall per layer, inset by line width.
 // Infill and shells are out of scope for this build; the walls are what Motionex modifies.
-import type { Layer, SlicedPlate, Toolpath, ToolpathPoint } from "./types.ts";
+import { emptyCheck, type Layer, type SlicedPlate, type Toolpath, type ToolpathPoint } from "./types.ts";
 import type { PrintProfiles } from "./profiles.ts";
 import { contourAt, objectHeight, type SceneObject } from "./primitives.ts";
 
@@ -36,10 +36,17 @@ export function sliceObjects(objects: SceneObject[], p: PrintProfiles): SlicedPl
     for (const o of objects) {
       if (z > objectHeight(o) + 1e-6) continue;
       const contour = contourAt(o, z - height / 2);
+      // Wall slope from the contour a little below and above (same point count and order).
+      const dz = 0.5, below = contourAt(o, Math.max(0, z - height / 2 - dz)), above = contourAt(o, Math.min(objectHeight(o), z - height / 2 + dz));
+      const slopes = contour.map((_, i) => {
+        const r0 = Math.hypot(below[i][0] - o.x, below[i][1] - o.y), r1 = Math.hypot(above[i][0] - o.x, above[i][1] - o.y);
+        const span = Math.max(1e-6, Math.min(objectHeight(o), z - height / 2 + dz) - Math.max(0, z - height / 2 - dz));
+        return round((Math.atan2(r1 - r0, span) * 180) / Math.PI, 2);
+      });
       // Walls print inside-out so the outer wall lands on a supported inner wall.
       for (let w = process.walls - 1; w >= 0; w--) {
         const ring = insetPolygon(contour, process.lineWidth * (w + 0.5));
-        const points: ToolpathPoint[] = ring.map(([x, y]) => ({ x, y, z: round(z), f: speed, flow: 1, e: 0 }));
+        const points: ToolpathPoint[] = ring.map(([x, y], i) => ({ x, y, z: round(z), f: speed, flow: 1, e: 0, slope: slopes[i] }));
         points.push({ ...points[0] });
         paths.push({ feature: w === 0 ? "outer_wall" : "inner_wall", closed: true, points });
       }
@@ -47,7 +54,7 @@ export function sliceObjects(objects: SceneObject[], p: PrintProfiles): SlicedPl
     layers.push({ index, z: round(z), height, paths });
     index++; z += process.layerHeight;
   }
-  return { layers, warnings: [] };
+  return { layers, warnings: [], check: emptyCheck() };
 }
 
 export const round = (v: number, d = 5) => Math.round(v * 10 ** d) / 10 ** d;

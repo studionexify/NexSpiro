@@ -207,7 +207,7 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
   function thumb(cv: HTMLCanvasElement, b: MotionBrush): void {
     const g = cv.getContext("2d")!; g.clearRect(0, 0, 44, 18);
     const p = profiles();
-    const out = applyBrushToPath({ feature: "outer_wall", closed: false, points: [{ x: 0, y: 0, z: 0, f: 30, flow: 1, e: 0 }, { x: b.period_mm * 2.5, y: 0, z: 0, f: 30, flow: 1, e: 0 }] }, b, p, { resampleStep: b.period_mm / 24 }, () => 1, () => {});
+    const out = applyBrushToPath({ feature: "outer_wall", closed: false, points: [{ x: 0, y: 0, z: 0, f: 30, flow: 1, e: 0 }, { x: b.period_mm * 2.5, y: 0, z: 0, f: 30, flow: 1, e: 0 }] }, b, p, { ...mx.options, resampleStep: b.period_mm / 24 }, () => 1, () => {});
     const L = b.period_mm * 2.5, A = Math.max(0.01, b.amplitude * 1.3);
     g.strokeStyle = "#7c3aed"; g.lineWidth = 1.5; g.beginPath();
     out.points.forEach((q, i) => { const x = 2 + (q.x / L) * 40, y = 9 - (q.y / A) * 7; i ? g.lineTo(x, y) : g.moveTo(x, y); });
