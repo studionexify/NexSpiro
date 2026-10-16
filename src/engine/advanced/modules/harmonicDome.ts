@@ -33,7 +33,7 @@ export const harmonicDome: TechModule = {
       const dw = domeWarp(a, hr, { maxSlopeDeg: s.caps.maxSlopeDeg, minRatio: s.pnum('harmonic_dome', 'minRatio'), maxRatio: s.pnum('harmonic_dome', 'maxRatio'), band: s.pnum('harmonic_dome', 'band') });
       if (!dw) continue;
       warps.push(dw.field);
-      const st = dw.field.stats();
+      const st = dw.field.stats(dw.field.material);
       cells += hr.domeCells; iters += hr.iterations; conf += dw.conformity; slope = Math.max(slope, (Math.atan(st.maxSlope) * 180) / Math.PI); n++;
     }
     if (!warps.length) { r.status = 'idle'; r.reason = 'No dome or shallow top surfaces on this part.'; return undefined; }

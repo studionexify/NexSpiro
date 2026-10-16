@@ -5,26 +5,37 @@
 import type { LayerOps } from '../gcode';
 import type { ToolheadProfile } from '../../plugins/motionex/core/toolhead';
 
-export interface ClearanceReport { checked: number; collisions: number; raised: number; unresolved: number; worst: number }
+/** worst: deepest collision found; worstLeft: deepest one left unresolved. */
+export interface ClearanceReport { checked: number; collisions: number; raised: number; unresolved: number; worst: number; worstLeft: number }
 
-/** Highest printed plastic per 0.5 mm cell, with a 4 mm max level for fast rejection. */
+/** Highest printed plastic per 0.25 mm cell, with a 4 mm max level for fast rejection. */
 export class PlasticMap {
-  readonly c = 0.5;
-  private readonly K = 8;
+  readonly c = 0.25;
+  private readonly K = 16;
   readonly nx: number; readonly ny: number;
   private readonly cnx: number; private readonly cny: number;
   readonly h: Float32Array; private readonly coarse: Float32Array;
+  /** Exact position of the point that set each cell's height (no cell-size margin in distances). */
+  readonly px: Float32Array; readonly py: Float32Array;
+  private touched: number[] = [];
   constructor(w: number, d: number) {
     this.nx = Math.ceil(w / this.c) + 2; this.ny = Math.ceil(d / this.c) + 2;
     this.cnx = Math.ceil(this.nx / this.K); this.cny = Math.ceil(this.ny / this.K);
     this.h = new Float32Array(this.nx * this.ny); this.coarse = new Float32Array(this.cnx * this.cny);
+    this.px = new Float32Array(this.nx * this.ny); this.py = new Float32Array(this.nx * this.ny);
+  }
+  /** Empty the map again (only the cells that were written). */
+  reset() {
+    for (const k of this.touched) { this.h[k] = 0; const i = k % this.nx, j = (k - i) / this.nx; this.coarse[Math.floor(i / this.K) + this.cnx * Math.floor(j / this.K)] = 0; }
+    this.touched = [];
   }
   stamp(x: number, y: number, z: number) {
     const i = Math.round(x / this.c), j = Math.round(y / this.c);
     if (i < 0 || j < 0 || i >= this.nx || j >= this.ny) return;
     const k = i + this.nx * j;
     if (z > this.h[k]) {
-      this.h[k] = z;
+      if (!this.h[k]) this.touched.push(k);
+      this.h[k] = z; this.px[k] = x; this.py[k] = y;
       const q = Math.floor(i / this.K) + this.cnx * Math.floor(j / this.K);
       if (z > this.coarse[q]) this.coarse[q] = z;
     }
@@ -41,18 +52,22 @@ export class PlasticMap {
     }
     return best > above ? best : -Infinity;
   }
-  /** Lowest tip height keeping the nozzle cone clear of cells outside the tip's own footprint (−∞: free). */
+  /**
+   * Lowest tip height keeping the nozzle cone clear of plastic outside the tip's own flat (−∞: free).
+   * Plastic under the flat is the surface being printed on (a tilted layer's neighbours sit up to
+   * r·tanθ into it by definition of the slope limit); the cone above it must not touch anything.
+   */
   coneFloor(x: number, y: number, rTip: number, tipLen: number, tanA: number, above: number): number {
     const R = rTip + tipLen * tanA;
     if (this.maxAbove(x - R, y - R, x + R, y + R, above) === -Infinity) return -Infinity;
     const [i0, i1] = this.range(x - R, x + R, this.nx), [j0, j1] = this.range(y - R, y + R, this.ny);
     let floor = -Infinity;
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-      const hh = this.h[i + this.nx * j];
+      const k = i + this.nx * j, hh = this.h[k];
       if (hh <= above) continue;
-      const d = Math.hypot(i * this.c - x, j * this.c - y);
-      if (d > R || d < rTip + this.c / 2) continue;
-      floor = Math.max(floor, hh - (d - rTip - this.c / 2) / tanA);
+      const d = Math.hypot(this.px[k] - x, this.py[k] - y);
+      if (d > R || d <= rTip) continue;
+      floor = Math.max(floor, hh - (d - rTip) / tanA);
     }
     return floor;
   }
@@ -64,17 +79,19 @@ export class PlasticMap {
  * within the current layer, neighbouring beads of a tilted layer sit a little higher by design, so
  * only the cone and head volumes see them.
  */
-export function headFloor(done: PlasticMap, cur: PlasticMap, x: number, y: number, z: number, head: ToolheadProfile): number {
+export function headFloor(done: PlasticMap, cur: PlasticMap, x: number, y: number, z: number, head: ToolheadProfile, why?: { by: string }): number {
   const tanA = Math.tan((head.nozzle.cone_angle_deg * Math.PI) / 180), rTip = head.nozzle.tip_diameter / 2;
-  let floor = Math.max(done.coneFloor(x, y, rTip, head.nozzle.tip_len, tanA, z), cur.coneFloor(x, y, rTip, head.nozzle.tip_len, tanA, z));
+  const cd = done.coneFloor(x, y, rTip, head.nozzle.tip_len, tanA, z), cc = cur.coneFloor(x, y, rTip, head.nozzle.tip_len, tanA, z);
+  let floor = Math.max(cd, cc);
+  if (why) why.by = cd >= cc ? 'cone/done' : 'cone/current';
   const r = rTip * 0.7, under = done.maxAbove(x - r, y - r, x + r, y + r, z - 0.03);
-  if (under !== -Infinity) floor = Math.max(floor, under + 0.03);
+  if (under !== -Infinity && under + 0.03 > floor) { floor = under + 0.03; if (why) why.by = 'tip/done'; }
   for (const v of head.volumes) {
     const cx = x + v.offset[0], cy = y + v.offset[1];
     const hx = v.shape === 'box' ? v.dims[0] / 2 : v.dims[0], hy = v.shape === 'box' ? v.dims[1] / 2 : v.dims[0];
     const lim = z + v.offset[2] - head.margin;
     const top = Math.max(done.maxAbove(cx - hx, cy - hy, cx + hx, cy + hy, lim), cur.maxAbove(cx - hx, cy - hy, cx + hx, cy + hy, lim));
-    if (top !== -Infinity) floor = Math.max(floor, top - v.offset[2] + head.margin);
+    if (top !== -Infinity && top - v.offset[2] + head.margin > floor) { floor = top - v.offset[2] + head.margin; if (why) why.by = v.name; }
   }
   return floor;
 }
@@ -83,11 +100,12 @@ export function headFloor(done: PlasticMap, cur: PlasticMap, x: number, y: numbe
  * Check (and with `fix`, repair) every non-planar move: one whose Z differs from its layer's top by
  * more than 1 µm. Plastic of the current layer counts once the nozzle is `lag` mm past it.
  */
-export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { x: number; y: number }, fix = true, lag = 3): ClearanceReport {
+export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { x: number; y: number }, fix = true, lag = 3, onCollision?: (c: { layer: number; x: number; y: number; z: number; floor: number; feature: string }) => void): ClearanceReport {
   const done = new PlasticMap(bed.x + 2, bed.y + 2);
-  const rep: ClearanceReport = { checked: 0, collisions: 0, raised: 0, unresolved: 0, worst: 0 };
+  const rep: ClearanceReport = { checked: 0, collisions: 0, raised: 0, unresolved: 0, worst: 0, worstLeft: 0 };
+  const cur = new PlasticMap(bed.x + 2, bed.y + 2);
   for (const L of layers) {
-    const cur = new PlasticMap(bed.x + 2, bed.y + 2);
+    cur.reset();
     const printed: number[] = [];
     const pending: { x: number; y: number; z: number; s: number }[] = [];
     let s = 0, px = NaN, py = NaN, head0 = 0;
@@ -98,19 +116,26 @@ export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { 
       px = op.x; py = op.y;
       while (head0 < pending.length && pending[head0].s < s - lag) { const q = pending[head0++]; cur.stamp(q.x, q.y, q.z); }
       if (op.travel || op.e <= 0) continue;
+      // conformal ironing ploughs the stair-step peaks on purpose and checks the head itself
+      if (op.feature === 'ironing') continue;
       if (Math.abs(op.z - L.z) > 1e-3) {
         rep.checked++;
-        const floor = headFloor(done, cur, op.x, op.y, op.z, head);
+        const why = onCollision ? { by: '' } : undefined;
+        const floor = headFloor(done, cur, op.x, op.y, op.z, head, why);
         if (op.z < floor - 1e-4) {
           rep.collisions++;
+          onCollision?.({ layer: layers.indexOf(L), x: op.x, y: op.y, z: op.z, floor, feature: op.feature + ' by ' + why!.by });
           rep.worst = Math.max(rep.worst, floor - op.z);
-          // lift by at most half a layer (a thicker bead, flow to match); anything worse is reported
-          if (fix && floor - op.z <= op.h * 0.5 + 1e-4) {
+          // lift by at most half a layer (a thicker bead, flow to match), a whole layer inside the
+          // infill where a thicker bead is never seen; anything worse is reported
+          // a bead that surface passes lowered may always go back up by what they took off
+          const maxLift = Math.max(op.h * (op.feature === 'sparse_infill' || op.feature === 'internal_solid_infill' ? 1 : 0.5), -(op.dev ?? 0) + op.h * 0.25);
+          if (fix && floor - op.z <= maxLift + 1e-4) {
             const lift = floor - op.z;
             op.e *= (op.h + lift) / Math.max(op.h, 1e-6);
             op.z = +(op.z + lift).toFixed(4);
             rep.raised++;
-          } else rep.unresolved++;
+          } else { rep.unresolved++; rep.worstLeft = Math.max(rep.worstLeft, floor - op.z); }
         }
       }
       pending.push({ x: op.x, y: op.y, z: op.z, s });

@@ -5,7 +5,9 @@ import { FEATURE_ORDER } from './types';
 import { fitArc } from './arc';
 
 export type Op =
-  | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean }
+  | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean;
+      /** Advanced mode: how far (mm, signed) surface passes have already moved this bead off its layer surface. */
+      dev?: number }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
   | { k: 'tool'; tool: number }

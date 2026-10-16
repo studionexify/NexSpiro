@@ -3,7 +3,7 @@
 import type { Config } from '../../profiles/settings';
 import type { LayerOps } from '../gcode';
 import type { IndexedMesh } from '../mesh';
-import type { FilamentSlot, MeshInput, Paths, Polyline2, ExPolygon } from '../types';
+import type { FilamentSlot, MeshInput, Paths, Polyline2, ExPolygon, FeatureType } from '../types';
 import type { PluginSession } from '../../plugins/api';
 import { analyzePart, RESOLUTION_CELLS, type PartAnalysis } from './analysis';
 import { machineCaps, type MachineCaps } from './machine';
@@ -13,7 +13,7 @@ import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
 import { clearancePass, type ClearanceReport } from './clearance';
 
-export interface WallLoop { pts: number[]; closed: boolean; feature: 'outer_wall' | 'inner_wall'; width: number; flow: number }
+export interface WallLoop { pts: number[]; closed: boolean; feature: FeatureType; width: number; flow: number; /** Per-point Z offsets from the layer top. */ zs?: number[] }
 export interface WallResult { loops: WallLoop[][]; inner: Paths }
 export interface InfillPath extends Polyline2 { width: number; flow?: number; feature?: 'sparse_infill' | 'internal_solid_infill'; /** Width per point (variable-width beads). */ widths?: number[] }
 
@@ -49,6 +49,8 @@ export interface SessionCtx {
   nonPlanar: boolean;
   /** Curved-layer warp in effect, if any. */
   warp?: Warp;
+  /** Layer indices compiled as one continuous helix (seam passes skip them). */
+  helicalLayers: Set<number>;
 }
 
 /** A technology implementation: any subset of the stage hooks. */
@@ -61,6 +63,8 @@ export interface TechModule {
   warp?(s: SessionCtx, base?: Warp): Warp | undefined;
   reshape?(s: SessionCtx, object: number, layer: number, slice: Paths, z: number): Paths;
   walls?(s: SessionCtx, object: number, ex: ExPolygon, c: WallCtx): WallResult | undefined;
+  /** Edit the finished wall rings of one island (any generator), ring 0 = outer wall. */
+  wallsPost?(s: SessionCtx, object: number, layer: number, ex: ExPolygon, rings: WallLoop[][]): void;
   infill?(s: SessionCtx, object: number, region: Paths, c: InfillCtx): InfillPath[] | undefined;
   post?(s: SessionCtx, layers: LayerOps[], c: StageCtx): void;
   finalize?(s: SessionCtx, layers: LayerOps[], c: StageCtx): void;
@@ -86,6 +90,7 @@ export interface AdvancedSession {
   walls?: (object: number, ex: ExPolygon, c: WallCtx) => WallResult | undefined;
   /** Infill override for one sparse region. */
   infill?: (object: number, region: Paths, c: InfillCtx) => InfillPath[] | undefined;
+  wallsPost?: (object: number, layer: number, ex: ExPolygon, rings: WallLoop[][]) => void;
   post(layers: LayerOps[], c: StageCtx): void;
   finalize(layers: LayerOps[], c: StageCtx): void;
   report(): AdvancedReport;
@@ -119,6 +124,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     param(id, key) { return techs.get(id)!.params[key]; },
     pnum(id, key) { return Number(techs.get(id)!.params[key]); },
     nonPlanar: false,
+    helicalLayers: new Set(),
   };
   const active = MODULES.filter((m) => ctx.on(m.id));
   const timed = <T>(id: TechId, fn: () => T): T => {
@@ -136,6 +142,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
   const reshapers = active.filter((m) => m.reshape);
   const wallers = active.filter((m) => m.walls);
   const fillers = active.filter((m) => m.infill);
+  const wallPosts = active.filter((m) => m.wallsPost);
   const plugin: PluginSession = {
     reshape: reshapers.length ? (o, i, sl) => reshapers.reduce((acc, m) => m.reshape!(ctx, o, i, acc, NaN), sl) : undefined,
   };
@@ -148,16 +155,20 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     return undefined;
   } : undefined;
 
+  const wallsPost = wallPosts.length ? (o: number, i: number, ex: ExPolygon, rings: WallLoop[][]) => {
+    for (const m of wallPosts) timed(m.id, () => m.wallsPost!(ctx, o, i, ex, rings));
+  } : undefined;
+
   return {
-    ctx, meshes: sliceMeshes, warp, plugin, walls, infill,
+    ctx, meshes: sliceMeshes, warp, plugin, walls, infill, wallsPost,
     post(layers, c) {
       // curved layers back to real space first, then every geometry pass, then the head-clearance check
       if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
       for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
       if (ctx.nonPlanar) {
-        clearance = clearancePass(layers, caps.toolhead, caps.bed, true);
+        clearance = clearancePass(layers, caps.toolhead, caps.bed, true, 3, debugCollision);
         if (clearance.raised) ctx.warn(`Head clearance: lifted ${clearance.raised} non-planar points so the ${caps.toolhead.name} clears the print.`);
-        if (clearance.unresolved) ctx.warn(`Head clearance: ${clearance.unresolved} non-planar points may touch the print with the ${caps.toolhead.name} (worst ${clearance.worst.toFixed(2)} mm). Check the toolhead shape in Machine capabilities.`);
+        if (clearance.unresolved) ctx.warn(`Head clearance: ${clearance.unresolved} non-planar points may touch the print with the ${caps.toolhead.name} (worst ${clearance.worstLeft.toFixed(2)} mm). Check the toolhead shape in Machine capabilities.`);
       }
     },
     finalize(layers, c) { for (const m of active) if (m.finalize) timed(m.id, () => m.finalize!(ctx, layers, c)); },
@@ -205,5 +216,9 @@ function warpMesh(m: MeshInput, w: Warp): MeshInput {
     return { ...p, vertices: pv };
   }) };
 }
+
+/** Test hook: receives every clearance collision (unset in production). */
+export let debugCollision: Parameters<typeof clearancePass>[5];
+export const setDebugCollision = (f: typeof debugCollision) => { debugCollision = f; };
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());

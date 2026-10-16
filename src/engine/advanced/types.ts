@@ -111,7 +111,7 @@ export interface AdvancedReport {
   zones: ZoneStat[];
   techs: TechReport[];
   /** Head-clearance check of the non-planar moves (when there were any). */
-  clearance?: { checked: number; collisions: number; raised: number; unresolved: number; worst: number };
+  clearance?: { checked: number; collisions: number; raised: number; unresolved: number; worst: number; worstLeft: number };
   warnings: string[];
   ms: number;
 }

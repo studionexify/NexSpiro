@@ -12,6 +12,8 @@ const bedFade = (zw: number) => { const t = (zw - FLAT) / RAMP; return t <= 0 ? 
 /** Displacement sampled on a regular grid: (nx × ny) columns, nz levels of z′ from 0 with spacing hz. */
 export class DisplacementField implements Warp {
   readonly d: Float32Array;
+  /** Nodes where the layers run through material (where the limits apply), if known. */
+  material?: Uint8Array;
   constructor(
     readonly nx: number, readonly ny: number, readonly nz: number,
     readonly ox: number, readonly oy: number, readonly h: number, readonly hz: number,
@@ -59,16 +61,20 @@ export class DisplacementField implements Warp {
     }
     return (lo + hi) / 2;
   }
-  /** Largest slope |∇xy d| and layer ratio range over the field (sampled at grid nodes). */
-  stats(): { maxSlope: number; minRatio: number; maxRatio: number; maxAbs: number } {
+  /** Largest slope |∇xy d| and layer ratio range over the field (sampled at grid nodes; only where `mask` is set). */
+  stats(mask?: Uint8Array): { maxSlope: number; minRatio: number; maxRatio: number; maxAbs: number } {
     let maxSlope = 0, minRatio = Infinity, maxRatio = -Infinity, maxAbs = 0;
     const val = (i: number, j: number, k: number) => this.at(i, j, k) * bedFade(k * this.hz);
     for (let k = 0; k < this.nz; k++) for (let j = 0; j < this.ny; j++) for (let i = 0; i < this.nx; i++) {
+      if (mask && !mask[this.idx(i, j, k)]) continue;
       const v = val(i, j, k);
       maxAbs = Math.max(maxAbs, Math.abs(v));
       if (i < this.nx - 1 && j < this.ny - 1) {
-        const gx = (val(i + 1, j, k) - v) / this.h, gy = (val(i, j + 1, k) - v) / this.h;
-        maxSlope = Math.max(maxSlope, Math.hypot(gx, gy));
+        // steepest of the axis and diagonal directions (forward differences would read a cone's apex as √2 too steep)
+        const gx = Math.abs(val(i + 1, j, k) - v), gy = Math.abs(val(i, j + 1, k) - v);
+        const g1 = Math.abs(val(i + 1, j + 1, k) - v) / Math.SQRT2, g2 = Math.abs(val(i + 1, j, k) - val(i, j + 1, k)) / Math.SQRT2;
+        // a smooth plane reads at worst cos 22.5° low: divide it back in
+        maxSlope = Math.max(maxSlope, Math.max(gx, gy, g1, g2) / this.h / 0.924);
       }
       if (k < this.nz - 1) {
         const r = 1 + (val(i, j, k + 1) - v) / this.hz;
@@ -78,7 +84,9 @@ export class DisplacementField implements Warp {
     return { maxSlope, minRatio: Number.isFinite(minRatio) ? minRatio : 1, maxRatio: Number.isFinite(maxRatio) ? maxRatio : 1, maxAbs };
   }
   scaled(s: number): DisplacementField {
-    return new DisplacementField(this.nx, this.ny, this.nz, this.ox, this.oy, this.h, this.hz, this.source, this.d.map((v) => v * s));
+    const f = new DisplacementField(this.nx, this.ny, this.nz, this.ox, this.oy, this.h, this.hz, this.source, this.d.map((v) => v * s));
+    f.material = this.material;
+    return f;
   }
 }
 
