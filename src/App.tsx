@@ -21,7 +21,7 @@ const TABS: { id: Workspace; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'prepare', label: 'Prepare', icon: 'cube' },
   { id: 'preview', label: 'Preview', icon: 'layers' },
-  { id: 'pattern', label: 'Pattern', icon: 'brush' },
+  { id: 'pattern', label: 'Motion', icon: 'brush' },
   { id: 'device', label: 'Device', icon: 'device' },
   { id: 'project', label: 'Project', icon: 'folder' },
   { id: 'calibration', label: 'Calibration', icon: 'calib' },
@@ -64,7 +64,7 @@ function FileMenu() {
 }
 
 function TopBar() {
-  const { workspace, set, theme, undo, redo, undoStack, redoStack } = useStore();
+  const { workspace, set, theme, undo, redo, undoStack, redoStack, liveToolpaths } = useStore();
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
@@ -81,6 +81,13 @@ function TopBar() {
         ))}
       </nav>
       <span className="spacer" />
+      {(workspace === 'prepare' || workspace === 'pattern') && (
+        <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
+          title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
+          onClick={() => set({ liveToolpaths: !liveToolpaths })}>
+          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" />Toolpath view
+        </button>
+      )}
       <PluginsButton />
       <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
@@ -160,7 +167,7 @@ function useShortcuts() {
 export default function App() {
   const { theme, workspace: ws } = useStore();
   const studio = useStore((s) => PLUGINS.find((p) => p.Studio && s.plugins.includes(p.id))?.Studio);
-  // the Pattern tab needs a plugin that has one; without it, fall back to Prepare
+  // the Motion tab needs a plugin that has one; without it, fall back to Prepare
   const workspace = ws === 'pattern' && !studio ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();

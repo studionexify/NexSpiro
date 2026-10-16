@@ -12,6 +12,8 @@ import {
 import { layOnFace } from '../state/ops';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
+import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
+import type { PatternexReport } from '../plugins/patternex/engine';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -197,6 +199,11 @@ export function Viewport() {
     scene.add(selBoxes);
     const toolpaths = new ToolpathView();
     scene.add(toolpaths.group);
+    // Patternex: placement outlines (prepare) and region/bleed/swap overlays (preview)
+    const pxPrep = new THREE.Group();
+    scene.add(pxPrep);
+    const pxPrev = new THREE.Group();
+    scene.add(pxPrev);
     const brush = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#FF5C8D', side: THREE.DoubleSide, depthTest: false, transparent: true }));
     brush.renderOrder = 10;
     brush.visible = false;
@@ -370,7 +377,8 @@ export function Viewport() {
         e.mesh.updateMatrixWorld();
         selBoxes.add(new THREE.BoxHelper(e.mesh, s.theme === 'dark' ? '#E9D8C8' : '#142030'));
       }
-      controls.mouseButtons = isPaintTool(s.tool) ? paintButtons : normalButtons;
+      controls.mouseButtons = isPaintTool(s.tool) || s.tool === 'place_pattern' ? paintButtons : normalButtons;
+      syncPatternex();
       if (!isPaintTool(s.tool)) brush.visible = false;
       syncGizmo();
       invalidate();
@@ -561,6 +569,14 @@ export function Viewport() {
     const onDown = (ev: PointerEvent) => {
       downAt = [ev.clientX, ev.clientY];
       const s = useStore.getState();
+      if (s.tool === 'place_pattern' && s.workspace === 'prepare' && ev.button === 0) {
+        ray.setFromCamera(ndc(ev), camera);
+        const hit = ray.intersectObjects(objectMeshes(), false)[0];
+        if (hit?.face && hit.faceIndex != null && placeDown(hit.object.userData.id, hit.point, hit.face.normal.clone().transformDirection(hit.object.matrixWorld), hit.faceIndex)) {
+          renderer.domElement.setPointerCapture(ev.pointerId);
+        }
+        return;
+      }
       if (!isPaintTool(s.tool) || s.workspace !== 'prepare' || ev.button === 1) return;
       const erase = ev.shiftKey || ev.button === 2;
       if (s.tool === 'lasso_motion') {
@@ -611,6 +627,12 @@ export function Viewport() {
     };
     const onMove = (ev: PointerEvent) => {
       const s = useStore.getState();
+      if (placeDragging()) {
+        ray.setFromCamera(ndc(ev), camera);
+        const hit = ray.intersectObjects(objectMeshes(), false)[0];
+        if (hit?.face && hit.faceIndex != null) placeMove(hit.object.userData.id, hit.point, hit.face.normal.clone().transformDirection(hit.object.matrixWorld), hit.faceIndex);
+        return;
+      }
       if (drawing) {
         const last = drawing.pts[drawing.pts.length - 1];
         if (drawing.box) drawing.pts = [drawing.pts[0], [ev.clientX, ev.clientY]];
@@ -623,6 +645,8 @@ export function Viewport() {
       if (isPaintTool(s.tool) && s.workspace === 'prepare') paintAt(ev);
     };
     const onUp = (ev: PointerEvent) => {
+      if (placeUp()) { downAt = null; return; }
+      if (useStore.getState().tool === 'place_pattern') { downAt = null; return; }
       if (drawing) {
         const d = drawing;
         drawing = null;
@@ -702,7 +726,8 @@ export function Viewport() {
       const moved = Math.hypot(ev.clientX - downAt![0], ev.clientY - downAt![1]);
       downAt = null;
       const s = useStore.getState();
-      if (moved > 4 || s.workspace !== 'prepare' || isPaintTool(s.tool)) return;
+      // no menu while painting or placing artwork (right button belongs to the tool there)
+      if (moved > 4 || s.workspace !== 'prepare' || isPaintTool(s.tool) || s.tool === 'place_pattern') return;
       ray.setFromCamera(ndc(ev), camera);
       const parts = [...partMeshes.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
       const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
@@ -747,10 +772,17 @@ export function Viewport() {
         const s = useStore.getState();
         if (!showsPattern(s)) return;
         const t0 = performance.now();
-        let lines: { positions: Float32Array; colors: Float32Array } | null = null;
-        for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { lines = p.preview(); if (lines) break; }
+        // every installed plugin adds its lines (Patternex inks, Motionex motion); drawn together
+        const parts: { positions: Float32Array; colors: Float32Array }[] = [];
+        for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { const l = p.preview(); if (l && l.positions.length) parts.push(l); }
         const geo = new LineSegmentsGeometry();
-        if (lines && lines.positions.length) { geo.setPositions(lines.positions); geo.setColors(lines.colors); }
+        if (parts.length) {
+          const n = parts.reduce((a, l) => a + l.positions.length, 0);
+          const P = new Float32Array(n), C = new Float32Array(n);
+          let o = 0;
+          for (const l of parts) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
+          geo.setPositions(P); geo.setColors(C);
+        }
         patternLines.geometry.dispose();
         patternLines.geometry = geo;
         (window as any).__nxPreviewMs = performance.now() - t0;
@@ -786,9 +818,25 @@ export function Viewport() {
         toolpaths.setRange(s.layerRange[0], s.layerRange[1], s.moveCursor);
         toolpaths.showTravel(s.showTravel);
       }
+      pxPrev.visible = preview;
+      if (preview) {
+        const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
+        pxPrev.position.set(ox, oy, 0);
+        const r = s.slice.result;
+        syncPreviewOverlay(pxPrev, r?.pluginReports?.patternex as PatternexReport | undefined, s.layerRange, r ? r.layers.map((l) => l.z) : [], s.filaments.map((f) => f.color));
+      }
       syncGizmo();
       invalidate();
     };
+
+    function syncPatternex() {
+      const s = useStore.getState();
+      pxPrep.visible = (s.workspace === 'prepare' || s.workspace === 'pattern') && s.plugins.includes('patternex');
+      if (pxPrep.visible) syncPlacementOverlay(pxPrep, s.objects);
+      invalidate();
+    }
+    const onPatternex = () => { syncPatternex(); if (useStore.getState().workspace === 'preview') syncPreview(); };
+    window.addEventListener('nx-patternex', onPatternex);
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -818,7 +866,7 @@ export function Viewport() {
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsPattern(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
-        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins)) rebuildPatternPreview();
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments)) rebuildPatternPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
@@ -835,6 +883,7 @@ export function Viewport() {
 
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener('nx-patternex', onPatternex);
       unsub();
       ro.disconnect();
       gizmo.dispose();

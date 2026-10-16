@@ -1,4 +1,6 @@
 // Object commands used by the right-click menus: mirror, split, clone, fill bed, export STL, copy/paste.
+import * as THREE from 'three';
+import { reframePlacements } from '../plugins/patternex/ui/state';
 import { openEdgeCount, transformVertices, type IndexedMesh } from '../engine/mesh';
 import { centreMesh } from '../io/load';
 import { saveFile } from '../platform';
@@ -24,7 +26,13 @@ export function mirrorObjects(axis: 0 | 1 | 2, ids = useStore.getState().selecte
     const m = { vertices: v, indices: ix };
     const [cx, cy, cz] = centreMesh(m);
     // paint is per triangle and the triangle order is kept, so it stays valid
-    return dropToBed({ ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], parts: undefined, layerHeights: undefined });
+    const next = dropToBed({ ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], parts: undefined, layerHeights: undefined });
+    // Patternex artwork is mirrored with the object (same reflection, re-expressed in the new frame)
+    if (o.patternex) {
+      const reflect = (p: Vec3, isDir: boolean): Vec3 => { const q = [...p] as Vec3; q[axis] = isDir ? -q[axis] : 2 * c - q[axis]; return q; };
+      next.patternex = reframePlacements(o.patternex, objectMatrix(o).elements, objectMatrix(next).invert().elements, reflect);
+    }
+    return next;
   }, ids);
 }
 
@@ -63,6 +71,23 @@ export function splitObject(id: string) {
     });
     return objectFromWorld(`${o.name} (${k + 1})`, { vertices: new Float32Array(verts), indices: ix }, { filament: o.filament, overrides: o.overrides });
   });
+  // Patternex: each placement goes to the piece nearest its anchor point, re-expressed in that piece's frame
+  if (o.patternex) {
+    const toWorld = objectMatrix(o).elements;
+    for (const p of o.patternex.placements) {
+      const a = new THREE.Vector3(...p.position_xyz).applyMatrix4(objectMatrix(o));
+      let best = 0, bd = Infinity;
+      out.forEach((piece, k) => {
+        const v = piece.mesh.vertices, mm = objectMatrix(piece);
+        for (let i = 0; i < v.length; i += 3) { const d = new THREE.Vector3(v[i], v[i + 1], v[i + 2]).applyMatrix4(mm).distanceToSquared(a); if (d < bd) { bd = d; best = k; } }
+      });
+      const piece = out[best];
+      const one = { placements: [p], actions: o.patternex.actions.filter((x) => x.region_ref.placement_id === p.id), patterns: o.patternex.patterns };
+      const moved = reframePlacements(one, toWorld, objectMatrix(piece).invert().elements);
+      const cur = piece.patternex ?? { placements: [], actions: [], patterns: o.patternex.patterns };
+      piece.patternex = { placements: [...cur.placements, ...moved.placements.map((q) => ({ ...q, object_id: piece.id }))], actions: [...cur.actions, ...moved.actions], patterns: cur.patterns };
+    }
+  }
   s.checkpoint();
   s.set({ objects: [...s.objects.filter((x) => x.id !== id), ...out], selected: out.map((x) => x.id), selectedPart: null });
   s.markDirty();
