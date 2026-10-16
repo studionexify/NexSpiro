@@ -9,7 +9,7 @@ import { parseSvg } from '../svg';
 import { BUILTIN_KINDS } from '../builtin';
 import { colorGroups, type PurgeMode, type RegionAction } from '../model';
 import { DEFAULT_TRANSITION_VOLUME, type PatternexConfig, type PatternexReport, type SingleColourPolicy } from '../engine';
-import { addPattern, createPatternexState, ensureBuiltin, savePatternexState, toPatternexConfig, type ObjPlacement, type PatternexState } from './state';
+import { addPattern, createPatternexState, patternInkKey, ensureBuiltin, savePatternexState, toPatternexConfig, type ObjPlacement, type PatternexState } from './state';
 import type { MotionApplication } from '../../motionex/model';
 import { mx } from '../../motionex/ui/MotionexPanel';
 import { LibraryWindow } from '../library/LibraryWindow';
@@ -36,7 +36,8 @@ export function sliceObjects() {
   const s = useStore.getState();
   const [ox, oy] = plateOrigin(s.activePlate, s.printerId);
   const toPlate = new THREE.Matrix4().makeTranslation(-ox, -oy, 0);
-  return plateObjects(s.activePlate).map((o) => ({ id: o.id, matrix: toPlate.clone().multiply(objectMatrix(o)).elements }));
+  // same objects, same order as the slicer receives them (non-printable objects are not sliced)
+  return plateObjects(s.activePlate).filter((o) => o.printable !== false).map((o) => ({ id: o.id, matrix: toPlate.clone().multiply(objectMatrix(o)).elements }));
 }
 
 export function patternexConfig(): PatternexConfig | undefined {
@@ -212,7 +213,14 @@ function PlacementEditor({ p, slots, ams }: { p: ObjPlacement; slots: string[]; 
       {p.depth_mode === 'fixed' && !p.through && <label className="mx-field">Depth (mm)<input className="input" type="number" min={0.05} step={0.1} value={p.depth_mm} onChange={(e) => upd(() => { p.depth_mm = Math.max(0.05, num(e.target.value, 1.5)); })} /></label>}
       <p className="mx-muted">Drag on the model with the place tool to move it; position snaps to the face under the cursor.</p>
 
-      <div className="mx-label">Regions</div>
+      <div className="mx-label">Regions<span className="spacer" />
+        <button className="btn-secondary btn-small" title="Every new placement of this pattern starts with these inks" onClick={() => {
+          const m: Record<string, number> = {};
+          for (const a of px.actions) if (a.region_ref.placement_id === p.id && a.region_ref.color_group) m[a.region_ref.color_group] = a.material.slot_index;
+          if (Object.keys(m).length) px.savedInks[patternInkKey(p.pattern_id)] = m; else delete px.savedInks[patternInkKey(p.pattern_id)];
+          changed(false);
+        }}>{px.savedInks[patternInkKey(p.pattern_id)] ? 'Update saved inks' : 'Save inks for this pattern'}</button>
+      </div>
       {slots.length < 2 && <p className="mx-muted px-warn">Only one filament slot is set up. Add slots in the Filament panel to give regions their own material.</p>}
       {groups.map((color) => {
         const a = actionFor(color);

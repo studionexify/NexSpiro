@@ -8,7 +8,7 @@ import { CATEGORIES, familyById, type Category } from './families';
 import { buildPattern, GROUP_KEYS, GROUP_NAMES, libraryCounts, patternSvg, searchLibrary, specOf, type GenSpec, type LibraryEntry } from './catalog';
 import { applyToObject, inkActions, SIDES, targetObject, targetSize, type Side, type Target } from './apply';
 import { px, changed } from '../ui/PatternexPanel';
-import { addPattern } from '../ui/state';
+import { addPattern, patternInkKey } from '../ui/state';
 
 const PAGE = 120;
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -151,6 +151,8 @@ function Editor({ entry, onDone, guard, request }: { entry: LibraryEntry; onDone
   const dirty = norm(inks) !== norm(saved);
   const saveInks = () => {
     if (Object.values(inks).some((v) => v >= 0)) px.savedInks[entry.key] = { ...inks }; else delete px.savedInks[entry.key];
+    // the same inks also apply when this pattern is placed again from the panel
+    if (px.savedInks[entry.key]) px.savedInks[patternInkKey(pat.id)] = { ...inks }; else delete px.savedInks[patternInkKey(pat.id)];
     changed(false);
   };
   guard.current = { dirty: () => dirty, save: saveInks, name: entry.name };

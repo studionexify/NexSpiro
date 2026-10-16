@@ -164,3 +164,6 @@ export function restoreProject(s: PatternexState, d: PatternexProjectData | unde
   s.singleColour = d.singleColour ?? s.singleColour;
   s.transitionVolume = d.transitionVolume ?? s.transitionVolume;
 }
+
+/** Key under which inks saved for a whole pattern (from the panel) are stored in `savedInks`. */
+export const patternInkKey = (patternId: string) => `pattern:${patternId}`;
