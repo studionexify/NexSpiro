@@ -1,4 +1,4 @@
-// Motionex engine side: turns Nexspiro's move list into Motionex paths, applies the patterns,
+// Motionex engine side: turns Nexspiro's move list into Motionex paths, applies the motions,
 // runs the print-head collision check, and writes the result back as Nexspiro moves.
 // Extrusion is recomputed from each new move's true 3D length; Nexspiro then writes the G-code.
 import type { Config } from '../../profiles/settings';
@@ -7,6 +7,7 @@ import type { EnginePlugin, PluginContext } from '../api';
 import { applyMotion, DEFAULT_OPTIONS, type ModifierOptions } from './modifier';
 import { checkCollisions, limitZSpeed, type CollisionMode, type ToolheadProfile } from './core/toolhead';
 import { RegionRegistry } from './core/regions';
+import { clearOverlaps, type ClearanceOptions } from './core/clearance';
 import { emptyCheck, type Layer, type PointAction, type PrintCheck, type Toolpath, type ToolpathPoint } from './core/types';
 import type { PrintProfiles, Firmware } from './core/profiles';
 import type { MotionApplication, MotionBrush } from './model';
@@ -14,7 +15,7 @@ import type { MotionApplication, MotionBrush } from './model';
 /** Everything the worker needs, as plain data. */
 export interface MotionexConfig {
   applications: MotionApplication[];
-  /** The patterns the applications use. */
+  /** The motions the applications use. */
   brushes: MotionBrush[];
   options: ModifierOptions;
   collisionMode: CollisionMode;
@@ -30,7 +31,9 @@ export interface MotionexReport {
 
 type Move = Extract<Op, { k: 'move' }>;
 
-/** Read machine, filament and process values the pattern code needs from Nexspiro's config. */
+const num = (cfg: Config, k: string, d: number) => { const v = parseFloat(String(cfg[k] ?? '')); return Number.isFinite(v) ? v : d; };
+
+/** Read machine, filament and process values the motion code needs from Nexspiro's config. */
 export function profilesFromConfig(cfg: Config, printerId: string): PrintProfiles {
   const num = (k: string, d = 0) => (cfg[k] === undefined || cfg[k] === '' ? d : Number(cfg[k]));
   const flavor = String(cfg.gcode_flavor ?? 'marlin');
@@ -91,7 +94,7 @@ export function opsToLayers(layers: LayerOps[]): { layers: Layer[]; runs: Run[] 
         const p = pts[pts.length - 1];
         lenSum += Math.hypot(m.x - p.x, m.y - p.y, m.z - p.z);
         eSum += m.e;
-        pts.push({ x: m.x, y: m.y, z: m.z, f: m.f, flow: 1, e: m.e });
+        pts.push({ x: m.x, y: m.y, z: m.z, f: m.f, flow: 1, e: m.e, w: m.w });
         j++;
       }
       const a = pts[0], b = pts[pts.length - 1];
@@ -117,10 +120,15 @@ function postOps(a: PointAction, at: ToolpathPoint, run: Run, cfg: Config): Op[]
   return out;
 }
 
-/** Moves for a changed path, with E from the true 3D length of each move. */
+/**
+ * Moves for a changed path, with E from the true 3D length of each move. A path that was only cut
+ * (not moved) keeps the slicer's own E for each piece, so variable-width lines keep their plastic.
+ */
 function runToOps(run: Run, original: ToolpathPoint, cfg: Config): Op[] {
   const pts = run.path.points;
   const out: Op[] = [];
+  if (pts.length < 2) return out;
+  const ownE = run.path.clipped && run.path.modifiedBy !== 'motionex';
   const s = pts[0];
   if (Math.hypot(s.x - original.x, s.y - original.y, s.z - original.z) > 1e-4)
     out.push({ k: 'move', x: s.x, y: s.y, z: s.z, e: 0, f: Number(cfg.travel_speed ?? 200), feature: 'travel', w: 0, h: run.h, travel: true });
@@ -129,7 +137,7 @@ function runToOps(run: Run, original: ToolpathPoint, cfg: Config): Op[] {
     const p = pts[k - 1], q = pts[k];
     const len = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
     if (q.travel) out.push({ k: 'move', x: q.x, y: q.y, z: q.z, e: 0, f: Number(cfg.travel_speed ?? 200), feature: 'travel', w: 0, h: run.h, travel: true, noArc: true });
-    else if (len > 1e-6) out.push({ k: 'move', x: q.x, y: q.y, z: q.z, e: len * run.ePerMm * q.flow, f: q.f, feature: run.feature, w: run.w, h: run.h, travel: false, noArc: true });
+    else if (len > 1e-6) out.push({ k: 'move', x: q.x, y: q.y, z: q.z, e: ownE ? q.e : len * run.ePerMm * q.flow, f: q.f, feature: run.feature, w: q.w ?? run.w, h: run.h, travel: false, noArc: true });
     if (q.post) out.push(...postOps(q.post, q, run, cfg));
   }
   return out;
@@ -175,11 +183,22 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     }
     if (check.blocking) ctx.warn('Motionex: export is blocked until the print-head collisions are fixed.');
 
+    // Nothing may print over a moved wall: cut the other lines of each layer back to the slicer's spacing.
+    const clear: ClearanceOptions = {
+      layerHeight: profiles.process.layerHeight, infillOverlap: num(ctx.cfg, 'infill_wall_overlap', 15) / 100,
+      retractOver: Math.max(1, num(ctx.cfg, 'retraction_minimum_travel', 1)), retractLength: num(ctx.cfg, 'retraction_length', 0.8),
+    };
+    for (const [li, rs] of byLayer) {
+      const L = res.layers[li];
+      if (!clearOverlaps(L, (_p, k) => rs[k].w, { ...clear, layerHeight: rs[0]?.h || clear.layerHeight })) continue;
+      rs.forEach((r, k) => { r.path = L.paths[k]; });
+    }
+
     // Write back from the last run of each layer so earlier op indices stay valid.
     let moved = 0;
     for (let k = runs.length - 1; k >= 0; k--) {
       const r = runs[k];
-      if (r.path.modifiedBy !== 'motionex') continue;
+      if (r.path.modifiedBy !== 'motionex' && !r.path.clipped) continue;
       layerOps[r.layer].ops.splice(r.start, r.end - r.start, ...runToOps(r, originals[k], ctx.cfg));
       moved++;
     }

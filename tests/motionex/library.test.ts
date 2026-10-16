@@ -24,7 +24,7 @@ test("saving a preset stores a copy; saving again bumps version; persists", () =
   assert.equal(again.get(saved.id)!.amplitude, 2);
 });
 
-test("preset library: 150+ unique, valid patterns that stay within their size", async () => {
+test("preset library: 150+ unique, valid motions that stay within their size", async () => {
   const { applyBrushToPath, DEFAULT_OPTIONS } = await import("../../src/plugins/motionex/modifier");
   const { profiles } = await import("./helpers");
   assert.ok(PRESETS.length >= 150, `only ${PRESETS.length} presets`);

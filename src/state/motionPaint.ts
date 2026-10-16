@@ -1,4 +1,4 @@
-// Surface sets for plugins (paint.motion): every way of choosing where a pattern goes ends up here —
+// Surface sets for plugins (paint.motion): every way of choosing where a motion goes ends up here —
 // click a surface, paint, lasso or box from the view, a height band, or a whole object.
 import * as THREE from 'three';
 import { transformVertices } from '../engine/mesh';
@@ -9,8 +9,8 @@ export const SURFACE_COLORS = ['#ff7a45', '#36cfc9', '#b37feb', '#ffd666', '#ff8
 
 /**
  * Set triangles of each object to value (1..n), or clear them (value 0). Clearing only clears the
- * given set, so erasing one pattern's surfaces never removes another's. onlyFree: leave faces that
- * already belong to another pattern alone.
+ * given set, so erasing one motion's surfaces never removes another's. onlyFree: leave faces that
+ * already belong to another motion alone.
  */
 export function assignMotion(sel: Map<string, ArrayLike<number>>, value: number, set = useStore.getState().motionSet, record = true, onlyFree = false) {
   const s = useStore.getState();
@@ -78,7 +78,7 @@ export function trisInScreenPolygon(o: SceneObject, poly: [number, number][], ca
   return out;
 }
 
-/** Remove every triangle of a surface set from all objects (when its pattern is removed). */
+/** Remove every triangle of a surface set from all objects (when its motion is removed). */
 export function clearMotionSet(set: number) {
   const s = useStore.getState();
   const ids = s.objects.filter((o) => o.paint?.motion?.some((v) => v === set)).map((o) => o.id);
