@@ -1,6 +1,7 @@
 // Patternex UI-side state: patterns, placements (object-local), region actions and printer options.
 // Plain data with a tiny change signal, like Motionex. Converted to plate coordinates only for slicing.
 import { builtinPattern } from '../builtin';
+import { restoreFont, userFontData } from '../tools/text';
 import type { Pattern, Placement, RegionAction } from '../model';
 import type { PatternexConfig, SingleColourPolicy } from '../engine';
 import type { V3, WorldPlacement } from '../projection';
@@ -15,7 +16,19 @@ export interface ObjPlacement extends Placement {
 }
 
 /** What one scene object carries: its placements and their region actions. */
-export interface ObjectPatternex { placements: ObjPlacement[]; actions: RegionAction[]; /** Definitions of the patterns used, so a project opens anywhere. */ patterns?: Pattern[] }
+export interface ObjectPatternex {
+  placements: ObjPlacement[]; actions: RegionAction[];
+  /** Definitions of the patterns used, so a project opens anywhere. */
+  patterns?: Pattern[];
+  /** User fonts used by text artwork (font id → base64), so text can be edited and batched anywhere. */
+  fonts?: Record<string, string>;
+}
+
+/** Font id of generated text artwork, if it uses a user font. */
+const userFontOf = (p: Pattern): string | undefined => {
+  const f = p.meta?.kind === 'text' ? (p.meta.spec as { font?: string })?.font : undefined;
+  return f?.startsWith('user:') ? f : undefined;
+};
 
 /**
  * Collect placements from scene objects (deep copies, so the panel can edit them freely).
@@ -30,6 +43,7 @@ export function collectPlacements(objects: { id: string; patternex?: ObjectPatte
     const pe = o.patternex;
     if (!pe) continue;
     for (const pat of pe.patterns ?? []) if (!patterns.some((x) => x.id === pat.id)) patterns.push(pat);
+    for (const [id, data] of Object.entries(pe.fonts ?? {})) restoreFont(id, data);
     for (const p0 of pe.placements) {
       let id = p0.id;
       if (seen.has(id) || p0.object_id !== o.id) { id = `${p0.id.split('~')[0]}~${o.id}`; renamed = renamed || id !== p0.id; }
@@ -48,7 +62,11 @@ export function splitByObject(placements: ObjPlacement[], actions: RegionAction[
     let e = out.get(p.object_id); if (!e) out.set(p.object_id, (e = { placements: [], actions: [], patterns: [] }));
     e.placements.push(structuredClone(p));
     const pat = patterns.find((x) => x.id === p.pattern_id);
-    if (pat && !e.patterns!.some((x) => x.id === pat.id)) e.patterns!.push(pat);
+    if (pat && !e.patterns!.some((x) => x.id === pat.id)) {
+      e.patterns!.push(pat);
+      const font = userFontOf(pat), data = font && userFontData(font);
+      if (font && data) (e.fonts ??= {})[font] = data;
+    }
     for (const a of actions) if (a.region_ref.placement_id === p.id) e.actions.push(structuredClone(a));
   }
   return out;

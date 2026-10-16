@@ -19,10 +19,26 @@ export const BUNDLED_FONTS: FontEntry[] = [
 const loaded = new Map<string, opentype.Font>();
 export const fontList = (): FontEntry[] => [...BUNDLED_FONTS, ...[...loaded.keys()].filter((k) => k.startsWith('user:')).map((k) => ({ id: k, name: loaded.get(k)!.names.fullName?.en ?? k.slice(5), licence: 'user' }))];
 
+/** Raw bytes of fonts the user added, so projects can carry them. */
+const userBytes = new Map<string, Uint8Array>();
+
 export function registerFont(id: string, buf: ArrayBuffer): opentype.Font {
   const f = opentype.parse(buf);
   loaded.set(id, f);
+  if (id.startsWith('user:')) userBytes.set(id, new Uint8Array(buf.slice(0)));
   return f;
+}
+
+const toB64 = (b: Uint8Array) => { let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = (s: string) => { const bin = atob(s); const b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; };
+
+/** Base64 of a user font (for embedding in a project), or undefined for bundled / unknown fonts. */
+export const userFontData = (id: string): string | undefined => { const b = userBytes.get(id); return b ? toB64(b) : undefined; };
+
+/** Register a font embedded in a project (no-op when already loaded). Returns false if it cannot be read. */
+export function restoreFont(id: string, b64: string): boolean {
+  if (loaded.has(id)) return true;
+  try { const b = fromB64(b64); registerFont(id, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer); return true; } catch { return false; }
 }
 export const fontById = (id: string) => loaded.get(id);
 

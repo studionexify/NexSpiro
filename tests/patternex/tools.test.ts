@@ -160,3 +160,24 @@ describe('dither and band merging', () => {
     expect(m.swapsBefore - m.swapsAfter).toBe(2);
   });
 });
+
+describe('fonts in projects', () => {
+  it('user fonts used by text artwork travel with the object and are restored on load', async () => {
+    const { splitByObject, collectPlacements } = await import('../../src/plugins/patternex/ui/state');
+    const { userFontData, fontById } = await import('../../src/plugins/patternex/tools/text');
+    const b = readFileSync('src/plugins/patternex/tools/fonts/oswald.woff');
+    registerFont('user:My.woff', b.buffer.slice(b.byteOffset, b.byteOffset + b.length) as ArrayBuffer);
+    const pat = textPattern(fontById('user:My.woff')!, { ...defaultTextSpec(), font: 'user:My.woff', text: 'Hi', size_mm: 10 }, 'tx').pattern;
+    const pl: any = { id: 'p1', pattern_id: 'tx', object_id: 'o1' };
+    const pe = splitByObject([pl], [], [pat]).get('o1')!;
+    expect(pe.fonts?.['user:My.woff']).toBe(userFontData('user:My.woff'));
+    // a bundled font is not embedded
+    const bundled = { ...pat, id: 'tb', meta: { kind: 'text' as const, spec: { ...defaultTextSpec() } } };
+    expect(splitByObject([{ ...pl, pattern_id: 'tb' }], [], [bundled]).get('o1')!.fonts).toBeUndefined();
+    // round trip through JSON (project file) and back
+    const json = JSON.parse(JSON.stringify(pe));
+    json.fonts = { 'user:Other.woff': json.fonts['user:My.woff'] };
+    collectPlacements([{ id: 'o1', patternex: json }]);
+    expect(fontById('user:Other.woff')?.names.fontFamily.en).toMatch(/^Oswald/);
+  });
+});

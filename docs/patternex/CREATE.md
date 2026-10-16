@@ -11,7 +11,7 @@ Artwork beyond the pattern library. Everything below becomes an ordinary pattern
 
 ## Create tools
 - **Text**
-  - Bundled fonts: Inter, Oswald, Allerta Stencil, Pacifico (OFL) and Roboto Mono (Apache 2.0). You can add your own TTF, OTF or WOFF.
+  - Bundled fonts: Inter, Oswald, Allerta Stencil, Pacifico (OFL) and Roboto Mono (Apache 2.0). You can add your own TTF, OTF or WOFF; fonts used by text artwork are embedded in the project file (per object, base64), so text can be edited and batched on any machine.
   - Settings: size, tracking, kerning, line height, alignment, arc (keeps arc length) and weight.
   - Wrap round object puts the text on a cylinder.
   - Minimum-stroke check: parts thinner than 2 × nozzle are flagged, using a morphological opening.
@@ -56,4 +56,3 @@ Artwork beyond the pattern library. Everything below becomes an ordinary pattern
 ## Not included
 - Wall count per region: the slicer has no per-region wall hook, only modifier infill keys.
 - Raised artwork on flat top faces.
-- Fonts you add are not saved in the project; add them again after reopening.
