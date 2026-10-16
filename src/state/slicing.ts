@@ -4,6 +4,7 @@ import { transformVertices } from '../engine/mesh';
 import type { MeshInput, SliceOutput } from '../engine/types';
 import { filamentSlots, resolveConfig, tuningConfig } from '../profiles/resolve';
 import { effectiveFlush } from '../profiles/flush';
+import { faceSetsOf, pluginConfigs } from '../plugins/registry';
 import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } from './store';
 
 let worker: Worker | null = null;
@@ -39,6 +40,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     filament: o.filament ?? 0,
     overrides: o.overrides,
     paint: o.paint,
+    faceSets: faceSetsOf(o.paint?.motion),
     layerHeights: o.layerHeights,
     parts: (o.parts ?? []).map((p) => ({
       type: p.type, overrides: p.overrides, indices: p.mesh.indices,
@@ -67,7 +69,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     };
     worker!.postMessage({
       id, meshes, cfg: currentConfig(),
-      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
 }

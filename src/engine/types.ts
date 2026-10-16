@@ -87,7 +87,7 @@ export interface PartInput {
 }
 
 /** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */
-export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array }
+export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
 
 export interface MeshInput {
   id: string;
@@ -103,7 +103,11 @@ export interface MeshInput {
   paint?: MeshPaint;
   /** Variable layer height profile: successive layer heights from the bed. */
   layerHeights?: number[];
+  /** Named sets of picked triangles (used by plugins such as Motionex). */
+  faceSets?: FaceSet[];
 }
+
+export interface FaceSet { id: string; name: string; tris: Uint32Array }
 
 /** Filament slot settings used during emission. */
 export interface FilamentSlot {
@@ -132,6 +136,8 @@ export interface SliceOptions {
   /** Flush volume (mm³) for each [from][to] filament pair; overrides flush_volume. */
   flushMatrix?: number[][];
   layerActions?: LayerAction[];
+  /** Config for each enabled plugin, keyed by plugin id (plain data). */
+  plugins?: Record<string, unknown>;
 }
 
 export interface SliceStats {
@@ -153,6 +159,8 @@ export interface SliceOutput {
   layers: LayerResult[];
   stats: SliceStats;
   warnings: string[];
+  /** What each plugin reported (e.g. Motionex print check). */
+  pluginReports?: Record<string, unknown>;
 }
 
 export const FEATURE_ORDER: FeatureType[] = [

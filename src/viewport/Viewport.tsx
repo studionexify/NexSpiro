@@ -1,5 +1,7 @@
 // The 3D workspace (Prepare + Preview share one renderer).
 import { useEffect, useRef } from 'react';
+import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
+import { SURFACE_COLORS } from '../plugins/registry';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -129,21 +131,23 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   const slotC = slots.map((c) => new THREE.Color(c));
   const tris = arr.length / 9;
   const p: ObjectPaint = o.paint ?? {};
-  const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : undefined;
-  const layerC = (tool === 'paint_support' ? PAINT.support : PAINT.seam).map((c) => new THREE.Color(c));
-  const dim = tool === 'paint_support' || tool === 'paint_seam' ? 0.55 : 1;
+  const motion = tool === 'paint_motion' || tool === 'pick_motion';
+  const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : motion ? p.motion : undefined;
+  const layerC = (tool === 'paint_support' ? PAINT.support : motion ? SURFACE_COLORS : PAINT.seam).map((c) => new THREE.Color(c));
+  const dim = tool === 'paint_support' || tool === 'paint_seam' || motion ? 0.55 : 1;
   const c = new THREE.Color();
   for (let t = 0; t < tris; t++) {
     const cv = p.color?.[t] ?? 0;
     c.copy(cv ? slotC[Math.min(cv - 1, slotC.length - 1)] ?? base : base).multiplyScalar(dim);
     const lv = layer?.[t] ?? 0;
-    if (lv) c.copy(layerC[lv - 1]);
+    if (lv) c.copy(layerC[(lv - 1) % layerC.length]);
     for (let k = 0; k < 3; k++) { arr[t * 9 + k * 3] = c.r; arr[t * 9 + k * 3 + 1] = c.g; arr[t * 9 + k * 3 + 2] = c.b; }
   }
   attr.needsUpdate = true;
 }
 
-export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color';
+export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || t === 'paint_motion' || t === 'pick_motion';
+const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
 
 export function Viewport() {
   const host = useRef<HTMLDivElement>(null);
@@ -462,6 +466,7 @@ export function Viewport() {
       brush.visible = true;
       invalidate();
       if (!painting) return;
+      if (s.tool === 'pick_motion') return; // click-to-pick fills the whole surface on press
       const id = hit.object.userData.id as string;
       if (id !== painting.id) return;
       const o = s.objects.find((x) => x.id === id);
@@ -504,8 +509,9 @@ export function Viewport() {
       const hit = ray.intersectObjects(objectMeshes(), false)[0];
       if (!hit) return;
       const id = hit.object.userData.id as string;
-      const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : 'color';
-      const value = ev.shiftKey ? 0 : layer === 'color' ? (ev.button === 2 ? 0 : s.paintColor) : ev.button === 2 ? 2 : 1;
+      const motion = s.tool === 'paint_motion' || s.tool === 'pick_motion';
+      const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : motion ? 'motion' : 'color';
+      const value = ev.shiftKey ? 0 : layer === 'color' ? (ev.button === 2 ? 0 : s.paintColor) : motion ? (ev.button === 2 ? 0 : s.motionSet) : ev.button === 2 ? 2 : 1;
       // copy-on-write so undo keeps the previous paint
       s.updateObjects((o) => {
         const tris = o.mesh.indices.length / 3;
@@ -513,6 +519,16 @@ export function Viewport() {
         return { ...o, paint: { ...(o.paint ?? {}), [layer]: prev ? prev.slice() : new Uint8Array(tris) } };
       }, [id]);
       painting = { id, value, layer };
+      if (s.tool === 'pick_motion' && hit.faceIndex != null) {
+        // click a surface: take it and every smoothly joined neighbour (a flat side, or a whole curved wall)
+        const o = useStore.getState().objects.find((x) => x.id === id)!;
+        let a = adjCache.get(o.mesh);
+        if (!a) { a = { adj: triAdjacency(o.mesh), normals: triNormals(o.mesh) }; adjCache.set(o.mesh, a); }
+        const arr = o.paint!.motion!;
+        for (const t of growFaces(o.mesh, hit.faceIndex, s.motionGrowAngle, a.adj, a.normals)) arr[t] = value;
+        paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color));
+        invalidate();
+      }
       renderer.domElement.setPointerCapture(ev.pointerId);
       paintAt(ev);
     };

@@ -9,7 +9,7 @@ import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
@@ -26,7 +26,8 @@ export interface ScenePart {
   overrides: Config; // modifier settings
 }
 
-export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array }
+/** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). */
+export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
 
 export interface SceneObject {
   id: string;
@@ -87,6 +88,13 @@ interface State {
 
   brushSize: number; // mm
   paintColor: number; // 1-based slot for colour painting
+  /** Surface set being picked/painted for plugins (1-based). */
+  motionSet: number;
+  /** Click-to-pick spreads across edges flatter than this (degrees). */
+  motionGrowAngle: number;
+  /** Installed plugins (ids) and the right dock. */
+  plugins: string[];
+  dock: { open: boolean; width: number; tab: string };
   overhangOnly: boolean;
 
   slice: SliceState;
@@ -165,6 +173,10 @@ export const useStore = create<State>((set, get) => ({
 
   brushSize: 4,
   paintColor: 2,
+  motionSet: 1,
+  motionGrowAngle: 15,
+  plugins: Array.isArray(prefs.plugins) ? prefs.plugins : [],
+  dock: { open: true, width: 340, tab: 'motionex', ...(prefs.dock ?? {}) },
   overhangOnly: false,
 
   slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
@@ -246,6 +258,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
+      plugins: s.plugins, dock: s.dock,
     }));
   } catch { /* storage unavailable */ }
 });
