@@ -11,8 +11,8 @@ import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh } from './slice';
-import { runPlugins } from '../plugins/engine';
-import type { FaceRegion } from '../plugins/api';
+import { preparePlugins, runPlugins } from '../plugins/engine';
+import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 
@@ -201,13 +201,31 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
   const paintDepth = num('mmu_paint_depth') || 1.5;
+  // plugins that add material regions (Patternex) are set up here, before perimeters
+  const sessions = preparePlugins(opts.plugins, {
+    cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
+    filamentCount: filaments.length, hasAms: bool('has_ams'), warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); },
+  });
+  const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
+  const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
+  const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
+  const paintOverlapWarned = new Set<number>();
   const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
+    const key = o * 1_000_000 + i;
+    const hit = filRegionsCache.get(key);
+    if (hit) return hit;
+    const r = filRegionsUncached(o, i);
+    filRegionsCache.set(key, r);
+    return r;
+  };
+  const filRegionsUncached = (o: number, i: number): { fil: number; paths: Paths }[] => {
     const sl = objSlices[o][i];
     if (!sl.length) return [];
     const base = baseFilAt(o, i);
-    if (!colorTris[o].length) return [{ fil: base, paths: sl }];
-    const map = colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth);
-    const out: { fil: number; paths: Paths }[] = [];
+    const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
+    if (!colorTris[o].length && !contribs.length) return [{ fil: base, paths: sl }];
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth) : new Map<number, Paths>();
+    let out: { fil: number; paths: Paths }[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
       const fil = clampFil(c - 1);
@@ -218,6 +236,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }
     const rest = taken.length ? difference(sl, taken) : sl;
     if (rest.length) out.unshift({ fil: base, paths: rest });
+    // plugin regions win over paint and the base material; later contributions win over earlier ones
+    for (const c of contribs) {
+      const r = intersection(c.paths, sl);
+      if (!r.length) continue;
+      if (taken.length && !paintOverlapWarned.has(o) && intersection(r, taken).length) {
+        paintOverlapWarned.add(o);
+        warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
+      }
+      out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
+      out.push({ fil: clampFil(c.fil), paths: r });
+    }
     // merge regions sharing a filament
     const merged = new Map<number, Paths>();
     for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
@@ -632,7 +661,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (curTool === -1 && (!hasAms || (usedFils.size <= 1 && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
-      const flushVol = opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      let flushVol = opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      let plan: TransitionPlan | undefined;
+      for (const x of transitionPlugins) plan = x.transition!({ layer: i, from: prev, to: next, flushVolume: flushVol }) ?? plan;
+      if (plan?.flushVolume !== undefined) flushVol = plan.flushVolume;
+      if (plan) ops.push({ k: 'raw', text: `${TRANSITION_MARKER} ${prev}->${next} mode=${plan.skipTower ? 'none' : plan.flushVolume !== undefined ? 'reduced' : 'full'} shift=${(plan.shiftMm ?? 0).toFixed(3)}${plan.regionId ? ` region=${plan.regionId}` : ''}` });
+      if (plan?.label && !hasAms) ops.push({ k: 'raw', text: `M117 Load ${plan.label.replace(/[;\n]/g, ' ')}` });
       const flushLen = (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
       if (!retracted && curTool >= 0) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); }
       ops.push({
@@ -650,7 +684,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       px = NaN; py = NaN;
       const wasFirst = curTool === -1;
       curTool = next;
-      if (towerActive && !wasFirst) { towerOutline(); towerBand(bandsDone++, true); }
+      if (towerActive && !wasFirst && !plan?.skipTower) { towerOutline(); towerBand(bandsDone++, true); }
     };
 
     // --- layer actions (pause / custom G-code / setting change)
@@ -856,7 +890,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         },
       });
     }));
-    pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } });
+    pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
   }
   const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header });
 

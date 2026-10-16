@@ -48,6 +48,12 @@
 | **Tools** | Cut (tilted plane, capped), Mesh boolean (union/difference/intersection), Text (object/emboss/engrave), Measure, Flushing-volume matrix. |
 | **Motionex plugin** | Wall patterns from a library, placed by click, paint, lasso, box, height band, whole object or whole plate. Instant pattern preview on the model in Prepare (patterned walls only, no slicing). Pattern tab: change a placed pattern's wave shape, depth, spacing, layer lead/lag, stacking and advanced curves with live close-ups and the model redrawn as you edit; changes stay on that placement unless saved to the library. Patterns fade into plain walls and cross-fade into each other, close at the seam, line up layer to layer, and inner walls follow the outer wall so the skin stays fused. |
 
+### Plugins
+| Plugin | Features |
+| --- | --- |
+| **Motionex** | Waves, loops, dots and textures on walls, with a print-head collision check. |
+| **Patternex** | SVG or built-in patterns (stripes, checker, dots, hex) projected onto the model (planar or wrapped), a filament per colour region — AMS tool changes or manual swaps — with full / reduced / no purge, a movable change point for deliberate colour bleed, and a pre-export report. See `docs/patternex/`. |
+
 > Not covered yet: H2D dual-nozzle, Creality CFS / Anycubic ACE multi-colour, X1/H2 camera (RTSPS — open the shown URL in VLC). Profiles beyond the original four printers use generic start G-code — check the first print.
 
 > Painting resolution follows the model's triangles; very coarse meshes paint in large facets.

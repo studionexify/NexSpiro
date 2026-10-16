@@ -6,10 +6,11 @@ import type { LayerAction, PartType, SliceOutput } from '../engine/types';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
 import type { Config, ProcessTab } from '../profiles/settings';
+import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
@@ -44,6 +45,8 @@ export interface SceneObject {
   layerHeights?: number[];
   /** false: kept on the plate but left out of slicing. */
   printable?: boolean;
+  /** Patternex artwork on this object (object-local), so undo, project files and object operations carry it. */
+  patternex?: ObjectPatternex;
 }
 
 /** Values found with the Calibration workspace, applied on top of the filament preset. */

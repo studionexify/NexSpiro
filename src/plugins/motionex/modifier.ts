@@ -3,7 +3,7 @@
 // Extrusion itself is recomputed by the core from the real 3D length after all plugins run.
 import { emptyCheck, type Layer, type PrintCheck, type SliceWarning, type Toolpath, type ToolpathPoint } from "./core/types";
 import type { PrintProfiles } from "./core/profiles";
-import { regionWeight, type MotionexRegion, type RegionRegistry } from "./core/regions";
+import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
 import { wallMatches, type MotionApplication, type MotionBrush } from "./model";
@@ -303,14 +303,14 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const seen = new Set<string>();
   const warn = (w: SliceWarning) => { if (!seen.has(w.code)) { seen.add(w.code); warnings.push(w); } };
   const sorted = apps.filter((a) => a.enabled).sort((a, b) => a.order - b.order);
-  interface Prepared { app: MotionApplication; brush: MotionBrush; faces: MotionexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
+  interface Prepared { app: MotionApplication; brush: MotionBrush; faces: PatternexRegion[]; zWeight: (z: number) => number; lockFor: (feature: string) => RepeatLock }
   const prepared: Prepared[] = [];
   for (const app of sorted) {
     const found = app.brush ?? brushes(app.brush_id);
     const k = app.scale ?? 1;
     const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Motion ${app.brush_id} was not found` }); continue; }
-    const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is MotionexRegion => !!r) : [];
+    const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is PatternexRegion => !!r) : [];
     if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A motion is set to picked surfaces but none are picked, so it was skipped" }); continue; }
     if ((brush.z_amplitude ?? 0) > 0 && p.machine.firmware !== "klipper" && !check.notes.includes("slow-z"))
       check.notes.push("slow-z");

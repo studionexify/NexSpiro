@@ -3,8 +3,11 @@
 import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
-import { motionexConfig, MotionexPanel, motionexPreview } from './motionex/ui/MotionexPanel';
+import { motionexConfig, MotionexPanel, motionexPreview, mx } from './motionex/ui/MotionexPanel';
 import { MotionStudio } from './motionex/ui/MotionStudio';
+import { toConfig } from './motionex';
+import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patternex/ui/PatternexPanel';
+import { patternexPreview } from './patternex/ui/preview';
 
 export interface UiPlugin {
   id: string;
@@ -26,9 +29,26 @@ export const PLUGINS: UiPlugin[] = [
     id: 'motionex', name: 'Motionex', badge: 'M',
     description: 'Waves, loops, dots and textures on the walls of your print.',
     Panel: MotionexPanel,
-    sliceConfig: () => motionexConfig(useStore.getState().printerId),
+    sliceConfig: () => {
+      const printerId = useStore.getState().printerId;
+      // Patternex regions that carry a motion become Motionex applications targeting that region
+      const extra = useStore.getState().plugins.includes('patternex') ? patternexMotionApps() : [];
+      const base = motionexConfig(printerId);
+      if (!extra.length) return base;
+      const c = base ?? { ...toConfig(mx, printerId), applications: [] };
+      const have = new Set(c.brushes.map((b) => b.id));
+      const brushes = [...c.brushes, ...extra.map((a) => a.brush_id).filter((id, i, l) => !have.has(id) && l.indexOf(id) === i).map((id) => mx.library.get(id)).filter((b): b is NonNullable<typeof b> => !!b).map((b) => structuredClone(b))];
+      return { ...c, applications: [...c.applications, ...extra], brushes };
+    },
     preview: motionexPreview,
     Studio: MotionStudio,
+  },
+  {
+    id: 'patternex', name: 'Patternex', badge: 'P',
+    description: 'SVG and pattern artwork on the surface, with a filament change (AMS) or a manual swap inside each region.',
+    Panel: PatternexPanel,
+    sliceConfig: () => patternexConfig(),
+    preview: () => patternexPreview(px),
   },
 ];
 

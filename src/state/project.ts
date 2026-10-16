@@ -5,6 +5,7 @@ import { saveFile } from '../platform';
 import { emptyProject, newId, objectMatrix, useStore, type ProjectInfo, type SceneObject } from './store';
 import type { LayerAction } from '../engine/types';
 import type { Config } from '../profiles/settings';
+import type { PatternexProjectData } from '../plugins/patternex/ui/state';
 
 const VERSION = 1;
 
@@ -23,6 +24,8 @@ interface ProjectJson {
   filaments: { presetId: string; color: string }[];
   plates: { id: string; name: string; layerActions: LayerAction[] }[];
   project: ProjectInfo;
+  /** Older projects stored Patternex placements here; they now live on each object. */
+  patternex?: PatternexProjectData;
   objects: (Omit<SceneObject, 'mesh' | 'parts' | 'paint'> & {
     meshIndex: number;
     parts?: { id: string; name: string; type: string; position: number[]; rotation: number[]; scale: number[]; overrides: Config; v: string; i: string }[];
@@ -86,7 +89,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     filaments: s.filaments, plates: s.plates, project,
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
-      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, meshIndex: i,
+      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, patternex: o.patternex, meshIndex: i,
       parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type, position: p.position, rotation: p.rotation, scale: p.scale, overrides: p.overrides, v: f32(p.mesh.vertices), i: u32(p.mesh.indices) })),
       paint: o.paint ? Object.fromEntries(Object.entries(o.paint).filter(([, a]) => a).map(([k, a]) => [k, b64(a as Uint8Array)])) : undefined,
     })),
@@ -132,6 +135,7 @@ export async function loadProject(data: ArrayBuffer) {
   const objects: SceneObject[] = json.objects.map((o) => ({
     id: o.id || newId(), name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges ?? 0,
     filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable,
+    patternex: o.patternex ?? legacyPatternex(json.patternex, o.id),
     mesh: meshes[o.meshIndex],
     parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type as any, position: p.position as any, rotation: p.rotation as any, scale: p.scale as any, overrides: p.overrides ?? {}, mesh: { vertices: toF32(p.v), indices: toU32(p.i) } })),
     paint: o.paint ? Object.fromEntries(Object.entries(o.paint).map(([k, v]) => [k, unb64(v)])) : undefined,
@@ -156,4 +160,13 @@ export async function openProjectDialog() {
     try { await loadProject(f.data); useStore.getState().set({ toast: { kind: 'info', text: `Opened ${f.name}` } }); }
     catch (e: any) { useStore.getState().set({ toast: { kind: 'error', text: `Could not open ${f.name}: ${e?.message ?? e}` } }); }
   } else await importBuffers([f]);
+}
+
+/** Projects saved before placements moved onto objects kept them in one list keyed by object id. */
+function legacyPatternex(d: PatternexProjectData | undefined, objectId: string) {
+  if (!d?.placements?.length) return undefined;
+  const placements = d.placements.filter((p) => p.object_id === objectId);
+  if (!placements.length) return undefined;
+  const ids = new Set(placements.map((p) => p.id));
+  return { placements, actions: (d.actions ?? []).filter((a) => ids.has(a.region_ref.placement_id)), patterns: (d.patterns ?? []).filter((p) => placements.some((q) => q.pattern_id === p.id)) };
 }

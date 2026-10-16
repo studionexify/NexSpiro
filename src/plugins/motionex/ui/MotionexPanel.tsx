@@ -15,6 +15,8 @@ import { profilesFromConfig, type MotionexConfig, type MotionexReport } from '..
 import { brushAt } from '../modifier';
 import type { MotionApplication, MotionBrush, WallChoice } from '../model';
 import type { CollisionMode } from '../core/toolhead';
+import { patternexMotionApps, px } from '../../patternex/ui/PatternexPanel';
+import { regionColor, regionList, regionTriangles } from '../../patternex/ui/preview';
 import { openMotionexEditor } from './motionexEditor';
 import './editor.css';
 
@@ -39,12 +41,21 @@ export function changed(): void {
 export function motionexPreview(): PreviewLines | null {
   const s = useStore.getState();
   const apps: PreviewApp[] = [];
-  for (const a of mx.applications) {
+  // Patternex regions with a motion, plus Motionex motions aimed at a Patternex region
+  const pxOn = s.plugins.includes('patternex');
+  const all = [...mx.applications, ...(pxOn ? patternexMotionApps() : [])];
+  for (const a of all) {
     if (!a.enabled) continue;
     const found = brushOf(a);
     if (!found) continue;
     const k = a.scale ?? 1;
     const brush = k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
+    const region = pxOn && a.target.type === 'faces' ? a.target.faces?.find((f) => f.includes(':')) : undefined;
+    if (region) {
+      const ink = regionColor(px, region) ?? [0.6, 0.6, 0.6];
+      apps.push({ app: a, brush, surface: 0, color: ink, trisByObject: regionTriangles(px, region) });
+      continue;
+    }
     const c = new THREE.Color(SURFACE_COLORS[surfaceOf(a) - 1]);
     apps.push({ app: a, brush, surface: surfaceOf(a), color: [c.r, c.g, c.b] });
   }
@@ -171,7 +182,7 @@ export function MotionexPanel() {
         <span className="mx-badge">M</span>
         <div style={{ flex: 1 }}><div className="mx-title">Motionex</div><div className="mx-sub">Waves, loops and textures on your walls</div></div>
       </div>
-      <LiveToggle />
+      {/* toolpath view toggle lives in the top bar (shared by all plugins) */}
       <section className="mx-card">
         <div className="mx-card-title">Motions<span className="spacer" />
           <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own motions">Edit library…</button>
@@ -192,19 +203,6 @@ export function MotionexPanel() {
   );
 }
 
-function LiveToggle() {
-  const { liveToolpaths, set } = useStore();
-  return (
-    <section className="mx-card mx-live">
-      <label className="row" style={{ gap: 8, margin: 0 }}>
-        <span style={{ flex: 1 }}><b>Show motion path on model</b>
-          <div className="mx-muted" style={{ margin: 0 }}>{liveToolpaths ? 'Quick preview of the motion walls only, updated as you edit. Slice for the exact G-code.' : 'Draws the motion wall lines on the model, instantly, without slicing.'}</div>
-        </span>
-        <button className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-label="Show motion path on model" onClick={() => set({ liveToolpaths: !liveToolpaths })} />
-      </label>
-    </section>
-  );
-}
 
 function coverage(a: MotionApplication, objects: ReturnType<typeof useStore.getState>['objects']): string {
   if (a.target.type === 'body') return 'Whole plate';
@@ -212,6 +210,28 @@ function coverage(a: MotionApplication, objects: ReturnType<typeof useStore.getS
   if (!c.tris) return 'Nowhere yet — choose where below';
   const whole = objects.filter((o) => o.paint?.motion?.length && o.paint.motion.every((v) => v === surfaceOf(a))).length;
   return whole === c.objects ? `${whole} whole object${whole > 1 ? 's' : ''}` : `${c.tris} faces on ${c.objects} object${c.objects > 1 ? 's' : ''}`;
+}
+
+/** Aim the motion at a Patternex artwork region (Patternex owns the region; Motionex moves only the walls inside it). */
+function ArtworkTarget({ a }: { a: MotionApplication }) {
+  const { plugins, objects } = useStore();
+  void objects; // re-render when placements change
+  if (!plugins.includes('patternex')) return null;
+  const regions = regionList(px);
+  if (!regions.length) return null;
+  const cur = a.target.type === 'faces' ? a.target.faces?.find((f) => f.includes(':')) ?? '' : '';
+  return (
+    <label className="mx-field">Or on Patternex artwork
+      <select className="select" value={cur} onChange={(e) => {
+        if (e.target.value) { a.target = { ...a.target, type: 'faces', faces: [e.target.value] }; useStore.getState().set({ tool: 'select' }); }
+        else toFaces(a);
+        changed();
+      }}>
+        <option value="">— picked faces —</option>
+        {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+    </label>
+  );
 }
 
 function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number; active: boolean; onChange: () => void }) {
@@ -337,6 +357,7 @@ function Placement({ a }: { a: MotionApplication }) {
           </button>
         ))}
       </div>
+      <ArtworkTarget a={a} />
       {info && <p className="mx-muted" style={{ margin: 0 }}>{info.hint}{current === 'band_motion' ? ' Shift + drag goes back to full height.' : current === 'lasso_motion' ? ' Shift + drag takes it off.' : current !== 'plate' && current !== 'object_motion' ? ' Shift + drag or a right click takes it off.' : ''}{current === 'lasso_motion' ? ' Right or middle drag pans; wheel zooms; press Done to rotate again.' : current !== 'plate' ? ' Drag off the model to rotate; right or middle drag pans; wheel zooms.' : ''}</p>}
       {current === 'pick_motion' && (
         <label className="mx-field">Spread over edges up to {motionGrowAngle}°

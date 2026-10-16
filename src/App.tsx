@@ -64,7 +64,7 @@ function FileMenu() {
 }
 
 function TopBar() {
-  const { workspace, set, theme, undo, redo, undoStack, redoStack } = useStore();
+  const { workspace, set, theme, undo, redo, undoStack, redoStack, liveToolpaths } = useStore();
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
@@ -81,6 +81,13 @@ function TopBar() {
         ))}
       </nav>
       <span className="spacer" />
+      {(workspace === 'prepare' || workspace === 'motion') && (
+        <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
+          title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
+          onClick={() => set({ liveToolpaths: !liveToolpaths })}>
+          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" />Toolpath view
+        </button>
+      )}
       <PluginsButton />
       <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
