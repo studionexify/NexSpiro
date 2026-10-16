@@ -387,3 +387,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mx-check span { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 11px; flex: none; }
 .mx-check .ok { background: var(--accent-tint); color: var(--accent); }
 .mx-check .bad { background: color-mix(in srgb, var(--warning) 25%, transparent); color: var(--warning); }
+
+/* ---------- Patternex panel (reuses the Motionex card styles) */
+.px-row { display: flex; align-items: center; gap: 6px; flex-direction: row; }
+.px-row .input { flex: 1; min-width: 0; }
+.px-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle; flex: none; }
+.px-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--warning); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+.px-warn { color: var(--warning); }
+.px-check { flex-direction: row; align-items: center; gap: 6px; }
+.px-place { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: var(--surface-primary); }
+.px-place.on { border-color: var(--accent); background: var(--accent-tint); }
+.px-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.px-region { border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--surface-primary); }
+.px-region .select { min-width: 0; }
+.px-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.px-table th, .px-table td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--border); }
+.px-table tbody tr { cursor: pointer; }
+.px-table tbody tr:hover { background: var(--surface-hover); }
+.btn-small.on { border-color: var(--accent); background: var(--accent-tint); }

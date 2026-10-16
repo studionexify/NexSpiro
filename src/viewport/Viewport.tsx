@@ -12,6 +12,8 @@ import {
 } from '../state/store';
 import { layOnFace } from '../state/ops';
 import { ToolpathView } from './toolpaths';
+import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
+import type { PatternexReport } from '../plugins/patternex/engine';
 
 export interface ViewApi { setView: (v: 'iso' | 'top' | 'front' | 'left' | 'right' | 'back') => void; fit: () => void }
 export const viewApi: { current: ViewApi | null } = { current: null };
@@ -189,6 +191,11 @@ export function Viewport() {
     scene.add(selBoxes);
     const toolpaths = new ToolpathView();
     scene.add(toolpaths.group);
+    // Patternex: placement outlines (prepare) and region/bleed/swap overlays (preview)
+    const pxPrep = new THREE.Group();
+    scene.add(pxPrep);
+    const pxPrev = new THREE.Group();
+    scene.add(pxPrev);
     const brush = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#FF5C8D', side: THREE.DoubleSide, depthTest: false, transparent: true }));
     brush.renderOrder = 10;
     brush.visible = false;
@@ -347,7 +354,8 @@ export function Viewport() {
         e.mesh.updateMatrixWorld();
         selBoxes.add(new THREE.BoxHelper(e.mesh, s.theme === 'dark' ? '#E9D8C8' : '#142030'));
       }
-      controls.mouseButtons = isPaintTool(s.tool) ? paintButtons : normalButtons;
+      controls.mouseButtons = isPaintTool(s.tool) || s.tool === 'place_pattern' ? paintButtons : normalButtons;
+      syncPatternex();
       if (!isPaintTool(s.tool)) brush.visible = false;
       syncGizmo();
       invalidate();
@@ -504,6 +512,14 @@ export function Viewport() {
     const onDown = (ev: PointerEvent) => {
       downAt = [ev.clientX, ev.clientY];
       const s = useStore.getState();
+      if (s.tool === 'place_pattern' && s.workspace === 'prepare' && ev.button === 0) {
+        ray.setFromCamera(ndc(ev), camera);
+        const hit = ray.intersectObjects(objectMeshes(), false)[0];
+        if (hit?.face && hit.faceIndex != null && placeDown(hit.object.userData.id, hit.point, hit.face.normal.clone().transformDirection(hit.object.matrixWorld), hit.faceIndex)) {
+          renderer.domElement.setPointerCapture(ev.pointerId);
+        }
+        return;
+      }
       if (!isPaintTool(s.tool) || s.workspace !== 'prepare' || ev.button === 1) return;
       ray.setFromCamera(ndc(ev), camera);
       const hit = ray.intersectObjects(objectMeshes(), false)[0];
@@ -534,9 +550,17 @@ export function Viewport() {
     };
     const onMove = (ev: PointerEvent) => {
       const s = useStore.getState();
+      if (placeDragging()) {
+        ray.setFromCamera(ndc(ev), camera);
+        const hit = ray.intersectObjects(objectMeshes(), false)[0];
+        if (hit?.face && hit.faceIndex != null) placeMove(hit.object.userData.id, hit.point, hit.face.normal.clone().transformDirection(hit.object.matrixWorld), hit.faceIndex);
+        return;
+      }
       if (isPaintTool(s.tool) && s.workspace === 'prepare') paintAt(ev);
     };
     const onUp = (ev: PointerEvent) => {
+      if (placeUp()) { downAt = null; return; }
+      if (useStore.getState().tool === 'place_pattern') { downAt = null; return; }
       if (painting) {
         painting = null;
         const s = useStore.getState();
@@ -612,9 +636,25 @@ export function Viewport() {
         toolpaths.setRange(s.layerRange[0], s.layerRange[1], s.moveCursor);
         toolpaths.showTravel(s.showTravel);
       }
+      pxPrev.visible = preview;
+      if (preview) {
+        const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
+        pxPrev.position.set(ox, oy, 0);
+        const r = s.slice.result;
+        syncPreviewOverlay(pxPrev, r?.pluginReports?.patternex as PatternexReport | undefined, s.layerRange, r ? r.layers.map((l) => l.z) : [], s.filaments.map((f) => f.color));
+      }
       syncGizmo();
       invalidate();
     };
+
+    function syncPatternex() {
+      const s = useStore.getState();
+      pxPrep.visible = s.workspace === 'prepare' && s.plugins.includes('patternex');
+      if (pxPrep.visible) syncPlacementOverlay(pxPrep, s.objects);
+      invalidate();
+    }
+    const onPatternex = () => { syncPatternex(); if (useStore.getState().workspace === 'preview') syncPreview(); };
+    window.addEventListener('nx-patternex', onPatternex);
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -657,6 +697,7 @@ export function Viewport() {
 
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener('nx-patternex', onPatternex);
       unsub();
       ro.disconnect();
       gizmo.dispose();

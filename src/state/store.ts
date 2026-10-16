@@ -9,7 +9,7 @@ import type { Config, ProcessTab } from '../profiles/settings';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
