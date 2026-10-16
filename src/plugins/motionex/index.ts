@@ -1,7 +1,7 @@
 // Motionex plugin entry: owns the pattern library, the list of applied patterns and the print-head
 // settings, and plugs into the post-toolpath hook. The collision check runs after all patterns.
 import type { NexPlugin } from "../../core/plugins.ts";
-import { checkCollisions, defaultToolhead, type CollisionMode, type ToolheadProfile } from "../../core/toolhead.ts";
+import { checkCollisions, defaultToolhead, limitZSpeed, type CollisionMode, type ToolheadProfile } from "../../core/toolhead.ts";
 import { applyMotion, DEFAULT_OPTIONS, type ModifierOptions } from "./modifier.ts";
 import { BrushLibrary, type KeyValueStore } from "./library.ts";
 import type { MotionApplication } from "./model.ts";
@@ -44,7 +44,10 @@ export function createMotionex(store: KeyValueStore | null): { plugin: NexPlugin
       ctx.warnings.push(...r.warnings);
       // Collision pass (spec §3.4): mandatory whenever any point moves up or down.
       const moved = r.layers.some((l) => l.paths.some((p) => p.points.some((q) => q.zOff)));
-      if (moved) checkCollisions(r.layers, state.toolheads.get(ctx.profiles.machine.id), ctx.profiles.machine.bed, state.collisionMode, ctx.check, (w) => ctx.warnings.push(w));
+      if (moved) {
+        checkCollisions(r.layers, state.toolheads.get(ctx.profiles.machine.id), ctx.profiles.machine.bed, state.collisionMode, ctx.check, (w) => ctx.warnings.push(w));
+        ctx.check.zSpeedHits += limitZSpeed(r.layers, ctx.profiles.machine.maxSpeed.z);
+      }
       return r.layers;
     },
     gcodeHeader() {

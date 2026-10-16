@@ -1,7 +1,7 @@
 // Motionex brush editor window: library, curve editor, live 2D preview, parameters.
 import { h, numInput, select, download, pickFile } from "./dom.ts";
 import { CurveEditor } from "./curveEditor.ts";
-import { CURVE_INFO, CURVE_KEYS, type CurveKey, type MotionBrush, type Interpolation, type RepeatMode, type LayerMode } from "../plugins/motionex/model.ts";
+import { CURVE_INFO, CURVE_KEYS, type CurveKey, type MotionBrush, type Interpolation, type RepeatMode, type LayerMode, type EventType, type MotionEvent } from "../plugins/motionex/model.ts";
 import { applyBrushToPath, brushAt } from "../plugins/motionex/modifier.ts";
 import { parseBrush, serializeBrush } from "../plugins/motionex/library.ts";
 import type { MotionexState } from "../plugins/motionex/index.ts";
@@ -122,6 +122,7 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
       row("Wave height (mm)", numInput(brush.amplitude, (v) => { brush.amplitude = Math.max(0, v); touch(); }, { min: 0, step: 0.05 })),
       row("Wave length (mm)", numInput(brush.period_mm, (v) => { brush.period_mm = Math.max(0.2, v); touch(); }, { min: 0.2, step: 0.1 })),
       row("Start shift (°)", numInput(brush.phase_deg, (v) => { brush.phase_deg = ((v % 360) + 360) % 360; touch(); }, { step: 15 })),
+      row("Up-and-down height (mm)", numInput(brush.z_amplitude ?? 0, (v) => { brush.z_amplitude = Math.min(5, Math.max(0, v)); touch(); }, { min: 0, step: 0.1, title: "How far the nozzle moves up and down. Shape it on the Up and down tab." })),
       row("Repeat", select<RepeatMode>(brush.repeat_mode, [["tile", "All the way round"], ["once", "Only once"], ["stretch", "Fit evenly (no seam)"]], (v) => { brush.repeat_mode = v; touch(); })),
       h("div.section", null, "Plastic limits"),
       row("Least plastic", numInput(brush.limits.min_flow_mult, (v) => { brush.limits.min_flow_mult = v; touch(); }, { step: 0.05 })),
@@ -151,11 +152,34 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
       brush.layers && brush.layers.band_on > 0 ? row("then plain for … layers", numInput(brush.layers.band_off, (v) => { brush.layers!.band_off = Math.max(0, Math.round(v)); touch(); }, { min: 0, step: 1 })) : null,
       brush.layers && brush.layers.mode !== "alternate" ? h("label.inline", null, h<"input">("input", { type: "checkbox", checked: !!brush.layers.cross, onchange: (e: Event) => { brush.layers!.cross = (e.target as HTMLInputElement).checked; touch(); } }), "Slant both ways (makes diamonds and cells)") : null,
       h("div.muted", null, "Shifting the pattern a little each layer makes twists, diamonds, bricks and honeycombs. On/off makes rings and stripes."),
-      h("div.section", null, "Pauses and blobs"),
-      h("div.muted", null, "Coming soon: pause the nozzle, add a blob, or lift off at chosen spots."),
+      h("div.section", null, "Pauses, blobs and lift-offs"),
+      ...brush.events.map((e, i) => eventRow(e, i)),
+      h("div", null, ...([["dwell", "+ Pause"], ["flow_change", "+ Plastic change"], ["retract", "+ Lift-off"]] as [EventType, string][]).map(([t, l]) =>
+        h("button.sm", { style: "margin:2px", onclick: () => { brush.events.push(newEvent(t)); renderSide(); touch(); } }, l))),
+      h("div.muted", null, "Each one happens at its spot in every repeat (or only once). Pause can push out a blob for dots and pearls; lift-off stops printing for a short jump."),
       h("div.section", null, "About"),
       h("div.muted", null, `${brush.category ?? "My patterns"} · version ${brush.version}${mx.library.isPreset(brush.id) ? " · built-in (saving keeps your own copy)" : ""}`),
     ));
+  }
+
+  function newEvent(t: EventType): MotionEvent {
+    return t === "dwell" ? { at: { mode: "percent", value: 50 }, type: t, params: { ms: 300, blob_mm3: 0 } }
+      : t === "flow_change" ? { at: { mode: "percent", value: 50 }, type: t, params: { mult: 1.3 } }
+      : { at: { mode: "percent", value: 50 }, type: t, params: { length: 0, travel_mm: 1 } };
+  }
+
+  function eventRow(e: MotionEvent, i: number): HTMLElement {
+    const label = { dwell: "Pause", flow_change: "Plastic change", retract: "Lift-off" }[e.type];
+    const p = (key: string, text: string, step: number, title = "") => h("label.muted", { title }, text, numInput(e.params[key] ?? 0, (v) => { e.params[key] = Math.max(0, v); touch(); }, { min: 0, step }));
+    return h("div.app", null,
+      h("div.app-top", null, h("strong", { style: "flex:1" }, label),
+        h("label.inline.muted", null, h<"input">("input", { type: "checkbox", checked: !!e.once, onchange: (ev: Event) => { e.once = (ev.target as HTMLInputElement).checked; touch(); } }), "only once"),
+        h("button.ghost.sm", { title: "Remove", onclick: () => { brush.events.splice(i, 1); renderSide(); touch(); } }, "✕")),
+      h("div.row.three", null,
+        h("label.muted", null, "At (% of repeat)", numInput(e.at.mode === "percent" ? e.at.value : 0, (v) => { e.at = { mode: "percent", value: Math.min(100, Math.max(0, v)) }; touch(); }, { min: 0, max: 100, step: 5 })),
+        ...(e.type === "dwell" ? [p("ms", "Pause (ms)", 50), p("blob_mm3", "Blob size (mm³)", 0.5, "0 = no blob")]
+          : e.type === "flow_change" ? [h("label.muted", null, "Plastic (1 = normal)", numInput(e.params.mult ?? 1, (v) => { e.params.mult = Math.max(0, v); touch(); }, { min: 0, step: 0.1 })), h("span")]
+          : [p("travel_mm", "Jump (mm)", 0.5), p("length", "Pull back (mm)", 0.1, "0 = use print settings")])));
   }
 
   function drawPreview(): void {
@@ -176,12 +200,18 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
     const bead = p.process.lineWidth * sy;
     for (let i = 1; i < out.points.length; i++) {
       const a = out.points[i - 1], b = out.points[i];
+      if (b.travel) { g.strokeStyle = "#cfd5dd"; g.lineWidth = 1; g.beginPath(); g.moveTo(X(a.x), Y(a.y)); g.lineTo(X(b.x), Y(b.y)); g.stroke(); continue; }
       g.strokeStyle = `hsl(${(1 - Math.min(1, Math.max(0, (b.flow - 0.5) / 1.1))) * 240},75%,52%)`;
       g.lineWidth = Math.max(1.5, Math.min(14, bead * b.flow)); g.lineCap = "round";
       g.beginPath(); g.moveTo(X(a.x), Y(a.y)); g.lineTo(X(b.x), Y(b.y)); g.stroke();
     }
     g.fillStyle = "#8a93a0"; g.font = "11px Inter, system-ui";
     g.fillText("plain wall", X(0), Y(0) - 6 - brush.amplitude * sy);
+    // Event markers: pauses as dots, lift-offs as gaps already drawn grey, plastic changes as ticks.
+    for (const q of out.points) {
+      if (q.post?.dwell_ms) { g.fillStyle = "#e5484d"; g.beginPath(); g.arc(X(q.x), Y(q.y), Math.max(3, Math.min(9, 3 + (q.post.blob_mm ?? 0) * 6)), 0, Math.PI * 2); g.fill(); }
+      if (q.post?.retract_mm) { g.fillStyle = "#2b6cb0"; g.fillRect(X(q.x) - 1, Y(q.y) - 10, 2, 20); }
+    }
     g.fillText("10 mm", X(L - 10), H - 8); g.strokeStyle = "#8a93a0"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(X(L - 10), H - 18); g.lineTo(X(L), H - 18); g.stroke();
     drawWall();

@@ -1,6 +1,6 @@
 // Built-in pattern library. Every pattern is a shape function over one repeat (u = 0..1),
 // turned into editable curves, then offered in several sizes.
-import { flatCurve, pt, type Curve, type CurveKey, type LayerEffect, type LayerMode, type MotionBrush, type NoiseSettings } from "./model.ts";
+import { flatCurve, pt, type Curve, type CurveKey, type LayerEffect, type LayerMode, type MotionBrush, type MotionEvent, type NoiseSettings } from "./model.ts";
 
 type Fn = (u: number) => number;
 const TAU = 2 * Math.PI;
@@ -54,6 +54,9 @@ interface Shape {
   amp?: number; period?: number; noise?: Partial<NoiseSettings>;
   limits?: [number, number];
   layers?: LayerEffect;
+  /** Up-and-down curve and its height in mm. */
+  zc?: Curve; zamp?: number;
+  events?: MotionEvent[];
   /** Fit a whole number of repeats around each wall so vertical patterns line up. */
   fit?: boolean;
 }
@@ -236,7 +239,36 @@ const SHAPES: Shape[] = [
   { key: "orange-peel", name: "Orange peel", desc: "Soft dimpled skin", cat: S, lat: smooth((u) => -bump(u), 24), layers: lay(97, "steady", 2), amp: 0.2, period: 1.4 },
   { key: "concrete", name: "Concrete", desc: "Grainy cast surface with pits", cat: S, amp: 0.3, period: 2.5, noise: { seed: 1001, scale: 1, octaves: 5, persistence: 0.45 } },
   ...mathShapes(),
+  ...motionShapes(),
 ];
+
+/** Patterns that use up-and-down movement, pauses, blobs and lift-offs. */
+function motionShapes(): Shape[] {
+  const U = "Up & down", E = "Dots, stitches & jumps";
+  const pause = (pct: number, ms: number, blob = 0): MotionEvent => ({ at: { mode: "percent", value: pct }, type: "dwell", params: { ms, blob_mm3: blob } });
+  const lift = (pct: number, jump: number): MotionEvent => ({ at: { mode: "percent", value: pct }, type: "retract", params: { length: 0, travel_mm: jump } });
+  const plastic = (pct: number, mult: number): MotionEvent => ({ at: { mode: "percent", value: pct }, type: "flow_change", params: { mult } });
+  return [
+    { key: "z-wave", name: "Rolling top", desc: "The nozzle rises and falls along the wall, like waves on a rim", cat: U, zc: smooth((u) => (1 - Math.cos(TAU * u)) / 2), zamp: 0.6, amp: 0, period: 12, fit: true },
+    { key: "z-ripple", name: "Up-down ripple", desc: "Small fast up-and-down ripples", cat: U, zc: smooth((u) => (1 - Math.cos(TAU * u)) / 2), zamp: 0.25, amp: 0, period: 3, fit: true },
+    { key: "z-scallop", name: "Scalloped rim", desc: "Rounded humps along the top edge", cat: U, zc: smooth((u) => bump(u) * 0.5 + 0.5, 24), zamp: 0.8, amp: 0, period: 10, fit: true },
+    { key: "z-crenel", name: "Crenellated rim", desc: "Castle-top steps up and down", cat: U, zc: smooth((u) => (softSquare(4)(u) + 1) / 2, 32), zamp: 0.6, amp: 0, period: 10, fit: true },
+    { key: "z-hammer", name: "Bumpy layers", desc: "Little rises along each layer for a hand-made look", cat: U, zc: smooth((u) => (1.6 + 0.6 * sine(u) + 0.4 * Math.sin(TAU * 3 * u + 1)) / 3.2, 32), zamp: 0.3, amp: 0.2, period: 6, noise: { seed: 17, scale: 0.3, octaves: 2, persistence: 0.5 } },
+    { key: "z-wave-side", name: "3D wave", desc: "Goes in and out and up and down together", cat: U, lat: smooth(sine), zc: smooth((u) => (1 + cosine(u)) / 2), zamp: 0.35, amp: 0.6, period: 6, fit: true },
+    { key: "z-corkscrew", name: "Corkscrew", desc: "Spirals round the wall, in, up, out and down", cat: U, lat: smooth(sine), zc: smooth((u) => (1 + cosine(u)) / 2), zamp: 0.3, amp: 0.5, period: 4, layers: lay(10, "steady"), fit: true },
+    { key: "brick-lock", name: "Interlock", desc: "Every other stretch is lifted half a layer for stronger walls", cat: U, zc: jumps([[0, 0], [0.5, 1]]), zamp: 0.1, amp: 0, period: 10, layers: lay(180, "alternate"), fit: true },
+    { key: "layer-stitch", name: "Stitched layers", desc: "Short dips into the layer below to sew layers together", cat: E, zc: sharp((u) => (Math.abs(u - 0.5) < 0.06 ? -(1 - Math.abs(u - 0.5) / 0.06) : 0), 96), zamp: 0.15, amp: 0, period: 8, layers: lay(180, "alternate"), fit: true },
+    { key: "dots", name: "Dots", desc: "A little blob at every stop", cat: E, amp: 0, period: 3, events: [pause(0, 250, 1.5)] },
+    { key: "big-dots", name: "Big dots", desc: "Bigger, well-spaced blobs", cat: E, amp: 0, period: 6, events: [pause(0, 400, 4)] },
+    { key: "pearls", name: "Pearls on a string", desc: "Thin line with round pearls", cat: E, amp: 0, period: 4, flow: flatCurve(0.7), events: [pause(50, 300, 2.5)], limits: [0.5, 1.4] },
+    { key: "stipple", name: "Stipple", desc: "Separate dots with a jump between each", cat: E, amp: 0, period: 3, events: [pause(0, 200, 1.2), lift(10, 2.4)] },
+    { key: "dashed", name: "Dashed jumps", desc: "Printed dashes with small gaps", cat: E, amp: 0, period: 4, events: [lift(60, 1.4)] },
+    { key: "morse-dots", name: "Dot and dash", desc: "Blobs and short dashes taking turns", cat: E, amp: 0, period: 6, events: [pause(0, 250, 1.5), lift(25, 1), lift(75, 0.8)] },
+    { key: "thick-thin-steps", name: "Thick then thin", desc: "Half of each repeat thick, half thin", cat: E, amp: 0, period: 6, events: [plastic(0, 1.35), plastic(50, 0.7)] },
+    { key: "wave-dots", name: "Wave with dots", desc: "Wave with a blob on every crest", cat: E, lat: smooth(sine), amp: 0.6, period: 5, events: [pause(25, 250, 1.2)] },
+    { key: "pause-cool", name: "Cool-down pauses", desc: "Short pauses that let fine details set", cat: E, amp: 0, period: 15, events: [pause(0, 600)] },
+  ];
+}
 
 /** Geometric figures drawn by moving side-to-side and forward-and-back at once (the nozzle still moves forward overall). */
 function mathShapes(): Shape[] {
@@ -273,14 +305,14 @@ function mathShapes(): Shape[] {
 
 function build(s: Shape): MotionBrush {
   const curves: Record<CurveKey, Curve> = {
-    lateral_offset: s.lat ?? flatCurve(0), along_offset: s.along ?? flatCurve(0), z_offset: flatCurve(0),
+    lateral_offset: s.lat ?? flatCurve(0), along_offset: s.along ?? flatCurve(0), z_offset: s.zc ?? flatCurve(0),
     extrusion_mult: s.flow ?? flatCurve(1), speed_mult: s.speed ?? flatCurve(1),
   };
   const noise = s.noise ? { enabled: true, type: "value" as const, seed: 1, scale: 1, octaves: 3, persistence: 0.5, ...s.noise } : null;
   return {
     id: `preset-${s.key}`, name: s.name, version: 1,
     amplitude: s.amp ?? 0.6, period_mm: s.period ?? 4, phase_deg: 0, repeat_mode: s.fit ? "stretch" : "tile",
-    curves, events: [], noise,
+    curves, events: structuredClone(s.events ?? []), noise, z_amplitude: s.zamp ?? 0,
     limits: { min_flow_mult: s.limits?.[0] ?? 0.5, max_flow_mult: s.limits?.[1] ?? 1.6 },
     layers: s.layers ?? null,
     tags: ["preset"], category: s.cat, description: s.desc,

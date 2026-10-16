@@ -46,7 +46,9 @@ input[type=range] { padding: 0; }
 .app-top { display: flex; gap: 6px; align-items: center; }
 #stats { position: absolute; left: 12px; bottom: 12px; background: rgba(255,255,255,.92); border-radius: 9px; padding: 8px 12px; box-shadow: var(--shadow); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; max-width: calc(100% - 24px); }
 #stats:empty { display: none; }
-#viewTools { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; z-index: 2; }
+#viewTools { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 2; pointer-events: none; }
+#viewTools > * { pointer-events: auto; }
+#viewTools .legend { white-space: nowrap; }
 #viewTools .seg { display: flex; background: var(--panel); border-radius: 8px; box-shadow: var(--shadow); padding: 3px; gap: 2px; }
 #viewTools .seg button { border: 0; padding: 4px 10px; }
 #viewTools .seg button.on { background: var(--accent-2); color: var(--accent); font-weight: 600; }
@@ -107,3 +109,8 @@ body { position: fixed; inset: 0; } /* fills the window even when embedded in an
 .lib-group summary::-webkit-details-marker { display: none; }
 .lib-group summary::after { content: "▸"; } .lib-group[open] summary::after { content: "▾"; }
 .wdesc { color: var(--muted); font-size: 12px; }
+.check { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.check .ok, .check .bad { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.check .ok { background: var(--accent-2); color: var(--accent); }
+.check .bad { background: #fdecc8; color: var(--warn); }
+details > summary.muted { list-style: none; }

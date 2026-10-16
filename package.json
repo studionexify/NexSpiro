@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts"
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "testprints": "node --experimental-strip-types --no-warnings scripts/testprints.ts"
   },
   "engines": {
     "node": ">=22.6"

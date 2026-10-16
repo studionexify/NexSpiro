@@ -80,7 +80,8 @@ test("height map remembers the tallest plastic and the cone floor rises near it"
   assert.equal(m.maxIn(9, 9, 11, 11), 4);
   assert.equal(m.maxIn(20, 20, 30, 30), 0);
   const floor = m.coneFloor(11, 10, 0.5, 3, Math.tan((40 * Math.PI) / 180));
-  assert.ok(Math.abs(floor - (4 - 0.5 / Math.tan((40 * Math.PI) / 180))) < 1e-6);
+  // d = 1 from the tip centre, tip radius 0.5, half a 0.5 mm cell of contact allowance
+  assert.ok(Math.abs(floor - (4 - 0.25 / Math.tan((40 * Math.PI) / 180))) < 1e-6);
 });
 
 const tallThenDip = (): Layer[] => {
@@ -94,7 +95,7 @@ test("collision: nozzle dipping next to a tall bump is caught; clamp lifts it cl
   const L = tallThenDip();
   checkCollisions(L, coneOnly, { x: 100, y: 100 }, "clamp", check, (w) => warns.push(w.code));
   assert.ok(check.collisionCount >= 15, `found ${check.collisionCount}`);
-  const need = 4 - 0.5 / Math.tan((40 * Math.PI) / 180);
+  const need = 4 - 0.25 / Math.tan((40 * Math.PI) / 180);
   assert.ok(L[0].paths[1].points.slice(2, -2).every((q) => q.z >= need - 1e-3 && q.flag === "collision"));
   assert.deepEqual(warns, ["collision_fixed"]);
   assert.equal(check.blocking, false);

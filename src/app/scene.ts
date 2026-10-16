@@ -5,13 +5,17 @@ import type { MachineProfile } from "../core/profiles.ts";
 import { contourAt, type SceneObject } from "../core/primitives.ts";
 import type { Layer } from "../core/types.ts";
 
-export type ColorMode = "feature" | "speed" | "flow";
+export type ColorMode = "feature" | "speed" | "flow" | "updown" | "problems";
+export type ViewMode = "3d" | "front" | "side";
 
 export class Viewport {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
+  private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 5000);
+  private orthoControls: OrbitControls;
+  private mode: ViewMode = "3d";
   private plate = new THREE.Group();
   private objects = new THREE.Group();
   private paths = new THREE.Group();
@@ -28,13 +32,16 @@ export class Viewport {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.addEventListener("start", () => { this.userMoved = true; });
+    this.ortho.up.set(0, 0, 1);
+    this.orthoControls = new OrbitControls(this.ortho, this.renderer.domElement);
+    this.orthoControls.enableRotate = false; this.orthoControls.enabled = false; this.orthoControls.screenSpacePanning = true;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8890a0, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(200, -300, 500); this.scene.add(sun);
     this.scene.add(this.plate, this.objects, this.paths);
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
     this.renderer.domElement.addEventListener("pointerdown", (e) => this.pick(e));
-    const loop = () => { this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
+    const loop = () => { const ortho = this.mode !== "3d"; (ortho ? this.orthoControls : this.controls).update(); this.renderer.render(this.scene, ortho ? this.ortho : this.camera); requestAnimationFrame(loop); };
     loop();
   }
 
@@ -46,6 +53,23 @@ export class Viewport {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h); this.camera.updateProjectionMatrix();
     if (!this.userMoved) this.frame();
+    if (this.mode !== "3d") this.setView(this.mode);
+  }
+
+  /** Flat front or side view (no perspective) shows the wall profile; 3D turns freely. */
+  setView(mode: ViewMode): void {
+    this.mode = mode;
+    this.controls.enabled = mode === "3d"; this.orthoControls.enabled = mode !== "3d";
+    if (mode === "3d" || !this.bed) return;
+    const box = new THREE.Box3().setFromObject(this.paths.children.length ? this.paths : this.objects);
+    if (box.isEmpty()) box.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(this.bed.x, this.bed.y, 50));
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const aspect = this.camera.aspect, wide = mode === "front" ? size.x : size.y;
+    const half = Math.max(size.z * 0.6, (wide * 0.6) / aspect, 10);
+    Object.assign(this.ortho, { left: -half * aspect, right: half * aspect, top: half, bottom: -half, zoom: 1 });
+    this.ortho.position.set(mode === "side" ? c.x + 1000 : c.x, mode === "front" ? c.y - 1000 : c.y, c.z);
+    this.orthoControls.target.copy(c);
+    this.ortho.lookAt(c); this.ortho.updateProjectionMatrix();
   }
 
   /** Point the camera at the whole plate; on tall, narrow screens step back so the plate still fits. */
@@ -113,15 +137,20 @@ export class Viewport {
     if (!layers) return;
     const pos: number[] = [], col: number[] = [];
     let fLo = Infinity, fHi = -Infinity;
-    for (const l of layers) for (const p of l.paths) for (const q of p.points) { fLo = Math.min(fLo, q.f); fHi = Math.max(fHi, q.f); }
+    let zSpan = 1e-6;
+    for (const l of layers) for (const p of l.paths) for (const q of p.points) { fLo = Math.min(fLo, q.f); fHi = Math.max(fHi, q.f); zSpan = Math.max(zSpan, Math.abs(q.zOff ?? 0)); }
     const c = new THREE.Color();
     for (const l of layers) {
       if (l.index > maxLayer) break;
       for (const p of l.paths) for (let i = 1; i < p.points.length; i++) {
         const a = p.points[i - 1], b = p.points[i];
         pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
-        if (mode === "feature") c.set(p.feature === "outer_wall" ? (p.modifiedBy ? 0x8b5cf6 : 0xf97316) : 0xfacc15);
+        if (b.travel) c.set(0xd1d5db);
+        else if (mode === "problems") c.set(b.flag === "collision" ? 0xe5484d : b.flag === "loop" ? 0xf59e0b : 0x9aa3ae);
+        else if (b.flag === "collision") c.set(0xe5484d);
+        else if (mode === "feature") c.set(p.feature === "outer_wall" ? (p.modifiedBy ? 0x8b5cf6 : 0xf97316) : 0xfacc15);
         else if (mode === "speed") ramp(c, (b.f - fLo) / Math.max(1e-9, fHi - fLo));
+        else if (mode === "updown") ramp(c, 0.5 + (b.zOff ?? 0) / (2 * zSpan));
         else ramp(c, (b.flow - 0.5) / 1.1);
         col.push(c.r, c.g, c.b, c.r, c.g, c.b);
       }

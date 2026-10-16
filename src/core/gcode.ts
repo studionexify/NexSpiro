@@ -20,6 +20,7 @@ export function emitGcode(layers: Layer[], p: PrintProfiles, header: string[] = 
       out.push(`G1 Z${fmt(s.z, 3)} F${fmt(machine.maxSpeed.z * 60, 0)}`);
       out.push(`G0 X${fmt(s.x, 3)} Y${fmt(s.y, 3)} F${fmt(process.travelSpeed * 60, 0)}`);
       let lastF = -1, lastZ = s.z;
+      if (s.post) { out.push(...postLines(s.post, p)); filamentUsed += (s.post.blob_mm ?? 0) + (s.post.unretract_mm ?? 0) - (s.post.retract_mm ?? 0); }
       for (let i = 1; i < path.points.length; i++) {
         const q = path.points[i];
         let line = `${q.travel ? "G0" : "G1"} X${fmt(q.x, 3)} Y${fmt(q.y, 3)}`;

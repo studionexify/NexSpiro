@@ -105,8 +105,9 @@ export class HeightMap {
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
       const hh = this.h[j * this.nx + i]; if (hh <= 0) continue;
       const d = Math.hypot(i * this.cell - x, j * this.cell - y);
-      if (d > R || d < rTip) continue; // directly under the tip is the bead being printed onto
-      floor = Math.max(floor, hh - (d - rTip) / tanA);
+      // Directly under the tip (within half a map cell of its edge) is the bead being printed onto.
+      if (d > R || d < rTip + this.cell / 2) continue;
+      floor = Math.max(floor, hh - (d - rTip - this.cell / 2) / tanA);
     }
     return floor;
   }
@@ -132,7 +133,9 @@ export function checkCollisions(layers: Layer[], head: ToolheadProfile, bed: { x
       const nominal = layer.z;
       if (Math.abs(p.z - nominal) < 1e-6) continue; // flat moves are safe by construction
       let floor = p.z < head.margin ? head.margin : 0; // bed
-      floor = Math.max(floor, map.coneFloor(p.x, p.y, rTip, head.nozzle.tip_len, tanA) + head.margin);
+      // The nozzle cone is compared directly with the plastic (it normally rides one layer above it);
+      // the safety gap is kept for the bigger parts of the head.
+      floor = Math.max(floor, map.coneFloor(p.x, p.y, rTip, head.nozzle.tip_len, tanA));
       for (const v of head.volumes) {
         const cx = p.x + v.offset[0], cy = p.y + v.offset[1];
         const hx = v.shape === "box" ? v.dims[0] / 2 : v.dims[0], hy = v.shape === "box" ? v.dims[1] / 2 : v.dims[0];
@@ -159,3 +162,14 @@ export function checkCollisions(layers: Layer[], head: ToolheadProfile, bed: { x
 }
 
 const round = (v: number) => Math.round(v * 1e4) / 1e4;
+
+/** Hold every move's up/down speed to the printer's limit (run after anything that changes Z). Returns moves slowed. */
+export function limitZSpeed(layers: Layer[], maxZ: number): number {
+  let n = 0;
+  for (const l of layers) for (const p of l.paths) for (let i = 1; i < p.points.length; i++) {
+    const a = p.points[i - 1], q = p.points[i];
+    const len = Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z), dz = Math.abs(q.z - a.z);
+    if (dz > 1e-9 && len > 0 && (q.f * dz) / len > maxZ) { q.f = (maxZ * len) / dz; n++; }
+  }
+  return n;
+}

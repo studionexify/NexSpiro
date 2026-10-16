@@ -64,20 +64,20 @@ export function periodFor(b: MotionBrush, L: number): number {
 }
 
 /** Brush sample at arc length s along a path of total length L. Returns null where the brush does not apply. */
-export function brushAt(b: MotionBrush, s: number, L: number, layer = 0): BrushSample | null {
+export function brushAt(b: MotionBrush, s: number, L: number, layer = 0, period?: number): BrushSample | null {
   const lp = layerPhase(b, layer);
   if (lp === null) return null;
   if (b.layers?.cross && lp !== 0) {
-    const a = sampleAt(b, s, L, b.phase_deg + lp), c = sampleAt(b, s, L, b.phase_deg - lp);
+    const a = sampleAt(b, s, L, b.phase_deg + lp, period), c = sampleAt(b, s, L, b.phase_deg - lp, period);
     if (!a || !c) return a ?? c;
     // The higher of the two keeps both ridges at full height, including where they cross.
     return { lat: Math.max(a.lat, c.lat), along: (a.along + c.along) / 2, z: Math.max(a.z, c.z), flow: (a.flow + c.flow) / 2, speed: Math.min(a.speed, c.speed) };
   }
-  return sampleAt(b, s, L, b.phase_deg + lp);
+  return sampleAt(b, s, L, b.phase_deg + lp, period);
 }
 
-function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number): BrushSample | null {
-  const period = periodFor(b, L);
+function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number, fixedPeriod?: number): BrushSample | null {
+  const period = fixedPeriod ?? periodFor(b, L);
   const ph = (((phaseDeg % 360) + 360) % 360 / 360) * period;
   if (b.repeat_mode === "once" && s + ph > period) return null;
   const u = (((s + ph) / period) % 1 + 1) % 1;
@@ -110,12 +110,24 @@ export function eventPositions(b: MotionBrush, L: number, layer: number): { s: n
 }
 
 export type Weight = (x: number, y: number, z: number, slope: number) => number;
+/** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
+export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
 
 /** Apply one brush to one path, returning a new path. */
-export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, weight: Weight, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[]): Toolpath {
+export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, weight: Weight, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[], repeats?: RepeatLock): Toolpath {
   const samples = resample(source ?? path.points, opt.resampleStep);
   const L = samples[samples.length - 1].s;
   if (L <= 0) return path;
+  // "Fit evenly" on a closed loop: the same number of repeats every layer, placed by angle round the
+  // loop, so the pattern stacks straight up even when the loop grows or shrinks (vases, cones).
+  let lockPeriod: number | undefined, cx = 0, cy = 0;
+  if (repeats && path.closed && b.repeat_mode === "stretch") {
+    for (const q of samples) { cx += q.x; cy += q.y; }
+    cx /= samples.length; cy /= samples.length;
+    const n = repeats(cx, cy, Math.max(1, Math.round(L / b.period_mm)));
+    lockPeriod = L / n;
+  }
+  const posAt = (c: Sample) => lockPeriod === undefined ? c.s : ((((Math.atan2(c.y - cy, c.x - cx) / (2 * Math.PI)) % 1) + 1) % 1) * L;
   const { machine, process, filament } = p;
   const maxXY = Math.min(machine.maxSpeed.x, machine.maxSpeed.y);
   const filArea = Math.PI * (filament.diameter / 2) ** 2;
@@ -133,8 +145,8 @@ export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfile
     // Outward normal: walls are CCW, so outward is the right-hand normal.
     const nx = ty, ny = -tx;
     const w = clamp(weight(c.x, c.y, c.z, c.slope), 0, 1);
-    const s = path.closed && i === samples.length - 1 ? 0 : c.s; // seam closes onto its own start
-    const m = w > 0 ? brushAt(b, s, L, layer) : null;
+    const s = path.closed && i === samples.length - 1 ? posAt(samples[0]) : posAt(c); // seam closes onto its own start
+    const m = w > 0 ? brushAt(b, s, L, layer, lockPeriod) : null;
     const q: ToolpathPoint = { x: c.x, y: c.y, z: c.z, f: c.f, flow: c.flow, e: 0, slope: c.slope };
     if (m) {
       q.x += (nx * m.lat + tx * m.along) * w;
@@ -236,6 +248,12 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
       const b = fade_out_mm > 0 ? clamp((z_end - z) / fade_out_mm, 0, 1) : 1;
       return Math.min(a, b);
     };
+    const locked = new Map<string, number>();
+    const lockFor = (feature: string): RepeatLock => (x, y, suggested) => {
+      const key = `${feature}|${Math.round(x / 2)}|${Math.round(y / 2)}`;
+      if (!locked.has(key)) locked.set(key, suggested);
+      return locked.get(key)!;
+    };
     for (const layer of layers) {
       if (zWeight(layer.z) <= 0) continue;
       const weight: Weight = (x, y, z, slope) => {
@@ -250,7 +268,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
         if (!hit) return path;
         // "Replace" starts again from the slicer's path; "add" builds on whatever earlier patterns did.
         const source = app.blend === "override" ? path.base ?? path.points : undefined;
-        return applyBrushToPath(path, brush, p, opt, weight, warn, layer.index, check, source);
+        return applyBrushToPath(path, brush, p, opt, weight, warn, layer.index, check, source, lockFor(path.feature));
       });
     }
   }

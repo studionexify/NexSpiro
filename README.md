@@ -8,16 +8,41 @@ Studio Nexify's slicer, rebuilt from scratch. Web app (TypeScript, Vite, Three.j
 - `npm run typecheck` and `npm run build`.
 
 ## What is here
-- **Prepare tab:** a 3D build plate sized from the machine profile, cube/cylinder/vase primitives, object transform, and printer/filament/process profiles (Bambu X1C, Voron 2.4 on Klipper, Prusa MK3S on Marlin).
-- **Core** (`src/core`): a planar wall slicer, extrusion calculated from the actual 3D move length with a volumetric flow cap, a deterministic G-code emitter for Klipper/Marlin/Bambu, and the plugin host.
-- **Plugin API** (`src/core/plugins.ts`): `NexPlugin.postToolpath(layers, ctx)` runs after toolpaths are generated and before G-code is emitted. E is recomputed afterwards, so plugins only edit geometry, feedrate and flow.
-- **Motionex** (`src/plugins/motionex`): motion brushes covering spec phases 2–4.
-  - 7 presets: sine, zigzag, square, sawtooth, coil, loop/curl, noise.
-  - A curve editor for lateral offset, along-path offset, extrusion and speed, with bezier/linear/step curves, handles and numeric entry.
-  - Amplitude, period, phase, and repeat mode (tile/once/stretch).
-  - Brushes saved as JSON with import/export, flow limits, and a seeded noise brush.
-  - A live 2D preview of the brush on a sample path.
-  - Brush applications by feature or whole model, with a Z range and fade-in.
+- **Prepare tab:**
+  - 3D build plate sized from the printer profile; works on phones and narrow windows (side panels slide in)
+  - shapes (cube, cylinder, vase)
+  - printer, filament and print-setting profiles (Bambu X1C, Voron 2.4 on Klipper, Prusa MK3S on Marlin)
+  - regions: height bands and boxes that patterns can be limited to
+- **Preview tab:**
+  - colour by part, speed, plastic, up/down or problems
+  - 3D, front or side view
+  - layer slider
+- **Printer tab:** printer limits, the print-head shape used for the collision check, and what to do on a hit (lower automatically, leave the pattern out, or stop).
+- **Export:** a "Check before export" report covering:
+  - print-head hits
+  - plastic-flow, speed, up/down and turn limits
+  - loops slowed
+  - pauses and lift-offs
+  - time and filament the patterns add
+- **Core** (`src/core`):
+  - planar wall slicer that records wall slope at every point
+  - extrusion from the real 3D move length with a volumetric cap
+  - deterministic G-code for Klipper, Marlin and Bambu, including pauses, blobs and lift-offs
+  - print-head collision check (`toolhead.ts`)
+  - shared region contract for Patternex (`regions.ts`)
+- **Plugin API** (`src/core/plugins.ts`): `postToolpath(layers, ctx)` runs after toolpaths and before G-code. `ctx` carries the profiles, the check report and the shared regions. E is recomputed after every plugin.
+- **Motionex** (`src/plugins/motionex`):
+  - 195 patterns in 17 groups, with a Size slider
+  - curves for side-to-side, forward-and-back, up-and-down, plastic amount and speed
+  - layer-by-layer effects for twists, diamonds, bricks, honeycomb, rings and stripes
+  - pauses (with blobs), plastic changes and lift-offs
+  - masks by height (with blend in and out), wall slope and region (with a soft edge); patterns stack by adding on top or replacing
+  - loops print slower and warn
+  - live top view and wall view previews
+  - JSON pattern files
 
-## Not yet (Motionex phases 5–9)
-Point events (dwell, flow change, retract), Z offset with toolhead profiles and the collision pass, the side-view preview, stacking with override blending, Patternex regions, and the validation report. Marlin and Bambu will need Z-speed gating before Z brushes are enabled.
+## Test prints
+`npm run testprints` writes G-code for the spec's three test prints. See [docs/test-prints.md](docs/test-prints.md) for what to look for.
+
+## Not yet
+Infill and top/bottom shells, mesh import, and the extended spec items (§11): keyframes over height, overhang-aware motion, painted masks, a toolhead preset library, non-planar tops and ironing, arc fitting, the rule engine and Nexcal.

@@ -25,11 +25,15 @@ export function runBaseline(objects: SceneObject[], profiles: PrintProfiles): Pr
 
 export function statsOf(layers: Layer[], profiles: PrintProfiles): PrintStats {
   let moves = 0, fil = 0, sec = 0;
-  for (const l of layers) for (const p of l.paths) for (let i = 1; i < p.points.length; i++) {
+  for (const l of layers) for (const p of l.paths) {
+    const p0 = p.points[0];
+    fil += p0?.post?.blob_mm ?? 0; sec += (p0?.post?.dwell_ms ?? 0) / 1000;
+    for (let i = 1; i < p.points.length; i++) {
     const a = p.points[i - 1], b = p.points[i];
     const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
     moves++; fil += b.e + (b.post?.blob_mm ?? 0);
     sec += len / (b.travel ? profiles.process.travelSpeed : b.f) + (b.post?.dwell_ms ?? 0) / 1000;
+    }
   }
   const grams = fil * Math.PI * (profiles.filament.diameter / 2) ** 2 / 1000 * profiles.filament.density;
   return { moves, filamentMm: fil, grams, seconds: sec };
