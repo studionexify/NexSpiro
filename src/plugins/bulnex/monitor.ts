@@ -1,4 +1,4 @@
-// Bulnex monitor: watches a running Bulnex job through the printer's status and camera (Bambu LAN,
+// Bulnex monitor: watches a running Bulnex job through the printer's status and camera (LAN,
 // desktop app) and sends a phone notification when something looks wrong. It only alerts — the user
 // decides whether to stop the printer.
 //
