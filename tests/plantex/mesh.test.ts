@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBody, buildSaucer } from '../../src/plugins/plantex/mesh';
+import { buildBody, buildInsert, buildSaucer } from '../../src/plugins/plantex/mesh';
 import { defaultSpec, normalizeSpec, textureLayer } from '../../src/plugins/plantex/model';
 import { PRESETS } from '../../src/plugins/plantex/presets';
 import type { IndexedMesh } from '../../src/engine/mesh';
@@ -38,6 +38,28 @@ describe('plantex mesh', () => {
     const r = buildBody(s, undefined, true);
     expect(manifold(r.mesh)).toBe(0);
     expect(volume(r.mesh)).toBeGreaterThan(0);
+  });
+  it('smooth filleted holes, feet and rim rounding stay closed', () => {
+    for (const fillet of [0, 0.6, 1.2]) {
+      const s = defaultSpec();
+      s.fillet = fillet; s.rimRound = fillet;
+      s.feet = { enabled: true, count: 4, height: 3, size: 10, ring: 0.7 };
+      s.drain = { enabled: true, center: 14, count: 6, diameter: 5, ring: 0.6 };
+      s.textures = [textureLayer({ kind: 'voronoi', mode: 'cut', countU: 10, countV: 4, shape: 0.3, invert: true, z0: 0.1, z1: 0.9 })];
+      const r = buildBody(s, undefined, true);
+      expect(manifold(r.mesh), `fillet ${fillet}`).toBe(0);
+      expect(volume(r.mesh)).toBeGreaterThan(0);
+    }
+  });
+  it('self-watering planter and insert are closed', () => {
+    const s = defaultSpec();
+    s.profile = [{ z: 0, r: 45 }, { z: 1, r: 60 }];
+    s.selfWater = { enabled: true, reservoir: 25, gap: 1.5, wall: 1.6, wick: 14, slots: 8, overflow: 6 };
+    const body = buildBody(s, undefined, true), ins = buildInsert(s, undefined, true);
+    expect(manifold(body.mesh)).toBe(0);
+    expect(manifold(ins.mesh)).toBe(0);
+    expect(volume(ins.mesh)).toBeGreaterThan(0);
+    expect(ins.warnings).toEqual([]);
   });
   it('vase mode is one closed solid', () => {
     const s = { ...defaultSpec(), vaseMode: true, twist: 90 };

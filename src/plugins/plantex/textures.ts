@@ -167,6 +167,8 @@ export interface TextureField {
   disp(u: number, z: number): number;
   /** True where a cut-through layer opens the wall. */
   cut(u: number, z: number): boolean;
+  /** Smooth cut field: > 0 inside a hole, 0 on its edge (unitless; the mesher turns it into a distance). */
+  cutField(u: number, z: number): number;
   hasCut: boolean;
   /** Deepest deboss (mm), to keep the wall printable. */
   maxDeboss: number;
@@ -211,6 +213,11 @@ export function textureField(spec: PlantexSpec, rRef: number, masks: (key: strin
     cut(u, z) {
       for (const L of cutting) if (layerValue(L, u, z, H, rRef, lm.get(L.id)) > L.cutLevel) return true;
       return false;
+    },
+    cutField(u, z) {
+      let g = -1;
+      for (const L of cutting) g = Math.max(g, layerValue(L, u, z, H, rRef, lm.get(L.id)) - L.cutLevel);
+      return g;
     },
   };
 }

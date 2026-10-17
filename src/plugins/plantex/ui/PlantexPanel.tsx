@@ -8,6 +8,7 @@ import { PRESETS, TEXTURE_LIBRARY, type PresetCategory } from '../presets';
 import { KINDS } from '../textures';
 import { patternEntry } from '../patternLink';
 import { ProfileEditor } from './ProfileEditor';
+import { WallMap } from './WallMap';
 import { changed, deleteDesign, generate, loadSpec, ownedObject, pt, saveDesign, usePt } from './state';
 import { designThumb, textureThumb } from './thumbs';
 
@@ -134,7 +135,7 @@ function SectionCard() {
 }
 
 function PlanterCard() {
-  const s = pt.spec, d = s.drain, sa = s.saucer;
+  const s = pt.spec, d = s.drain, sa = s.saucer, f = s.feet, w = s.selfWater;
   if (s.vaseMode) return <section className="mx-card"><div className="mx-card-title">Walls</div><div className="muted">Spiral vase mode: the slicer prints one outer wall and a solid bottom (set wall width with the outer wall line width). Turn vase mode off for a walled planter with drain holes and cut-throughs.</div></section>;
   return (
     <section className="mx-card">
@@ -145,6 +146,9 @@ function PlanterCard() {
         <Num label="Solid band above floor" unit="mm" value={s.solidBase} set={(v) => { s.solidBase = v; }} min={0} max={100} hint="No cut-throughs here" />
         <Num label="Solid band under rim" unit="mm" value={s.solidRim} set={(v) => { s.solidRim = v; }} min={0} max={100} hint="No cut-throughs here" />
       </div>
+      <Slider label="Hole edge rounding (fillet)" value={s.fillet} set={(v) => { s.fillet = v; }} min={0} max={Math.max(0.4, s.wall / 2)} step={0.05} unit=" mm" />
+      <Slider label="Rim rounding" value={s.rimRound} set={(v) => { s.rimRound = v; }} min={0} max={Math.max(0.4, s.wall / 2)} step={0.05} unit=" mm" />
+      <div className="muted" style={{ fontSize: 11 }}>Rounds every cut-through and drain-hole edge on both faces (up to half the wall: a full round). Live preview updates as you drag.</div>
       <Check label="Drain holes" value={d.enabled} set={(v) => { d.enabled = v; }} />
       {d.enabled && (
         <div className="mx-two">
@@ -153,6 +157,29 @@ function PlanterCard() {
           <Num label="Ring hole ⌀" unit="mm" value={d.diameter} set={(v) => { d.diameter = v; }} min={1} max={40} />
           <Num label="Ring position" unit="%" value={d.ring * 100} set={(v) => { d.ring = v / 100; }} min={10} max={90} />
         </div>
+      )}
+      <Check label="Feet" value={f.enabled} set={(v) => { f.enabled = v; }} />
+      {f.enabled && (
+        <div className="mx-two">
+          <Num label="Feet (0 = ring)" value={f.count} set={(v) => { f.count = Math.round(v); }} min={0} max={12} />
+          <Num label="Height" unit="mm" value={f.height} set={(v) => { f.height = v; }} min={0.5} max={40} step={0.5} />
+          <Num label="Size" unit="mm" value={f.size} set={(v) => { f.size = v; }} min={2} max={80} />
+          <Num label="Position" unit="% of radius" value={f.ring * 100} set={(v) => { f.ring = v / 100; }} min={10} max={95} />
+        </div>
+      )}
+      <Check label="Self-watering (insert pot over a reservoir)" value={w.enabled} set={(v) => { w.enabled = v; }} />
+      {w.enabled && (
+        <>
+          <div className="mx-two">
+            <Num label="Reservoir depth" unit="mm" value={w.reservoir} set={(v) => { w.reservoir = v; }} min={5} max={150} />
+            <Num label="Insert gap" unit="mm" value={w.gap} set={(v) => { w.gap = v; }} min={0.3} max={10} step={0.1} />
+            <Num label="Insert wall" unit="mm" value={w.wall} set={(v) => { w.wall = v; }} min={0.8} max={6} step={0.1} />
+            <Num label="Wick hole ⌀" unit="mm" value={w.wick} set={(v) => { w.wick = v; }} min={0} max={60} />
+            <Num label="Floor slots" value={w.slots} set={(v) => { w.slots = Math.round(v); }} min={0} max={24} />
+            <Num label="Overflow hole ⌀" unit="mm" value={w.overflow} set={(v) => { w.overflow = v; }} min={0} max={20} step={0.5} hint="In the planter wall at the top of the reservoir" />
+          </div>
+          <div className="muted" style={{ fontSize: 11 }}>The insert is placed beside the pot. It stands on three legs, has a wick hole and slots, and follows the inner wall.</div>
+        </>
       )}
       <Check label="Matching saucer (placed beside the pot)" value={sa.enabled} set={(v) => { sa.enabled = v; }} />
       {sa.enabled && (
@@ -216,6 +243,7 @@ function LayerEditor({ L }: { L: TextureLayer }) {
       </label>
       {entry && <div className="muted" style={{ fontSize: 11 }}>Linked Patternex artwork: {entry.name}</div>}
       <Seg value={L.mode} options={MODES} set={(v) => { L.mode = v; }} />
+      <WallMap L={L} />
       {L.mode === 'cut' && pt.spec.vaseMode && <div className="px-warn" style={{ fontSize: 11 }}>Vase mode: cut-through prints as deboss.</div>}
       <div className="mx-two">
         {L.mode !== 'cut' ? <Num label="Depth" unit="mm" value={L.depth} set={(v) => { L.depth = v; }} min={0} max={30} step={0.1} /> : <Slider label="Hole size" value={1 - L.cutLevel} set={(v) => { L.cutLevel = 1 - v; }} min={0.02} max={0.98} step={0.01} />}

@@ -101,6 +101,15 @@ export interface SaucerSpec {
   ribs: number;
 }
 
+/** Feet under the floor: `count` = 0 makes one continuous foot ring. */
+export interface FootSpec { enabled: boolean; count: number; height: number; size: number; /** Centre of the feet as a fraction of the floor radius. */ ring: number }
+
+/**
+ * Self-watering: a separate insert pot standing on legs inside the planter, with a wick hole and slots in
+ * its floor; the planter keeps a water reservoir under it and an overflow hole in its wall.
+ */
+export interface SelfWaterSpec { enabled: boolean; reservoir: number; gap: number; wall: number; wick: number; slots: number; overflow: number }
+
 export interface PlantexSpec {
   name: string;
   kind: PlantexKind;
@@ -120,8 +129,14 @@ export interface PlantexSpec {
   solidRim: number;
   /** Band above the floor kept free of cut-throughs (mm). */
   solidBase: number;
+  /** Rounding radius (mm) of every through-hole edge (cut-throughs and drain holes). */
+  fillet: number;
+  /** Rounding radius (mm) of the rim. */
+  rimRound: number;
   drain: DrainSpec;
   saucer: SaucerSpec;
+  feet: FootSpec;
+  selfWater: SelfWaterSpec;
   textures: TextureLayer[];
   /** Mesh resolution: segments around, max row step (mm). */
   around: number;
@@ -148,7 +163,10 @@ export function defaultSpec(): PlantexSpec {
     section: { ...DEFAULT_SECTION }, twist: 0, twistEase: 'linear',
     wall: 2.4, floor: 2.4, solidRim: 3, solidBase: 4,
     drain: { enabled: true, center: 10, count: 0, diameter: 6, ring: 0.55 },
+    fillet: 0.8, rimRound: 0.8,
     saucer: { enabled: false, gap: 2, wall: 2, floor: 2, height: 14, flare: 4, ribs: 6 },
+    feet: { enabled: false, count: 3, height: 4, size: 14, ring: 0.7 },
+    selfWater: { enabled: false, reservoir: 25, gap: 1.5, wall: 1.6, wick: 14, slots: 8, overflow: 6 },
     textures: [], around: 360, step: 0.6,
   };
 }
@@ -159,7 +177,7 @@ export function normalizeSpec(s: Partial<PlantexSpec>): PlantexSpec {
   return {
     ...d, ...s,
     section: { ...d.section, ...s.section },
-    drain: { ...d.drain, ...s.drain }, saucer: { ...d.saucer, ...s.saucer },
+    drain: { ...d.drain, ...s.drain }, saucer: { ...d.saucer, ...s.saucer }, feet: { ...d.feet, ...s.feet }, selfWater: { ...d.selfWater, ...s.selfWater },
     profile: (s.profile ?? d.profile).map((p) => ({ ...p })),
     textures: (s.textures ?? []).map((t) => textureLayer({ ...t, id: t.id ?? uid() })),
   };
