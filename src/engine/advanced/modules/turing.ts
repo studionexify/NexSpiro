@@ -34,29 +34,36 @@ export function gsStep(st: GsState, mask: Uint8Array, steps: number, F: number, 
   const { nx, ny } = st;
   const Du = 0.2, Dv = 0.1;
   const dt = Math.min(1, 0.2 / (Du * (1 + beta)));
+  const n = nx * ny;
+  // diffusion tensor per cell, D = m(I + β d⊗d)
+  const dxx = new Float32Array(n), dyy = new Float32Array(n), dxy = new Float32Array(n);
+  const inner: number[] = [];
+  for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+    const p = i + nx * j;
+    if (!mask[p]) continue;
+    inner.push(p);
+    const x = dirX[p], y = dirY[p], m = scale[p];
+    dxx[p] = (1 + beta * x * x) * m; dyy[p] = (1 + beta * y * y) * m; dxy[p] = 0.5 * beta * x * y * m; // ×2 / 4 of the cross stencil
+  }
+  const cells = Int32Array.from(inner);
   let u = st.u, v = st.v;
-  let u2 = new Float32Array(u.length), v2 = new Float32Array(v.length);
-  const at = (a: Float32Array, i: number, j: number, out: number) => (i < 0 || j < 0 || i >= nx || j >= ny || !mask[i + nx * j] ? out : a[i + nx * j]);
+  // outside the region: u = 1, v = 0 (cells off the mask, and the grid border)
+  for (let p = 0; p < n; p++) if (!mask[p] || p < nx || p >= n - nx || p % nx === 0 || p % nx === nx - 1) { u[p] = 1; v[p] = 0; }
+  let u2 = Float32Array.from(u), v2 = Float32Array.from(v);
   for (let s = 0; s < steps; s++) {
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-      const p = i + nx * j;
-      if (!mask[p]) { u2[p] = 1; v2[p] = 0; continue; }
-      const dx = dirX[p], dy = dirY[p], m = scale[p];
-      // D = I + β d⊗d (times D₀): Dxx, Dyy, Dxy
-      const Dxx = (1 + beta * dx * dx) * m, Dyy = (1 + beta * dy * dy) * m, Dxy = beta * dx * dy * m;
-      const lap = (a: Float32Array, out: number) => {
-        const c = a[p];
-        const xx = at(a, i + 1, j, out) - 2 * c + at(a, i - 1, j, out);
-        const yy = at(a, i, j + 1, out) - 2 * c + at(a, i, j - 1, out);
-        const xy = (at(a, i + 1, j + 1, out) - at(a, i + 1, j - 1, out) - at(a, i - 1, j + 1, out) + at(a, i - 1, j - 1, out)) / 4;
-        return Dxx * xx + Dyy * yy + 2 * Dxy * xy;
-      };
-      const uu = u[p], vv = v[p], uvv = uu * vv * vv;
-      u2[p] = Math.min(1, Math.max(0, uu + dt * (Du * lap(u, 1) - uvv + F * (1 - uu))));
-      v2[p] = Math.min(1, Math.max(0, vv + dt * (Dv * lap(v, 0) + uvv - (F + k) * vv)));
+    for (let c = 0; c < cells.length; c++) {
+      const p = cells[c];
+      const a = dxx[p], b = dyy[p], x = dxy[p];
+      const uc = u[p], vc = v[p];
+      const lu = a * (u[p + 1] - 2 * uc + u[p - 1]) + b * (u[p + nx] - 2 * uc + u[p - nx]) + x * (u[p + nx + 1] - u[p - nx + 1] - u[p + nx - 1] + u[p - nx - 1]);
+      const lv = a * (v[p + 1] - 2 * vc + v[p - 1]) + b * (v[p + nx] - 2 * vc + v[p - nx]) + x * (v[p + nx + 1] - v[p - nx + 1] - v[p + nx - 1] + v[p - nx - 1]);
+      const uvv = uc * vc * vc;
+      let nu = uc + dt * (Du * lu - uvv + F * (1 - uc)), nv = vc + dt * (Dv * lv + uvv - (F + k) * vc);
+      u2[p] = nu < 0 ? 0 : nu > 1 ? 1 : nu;
+      v2[p] = nv < 0 ? 0 : nv > 1 ? 1 : nv;
     }
-    [u, u2] = [u2, u];
-    [v, v2] = [v2, v];
+    const tu = u; u = u2; u2 = tu;
+    const tv = v; v = v2; v2 = tv;
   }
   st.u = u; st.v = v; st.steps += steps;
 }
@@ -112,7 +119,7 @@ export const turingInfill: TechModule = {
     }
     // first layer grows the pattern, later layers continue it
     if (st.layer !== c.layer) {
-      gsStep(st, mask, st.steps === 0 ? 2500 : 60, s.pnum('turing_infill', 'F'), s.pnum('turing_infill', 'k'), s.pnum('turing_infill', 'aniso'), dirX, dirY, scale);
+      gsStep(st, mask, st.steps === 0 ? 2000 : 50, s.pnum('turing_infill', 'F'), s.pnum('turing_infill', 'k'), s.pnum('turing_infill', 'aniso'), dirX, dirY, scale);
       st.layer = c.layer;
     }
     const phi = new Float64Array(n);

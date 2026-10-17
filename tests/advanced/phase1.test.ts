@@ -173,7 +173,8 @@ describe('Advanced slicing', () => {
       expect(out.advanced!.techs.length).toBe(35);
       expect(out.advanced!.zones.some((z) => z.kind === 'dome')).toBe(true);
       expect(out.advanced!.machine.name).toBe('Bambu Lab X1 Carbon');
-      expect(out.layers.length).toBeGreaterThan(50);
+      // 4D Flat-Morph prints the part as a flat sheet (metric morph) by design
+      expect(out.layers.length).toBeGreaterThan(intent === 'morph4d' ? 3 : 50);
     }
   });
   it('runs on Klipper and Marlin machines too', () => {

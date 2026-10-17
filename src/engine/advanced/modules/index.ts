@@ -15,8 +15,17 @@ import { quasicrystal } from './quasicrystal';
 import { turingInfill } from './turing';
 import { bandGap } from './bandGap';
 import { homogenization, metamaterial } from './cells';
+import { foamControl } from './foam';
+import { inverseWarp } from './inverseWarp';
+import { spatialLattice } from './lattice';
+import { dovetail } from './dovetail';
+import { coMolding } from './coMolding';
+import { metricMorph } from './metricMorph';
+import { mongeAmpere } from './mongeAmpere';
 
 export const MODULES: TechModule[] = [
+  // cross-sections and material regions: cast cavities, carved lenses, interface fingers
+  coMolding, mongeAmpere, dovetail,
   // layer plan (curved layers): dome field first, SGD refines it
   harmonicDome, sgdSlicing,
   // walls, then wall post-edits
@@ -28,4 +37,8 @@ export const MODULES: TechModule[] = [
   thickVase, eulerianSpiral, feaStress, quasicrystal, bandGap, turingInfill, metamaterial, homogenization,
   // toolpath passes, in order: surfaces, helix, interlocking, seams, final burnishing
   conformalLayers, subvoxelAA, perimeterFeathering, zWeave, tangentEntry, scarfSplice, conformalIroning,
+  // passes that replace the part (truss, flat morph sheet), then the shrinkage pre-distortion of everything
+  spatialLattice, metricMorph, inverseWarp,
+  // rheology on the final move list
+  foamControl,
 ];

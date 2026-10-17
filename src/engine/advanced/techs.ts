@@ -59,7 +59,7 @@ export const TECHS: TechDef[] = [
     summary: 'Solves the part under its load case and lays infill along the principal stress directions.',
     intents: ['structural'], reads: ['sdf', 'stress'],
     params: [
-      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 6000, min: 500, max: 40000, step: 500, tip: 'Hexahedral elements in the voxel FEA model.' },
+      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 4000, min: 500, max: 40000, step: 500, tip: 'Hexahedral elements in the voxel FEA model.' },
       { key: 'loadN', label: 'Load', type: 'number', def: 50, min: 1, max: 5000, step: 1, unit: 'N', tip: 'Total force of the inferred or painted load case.' },
       { key: 'family', label: 'Path family', type: 'enum', def: 'both', options: [{ value: 'max', label: 'Tension (σ₁)' }, { value: 'min', label: 'Compression (σ₃)' }, { value: 'both', label: 'Both, alternating layers' }] },
       { key: 'threshold', label: 'Stress percentile', type: 'number', def: 0.4, min: 0, max: 1, step: 0.05, tip: 'Infill below this von Mises percentile keeps the regular pattern.' },
@@ -227,7 +227,7 @@ export const TECHS: TechDef[] = [
     params: [
       { key: 'gain', label: 'Compensation', type: 'number', def: 1, min: 0, max: 2, step: 0.05 },
       { key: 'kerfs', label: 'Relief kerfs', type: 'bool', def: true },
-      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 5000, min: 500, max: 40000, step: 500 },
+      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 3000, min: 500, max: 40000, step: 500 },
     ],
     mould: (c) => (HIGH_SHRINK.test(c.filamentType) ? (c.caps.heatedChamber ? ok : { status: 'adapted', reason: `No heated chamber: ${c.filamentType} cools from Tg to ${c.caps.chamberTemp} °C, so the predicted warp is larger.` })
       : { status: 'adapted', reason: `${c.filamentType} shrinks little; compensation is small.` }),
@@ -369,7 +369,7 @@ export const TECHS: TechDef[] = [
     intents: ['optical'], reads: ['caustic_image'],
     params: [
       { key: 'ior', label: 'Refractive index', type: 'number', def: 1.57, min: 1.3, max: 1.8, step: 0.01 },
-      { key: 'iters', label: 'Transport iterations', type: 'number', def: 60, min: 5, max: 400, step: 5 },
+      { key: 'iters', label: 'Transport iterations', type: 'number', def: 120, min: 20, max: 1000, step: 10 },
     ],
     mould: (c) => (c.hasCaustic ? ok : { status: 'unavailable', reason: 'Load a target image in the Optical intent card.' }),
   },

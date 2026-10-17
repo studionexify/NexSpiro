@@ -5,7 +5,7 @@ import type { ObjectAnalysis } from './types';
 
 interface Req {
   id: number;
-  objects: { id: string; name: string; vertices: Float32Array; indices: Uint32Array; color?: Uint8Array }[];
+  objects: { id: string; name: string; vertices: Float32Array; indices: Uint32Array; color?: Uint8Array; advPaint?: Uint8Array }[];
   params: AnalysisParams;
 }
 
@@ -13,7 +13,7 @@ self.onmessage = (ev: MessageEvent<Req>) => {
   const { id, objects, params } = ev.data;
   try {
     const results: ObjectAnalysis[] = objects.map((o) => {
-      const a = analyzePart({ vertices: o.vertices, indices: o.indices }, { ...params, color: o.color });
+      const a = analyzePart({ vertices: o.vertices, indices: o.indices }, { ...params, color: o.color, advPaint: o.advPaint });
       // field solvers add their inspector fields (harmonic potential, stress, branches)
       for (const m of MODULES) m.inspect?.(a);
       return toObjectAnalysis(o.id, o.name, a);
