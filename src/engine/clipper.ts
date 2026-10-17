@@ -99,3 +99,14 @@ export function bounds(paths: Paths) {
 }
 
 export const pt = (x: number, y: number): IntPoint => ({ X: toInt(x), Y: toInt(y) });
+
+/** Even–odd point-in-polygons test (mm). */
+export function pointIn(x: number, y: number, paths: Paths): boolean {
+  const X = x * SCALE, Y = y * SCALE;
+  let inside = false;
+  for (const p of paths) for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const a = p[i], b = p[j];
+    if ((a.Y > Y) !== (b.Y > Y) && X < ((b.X - a.X) * (Y - a.Y)) / (b.Y - a.Y) + a.X) inside = !inside;
+  }
+  return inside;
+}

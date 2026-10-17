@@ -28,6 +28,8 @@ import { buildPlate, iconTexture, type PlateIcon } from './plate';
 import { arrange, deletePlate, orientPlate, updatePlate } from '../state/ops';
 import { selectPlate } from '../state/objectOps';
 import { openPlateSettings } from '../ui/PlateControls';
+import { useAdvanced } from '../state/advanced';
+import { fieldColor, ZONE_RGB } from '../ui/advanced/colors';
 
 export type ViewName = 'iso' | 'top' | 'bottom' | 'front' | 'left' | 'right' | 'back';
 export interface ViewApi {
@@ -48,7 +50,7 @@ const THEMES = {
 };
 
 const PART_COLORS: Record<string, string> = { negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
-const PAINT = { support: ['#1E88E5', '#E53935'], seam: ['#FFFFFF', '#E53935'] };
+const PAINT = { support: ['#1E88E5', '#E53935'], seam: ['#FFFFFF', '#E53935'], adv: ['#26A69A', '#FF7043', '#5B6770', '#FFFFFF'] };
 
 function backgroundTexture(theme: 'dark' | 'light') {
   const t = THEMES[theme];
@@ -121,13 +123,17 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
   const tris = arr.length / 9;
   const p: ObjectPaint = o.paint ?? {};
   const motion = isMotionTool(tool);
-  const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : motion ? p.motion : undefined;
-  const layerC = (tool === 'paint_support' ? PAINT.support : motion ? SURFACE_COLORS : PAINT.seam).map((c) => new THREE.Color(c));
-  const dim = tool === 'paint_support' || tool === 'paint_seam' || motion ? 0.55 : 1;
+  const advTool = tool === 'paint_adv';
+  const layer = tool === 'paint_support' ? p.support : tool === 'paint_seam' ? p.seam : motion ? p.motion : advTool ? p.adv : undefined;
+  const layerC = (tool === 'paint_support' ? PAINT.support : motion ? SURFACE_COLORS : advTool ? PAINT.adv : PAINT.seam).map((c) => new THREE.Color(c));
+  const dim = tool === 'paint_support' || tool === 'paint_seam' || motion || advTool ? 0.55 : 1;
   const c = new THREE.Color();
+  // Advanced mode: the Zone Inspector heatmap replaces the filament colours
+  const heat = heatmapFor(o, tool);
   for (let t = 0; t < tris; t++) {
     const cv = p.color?.[t] ?? 0;
-    c.copy(cv ? slotC[Math.min(cv - 1, slotC.length - 1)] ?? base : base).multiplyScalar(dim);
+    if (heat) c.setRGB(heat[t * 3], heat[t * 3 + 1], heat[t * 3 + 2]).multiplyScalar(advTool ? 0.75 : 1);
+    else c.copy(cv ? slotC[Math.min(cv - 1, slotC.length - 1)] ?? base : base).multiplyScalar(dim);
     const lv = layer?.[t] ?? 0;
     if (lv) c.copy(layerC[(lv - 1) % layerC.length]);
     for (let k = 0; k < 3; k++) { arr[t * 9 + k * 3] = c.r; arr[t * 9 + k * 3 + 1] = c.g; arr[t * 9 + k * 3 + 2] = c.b; }
@@ -138,7 +144,20 @@ function paintColors(geo: THREE.BufferGeometry, o: SceneObject, tool: Tool, slot
 /** Motion lines drawn on the model: the Prepare toggle, and always in the Motion tab. */
 const showsMotion = (s: { workspace: string; liveToolpaths: boolean }) => (s.workspace === 'prepare' && s.liveToolpaths) || s.workspace === 'motion';
 export const isMotionTool = (t: Tool) => t === 'paint_motion' || t === 'pick_motion' || t === 'lasso_motion' || t === 'band_motion' || t === 'object_motion';
-export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || isMotionTool(t);
+export const isPaintTool = (t: Tool) => t === 'paint_support' || t === 'paint_seam' || t === 'paint_color' || t === 'paint_adv' || isMotionTool(t);
+
+/** Per-triangle heatmap colours (rgb) when Advanced mode shows the Zone Inspector on this object. */
+function heatmapFor(o: SceneObject, tool: Tool): Float32Array | null {
+  const a = useAdvanced.getState();
+  if (a.engineMode !== 'advanced' || !a.heatmap || (isPaintTool(tool) && tool !== 'paint_adv')) return null;
+  const an = a.analysis[o.id];
+  if (!an || an.mesh !== o.mesh) return null;
+  const f = an.fields[a.field], range = an.ranges[a.field];
+  if (!f || !range || f.length * 3 !== o.mesh.indices.length) return null;
+  const out = new Float32Array(f.length * 3);
+  for (let t = 0; t < f.length; t++) { const c = fieldColor(a.field, f[t], range); out[t * 3] = c[0]; out[t * 3 + 1] = c[1]; out[t * 3 + 2] = c[2]; }
+  return out;
+}
 
 const adjCache = new WeakMap<object, { adj: Uint32Array[]; normals: Float32Array }>();
 
@@ -224,6 +243,31 @@ export function Viewport() {
     let printer = printerById(useStore.getState().printerId);
     const objGroup = new THREE.Group();
     scene.add(objGroup);
+    // Advanced mode: interior volume zones of the Zone Inspector, drawn as points
+    const voxelPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }));
+    voxelPts.raycast = () => {};
+    voxelPts.renderOrder = 3;
+    scene.add(voxelPts);
+    const syncVoxels = () => {
+      const a = useAdvanced.getState(), s = useStore.getState();
+      const show = a.engineMode === 'advanced' && a.showVoxels && s.workspace === 'prepare';
+      voxelPts.visible = show;
+      if (show) {
+        const pos: number[] = [], col: number[] = [];
+        for (const o of s.objects) {
+          const an = a.analysis[o.id];
+          if (!an || an.mesh !== o.mesh) continue;
+          const v = an.voxels;
+          for (let i = 0; i < v.length; i += 4) { pos.push(v[i], v[i + 1], v[i + 2]); col.push(...(ZONE_RGB[v[i + 3]] ?? [1, 1, 1])); }
+        }
+        voxelPts.geometry.dispose();
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        voxelPts.geometry = g;
+      }
+      invalidate();
+    };
     const meshes = new Map<string, { mesh: THREE.Mesh; src: SceneObject['mesh']; colorKey: string; hull?: THREE.Mesh }>();
     const outlineMat = outlineMaterial();
     let hoverId: string | null = null;
@@ -528,7 +572,8 @@ export function Viewport() {
           meshes.set(o.id, entry);
           objGroup.add(mesh);
         }
-        const colorKey = `${s.tool}|${slots.join()}|${o.filament ?? 0}`;
+        const adv = useAdvanced.getState();
+        const colorKey = `${s.tool}|${slots.join()}|${o.filament ?? 0}|${adv.engineMode}|${adv.heatmap}|${adv.field}|${adv.analysis[o.id] ? 1 : 0}|${adv.analysisVersion}`;
         if (colorKey !== entry.colorKey || entry.mesh.userData.paint !== o.paint) {
           paintColors(entry.mesh.geometry, o, s.tool, slots);
           entry.colorKey = colorKey;
@@ -920,8 +965,8 @@ export function Viewport() {
         return;
       }
       const motion = s.tool === 'paint_motion' || s.tool === 'pick_motion';
-      const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : motion ? 'motion' : 'color';
-      const value = eraseIn ? 0 : layer === 'color' ? (alt ? 0 : s.paintColor) : motion ? (erase ? 0 : s.motionSet) : alt ? 2 : 1;
+      const layer: keyof ObjectPaint = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : motion ? 'motion' : s.tool === 'paint_adv' ? 'adv' : 'color';
+      const value = eraseIn ? 0 : layer === 'adv' ? (alt ? 0 : useAdvanced.getState().paintValue) : layer === 'color' ? (alt ? 0 : s.paintColor) : motion ? (erase ? 0 : s.motionSet) : alt ? 2 : 1;
       // copy-on-write so undo keeps the previous paint
       s.updateObjects((o) => {
         const tris = o.mesh.indices.length / 3;
@@ -1467,6 +1512,10 @@ export function Viewport() {
     syncObjects();
     syncPreview();
 
+    const unsubAdv = useAdvanced.subscribe((a, prev) => {
+      if (a.engineMode !== prev.engineMode || a.heatmap !== prev.heatmap || a.field !== prev.field || a.analysisVersion !== prev.analysisVersion) syncObjects();
+      if (a.engineMode !== prev.engineMode || a.showVoxels !== prev.showVoxels || a.analysisVersion !== prev.analysisVersion) syncVoxels();
+    });
     const unsub = useStore.subscribe((s, prev) => {
       if (s.printerId !== prev.printerId || s.theme !== prev.theme || s.plates !== prev.plates || s.plate !== prev.plate || s.activePlate !== prev.activePlate) {
         rebuildPlates();
@@ -1480,6 +1529,7 @@ export function Viewport() {
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
+      if (s.workspace !== prev.workspace || s.objects !== prev.objects) syncVoxels();
       if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.cutMode !== prev.cutMode || s.cutGroove !== prev.cutGroove || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); }
     });
 
@@ -1501,6 +1551,8 @@ export function Viewport() {
       cancelAnimationFrame(raf);
       window.removeEventListener('nx-patternex', onPatternex);
       unsub();
+      unsubAdv();
+      voxelPts.geometry.dispose(); (voxelPts.material as THREE.Material).dispose();
       ro.disconnect();
       gizmo.dispose();
       controls.dispose();

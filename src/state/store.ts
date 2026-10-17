@@ -14,7 +14,7 @@ import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'brim_ears';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
@@ -31,8 +31,8 @@ export interface ScenePart {
   overrides: Config; // modifier settings
 }
 
-/** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). */
-export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
+/** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). adv: Advanced mode (1 fixture, 2 load, 3 matte, 4 gloss). */
+export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array; adv?: Uint8Array }
 
 export interface SceneObject {
   id: string;

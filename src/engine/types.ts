@@ -1,4 +1,5 @@
 // Core engine types. All engine geometry is in millimetres unless noted.
+import type { AdvancedConfig, AdvancedReport } from './advanced/types';
 
 /** Clipper integer point (scaled by SCALE). */
 export interface IntPoint { X: number; Y: number }
@@ -89,7 +90,8 @@ export interface PartInput {
 }
 
 /** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */
-export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
+/** adv (Advanced mode): 1 fixture, 2 load face, 3 matte, 4 gloss. */
+export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array; adv?: Uint8Array }
 
 export interface MeshInput {
   id: string;
@@ -148,6 +150,8 @@ export interface SliceOptions {
   plugins?: Record<string, unknown>;
   /** A drawn calibration program (PA line / pattern) instead of sliced models. */
   program?: import('./calibGcode').CalibProgram;
+  /** Advanced mode (NexSpiro physics core). Undefined: Basic mode, the classic engine only. */
+  advanced?: AdvancedConfig;
 }
 
 export interface SliceStats {
@@ -177,6 +181,8 @@ export interface SliceOutput {
   warnings: string[];
   /** What each plugin reported (e.g. Motionex print check). */
   pluginReports?: Record<string, unknown>;
+  /** What the Advanced engine did (Advanced mode only). */
+  advanced?: AdvancedReport;
 }
 
 export const FEATURE_ORDER: FeatureType[] = [

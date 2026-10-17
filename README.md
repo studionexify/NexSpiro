@@ -58,6 +58,21 @@
 
 > Painting resolution follows the model's triangles; very coarse meshes paint in large facets.
 
+## Advanced engine (NexSpiro Physics Core)
+
+The **BASIC | ADVANCED** switch at the top centre swaps the Bambu-style process controls for the NexSpiro
+Physics Core. In Advanced mode you pick an **Intent Card** (Structural Armor, Seamless Aesthetic,
+Optical / Caustic Lamp, Acoustic Damping, 4D Flat-Morph); the engine analyses each part (signed
+distance field, curvature, thickness, sections, topology), shows its zones in the **Zone Inspector**
+(domes, necks, bosses, helical bands, cores, stress, Morse–Smale branches) and routes every zone to the
+technologies made for it. Power users open the node graph and tune each technology's parameters.
+
+All 35 technologies are implemented in TypeScript inside the slicing worker and are moulded to the
+selected machine (kinematics, firmware input shaping and pressure advance, toolhead clearance cone,
+Z limits, chamber, resonance, multi-material hardware): each reports *applied*, *adapted* (with the
+reason) or *unavailable*. Basic mode output is unchanged byte for byte. See
+[docs/advanced/ENGINE.md](docs/advanced/ENGINE.md) for the methods and their verification.
+
 ## Download & run
 
 - **Desktop installers** — open the repository's **Actions → Desktop installers** workflow and click *Run workflow*, then download the `NexSpiro-Windows` / `NexSpiro-macOS` / `NexSpiro-Linux` artifact. Pushing a tag such as `v0.1.0` also publishes the installers on the **Releases** page.

@@ -22,6 +22,8 @@ import { arrangeAll, arrangeSelected } from './state/ops';
 import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
+import { ModeToggle } from './ui/advanced/ModeToggle';
+import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
 const TABS: { id: Workspace; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
@@ -75,34 +77,42 @@ function TopBar() {
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
-      <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
-      <FileMenu />
-      <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
-      <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
-      <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
-      <nav className="tabs" role="tablist">
-        {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
-          <button key={t.id} role="tab" aria-selected={workspace === t.id} className={`tab ${workspace === t.id ? 'active' : ''}`} onClick={() => set({ workspace: t.id })}>
-            {t.label}
+      <div className="tb-left">
+        <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
+        <FileMenu />
+        <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
+        <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
+        <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
+        <nav className="tabs" role="tablist">
+          {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
+            <button key={t.id} role="tab" aria-selected={workspace === t.id} title={t.label}
+              className={`tab ${workspace === t.id ? 'active' : ''} ${SECONDARY_TABS.has(t.id) ? 'secondary' : ''}`} onClick={() => set({ workspace: t.id })}>
+              <Icon name={t.icon} size={15} className="tab-icon" /><span className="tab-label">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="tb-center"><ModeToggle /></div>
+      <div className="tb-right">
+        {(workspace === 'prepare' || workspace === 'motion') && (
+          <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
+            title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
+            onClick={() => set({ liveToolpaths: !liveToolpaths })}>
+            <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
           </button>
-        ))}
-      </nav>
-      <span className="spacer" />
-      {(workspace === 'prepare' || workspace === 'motion') && (
-        <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
-          title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
-          onClick={() => set({ liveToolpaths: !liveToolpaths })}>
-          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
+        )}
+        <PluginsButton />
+        <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
-      )}
-      <PluginsButton />
-      <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
-        <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-      </button>
-      {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
+        {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
+      </div>
     </header>
   );
 }
+
+/** Tabs that collapse to icons when the header is narrow (the engine toggle keeps the centre). */
+const SECONDARY_TABS = new Set<Workspace>(['home', 'motion', 'device', 'project', 'calibration']);
 
 /** True when the active plate has a slice that matches the current scene and settings. */
 const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.result && !s.slice.dirty && s.slice.plate === s.activePlate);
@@ -257,7 +267,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />

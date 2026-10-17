@@ -13,6 +13,10 @@ export type Op =
     fanSet?: number;
     /** Excluded from the cooling slowdown (outer walls when "Don't slow down outer walls" is on). */
     noSlow?: boolean;
+    /** Advanced mode: how far (mm, signed) surface passes have already moved this bead off its layer surface. */
+    dev?: number;
+    /** Advanced mode: free-space draw whose head clearance is guaranteed by construction (skipped by the checker). */
+    noClear?: boolean;
   }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
