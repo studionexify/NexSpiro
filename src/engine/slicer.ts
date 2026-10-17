@@ -1,4 +1,5 @@
 // The NexSpiro slicing pipeline (stages 2–10). Pure TypeScript, runs in a Web Worker or Node.
+import { calibProgram } from './calibGcode';
 import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, type Config } from '../profiles/settings';
 import {
   area, bounds, clipLines, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
@@ -129,6 +130,7 @@ interface Regions {
 export const paLine = (flavor: string, k: number) => (flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${k}` : `M900 K${k}`);
 
 export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}, opts: SliceOptions = {}): SliceOutput {
+  if (opts.program) return calibProgram(cfg, opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)], opts.program);
   // values changed mid-print by 'config' layer actions (calibration towers etc.)
   const live: Record<string, number> = {};
   const num = (k: string) => (k in live ? live[k] : Number(cfg[k] ?? 0));

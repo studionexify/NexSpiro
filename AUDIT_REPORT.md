@@ -165,6 +165,18 @@ Parameter coverage against Bambu's `Tab.cpp` layout went from 116 to 296 of 418 
 - **Brim ears (E)**: click near the bed to add an ear, click an ear to remove it. Adding an ear switches the brim type to Painted.
 - **By-object printing**: each object gets its extruder clearance outline on the bed, red where two outlines overlap.
 
+### Milestone: preview, calibration and device
+
+- **Colour schemes**: Fan speed and Temperature come from the fan and nozzle temperature recorded for each move. Layer time can also be shown on a log scale (labelled in seconds, mid label at the geometric mean). "Flow" is renamed Volumetric flow rate.
+- **Legend**: each line type shows the filament it uses (grams), and the flushed filament appears next to the prime tower.
+- **Layer slider**: `L` (or the layers button) shows only the top layer and restores the range on a second press; ↑/↓ move both thumbs in that mode.
+- **Move slider**: ←/→ step through moves (Shift: 10 at a time). G-code is shown beside the slider: 13 lines around the current move with its line highlighted, plus the fan and temperature there. Lines are mapped exactly through the engine's move-to-line table.
+- **PA Line**: Bambu's CalibPressureAdvanceLine, drawn directly as G-code. Each line is 0.6 mm wide at 0.2 mm, 3.5 mm apart, printed 20 mm slow / 40 mm fast / 20 mm slow (20 and 100 mm/s). A 1.2× prime line comes first. The filled number tab carries 7-segment numbers on every second line, one layer up.
+- **PA Pattern**: Bambu's CalibPressureAdvancePattern: 4 layers of nested 90° chevrons (30 mm sides, 3 walls, 2 mm apart), one per K value, over an anchoring frame. A filled tab above carries bottom-to-top numbers on every second chevron, with first-layer shrink and Z-hops between chevrons.
+- **Flow rate**: Pass 1 has 9 blocks from −20 % to +20 %; Pass 2 has 10 blocks from 0 % to −9 %. Each block carries a raised number tab, and the flow is set through the object's `print_flow_ratio`.
+- **Temperature tower**: steps from hot (bottom) to cold. Each block carries its temperature as raised digits and has a bridge, a 45° overhang and a stringing fin.
+- **Device page**: part, aux and chamber fan sliders (aux and chamber on Bambu printers: `M106 P2` and `M106 P3`). A 10-minute temperature history chart shows nozzle, bed and chamber, with targets dashed.
+
 ## 7. Per-setting tables
 
 <!-- PARAMS:BEGIN -->

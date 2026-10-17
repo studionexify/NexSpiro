@@ -1,4 +1,5 @@
 // Application state (zustand). Scene objects are immutable records; meshes are shared by reference.
+import type { CalibProgram } from '../engine/calibGcode';
 import type { MeasureFeature, MeasureMode } from './measure';
 import type { BrushType } from '../engine/brush';
 import { DEFAULT_CONNECTOR, type ConnectorSettings } from './cutConnectors';
@@ -15,7 +16,7 @@ import { filamentById } from '../profiles/filaments';
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
 export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'brim_ears';
 export type Theme = 'dark' | 'light';
-export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
+export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
 export type Vec3 = [number, number, number];
 
@@ -76,6 +77,8 @@ export interface Plate {
   spiralVase?: boolean;
   /** Print sequence of this plate (undefined = same as global). */
   printSequence?: 'by_layer' | 'by_object';
+  /** Drawn calibration program printed instead of the plate's objects (PA line / pattern). */
+  program?: CalibProgram;
 }
 
 /** Right-click menu: where it opened and what was under the cursor. */
@@ -101,6 +104,10 @@ interface State {
   /** Height range modifier being edited (object id is the single selection). */
   selectedRange: string | null;
   shortcutsOpen: boolean;
+  /** Preview: show only the top layer (L), the bottom layer it replaced, the G-code beside the move slider. */
+  oneLayer: boolean;
+  savedLow?: number;
+  showGcode: boolean;
   undoStack: SceneObject[][];
   redoStack: SceneObject[][];
 
@@ -204,6 +211,8 @@ export const useStore = create<State>((set, get) => ({
   selectedPart: null,
   selectedRange: null,
   shortcutsOpen: false,
+  oneLayer: false,
+  showGcode: true,
   undoStack: [],
   redoStack: [],
 

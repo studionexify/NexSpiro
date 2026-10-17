@@ -252,7 +252,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- preview */
 .legend { right: 12px; top: 12px; width: 300px; max-height: calc(100% - 110px); overflow-y: auto; padding: 10px 12px; }
 .legend h4 { margin: 0; font-size: 13px; color: var(--text-strong); }
-.lrow { display: grid; grid-template-columns: 16px 14px 1fr auto auto; align-items: center; gap: 6px; padding: 3px 0; }
+.lrow { display: grid; grid-template-columns: 16px 14px 1fr auto auto auto; align-items: center; gap: 6px; padding: 3px 0; }
 .lrow.off { opacity: 0.4; }
 .swatch { width: 14px; height: 14px; border-radius: 3px; }
 .lrow .eye { border: 0; background: none; padding: 0; cursor: pointer; color: var(--text-muted); display: flex; }
@@ -644,3 +644,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .shortcut-row kbd { font-family: var(--mono, monospace); color: var(--accent); }
 .brush-seg { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
 .brush-seg button { flex: 1 0 auto; font-size: 11px; padding: 3px 6px; }
+
+.gcode-view { position: absolute; bottom: calc(100% + 8px); left: 0; width: 330px; background: var(--surface-overlay); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 8px; padding: 6px 0; font-size: 11px; line-height: 17px; box-shadow: var(--shadow); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.gcode-view > div { padding: 0 10px; }
+.gcode-view .cur { background: var(--accent); color: var(--accent-ink, #fff); }
+.gcode-view .ln { display: inline-block; width: 52px; color: var(--text-muted); text-align: right; margin-right: 10px; }
+.gcode-view .cur .ln { color: inherit; opacity: .8; }
+.gcode-view .aux { color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 3px; }
+
+.temp-chart { margin: 6px 0 10px; }
+.temp-chart svg { display: block; background: var(--surface-secondary, rgba(127,127,127,.06)); border-radius: 6px; }
+.temp-chart path { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.temp-chart path.target { stroke-dasharray: 4 3; stroke-width: 1; opacity: .6; }
+.temp-chart .nozzle { stroke: #FF5C8D; } .temp-chart .bed { stroke: #1E88E5; } .temp-chart .chamber { stroke: #00AE42; }
+.temp-chart .grid { stroke: var(--border); stroke-width: .5; vector-effect: non-scaling-stroke; }
+.temp-chart .key { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.temp-chart .key.nozzle { background: #FF5C8D; } .temp-chart .key.bed { background: #1E88E5; } .temp-chart .key.chamber { background: #00AE42; }

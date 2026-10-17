@@ -415,3 +415,29 @@ describe('cooling, retraction and machine G-code', () => {
     expect(g).toMatch(/^G1 E-3.3 F/m);
   });
 });
+
+describe('preview data', () => {
+  it('moveLines point at the G-code line of each move, moveAux carries fan and temperature', async () => {
+    const { slice } = await import('../src/engine/slicer');
+    const { weld } = await import('../src/engine/mesh');
+    const { box } = await import('./fixtures');
+    const { MOVE_STRIDE } = await import('../src/engine/gcode');
+    const m = weld(box(100, 100, 0, 20, 20, 3));
+    const cfg = cfgFor('bbl-p1s');
+    const r = slice([{ name: 'box', vertices: m.vertices, indices: m.indices, filament: 0 } as any], cfg);
+    const lines = r.gcode.split('\n');
+    let checked = 0;
+    for (let i = 1; i < r.moveFeatures.length; i += 97) {
+      const t = lines[r.moveLines![i]];
+      expect(t).toMatch(/^(N\d+ )?G[0123]/);
+      const x = /X(-?[\d.]+)/.exec(t);
+      if (x) { expect(+x[1]).toBeCloseTo(r.moves[i * MOVE_STRIDE], 1); checked++; }
+    }
+    expect(checked).toBeGreaterThan(5);
+    const aux = r.moveAux!;
+    let maxFan = 0, temp = 0;
+    for (let i = 0; i < aux.length; i += 2) { maxFan = Math.max(maxFan, aux[i]); temp = Math.max(temp, aux[i + 1]); }
+    expect(maxFan).toBeGreaterThan(0);
+    expect(temp).toBeGreaterThan(180);
+  });
+});

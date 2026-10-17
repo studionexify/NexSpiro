@@ -1,6 +1,6 @@
 // GPU toolpath renderer: one instanced box per extrusion move, built in the vertex shader.
 import * as THREE from 'three';
-import { MOVE_STRIDE } from '../engine/gcode';
+import { AUX_STRIDE, MOVE_STRIDE } from '../engine/gcode';
 import { FEATURE_ORDER, type FeatureType, type SliceOutput } from '../engine/types';
 import type { ColorScheme } from '../state/store';
 
@@ -190,16 +190,16 @@ export class ToolpathView {
   }
 
   /** Recolour by scheme; returns legend range for continuous schemes. */
-  colorize(scheme: ColorScheme, hidden: Set<string>, slotColors: string[] = []): { min: number; max: number; unit: string } | null {
+  colorize(scheme: ColorScheme, hidden: Set<string>, slotColors: string[] = []): { min: number; max: number; unit: string; log?: boolean } | null {
     const r = this.result;
     if (!r || !this.colorAttr) return null;
-    const m = r.moves, f = r.moveFeatures, S = MOVE_STRIDE;
+    const m = r.moves, f = r.moveFeatures, S = MOVE_STRIDE, aux = r.moveAux;
     const arr = this.colorAttr.array as Float32Array;
     const c = new THREE.Color();
     const feats = FEATURE_ORDER.map((k) => new THREE.Color(FEATURE_COLORS[k]));
     // layer time lookup
     let layerOf: Float32Array | null = null;
-    if (scheme === 'layer_time') {
+    if (scheme === 'layer_time' || scheme === 'layer_time_log') {
       layerOf = new Float32Array(f.length);
       for (const L of r.layers) for (let i = L.moveStart; i < L.moveEnd; i++) layerOf[i] = L.time;
     }
@@ -211,6 +211,9 @@ export class ToolpathView {
         case 'width': return m[b + 3];
         case 'flow': return m[b + 5] * m[b + 3] * m[b + 4];
         case 'layer_time': return layerOf![i];
+        case 'layer_time_log': return Math.log(Math.max(0.01, layerOf![i]));
+        case 'fan': return aux ? aux[i * AUX_STRIDE] : 0;
+        case 'temperature': return aux ? aux[i * AUX_STRIDE + 1] : 0;
         default: return 0;
       }
     };
@@ -231,7 +234,9 @@ export class ToolpathView {
     }
     this.colorAttr.needsUpdate = true;
     if (scheme === 'feature' || scheme === 'filament') return null;
-    const unit = { speed: 'mm/s', height: 'mm', width: 'mm', flow: 'mm³/s', layer_time: 's' }[scheme];
+    const unit = { speed: 'mm/s', height: 'mm', width: 'mm', flow: 'mm³/s', layer_time: 's', layer_time_log: 's', fan: '%', temperature: '°C' }[scheme];
+    // the log scale is coloured in log space but labelled in seconds
+    if (scheme === 'layer_time_log') return { min: Math.exp(min), max: Math.exp(max), unit, log: true };
     return { min, max, unit };
   }
 

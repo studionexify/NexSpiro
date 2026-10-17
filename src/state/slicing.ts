@@ -28,8 +28,9 @@ export const plateObjects = (plate = useStore.getState().activePlate) => {
 export function sliceNow(): Promise<SliceOutput | null> {
   const s = useStore.getState();
   const plate = s.activePlate;
-  const objs = plateObjects(plate).filter((o) => o.printable !== false);
-  if (!objs.length) {
+  const program = s.plates[plate]?.program;
+  const objs = program ? [] : plateObjects(plate).filter((o) => o.printable !== false);
+  if (!objs.length && !program) {
     s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
     return Promise.resolve(null);
   }
@@ -82,7 +83,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     };
     worker!.postMessage({
       id, meshes, cfg: currentConfig(plate),
-      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+      opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
 }

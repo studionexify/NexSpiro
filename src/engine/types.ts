@@ -146,6 +146,8 @@ export interface SliceOptions {
   layerActions?: LayerAction[];
   /** Config for each enabled plugin, keyed by plugin id (plain data). */
   plugins?: Record<string, unknown>;
+  /** A drawn calibration program (PA line / pattern) instead of sliced models. */
+  program?: import('./calibGcode').CalibProgram;
 }
 
 export interface SliceStats {

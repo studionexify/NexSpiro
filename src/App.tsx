@@ -57,7 +57,7 @@ function FileMenu() {
         <div className="menu-pop" role="menu">
           {item('New project', 'Ctrl+N', newProject)}
           {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
-          {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length)}
+          {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length && !useStore.getState().plates[useStore.getState().activePlate]?.program)}
           {item('Export G-code…', 'Ctrl+G', exportGcode, !sliced)}
           {item('Export plate sliced file (.gcode.3mf)…', '', () => exportPlateFile('3mf'), !sliced)}
           {item('Print plate…', 'Ctrl+P', openPrintDialog, !sliced)}
@@ -111,6 +111,7 @@ const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.r
 function SliceControls() {
   const { slice, objects, printerId } = useStore();
   const sliced = useSliced();
+  const hasProgram = useStore((s) => !!s.plates[s.activePlate]?.program);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -128,7 +129,7 @@ function SliceControls() {
   );
   return (
     <div className="slice-controls">
-      <button className="btn-primary slice-btn" disabled={!objects.length || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
+      <button className="btn-primary slice-btn" disabled={(!objects.length && !hasProgram) || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
         <Icon name="slice" size={16} />{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : 'Slice plate'}
       </button>
       <div className="split-btn menu">

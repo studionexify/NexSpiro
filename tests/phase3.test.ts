@@ -133,7 +133,7 @@ describe('calibration routines', () => {
       for (let i = 0; i < v.length; i += 3) { v[i] += o.position[0]; v[i + 1] += o.position[1]; }
       return { id: o.id, name: o.name, vertices: v, indices: o.mesh.indices, overrides: o.overrides };
     });
-    return { r, out: slice(meshes, cfg, undefined, { layerActions: r.layerActions }) };
+    return { r, out: slice(meshes, cfg, undefined, { layerActions: r.layerActions, program: r.program }) };
   };
   it('temperature tower steps M104 per block', () => {
     const { out } = sliceCal('temp');
@@ -160,6 +160,34 @@ describe('calibration routines', () => {
       if (k > l.moveStart) speeds.push(out.moves[k * 8 + 5]);
     }
     expect(speeds.at(-1)!).toBeGreaterThan(speeds[0] * 2);
+  });
+  it('PA line: slow-fast-slow lines with rising K, numbers on a tab', () => {
+    const { r, out } = sliceCal('pa_line');
+    expect(r.objects).toHaveLength(0);
+    const ks = [...out.gcode.matchAll(/^M900 K([\d.]+) ; pressure advance/gm)].map((m) => +m[1]);
+    expect(ks.slice(0, 51)).toEqual(Array.from({ length: 51 }, (_, i) => +(i * 0.002).toFixed(4)));
+    expect(out.layers).toHaveLength(2); // lines + number layer
+    // each test line: 20 mm at 20 mm/s, 40 mm at 100 mm/s, 20 mm at 20 mm/s
+    const speeds = new Set<number>();
+    for (let i = out.layers[0].moveStart; i < out.layers[0].moveEnd; i++) if (out.moveFeatures[i] === 0) speeds.add(Math.round(out.moves[i * 8 + 5]));
+    expect([...speeds].sort((a, b) => a - b)).toEqual(expect.arrayContaining([20, 100]));
+    expect(out.stats.filamentMm).toBeGreaterThan(50);
+  });
+  it('PA pattern: four layers of chevrons, K per chevron', () => {
+    const { out } = sliceCal('pa_pattern', 'creality-ender3v3ke');
+    expect(out.layers).toHaveLength(4);
+    const ks = [...out.gcode.matchAll(/^SET_PRESSURE_ADVANCE ADVANCE=([\d.]+) ; pressure advance/gm)].map((m) => +m[1]);
+    const n = 17; // 0 → 0.08 in 0.005
+    expect(new Set(ks).size).toBe(n);
+    expect(ks.filter((k) => k === 0.08)).toHaveLength(4);
+  });
+  it('flow blocks use the object flow ratio and carry number tabs; temperature blocks are labelled', () => {
+    const { r } = sliceCal('flow_fine');
+    expect(r.objects.map((o) => o.overrides!.print_flow_ratio)).toEqual([1, 0.99, 0.98, 0.97, 0.96, 0.95, 0.94, 0.93, 0.92, 0.91]);
+    const lowest = (o: (typeof r.objects)[0]) => { let m = Infinity; for (let i = 1; i < o.mesh.vertices.length; i += 3) m = Math.min(m, o.mesh.vertices[i]); return m; };
+    expect(lowest(r.objects[0])).toBeLessThan(-12); // tab in front of the 20 mm block
+    const t = sliceCal('temp');
+    expect(t.r.objects[0].mesh.indices.length).toBeGreaterThan(400);
   });
   it('retraction test increases retraction length', () => {
     const { out } = sliceCal('retraction');
