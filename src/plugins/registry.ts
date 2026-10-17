@@ -12,6 +12,8 @@ import { hanexConfig, HanexPanel } from './hanex/ui/HanexPanel';
 import { bulnexConfig, BulnexPanel } from './bulnex/ui/BulnexPanel';
 import { PlantexPanel } from './plantex/ui/PlantexPanel';
 import { loadPlantexProject, plantexProject } from './plantex/ui/state';
+import { LumonexPanel } from './lumonex/ui/LumonexPanel';
+import { loadProject as loadLumonexProject, projectData as lumonexProject } from './lumonex/ui/state';
 
 export interface UiPlugin {
   id: string;
@@ -79,6 +81,15 @@ export const PLUGINS: UiPlugin[] = [
     sliceConfig: () => undefined,
     projectData: () => plantexProject(),
     loadProjectData: (d) => loadPlantexProject(d),
+  },
+  {
+    id: 'lumonex', name: 'Lumonex', badge: 'L',
+    description: 'Parametric lamps: shades, bases, holders (E27/E14/B22/GU10/LED), 20 joint types, wall, pendant, floor, floor-to-ceiling, lantern and pipe-mount lamps, sized to your printer.',
+    Panel: LumonexPanel,
+    // geometry is placed on the plate as ordinary objects, so the slicer needs nothing from Lumonex
+    sliceConfig: () => undefined,
+    projectData: () => lumonexProject(),
+    loadProjectData: (d) => loadLumonexProject(d),
   },
 ];
 

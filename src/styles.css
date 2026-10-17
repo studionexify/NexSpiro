@@ -783,3 +783,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tech-graph .clickable { cursor: pointer; }
 .graph-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
 .graph-detail .tech-detail { padding-left: 0; }
+
+/* ---------------------------------------------------------------- Lumonex Studio (98% workspace) */
+.lx-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(0, 0, 0, .45); display: grid; place-items: center; }
+.lx-studio { width: 98vw; height: 98vh; background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, .4); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.lx-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-primary); }
+.lx-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(260px, 330px); }
+.lx-col { overflow-y: auto; padding: 10px; min-height: 0; }
+.lx-left { border-right: 1px solid var(--border); }
+.lx-right { border-left: 1px solid var(--border); }
+.lx-centre { position: relative; min-width: 0; min-height: 0; }
+.lx-viewer, .lx-canvas { position: absolute; inset: 0; }
+.lx-canvas canvas { display: block; width: 100%; height: 100%; }
+.lx-viewbar button { white-space: nowrap; }
+.lx-viewbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: color-mix(in srgb, var(--surface-primary) 85%, transparent); border: 1px solid var(--border); }
+.lx-legend { position: absolute; left: 10px; bottom: 34px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--surface-primary) 90%, transparent); border: 1px solid var(--border); font-size: 12px; display: flex; flex-direction: column; gap: 4px; color: var(--text); }
+.lx-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.lx-status { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: #bbb; text-shadow: 0 1px 2px #000; }
+.lx-toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; max-width: 80%; }
+@media (max-width: 900px) { .lx-body { grid-template-columns: 1fr; grid-template-rows: 45vh auto auto; overflow-y: auto; } .lx-centre { order: -1; min-height: 45vh; } }
