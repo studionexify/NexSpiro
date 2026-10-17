@@ -1,6 +1,6 @@
 // #8 Sub-voxel anti-aliasing, #26 normal-aligned perimeter feathering and #25 3D conformal ironing:
 // the passes that make printed surfaces follow the true CAD surface between layer steps.
-import type { LayerOps, Op } from '../../gcode';
+import type { LayerOps, Op } from '../classic/gcode';
 import { snapToSurface } from '../surface';
 import { moveLike, type Move } from '../runs';
 import type { TechModule } from '../session';

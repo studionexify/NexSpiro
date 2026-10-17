@@ -1,7 +1,7 @@
 // Snapping extrusions onto the true CAD surface inside their own layer band: the shared core of
 // conformal skins (#4) and sub-voxel anti-aliasing (#8). A bead whose layer cuts a sloped surface is
 // moved to the surface height there (never more than half a layer), with flow for its new height.
-import type { LayerOps, Op } from '../gcode';
+import type { LayerOps, Op } from './classic/gcode';
 import type { FeatureType } from '../types';
 import type { PartAnalysis } from './analysis';
 

@@ -5,7 +5,7 @@
 // third), and the re-entrant angle for a negative ν. Bolt-hole hubs get twice the target stiffness.
 import { clipLines, SCALE } from '../../clipper';
 import type { Paths } from '../../types';
-import { sparseFill } from '../../fill';
+import { sparseFill } from '../classic/fill';
 import { engineering, gibsonAshbyNu, gyroidCell, homogenize, homogenize2D, reentrantCell } from '../homogenize';
 import type { InfillPath, SessionCtx, TechModule } from '../session';
 import { PLA } from '../stress';

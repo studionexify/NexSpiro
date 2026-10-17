@@ -1,6 +1,6 @@
 // #22 Sub-surface tangential spiral entry and #23 3D volumetric scarf-wedge splice: the two ways the
 // Advanced engine hides the start and end of an outer-wall loop.
-import type { LayerOps, Op } from '../../gcode';
+import type { LayerOps, Op } from '../classic/gcode';
 import { along, moveLike, runPoints, runsOf, signedArea, type Move, type Run } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 import type { PartAnalysis } from '../analysis';

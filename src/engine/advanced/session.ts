@@ -1,7 +1,7 @@
 // The Advanced slicing session: analyses every part, routes zones to technologies, adapts them to the
 // machine, and exposes the hooks the slicer calls at each pipeline stage. Basic mode never creates one.
 import type { Config } from '../../profiles/settings';
-import type { LayerOps } from '../gcode';
+import type { LayerOps } from './classic/gcode';
 import type { IndexedMesh } from '../mesh';
 import type { FilamentSlot, MeshInput, Paths, Polyline2, ExPolygon, FeatureType } from '../types';
 import type { PluginSession } from '../../plugins/api';

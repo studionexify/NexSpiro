@@ -3,7 +3,7 @@
 // one cell (dwelling at the top so the strand freezes under full fan), drops diagonally to the next
 // node, and so on along each row; then the horizontal struts of the new level are laid. The cell height
 // is capped by the nozzle tip length, so the heater block never reaches a strut printed one level down.
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import type { Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 

@@ -14,9 +14,6 @@ export interface WallItem {
   /** Loop of a hole (clockwise) rather than of an outer contour. */
   hole: boolean;
   widths?: number[];
-  /** Flow multiplier and per-point Z offsets from the layer top (set by Advanced-mode surface passes). */
-  flow?: number;
-  zs?: number[];
 }
 
 export interface WallParams {

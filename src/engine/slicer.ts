@@ -1,5 +1,6 @@
 // The NexSpiro slicing pipeline (stages 2–10). Pure TypeScript, runs in a Web Worker or Node.
 import { calibProgram } from './calibGcode';
+import { slice as advancedSlice } from './advanced/classic/slicer';
 import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, type Config } from '../profiles/settings';
 import {
   area, bounds, clipLines, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
@@ -21,7 +22,6 @@ import { isSmoothLoop, loopLength, scarfLoop, seamGapLoop } from './seam';
 import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
-import { createAdvancedSession, type WallLoop } from './advanced/session';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -54,8 +54,6 @@ interface PathItem extends Polyline2 {
   fil?: number;
   hole?: boolean;
   wallDepth?: number;
-  /** Per-point Z offsets (mm) from the layer top, for non-planar wall patterns (Advanced mode). */
-  zs?: number[];
 }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
@@ -131,11 +129,30 @@ interface Regions {
   lines?: Polyline2[];
 }
 
+/**
+ * Settings of the Advanced engine's frozen classic core under the names it reads: keys the Bambu settings renamed
+ * are filled from their new equivalents (or the old defaults), so Advanced output does not depend on the rename.
+ */
+export function legacyConfig(cfg: Config): Config {
+  const fuzzy = cfg.fuzzy_skin === 'allwalls' ? 'all' : cfg.fuzzy_skin;
+  return {
+    ...cfg,
+    label_objects: cfg.label_objects ?? cfg.exclude_object ?? true,
+    reduce_infill_retraction: cfg.reduce_infill_retraction ?? (cfg.reduce_infill_retraction_mode !== undefined ? cfg.reduce_infill_retraction_mode !== 'disabled' : true),
+    overhang_speed: cfg.overhang_speed ?? (Number(cfg.overhang_3_4_speed) || 30),
+    flow_ratio_scale: cfg.flow_ratio_scale ?? 1,
+    ...(fuzzy !== undefined ? { fuzzy_skin: fuzzy } : {}),
+  };
+}
+
 /** Pressure advance command for the firmware flavour. */
 export const paLine = (flavor: string, k: number) => (flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${k}` : `M900 K${k}`);
 
 export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}, opts: SliceOptions = {}): SliceOutput {
   if (opts.program) return calibProgram(cfg, opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)], opts.program);
+  // drawn calibration programs need no slicing; otherwise Advanced mode is a separate engine (its own frozen
+  // classic core plus the physics modules) and Basic mode is this one
+  if (opts.advanced) return advancedSlice(meshes, legacyConfig(cfg), progress, opts);
   // values changed mid-print by 'config' layer actions (calibration towers etc.)
   const live: Record<string, number> = {};
   const num = (k: string) => (k in live ? live[k] : Number(cfg[k] ?? 0));
@@ -146,13 +163,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const rnd = mulberry(42);
   const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
   const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
-
-  // Advanced mode: analyse the parts, route zones to technologies; curved layers warp the meshes
-  let realMaxZ = 0;
-  for (const m of meshes) for (let i = 2; i < m.vertices.length; i += 3) realMaxZ = Math.max(realMaxZ, m.vertices[i]);
-  const adv = opts.advanced ? (progress('Analysing parts (Advanced)', 0.01), createAdvancedSession(meshes, cfg, opts.advanced, filaments, () => {})) : undefined;
-  if (adv) meshes = adv.meshes;
-
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
   const flavor = str('gcode_flavor');
@@ -221,7 +231,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const ostr = (o: number, i: number, k: string) => String(ocfg(o, i)[k] ?? '');
   const obool = (o: number, i: number, k: string) => ocfg(o, i)[k] === true;
   const olw = (o: number, i: number, k: string) => onum(o, i, k) || onum(o, i, 'line_width') || nozzle * 1.05;
-  adv?.setLayers(zs, hs);
 
   // ---------- stage 2/3: slice objects & parts
   progress('Slicing mesh', 0.04);
@@ -288,7 +297,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
     filamentCount: filaments.length, hasAms: bool('has_ams'), warn,
   });
-  if (adv) sessions.set('nexspiro-advanced', adv.plugin);
   // raised / recessed artwork changes the cross-sections themselves, before walls, surfaces and support
   const reshapers = [...sessions.values()].filter((x) => x.reshape);
   if (reshapers.length) {
@@ -341,9 +349,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     // merge regions sharing a filament
     const merged = new Map<number, Paths>();
     for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
-    const regs = [...merged].map(([fil, paths]) => ({ fil, paths }));
-    // Advanced: material interfaces (dovetail fingers)
-    return adv?.regions && regs.length > 1 ? adv.regions(o, i, regs) : regs;
+    return [...merged].map(([fil, paths]) => ({ fil, paths }));
   };
 
   // ---------- stage 4: perimeters, per object & filament region
@@ -376,15 +382,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       for (const reg of filRegions(oi, i)) {
         const regInner: Paths = [];
         for (const ex of toExPolygons(reg.paths)) {
-          // Advanced mode: a wall technology may replace the walls of this island
-          const custom = adv?.walls && !vase && walls > 0 ? adv.walls(oi, ex, { walls, wo, wi, so, si, h, z: zs[i], layer: i }) : undefined;
-          if (custom) {
-            const loops = custom.loops.map((ring, k) => ring.map((l) => ({ ...l, ring: k, hole: false })));
-            if (adv?.wallsPost) adv.wallsPost(oi, i, ex, loops as unknown as WallLoop[][]);
-            regInner.push(...custom.inner);
-            islands.push({ obj: oi, fil: reg.fil, ex, walls: { loops, inner: custom.inner, thin: [], gaps: [] } });
-            continue;
-          }
           let topOne: Paths | null = null;
           if (!vase && walls > 1 && (topType === 'all_top' || topType === 'topmost')) {
             const ip = exToPaths(ex);
@@ -406,11 +403,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             gapFill: !arachne && !vase,
             topOneWall: topOne,
           });
-          // Advanced mode: surface passes may reshape the wall rings (non-planar offsets)
-          if (adv?.wallsPost && !vase) {
-            for (const ring of w.loops) for (const l of ring) l.flow ??= 1;
-            adv.wallsPost(oi, i, ex, w.loops as unknown as WallLoop[][]);
-          }
           regInner.push(...w.inner);
           islands.push({ obj: oi, fil: reg.fil, ex, walls: w });
         }
@@ -1080,11 +1072,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const surfFlow = it.feature === 'top_surface' ? (cn('top_solid_infill_flow_ratio') || 1) : 1;
       const flowMul = (fl.flowRatio || 1) * it.flow * objFlow * layerFlow * surfFlow;
       const ePerMm = (xs / filArea) * flowMul;
-      const varW = it.widths && it.widths.length * 2 === pts.length ? (it.closed ? [...it.widths, it.widths[0]] : it.widths) : null;
+      const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
       let v = it.speed !== undefined ? Math.min(speedFor(it.feature, i), it.speed) : speedFor(it.feature, i);
       v = Math.min(v, capH.v);
-      // Advanced mode: per-point Z offsets of non-planar walls
-      const zoff = it.zs && it.zs.length * 2 === pts.length ? (it.closed ? [...it.zs, it.zs[0]] : it.zs) : null;
       const maxVol = 'filament_max_volumetric_speed' in live ? live.filament_max_volumetric_speed : fl.maxVolumetricSpeed;
       v = Math.min(v, (maxVol || 1e9) / Math.max(xs, 1e-6));
       const noSlow = it.noSlow;
@@ -1098,7 +1088,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (len < 1e-5) continue;
         run += len;
         const idx = k / 2;
-        const zz = (it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : it.depth ? zTop - (it.depth[idx] ?? 0) * h : zTop) + (zoff ? zoff[idx] : 0);
+        const zz = it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : it.depth ? zTop - (it.depth[idx] ?? 0) * h : zTop;
         const feat = it.feats?.[idx] ?? it.feature;
         const segFlow = it.flows?.[idx] ?? 1;
         let sv = v;
@@ -1234,11 +1224,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           add(clipped.map((p) => ({ pts: pathToPoly(p), closed: false })), 'sparse_infill', spw, 1, { fil: sparseFil });
         } else if (rg.sparse.length && dens > 0) {
           const reg = clipTo(rg.sparse, spw);
-          // Advanced mode: an infill technology may claim part of the region; the rest gets the regular pattern
-          const custom = adv?.infill && reg.length ? adv.infill(o, reg, { width: spw, density: dens, z: zTop, h, layer: i, pattern: pat }) : undefined;
-          if (custom) for (const p of custom.paths) fills.push({ ...p, pts: p.widths ? p.pts : simplify(p.pts, resolution, p.closed), feature: p.feature ?? 'sparse_infill', width: p.width, flow: p.flow ?? 1, fil: sparseFil });
-          const rest = custom ? custom.rest : reg;
-          if (rest.length) add(sparseLines(rest, pat, dens, onum(o, i, 'infill_direction')), 'sparse_infill', spw, 1, { fil: sparseFil });
+          if (reg.length) add(sparseLines(reg, pat, dens, onum(o, i, 'infill_direction')), 'sparse_infill', spw, 1, { fil: sparseFil });
         }
         if (rg.combined && dens > 0) {
           const reg = clipTo(rg.combined.paths, spw);
@@ -1406,15 +1392,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           const ordered = orderPaths(isl.walls.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
           for (const loop of ordered) {
             const feature = loop.feature;
-            if (loop.zs?.length || loop.widths?.length) {
-              // Advanced mode ring with per-point Z offsets or widths: keep every point so the arrays stay aligned
-              const si = loop.closed ? pickSeam(loop.pts, seamMode, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, null, rnd, hints) : 0;
-              const rot = <T,>(a: T[] | undefined) => (a && a.length * 2 === loop.pts.length ? [...a.slice(si), ...a.slice(0, si)] : undefined);
-              const pts = loop.closed ? rotateLoop(loop.pts, si) : loop.pts;
-              if (k === 0 && loop.closed) seams.push([pts[0], pts[1]]);
-              wallItems.push({ pts, closed: loop.closed, feature, width: loop.width, flow: loop.flow ?? 1, zs: rot(loop.zs), widths: rot(loop.widths), hole: loop.hole, wallDepth: k });
-              continue;
-            }
             if (!loop.closed) { wallItems.push(classifyOverhang({ pts: simplify(loop.pts, resolution, false), closed: false, feature, width: loop.width, flow: 1, wallDepth: k }, lower, o)); continue; }
             let pts = simplify(loop.pts, resolution, true);
             const prev = seamMode === 'aligned' && prevSeams.length
@@ -1442,8 +1419,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             if (vase && i >= objStart + Math.round(onum(o, i, 'bottom_shell_layers'))) {
               item = { pts: smoothSpiral(pts, o, i, loop.width), closed: true, feature, width: loop.width, flow: 1, spiral: true, hole: loop.hole };
             } else {
-              // Advanced mode seam technologies take over the seam: loops stay whole (no scarf, no seam gap)
-              const scarfOn = !adv && !fuzzThis && scarfType !== 'none' && scarfLen > 0 && i > objStart
+              const scarfOn = !fuzzThis && scarfType !== 'none' && scarfLen > 0 && i > objStart
                 && (k === 0 ? (scarfType === 'all' || !loop.hole) : (scarfFromProcess ? obool(o, i, 'seam_slope_inner_walls') : true) && (scarfType === 'all' || !loop.hole))
                 && (!(scarfFromProcess ? obool(o, i, 'seam_slope_conditional') : true) || isSmoothLoop(pts, onum(o, i, 'scarf_angle_threshold') || 155));
               if (scarfOn) {
@@ -1454,7 +1430,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
                 });
                 item = { pts: sc.pts, closed: false, feature, width: loop.width, flow: 1, depth: sc.depth, flows: sc.flows, hole: loop.hole };
               } else {
-                const gap = adv ? 0 : (onum(o, i, 'seam_gap') / 100) * nozzle;
+                const gap = (onum(o, i, 'seam_gap') / 100) * nozzle;
                 const open = flows ? [...pts, pts[0], pts[1]] : seamGapLoop(pts, gap);
                 item = { pts: open, closed: false, feature, width: loop.width, flow: 1, hole: loop.hole, ...(flows ? { flows: [1, ...flows.slice(1), flows[0]] } : {}) };
               }
@@ -1660,9 +1636,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }
 
     if (seams.length) prevSeams = seams;
-    // planned part fan for post-passes (Advanced modules); the emitter replaces it with the layer-time fan
-    const plannedFan = i < tnum('close_fan_the_first_x_layers') ? 0 : tnum('fan_max_speed');
-    const L: LayerOps = { z: zTop, h, ops, fan: plannedFan, layer: i, tool: Math.max(0, curTool) };
+    const L: LayerOps = { z: zTop, h, ops, fan: 0, layer: i, tool: Math.max(0, curTool) };
     if (i === 1) {
       const fl = filaments[Math.max(0, curTool)];
       if (fl.nozzleTemp !== fl.nozzleTempInitial) L.temp = fl.nozzleTemp;
@@ -1739,9 +1713,6 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const x0 = b.minX / SCALE, y0 = b.minY / SCALE, x1 = b.maxX / SCALE, y1 = b.maxY / SCALE;
     return { name: labelName(o), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as [number, number][] };
   }).filter((l) => isFinite(l.cx));
-  // ---------- Advanced: geometry passes (curved layers, helices, seams, weaving…) before the plugins
-  const stageCtx = { cfg, layerZ: zs, layerH: hs, warn: (msg: string) => { if (!warnings.includes(msg)) warnings.push(msg); } };
-  if (adv) { progress('Advanced toolpath passes', 0.88); adv.post(layerOps, stageCtx); }
   // ---------- plugins: post-toolpath, pre-G-code
   let pluginRun: ReturnType<typeof runPlugins> = { header: [], reports: {} };
   if (opts.plugins && Object.keys(opts.plugins).length && !byObject) {
@@ -1773,23 +1744,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }));
     pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn }, sessions);
   }
-  // ---------- Advanced: rheology & motion passes on the final move list
-  if (adv) { progress('Advanced rheology & motion', 0.91); adv.finalize(layerOps, stageCtx); }
-  const advHeader = adv ? [`; NexSpiro Advanced engine: intent=${opts.advanced!.intent} machine=${adv.ctx.caps.name}`] : [];
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: [...pluginRun.header, ...advHeader] });
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
   if (all.minX / SCALE < -0.01 || all.minY / SCALE < -0.01 || all.maxX / SCALE > bx + 0.01 || all.maxY / SCALE > by + 0.01) {
     warn('Some geometry lies outside the printable area.');
   }
-  // the real model height (Advanced curved layers may warp the meshes that were sliced)
-  if (realMaxZ + shift > num('bed_z')) warn(`Model height ${(realMaxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
+  if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
-  const advanced = adv?.report();
-  if (advanced) for (const w of advanced.warnings) if (!warnings.includes(w)) warnings.push(w);
-  return { ...res, warnings, pluginReports: pluginRun.reports, ...(advanced ? { advanced } : {}) };
+  return { ...res, warnings, pluginReports: pluginRun.reports };
 }
 
 /** Whether the straight travel A→B crosses the outline of the layer (Auto Z hop picks the spiral lift then). */

@@ -9,7 +9,7 @@ import { periodAccel, ringing } from '../../src/engine/advanced/modules/motion';
 import { wallShear } from '../../src/engine/advanced/modules/rheology';
 import { reebGraph } from '../../src/engine/advanced/modules/morse';
 import { analyzePart } from '../../src/engine/advanced/analysis';
-import type { LayerOps } from '../../src/engine/gcode';
+import type { LayerOps } from '../../src/engine/advanced/classic/gcode';
 import type { IntentId } from '../../src/engine/advanced/types';
 
 const cfgFor = (printerId: string, overrides = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides });

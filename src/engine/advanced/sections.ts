@@ -1,7 +1,7 @@
 // Cross-section profile of a part along Z: area, island count and holes per sampled plane. From it the
 // router finds necks (area minima), helical bands (steady single-island stretches) and bosses (round holes).
 import { area, toExPolygons, SCALE } from '../clipper';
-import { sliceMesh } from '../slice';
+import { sliceMesh } from './classic/slice';
 import type { IndexedMesh } from '../mesh';
 import type { Paths } from '../types';
 

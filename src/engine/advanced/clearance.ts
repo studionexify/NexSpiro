@@ -2,7 +2,7 @@
 // order, keeps height maps of printed plastic (finished layers, and the current layer with a lag), and
 // tests every move that leaves its layer's plane against the nozzle cone and the head's volumes
 // (heater block, fan duct, carriage). Offending points are lifted (up to half a layer) or reported.
-import type { LayerOps } from '../gcode';
+import type { LayerOps } from './classic/gcode';
 import type { ToolheadProfile } from '../../plugins/motionex/core/toolhead';
 
 /** worst: deepest collision found; worstLeft: deepest one left unresolved. */

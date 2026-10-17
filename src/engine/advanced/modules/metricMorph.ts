@@ -6,7 +6,7 @@
 // at angle α from e₂. Solving ρ(α) = 1/√(1 + |∇f|²) point by point gives the bead director field; the
 // sheet is printed flat (outline = the part's footprint) with its beads as evenly spaced streamlines
 // of that field, so heating buckles it into the target's curvature.
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import { clipLines, SCALE } from '../../clipper';
 import { isolines, maskDistance, smoothLoop, toPath, type RasterRegion } from '../offsets';
 import type { Move } from '../runs';
