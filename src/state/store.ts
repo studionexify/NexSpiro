@@ -168,7 +168,7 @@ interface State {
   /** Measure tool: picked world points (up to 2). */
   measureFeatures: MeasureFeature[];
   measureMode: MeasureMode;
-  /** Bambu's arrange settings: spacing between objects, try rotations, where the group goes. */
+  /** Arrange settings: spacing between objects, try rotations, where the group goes. */
   arrangeSettings: { spacing: number; rotate: boolean; align: 'center' | 'x' | 'y' };
   /** Surface point picked for Text / SVG volumes. */
   surfacePick: { objId: string; point: Vec3; normal: Vec3 } | null;

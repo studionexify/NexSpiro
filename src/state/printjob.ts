@@ -1,4 +1,4 @@
-// Builds the file sent to a printer for the sliced plate: .gcode.3mf for Bambu Lab,
+// Builds the file sent to a printer for the sliced plate: .gcode.3mf for A1/P1/X1/H2 printers,
 // G-code with embedded thumbnails for everything else. Also used by "Export plate".
 import { buildGcode3mf, gcodeThumbnailBlock } from '../io/gcode3mf';
 import { filamentById } from '../profiles/filaments';
@@ -18,7 +18,7 @@ export async function ensureSliced() {
   return sliceNow();
 }
 
-/** Bambu's filename_format: expand the placeholders of the export name. */
+/** filename_format: expand the placeholders of the export name. */
 export function formatFilename(fmt: string, v: { base: string; plate: string; cfg: Record<string, unknown>; seconds: number; grams: number }, ext: string): string {
   const hms = (t: number) => { const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60); return h ? `${h}h${m}m` : `${m}m${Math.round(t % 60)}s`; };
   const vals: Record<string, string> = {
@@ -49,7 +49,7 @@ export async function buildPrintJob(format?: '3mf' | 'gcode'): Promise<PrintJob 
   const p = printerById(s.printerId);
   const objs = plateObjects(s.slice.plate);
   const base = `${safeName(objs[0]?.name ?? 'plate')}${objs.length > 1 ? `_+${objs.length - 1}` : ''}`;
-  const kind = format ?? (p.flavor === 'bambu' ? '3mf' : 'gcode');
+  const kind = format ?? (p.flavor === 'bbl' ? '3mf' : 'gcode');
   const cfgOut = currentConfig(s.slice.plate);
   const fname = (ext: string) => formatFilename(String(cfgOut.filename_format ?? ''), { base, plate: s.plates[s.slice.plate]?.name ?? 'plate', cfg: cfgOut, seconds: r.stats.timeSeconds, grams: r.stats.filamentGrams }, ext);
   const gcodeOut = await postProcess(r.gcode, cfgOut, fname('gcode'));
@@ -62,7 +62,7 @@ export async function buildPrintJob(format?: '3mf' | 'gcode'): Promise<PrintJob 
       objects: objs.map((o, i) => ({ id: i + 1, name: o.name })),
       filaments: s.filaments.map((f) => ({ type: filamentById(f.presetId).type, color: f.color })),
       supportUsed: cfg.enable_support === true,
-    }], cfg, p.bambuModelId ?? '', p.nozzle);
+    }], cfg, p.printerModelId ?? '', p.nozzle);
     return { name: fname('gcode.3mf'), data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, kind, usedSlots };
   }
   // PrusaSlicer-style thumbnails right after the header comments (Klipper/Moonraker & printer screens read them)

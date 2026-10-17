@@ -1,5 +1,5 @@
-// Frozen classic engine of Advanced mode (as on main before the Bambu parity work, 08b924a). Advanced mode
-// slices with this engine only, so Basic (Bambu) changes never alter Advanced output and vice versa.
+// Frozen classic engine of Advanced mode (as on main at 08b924a). Advanced mode slices with this engine
+// only, so Basic-engine changes never alter Advanced output and vice versa.
 // Variable-width walls (Arachne-style). Regions too narrow for a pair of constant-width
 // beads are printed as a single bead that follows the region's medial axis, with the bead
 // width following the local region width. This fills thin walls and gaps that classic

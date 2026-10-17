@@ -1,4 +1,4 @@
-// Build plates drawn after Bambu Studio: the real plate outline (back tab, front lip, rounded corners),
+// Build plates: the real plate outline (back tab, front lip, rounded corners),
 // the bed type's colour and print, the 10 mm grid, the plate number and pencil, and the icon column
 // beside each plate (remove, auto orient, arrange, lock, settings) lying in the plate plane.
 import * as THREE from 'three';
@@ -6,17 +6,17 @@ import type { PlateType, PrinterProfile } from '../profiles/printers';
 import { ICON_PATHS } from '../ui/icons';
 
 export type PlateAction = 'remove' | 'orient' | 'arrange' | 'lock' | 'settings' | 'number' | 'name';
-export const BAMBU_GREEN = '#00AE42';
+export const ACCENT_GREEN = '#00AE42';
 
 interface BedLook { color: string; print: string; strip: string; textured: boolean }
 /** Plate surface colour and the print on it, per bed type. */
-function bedLook(type: PlateType, bambu: boolean, label: string): BedLook {
-  if (bambu) {
+function bedLook(type: PlateType, isBbl: boolean, label: string): BedLook {
+  if (isBbl) {
     switch (type) {
-      case 'cool_plate': return { color: '#2E3031', print: 'Bambu Cool Plate SuperTack', strip: 'PLA/PETG/TPU', textured: false };
-      case 'engineering_plate': return { color: '#3B3C3E', print: 'Bambu Engineering Plate', strip: 'ABS/ASA/PC/PA', textured: false };
-      case 'high_temp_plate': return { color: '#45423C', print: 'Bambu Smooth PEI Plate', strip: 'PLA/ABS/PETG', textured: false };
-      default: return { color: '#404343', print: 'Bambu Textured PEI Plate', strip: 'PLA/ABS/PETG', textured: true };
+      case 'cool_plate': return { color: '#2E3031', print: 'Cool Plate SuperTack', strip: 'PLA/PETG/TPU', textured: false };
+      case 'engineering_plate': return { color: '#3B3C3E', print: 'Engineering Plate', strip: 'ABS/ASA/PC/PA', textured: false };
+      case 'high_temp_plate': return { color: '#45423C', print: 'Smooth PEI Plate', strip: 'PLA/ABS/PETG', textured: false };
+      default: return { color: '#404343', print: 'Textured PEI Plate', strip: 'PLA/ABS/PETG', textured: true };
     }
   }
   return type === 'high_temp_plate'
@@ -38,10 +38,10 @@ function roundedPath(p: { moveTo(x: number, y: number): void; lineTo(x: number, 
 }
 
 /** Plate outline in plate coordinates (printable area is 0..X, 0..Y). */
-function outline(X: number, Y: number, bambu: boolean): { pts: V2[]; radii: number[] } {
-  const M = bambu ? 2 : 3;
+function outline(X: number, Y: number, isBbl: boolean): { pts: V2[]; radii: number[] } {
+  const M = isBbl ? 2 : 3;
   const L = -M, R = X + M, B = -M, T = Y + M;
-  if (!bambu) return { pts: [[L, B], [R, B], [R, T], [L, T]], radii: [5, 5, 5, 5] };
+  if (!isBbl) return { pts: [[L, B], [R, B], [R, T], [L, T]], radii: [5, 5, 5, 5] };
   const lipX = X * 0.3, lip = 9;
   const cx = X / 2, tw = X * 0.36, tab = 8;
   return {
@@ -50,7 +50,7 @@ function outline(X: number, Y: number, bambu: boolean): { pts: V2[]; radii: numb
   };
 }
 
-function surfaceTexture(p: PrinterProfile, X: number, Y: number, bambu: boolean, look: BedLook, box: { x0: number; y0: number; x1: number; y1: number }) {
+function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean, look: BedLook, box: { x0: number; y0: number; x1: number; y1: number }) {
   const W = box.x1 - box.x0, H = box.y1 - box.y0;
   const k = Math.min(6, 2048 / Math.max(W, H));
   const c = document.createElement('canvas');
@@ -59,7 +59,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, bambu: boolean,
   // draw in millimetres, y up
   const mm = () => g.setTransform(k, 0, 0, -k, -box.x0 * k, box.y1 * k);
   mm();
-  const o = outline(X, Y, bambu);
+  const o = outline(X, Y, isBbl);
   g.beginPath(); roundedPath(g, o.pts, o.radii); g.closePath();
   g.fillStyle = look.color; g.fill();
   if (look.textured) {
@@ -91,7 +91,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, bambu: boolean,
   };
   // bed type printed along the left edge, reading from the back towards the front
   if (look.print) text(look.print, 6.5, Y - 8, Math.min(9, X / 26), 'rgba(226,228,228,0.85)', Math.PI / 2);
-  if (bambu) {
+  if (isBbl) {
     // front lip: material strip with HOT SURFACE warning, and the lip markings
     const sx0 = X * 0.36, sx1 = X * 0.86, sy0 = -2 - 7.6, sy1 = -2 - 1.6;
     g.beginPath(); roundedPath(g, [[sx0, sy0], [sx1, sy0], [sx1, sy1], [sx0, sy1]], [1, 1, 1, 1]); g.closePath();
@@ -137,15 +137,15 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 }
 
-/** Icon tile in Bambu's style: light rounded square with a dark outline icon. state: normal, hover, on (toggled) or off (disabled). */
+/** Icon tile: light rounded square with a dark outline icon. state: normal, hover, on (toggled) or off (disabled). */
 export function iconTexture(icon: string, state: 'normal' | 'hover' | 'on' | 'off', dark: boolean) {
   return canvasTex(128, 128, (g) => {
-    const bg = state === 'hover' ? '#FFFFFF' : state === 'on' ? BAMBU_GREEN : dark ? '#3A3D42' : '#F2F2F2';
-    const fg = state === 'on' ? '#FFFFFF' : state === 'off' ? (dark ? '#5A5E64' : '#C4C4C4') : state === 'hover' ? BAMBU_GREEN : dark ? '#D8DADC' : '#5A5E62';
+    const bg = state === 'hover' ? '#FFFFFF' : state === 'on' ? ACCENT_GREEN : dark ? '#3A3D42' : '#F2F2F2';
+    const fg = state === 'on' ? '#FFFFFF' : state === 'off' ? (dark ? '#5A5E64' : '#C4C4C4') : state === 'hover' ? ACCENT_GREEN : dark ? '#D8DADC' : '#5A5E62';
     g.globalAlpha = state === 'off' ? 0.6 : 1;
     g.beginPath(); g.roundRect(6, 6, 116, 116, 16);
     g.fillStyle = bg; g.fill();
-    g.lineWidth = 4; g.strokeStyle = state === 'hover' || state === 'on' ? BAMBU_GREEN : dark ? '#62666C' : '#B9BBBD'; g.stroke();
+    g.lineWidth = 4; g.strokeStyle = state === 'hover' || state === 'on' ? ACCENT_GREEN : dark ? '#62666C' : '#B9BBBD'; g.stroke();
     g.translate(22, 22); g.scale(3.5, 3.5);
     g.strokeStyle = fg; g.lineWidth = 1.7; g.lineCap = 'round'; g.lineJoin = 'round';
     g.stroke(new Path2D(ICON_PATHS[icon] ?? ICON_PATHS.info));
@@ -159,18 +159,18 @@ export interface PlateBuild { group: THREE.Group; icons: PlateIcon[] }
 export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: string, index: number, opts: { plates: number; locked: boolean; name: string; dark: boolean; active: boolean }): PlateBuild {
   const g = new THREE.Group();
   const { x: X, y: Y } = p.bed;
-  const bambu = p.flavor === 'bambu';
-  const look = bedLook(plateType, bambu, bedLabel);
-  const o = outline(X, Y, bambu);
+  const isBbl = p.flavor === 'bbl';
+  const look = bedLook(plateType, isBbl, bedLabel);
+  const o = outline(X, Y, isBbl);
   const xs = o.pts.map((q) => q[0]), ys = o.pts.map((q) => q[1]);
   const box = { x0: Math.min(...xs) - 1, y0: Math.min(...ys) - 1, x1: Math.max(...xs) + 1, y1: Math.max(...ys) + 1 };
 
-  // the plate slab: textured top, darker sides; hidden from below so only the grid shows (as in Bambu Studio)
+  // the plate slab: textured top, darker sides; hidden from below so only the grid shows
   const shape = new THREE.Shape();
   roundedPath(shape, o.pts, o.radii);
   const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false, curveSegments: 6 });
   slabGeo.translate(0, 0, -1.2);
-  const top = new THREE.MeshBasicMaterial({ map: surfaceTexture(p, X, Y, bambu, look, box) });
+  const top = new THREE.MeshBasicMaterial({ map: surfaceTexture(p, X, Y, isBbl, look, box) });
   const side = new THREE.MeshBasicMaterial({ color: new THREE.Color(look.color).multiplyScalar(0.7) });
   const slab = new THREE.Mesh(slabGeo, [top, side]);
   slab.userData.plateIndex = index;
@@ -186,10 +186,10 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
   };
-  const lineColor = plateType === 'high_temp_plate' && !bambu ? '#5A4720' : '#A9ACAD';
+  const lineColor = plateType === 'high_temp_plate' && !isBbl ? '#5A4720' : '#A9ACAD';
   g.add(lines(minor, lineColor, 0.42));
   g.add(lines(major, lineColor, 0.75));
-  g.add(lines([0, 0, 0.02, X, 0, 0.02, X, 0, 0.02, X, Y, 0.02, X, Y, 0.02, 0, Y, 0.02, 0, Y, 0.02, 0, 0, 0.02], opts.active && opts.plates > 1 ? BAMBU_GREEN : lineColor, opts.active && opts.plates > 1 ? 1 : 0.8));
+  g.add(lines([0, 0, 0.02, X, 0, 0.02, X, 0, 0.02, X, Y, 0.02, X, Y, 0.02, 0, Y, 0.02, 0, Y, 0.02, 0, 0, 0.02], opts.active && opts.plates > 1 ? ACCENT_GREEN : lineColor, opts.active && opts.plates > 1 ? 1 : 0.8));
   // the printable volume, faintly
   const vol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, p.bed.z)), new THREE.LineBasicMaterial({ color: '#8C9094', transparent: true, opacity: opts.active ? 0.22 : 0.08 }));
   vol.position.set(X / 2, Y / 2, p.bed.z / 2);
@@ -220,7 +220,7 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   // plate number at the front-right, pencil (and custom name) at the back-left
   const numTex = canvasTex(256, 128, (c) => {
     c.font = 'italic 800 96px "Segoe UI", system-ui, sans-serif';
-    c.fillStyle = BAMBU_GREEN; c.textBaseline = 'middle'; c.textAlign = 'center';
+    c.fillStyle = ACCENT_GREEN; c.textBaseline = 'middle'; c.textAlign = 'center';
     c.fillText(String(index + 1).padStart(2, '0'), 128, 68);
   });
   const num = flatQuad(numTex, S * 1.4, S * 0.7, right + 4 + S * 0.7, Math.min(...ys) + S * 0.2);
@@ -231,9 +231,9 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   const custom = opts.name !== `Plate ${index + 1}`;
   const nameTex = canvasTex(custom ? 1024 : 128, 128, (c) => {
     c.save(); c.translate(8, 12); c.scale(4.2, 4.2);
-    c.strokeStyle = BAMBU_GREEN; c.lineWidth = 2; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = ACCENT_GREEN; c.lineWidth = 2; c.lineCap = 'round'; c.lineJoin = 'round';
     c.stroke(new Path2D(ICON_PATHS.edit)); c.restore();
-    if (custom) { c.font = '600 72px "Segoe UI", system-ui, sans-serif'; c.fillStyle = BAMBU_GREEN; c.textBaseline = 'middle'; c.fillText(opts.name, 128, 66); }
+    if (custom) { c.font = '600 72px "Segoe UI", system-ui, sans-serif'; c.fillStyle = ACCENT_GREEN; c.textBaseline = 'middle'; c.fillText(opts.name, 128, 66); }
   });
   const nameW = S * 0.7 * (custom ? 8 : 1);
   const name = flatQuad(nameTex, nameW, S * 0.7, Math.min(...xs) + nameW / 2 - 2, Math.max(...ys) + S * 0.55);

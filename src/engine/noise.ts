@@ -1,4 +1,4 @@
-// Fuzzy skin: displacement / extrusion noise along wall loops (Bambu Studio's fuzzy skin modes and noise types).
+// Fuzzy skin: displacement / extrusion noise along wall loops (fuzzy skin modes and noise types).
 export type NoiseType = 'classic' | 'perlin' | 'billow' | 'ridgedmulti' | 'voronoi';
 export type FuzzyMode = 'displacement' | 'extrusion' | 'combined';
 

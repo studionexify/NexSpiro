@@ -151,7 +151,7 @@ describe('interlocking (#7, #19)', () => {
 });
 
 describe('Seamless Aesthetic, all Phase 1–3 technologies together', () => {
-  it('compiles a domed vase-like part on Bambu, Klipper and Marlin machines', () => {
+  it('compiles a domed vase-like part on A1/P1/X1, Klipper and Marlin machines', () => {
     for (const id of ['bbl-a1', 'voron-24-350', 'prusa-mk4s']) {
       const out = slice([indexed(dome(100, 100, 16, 18, 6), 'silo')], cfgFor(id), () => {}, { advanced: { intent: 'aesthetic', printerId: id, techs: {}, resolution: 'draft' } });
       sane(out.gcode);

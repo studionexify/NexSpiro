@@ -1,4 +1,4 @@
-// Bambu Lab LAN connection: MQTT (TLS :8883) for status/commands, implicit FTPS (:990) for files,
+// LAN access-code connection (A1/P1/X1/H2): MQTT (TLS :8883) for status/commands, implicit FTPS (:990) for files,
 // and the TLS JPEG stream on :6000 (A1 / P1 series) for the camera. Runs in the Electron main process.
 import mqtt, { type MqttClient } from 'mqtt';
 import { Client as FtpClient } from 'basic-ftp';
@@ -6,7 +6,7 @@ import { Readable, Writable } from 'node:stream';
 import tls from 'node:tls';
 import { Emitter, type AmsUnit, type ConnectionConfig, type HmsEntry, type PrinterConnection, type PrinterStatus, type PrintOptions, type RemoteFile } from '../../src/connect/types';
 
-export interface BambuConfig extends ConnectionConfig { cameraMode?: 'jpeg' | 'rtsp' | 'none'; mqttPort?: number; ftpPort?: number; cameraPort?: number }
+export interface LanConfig extends ConnectionConfig { cameraMode?: 'jpeg' | 'rtsp' | 'none'; mqttPort?: number; ftpPort?: number; cameraPort?: number }
 
 const STATE: Record<string, PrinterStatus['state']> = {
   IDLE: 'idle', PREPARE: 'printing', SLICING: 'printing', RUNNING: 'printing', PAUSE: 'paused', FINISH: 'finished', FAILED: 'error',
@@ -51,7 +51,7 @@ export function statusFromReport(p: Record<string, any>): PrinterStatus {
     const sev = (Number(h.code) >>> 16) & 0xffff;
     return {
       code: hmsCode(Number(h.attr), Number(h.code)),
-      message: `HMS ${hmsCode(Number(h.attr), Number(h.code))} — see wiki.bambulab.com/en/hms`,
+      message: `HMS ${hmsCode(Number(h.attr), Number(h.code))} — see the printer's HMS documentation`,
       severity: sev <= 2 ? 'error' : sev === 3 ? 'warning' : 'info',
     };
   });
@@ -105,8 +105,8 @@ export class FrameParser {
   }
 }
 
-export class BambuConnection implements PrinterConnection {
-  readonly kind = 'bambu_lan' as const;
+export class LanConnection implements PrinterConnection {
+  readonly kind = 'bbl_lan' as const;
   private client: MqttClient | null = null;
   private acc: Record<string, any> = {};
   private st: PrinterStatus = { state: 'offline' };
@@ -115,13 +115,13 @@ export class BambuConnection implements PrinterConnection {
   private cam: tls.TLSSocket | null = null;
   private seq = 0;
 
-  constructor(private cfg: BambuConfig) {}
+  constructor(private cfg: LanConfig) {}
 
   private get serial() { return (this.cfg.serial ?? '').trim().toUpperCase(); }
   private set(s: PrinterStatus) { this.st = s; this.ev.emit(s); }
 
   connect(): Promise<void> {
-    if (!this.cfg.host || !this.serial || !this.cfg.accessCode) return Promise.reject(new Error('Bambu LAN needs the printer IP, serial number and access code.'));
+    if (!this.cfg.host || !this.serial || !this.cfg.accessCode) return Promise.reject(new Error('LAN connection needs the printer IP, serial number and access code.'));
     this.set({ state: 'connecting' });
     return new Promise((resolve, reject) => {
       let settled = false;

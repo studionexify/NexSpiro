@@ -1,4 +1,4 @@
-// Filament settings, laid out like Bambu Studio's filament settings pages (Filament, Cooling, Setting overrides,
+// Filament settings, laid out in filament settings pages (Filament, Cooling, Setting overrides,
 // Advanced, Notes). Values come from the filament profile; each filament slot can override any of them.
 import type { FilamentProfile } from './filaments';
 import type { Config, ParamDef } from './settings';
@@ -11,7 +11,7 @@ const noScarf = (c: Config) => c.filament_scarf_seam_type === 'none';
 
 export const FILAMENT_PAGES = ['Filament', 'Cooling', 'Setting overrides', 'Advanced', 'Notes'] as const;
 
-/** Printer retraction settings a filament may override (Bambu's "Setting overrides" page). */
+/** Printer retraction settings a filament may override (the "Setting overrides" page). */
 export const FILAMENT_OVERRIDE_KEYS = [
   'retraction_length', 'z_hop', 'z_hop_types', 'retraction_speed', 'deretraction_speed', 'retract_restart_extra',
   'retraction_minimum_travel', 'retract_when_changing_layer', 'wipe', 'wipe_distance', 'retract_before_wipe',
@@ -104,7 +104,7 @@ export const FILAMENT_PARAM_BY_KEY: Record<string, ParamDef> = Object.fromEntrie
 /** Keys only meaningful when the user sets them (Setting overrides page). */
 export const NULLABLE_FILAMENT_KEYS = new Set(FILAMENT_OVERRIDE_KEYS.map((k) => `filament_${k}`));
 
-/** Cooling and temperature defaults by material, from Bambu's generic filament profiles. */
+/** Cooling and temperature defaults by material, from generic filament profiles. */
 const BY_TYPE: Record<string, Config> = {
   PLA: { nozzle_temperature_range_low: 190, nozzle_temperature_range_high: 240, fan_cooling_layer_time: 100, reduce_fan_stop_start_freq: true, overhang_fan_threshold: '50%', additional_cooling_fan_speed: 70 },
   PETG: { nozzle_temperature_range_low: 220, nozzle_temperature_range_high: 260, fan_cooling_layer_time: 30, reduce_fan_stop_start_freq: true, overhang_fan_threshold: '10%', overhang_fan_speed: 90, additional_cooling_fan_speed: 0 },

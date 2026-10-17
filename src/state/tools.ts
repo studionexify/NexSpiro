@@ -194,7 +194,7 @@ export async function addText(o: TextOptions) {
   s.markDirty();
 }
 
-// ---------------------------------------------------------------- emboss as a volume (Bambu's Text / SVG gizmos)
+// ---------------------------------------------------------------- emboss as a volume (Text / SVG tools)
 export type EmbossKind = 'part' | 'negative' | 'modifier';
 export interface SurfacePick { objId: string; point: Vec3; normal: Vec3 }
 

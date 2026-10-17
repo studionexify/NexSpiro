@@ -1,4 +1,4 @@
-// Center-top global engine toggle: BASIC (Bambu-style heuristic engine) | ADVANCED (NexSpiro physics core).
+// Center-top global engine toggle: BASIC (classic heuristic engine) | ADVANCED (NexSpiro physics core).
 import { useAdvanced } from '../../state/advanced';
 import { useStore } from '../../state/store';
 import { Icon } from '../icons';
@@ -16,8 +16,8 @@ export function ModeToggle() {
     <div className={`mode-toggle ${adv ? 'is-adv' : ''}`} role="radiogroup" aria-label="Slicing engine">
       <span className="mode-thumb" aria-hidden="true" />
       <button role="radio" aria-checked={!adv} className={!adv ? 'on' : ''} onClick={() => pick('basic')}
-        title="Basic: Bambu-style heuristic slicing with the classic settings">
-        <span className="mode-name">BASIC</span><span className="mode-sub">Bambu Engine</span>
+        title="Basic: classic heuristic slicing with the process settings">
+        <span className="mode-name">BASIC</span><span className="mode-sub">Classic Engine</span>
       </button>
       <button role="radio" aria-checked={adv} className={adv ? 'on' : ''} onClick={() => pick('advanced')}
         title="Advanced: NexSpiro analyses each part and compiles it with 35 field, PDE and topology technologies">

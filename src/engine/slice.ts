@@ -11,7 +11,7 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
  * Intersection points are keyed by the mesh edge they lie on, so loops chain
  * by topology rather than float comparison.
  *
- * Modes (Bambu Studio's "Slicing mode"):
+ * Modes ("Slicing mode"):
  *  - 'even_odd' (default here): every nested loop toggles inside/outside; robust to bad triangle winding.
  *  - 'regular': loops are oriented by the triangle normals and merged with non-zero winding, so overlapping
  *    shells of one mesh are unioned instead of cancelling each other.

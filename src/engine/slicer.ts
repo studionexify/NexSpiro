@@ -130,7 +130,7 @@ interface Regions {
 }
 
 /**
- * Settings of the Advanced engine's frozen classic core under the names it reads: keys the Bambu settings renamed
+ * Settings of the Advanced engine's frozen classic core under the names it reads: keys the Basic settings renamed
  * are filled from their new equivalents (or the old defaults), so Advanced output does not depend on the rename.
  */
 export function legacyConfig(cfg: Config): Config {
@@ -913,7 +913,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   let objFlow = 1; // per-object flow multiplier (flow calibration)
   const travelSpeed = num('travel_speed');
   const reduceMode = str('reduce_infill_retraction_mode') || 'auto';
-  const labels = cfg.exclude_object !== false && flavor !== 'bambu';
+  const labels = cfg.exclude_object !== false && flavor !== 'bbl';
   const labelName = (o: number) => `obj${o}_${meshes[o].name.replace(/[^A-Za-z0-9_]/g, '_')}`;
   const seamTris = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.seam));
   const actionsByLayer = new Map<number, typeof opts.layerActions>();

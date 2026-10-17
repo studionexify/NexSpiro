@@ -37,7 +37,7 @@ export function HomePage() {
           <div className="menu-label" style={{ padding: '0 0 6px' }}>{v}</div>
           <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
             {PRINTERS.filter((p) => p.vendor === v).map((p) => (
-              <button key={p.id} className="btn-secondary btn-small" title={`${p.bed.x}×${p.bed.y}×${p.bed.z} mm · ${p.flavor === 'klipper' ? 'Klipper' : p.flavor === 'bambu' ? 'Bambu firmware' : 'Marlin'}${p.note ? ` — ${p.note}` : ''}`}
+              <button key={p.id} className="btn-secondary btn-small" title={`${p.bed.x}×${p.bed.y}×${p.bed.z} mm · ${p.flavor === 'klipper' ? 'Klipper' : p.flavor === 'bbl' ? 'Marlin (A1/P1/X1/H2 dialect)' : 'Marlin'}${p.note ? ` — ${p.note}` : ''}`}
                 onClick={() => set({ printerId: p.id, plate: p.plates[0].type, workspace: 'prepare' })}>{p.model}</button>
             ))}
           </div>

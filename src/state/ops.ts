@@ -25,7 +25,7 @@ export function silhouette(o: SceneObject): Pt[] {
 }
 
 /**
- * Arrange the objects on a plate (Bambu's arrange): pack their silhouettes with the arrange settings' spacing,
+ * Arrange the objects on a plate: pack their silhouettes with the arrange settings' spacing,
  * trying rotations when auto-rotate is on, then centre the group (or align it to an axis).
  * Objects that do not fit are placed past the plate's right edge and reported.
  */
@@ -39,7 +39,7 @@ export function arrange(spacing?: number, plate = useStore.getState().activePlat
   const st = s.arrangeSettings;
   const gap = spacing ?? st.spacing;
   const hulls = new Map(objs.map((o) => [o.id, silhouette(o)]));
-  // objects not being arranged stay where they are: arrange the rest around nothing (Bambu re-packs the whole plate)
+  // objects not being arranged stay where they are: arrange the rest around nothing (the whole plate is re-packed)
   const res = arrangeItems(objs.map((o) => ({ id: o.id, hull: hulls.get(o.id)!.map(([x, y]) => [x - ox, y - oy] as Pt) })), { x: p.bed.x, y: p.bed.y },
     { spacing: gap, rotations: st.rotate ? [0, 45, 90, 135, 180, 225, 270, 315] : [0], align: st.align, edge: 2 });
   let over = 0;
@@ -152,7 +152,7 @@ export function centreOnBed(o: SceneObject, printerId: string, plate = useStore.
 }
 
 // ---------------------------------------------------------------- plates
-/** Arrange every unlocked plate, like Bambu Studio's toolbar Arrange. */
+/** Arrange every unlocked plate, like the toolbar Arrange. */
 export function arrangeAll(spacing?: number) {
   const s = useStore.getState();
   s.plates.forEach((p, i) => { if (!p.locked) arrange(spacing, i); });
@@ -346,7 +346,7 @@ export function vlhReset(id: string) {
   useStore.getState().updateObjects((x) => ({ ...x, layerHeights: undefined }), [id]);
 }
 
-/** Bambu's "Height range modifier": a Z band of the object with its own settings (starts as the middle third). */
+/** "Height range modifier": a Z band of the object with its own settings (starts as the middle third). */
 export function addHeightRange(id: string) {
   const s = useStore.getState();
   const o = s.objects.find((x) => x.id === id);

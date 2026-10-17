@@ -23,7 +23,7 @@
 ### Phase 2 — advanced preparation
 | Area | Features |
 | --- | --- |
-| **Multi-material** | Up to 16 filament slots, filament per object, colour painting (brush, palette, keys 1–9), automatic filament changes with the Bambu AMS sequence (`M620`/`T`/`M621` + flush) or `M600` pauses on manual printers, prime tower sized from the prime volume, per-filament weight & cost, change-time estimate. |
+| **Multi-material** | Up to 16 filament slots, filament per object, colour painting (brush, palette, keys 1–9), automatic filament changes with the AMS sequence (`M620`/`T`/`M621` + flush) or `M600` pauses on manual printers, prime tower sized from the prime volume, per-filament weight & cost, change-time estimate. |
 | **Painting** | Support enforcer/blocker painting (with "on overhangs only"), seam enforcer/blocker painting, colour painting. Left drag = enforce/paint, right drag = block/reset, Shift = erase, middle drag = orbit. |
 | **Supports** | Normal and tree supports, auto or manual (painted areas / enforcer volumes only), support filament choice, blockers. |
 | **Parts** | Negative volumes (cut-outs), infill modifiers, support enforcer and blocker volumes — box, cylinder or sphere, positioned with the same gizmos. |
@@ -35,8 +35,8 @@
 ### Phase 3 — devices, project & calibration
 | Area | Features |
 | --- | --- |
-| **Devices** | Bambu Lab LAN (MQTT/TLS status & control, FTPS upload, A1/P1 camera, AMS & HMS), Klipper/Moonraker, OctoPrint/PrusaLink, USB serial (Marlin host with checksums & resend). Saved printers (access codes encrypted on desktop), live temps, job control, jog, console, file manager. Network Bambu connections need the desktop app. |
-| **Print** | *Print plate* dialog: slice → `.gcode.3mf` (Bambu, with thumbnail, MD5, slice info, AMS mapping) or G-code with embedded thumbnails → upload → start. |
+| **Devices** | LAN access code for A1/P1/X1/H2 (MQTT/TLS status & control, FTPS upload, A1/P1 camera, AMS & HMS), Klipper/Moonraker, OctoPrint/PrusaLink, USB serial (Marlin host with checksums & resend). Saved printers (access codes encrypted on desktop), live temps, job control, jog, console, file manager. LAN access-code connections need the desktop app. |
+| **Print** | *Print plate* dialog: slice → `.gcode.3mf` (A1/P1/X1/H2, with thumbnail, MD5, slice info, AMS mapping) or G-code with embedded thumbnails → upload → start. |
 | **Project** | Save/open `.3mf` projects (whole scene, settings, paint, parts, plates) readable by other slicers; title, designer, licence, notes, photos, bill of materials. |
 | **Calibration** | Temperature tower, pressure advance, flow (coarse/fine), max volumetric speed, retraction — results saved per filament slot and used when slicing. |
 | **Engine** | Arachne-style variable-width walls, G2/G3 arc fitting, per-layer setting changes. |
@@ -60,7 +60,7 @@
 
 ## Advanced engine (NexSpiro Physics Core)
 
-The **BASIC | ADVANCED** switch at the top centre swaps the Bambu-style process controls for the NexSpiro
+The **BASIC | ADVANCED** switch at the top centre swaps the classic process controls for the NexSpiro
 Physics Core. In Advanced mode you pick an **Intent Card** (Structural Armor, Seamless Aesthetic,
 Optical / Caustic Lamp, Acoustic Damping, 4D Flat-Morph); the engine analyses each part (signed
 distance field, curvature, thickness, sections, topology), shows its zones in the **Zone Inspector**

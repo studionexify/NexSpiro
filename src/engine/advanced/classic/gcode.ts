@@ -1,5 +1,5 @@
-// Frozen classic engine of Advanced mode (as on main before the Bambu parity work, 08b924a). Advanced mode
-// slices with this engine only, so Basic (Bambu) changes never alter Advanced output and vice versa.
+// Frozen classic engine of Advanced mode (as on main at 08b924a). Advanced mode slices with this engine
+// only, so Basic-engine changes never alter Advanced output and vice versa.
 // Stage 9–10: kinematic estimate, cooling slowdown and G-code emission.
 import type { Config } from '../../../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from '../../types';
@@ -160,7 +160,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     out.push(`;Z:${n(L.z)}`);
     out.push(`;HEIGHT:${n(L.h)}`);
     if (flavor !== 'klipper') out.push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
-    if (flavor === 'bambu') out.push(`M73 L${li + 1}`);
+    if (flavor === 'bbl') out.push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') out.push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
     if (lc) out.push(expandMacro(lc, cfg, { layer_num: li, layer_z: n(L.z) }));

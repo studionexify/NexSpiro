@@ -1,5 +1,5 @@
-// Advanced mode is its own engine: Basic (Bambu Studio) changes must never alter its G-code. The config fixture
-// and these hashes come from main before the Bambu parity work (81187d6); the same config through the same
+// Advanced mode is its own engine: Basic-engine changes must never alter its G-code. The config fixture
+// and these hashes come from main before the Basic settings rework (81187d6); the same config through the same
 // technologies must keep producing exactly that G-code.
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';

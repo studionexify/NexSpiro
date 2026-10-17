@@ -113,7 +113,7 @@ describe('region masks', () => {
   });
 });
 
-describe('slicing with Patternex (Bambu AMS)', () => {
+describe('slicing with Patternex (AMS)', () => {
   const cube = () => mesh(box(60, 60, 0, 20, 20, 10));
   const logo = (o: Partial<RegionAction> = {}) => pcfg([place({ position_xyz: [70, 70, 10], projection_axis: [0, 0, 1] })], [act(o)]);
 

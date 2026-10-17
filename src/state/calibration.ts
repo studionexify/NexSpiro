@@ -101,14 +101,14 @@ export const CALIBRATIONS: { id: CalibId; title: string; description: string; pa
   { id: 'temp', title: 'Temperature tower', description: 'Steps the nozzle temperature every 10 mm. Pick the block with the best bridges, overhang and least stringing.',
     params: (f) => ({ start: f.nozzleTemp + 15, end: f.nozzleTemp - 15, step: 5, unit: '°C', label: 'Temperature' }) },
   { id: 'pa', title: 'Pressure advance (flow dynamics)', description: 'A tower whose pressure advance increases with height. Find the height where the corners are sharpest without gaps.',
-    params: (_f, flavor) => ({ start: 0, end: flavor === 'bambu' ? 0.06 : 0.1, step: 0.002, unit: '', label: 'K / pressure advance' }) },
-  { id: 'pa_line', title: 'Pressure advance — line', description: 'Bambu\'s PA Line test: lines printed slow–fast–slow, pressure advance rising per line, numbered every second line. Pick the line with the most even width across the speed changes.',
+    params: (_f, flavor) => ({ start: 0, end: flavor === 'bbl' ? 0.06 : 0.1, step: 0.002, unit: '', label: 'K / pressure advance' }) },
+  { id: 'pa_line', title: 'Pressure advance — line', description: 'PA Line test: lines printed slow–fast–slow, pressure advance rising per line, numbered every second line. Pick the line with the most even width across the speed changes.',
     params: () => ({ start: 0, end: 0.1, step: 0.002, unit: '', label: 'K / pressure advance' }) },
-  { id: 'pa_pattern', title: 'Pressure advance — pattern', description: 'Bambu\'s PA Pattern test: nested 90° chevrons, one per value, four layers, numbered. Pick the chevron with the sharpest tip and no bulge or gap.',
+  { id: 'pa_pattern', title: 'Pressure advance — pattern', description: 'PA Pattern test: nested 90° chevrons, one per value, four layers, numbered. Pick the chevron with the sharpest tip and no bulge or gap.',
     params: () => ({ start: 0, end: 0.08, step: 0.005, unit: '', label: 'K / pressure advance' }) },
-  { id: 'flow', title: 'Flow rate — pass 1', description: 'Nine numbered blocks from −20% to +20% flow (Bambu pass 1). Pick the smoothest top surface without gaps or ridges.',
+  { id: 'flow', title: 'Flow rate — pass 1', description: 'Nine numbered blocks from −20% to +20% flow (pass 1). Pick the smoothest top surface without gaps or ridges.',
     params: () => ({ start: -20, end: 20, step: 5, unit: '%', label: 'Flow offset' }) },
-  { id: 'flow_fine', title: 'Flow rate — pass 2', description: 'Ten numbered blocks from 0% to −9% around your pass 1 result (Bambu pass 2) for a precise flow ratio.',
+  { id: 'flow_fine', title: 'Flow rate — pass 2', description: 'Ten numbered blocks from 0% to −9% around your pass 1 result (pass 2) for a precise flow ratio.',
     params: () => ({ start: 0, end: -9, step: 1, unit: '%', label: 'Flow offset' }) },
   { id: 'mvs', title: 'Max volumetric speed', description: 'A single-wall vase that speeds up with height. Where the wall starts to fail is your hotend\'s limit.',
     params: (f) => ({ start: 5, end: Math.max(20, Math.round(f.maxVolumetricSpeed * 1.6)), step: 0.5, unit: 'mm³/s', label: 'Volumetric speed' }) },
@@ -171,7 +171,7 @@ export function buildCalibration(id: CalibId, p: CalibParams, printerId: string,
     const objects = values.map((v, i) => {
       const x = bx + ((i % cols) - (cols - 1) / 2) * 28;
       const y = by - (Math.floor(i / cols) - (Math.ceil(values.length / cols) - 1) / 2) * 28;
-      // number tab on the front edge, as on Bambu's flow blocks
+      // number tab on the front edge
       const label = `${v > 0 ? '+' : ''}${v}`;
       const lw = digitsWidth(label);
       const tab = [...box(-10, -16, 0, 20, 6, 1.2), ...digits(label, -lw / 2, -15, 1.2)];

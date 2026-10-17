@@ -43,7 +43,7 @@ export interface ViewApi {
 /** cameraListeners get the camera's world-to-view matrix (column-major) after each frame drawn. */
 export const viewApi: { current: ViewApi | null; cameraListeners: Set<(m: ArrayLike<number>) => void> } = { current: null, cameraListeners: new Set() };
 
-// Bambu Studio's neutral viewport background
+// neutral viewport background
 const THEMES = {
   dark: { zenith: '#2F3236', nadir: '#1F2124' },
   light: { zenith: '#EDEDEE', nadir: '#D9DADC' },
@@ -96,7 +96,7 @@ function overhangMaterial(): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWN;\nvarying vec3 vWP;\nuniform float uOverhang;\nuniform float uCos;\nuniform float uOOB;')
       .replace('#include <color_fragment>', `#include <color_fragment>
-        // overhang heatmap (Bambu's slope view): blue just past the support threshold angle, red facing straight down
+        // overhang heatmap (slope view): blue just past the support threshold angle, red facing straight down
         if (uOverhang > 0.5 && vWP.z > 0.05) { float nz = -normalize(vWN).z; if (nz > uCos) { float t = clamp((nz - uCos) / max(1.0 - uCos, 1e-3), 0.0, 1.0); diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.15, 0.45, 1.0), vec3(1.0, 0.09, 0.15), t), 0.7); } }
         if (uOOB > 0.5) { float s = step(0.5, fract((vWP.x + vWP.y + vWP.z) * 0.25)); diffuseColor.rgb = mix(vec3(1.0, 0.23, 0.19), vec3(0.45, 0.08, 0.08), s); }`);
   };
@@ -186,7 +186,7 @@ function hullGeometry(m: SceneObject['mesh']) {
   return g;
 }
 
-/** Bambu Studio's selection box: short white brackets at the eight corners of the bounding box. */
+/** Selection box: short white brackets at the eight corners of the bounding box. */
 function cornerBrackets(min: number[], max: number[]): number[] {
   const out: number[] = [];
   const len = [0, 1, 2].map((k) => Math.max(0.6, (max[k] - min[k]) * 0.22));
@@ -221,7 +221,7 @@ export function Viewport() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.15;
     controls.screenSpacePanning = true;
-    controls.zoomToCursor = true; // zoom towards the point under the cursor, as Bambu Studio does
+    controls.zoomToCursor = true; // zoom towards the point under the cursor
     // One set of mouse controls everywhere, painting tools included:
     // left drag rotates, middle drag pans, right drag pans, wheel zooms.
     // While a painting tool is on, a left press that lands on the model paints instead of rotating
@@ -468,7 +468,7 @@ export function Viewport() {
     };
     controls.addEventListener('change', invalidate);
 
-    /** Camera distance that shows the whole plate with a margin, like Bambu Studio's default view. */
+    /** Camera distance that shows the whole plate with a margin, the default view. */
     const fitDistance = (X: number, Y: number) => {
       const half = Math.hypot(X, Y) * 0.5 * 1.08;
       const vfov = (camera.fov * Math.PI) / 180;
@@ -543,7 +543,7 @@ export function Viewport() {
       m.parent?.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose();
       for (const c of m.children) (c as THREE.Mesh).geometry?.dispose();
     };
-    /** Hovered objects brighten slightly, like Bambu Studio's hover highlight. */
+    /** Hovered objects brighten slightly. */
     const applyHover = () => {
       const s = useStore.getState();
       for (const [id, e] of meshes) {
@@ -581,7 +581,7 @@ export function Viewport() {
         }
         const mat = entry.mesh.material as THREE.MeshStandardMaterial;
         const sel = s.workspace === 'prepare' && s.selected.includes(o.id) && !s.selectedPart && !isPaintTool(s.tool);
-        // selected: white silhouette outline (as in Bambu Studio)
+        // selected: white silhouette outline
         if (sel && !entry.hull) {
           entry.hull = new THREE.Mesh(hullGeometry(o.mesh), outlineMat);
           entry.hull.raycast = () => {};
@@ -741,7 +741,7 @@ export function Viewport() {
     });
     gizmo.addEventListener('change', invalidate);
 
-    // Rotate gizmo scale (Bambu GLGizmoRotate): 72 ticks (5°), a long tooth every 10°. While dragging, the pointer
+    // Rotate gizmo scale : 72 ticks (5°), a long tooth every 10°. While dragging, the pointer
     // inside the tick band snaps to 5° and in the band just outside it to 45° (8 snap regions); Shift snaps to 5° anywhere.
     const tickGeo = (() => {
       const v: number[] = [];
@@ -888,7 +888,7 @@ export function Viewport() {
         if (changedGap) { paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color)); invalidate(); }
         return;
       } else {
-        // circle: the part of the sphere facing the camera (Bambu projects the circle along the view); sphere: everything inside
+        // circle: the part of the sphere facing the camera (the circle is projected along the view); sphere: everything inside
         const c = spheres(o.mesh);
         const eye = camera.position.clone().applyMatrix4(om.clone().invert());
         for (let t = 0; t < arr.length; t++) {
@@ -1201,7 +1201,7 @@ export function Viewport() {
         return;
       }
       const ph = ray.intersectObjects(plates, false)[0];
-      // Off the plate the menu still opens for the active plate, like Bambu Studio.
+      // Off the plate the menu still opens for the active plate.
       const plate = ph ? ph.object.userData.plateIndex as number : s.activePlate;
       const world: [number, number] | undefined = ph ? [ph.point.x, ph.point.y] : undefined;
       s.set({ selected: [], selectedPart: null, activePlate: plate, contextMenu: { ...at, kind: 'plate', plate, world } });
@@ -1209,7 +1209,7 @@ export function Viewport() {
     const onContext = (ev: Event) => ev.preventDefault();
 
     // ---------------- free move: left drag on an object slides it (and the rest of the selection) over the bed,
-    // with no tool needed, as in Bambu Studio. The drag runs on the horizontal plane through the grabbed point.
+    // with no tool needed. The drag runs on the horizontal plane through the grabbed point.
     let objDrag: { ids: string[]; plane: THREE.Plane; start: THREE.Vector3; at: [number, number]; delta: THREE.Vector3; moved: boolean; base: Map<THREE.Mesh, THREE.Matrix4>; proxy: THREE.Vector3 } | null = null;
     const FREE_MOVE_TOOLS: Tool[] = ['select', 'move', 'rotate', 'scale'];
     const startObjectDrag = (ev: PointerEvent): boolean => {

@@ -1,4 +1,4 @@
-// Plate arrange, after Bambu Studio's arrange dialog: silhouettes (convex hulls) are packed with a minimum
+// Plate arrange: silhouettes (convex hulls) are packed with a minimum
 // spacing, optionally rotated, biggest first, then the group is centred (or aligned to an axis).
 export type Pt = [number, number];
 

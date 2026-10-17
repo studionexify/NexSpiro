@@ -1,6 +1,6 @@
 // Machine / filament / process profiles. Every machine-specific value lives here, never in the engine.
 
-export type Firmware = "klipper" | "marlin" | "bambu";
+export type Firmware = "klipper" | "marlin" | "bbl";
 
 export interface MachineProfile {
   id: string; name: string; firmware: Firmware;
@@ -27,7 +27,7 @@ export interface ProcessProfile {
 
 export const MACHINES: MachineProfile[] = [
   {
-    id: "bambu-x1c", name: "Bambu Lab X1 Carbon 0.4", firmware: "bambu",
+    id: "x1c-hotend", name: "Bambu Lab X1 Carbon 0.4", firmware: "bbl",
     bed: { x: 256, y: 256, z: 256 }, nozzle: 0.4,
     maxSpeed: { x: 500, y: 500, z: 20, e: 30 }, maxAccel: { x: 20000, y: 20000, z: 500, e: 5000 },
     maxJerk: { x: 9, y: 9, z: 3, e: 2.5 }, maxVolumetricFlow: 32,

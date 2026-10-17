@@ -1,4 +1,4 @@
-// Cut connectors, after Bambu Studio's GLGizmoCut: Plug (pin on the upper part, socket in the lower), Dowel
+// Cut connectors: Plug (pin on the upper part, socket in the lower), Dowel
 // (sockets in both parts plus a separate pin) and Snap (a split pin with a bulge that clicks into its socket).
 // Geometry is built in cut-plane space: the plane is z = 0, the upper part is z > 0.
 import * as THREE from 'three';
@@ -40,7 +40,7 @@ function toIndexed(g: THREE.BufferGeometry): IndexedMesh {
 /** A prism or frustum along +z from z0 to z1 (r0 at z0, r1 at z1), centred on (x, y). */
 function prism(shape: ConnectorShape, x: number, y: number, z0: number, z1: number, r0: number, r1: number): THREE.BufferGeometry {
   const n = SEGMENTS[shape];
-  // a square's flat sides along the axes, as Bambu draws it
+  // a square's flat sides along the axes
   const g = new THREE.CylinderGeometry(r1, r0, z1 - z0, n, 1, false, shape === 'square' ? Math.PI / 4 : 0);
   g.rotateX(Math.PI / 2);
   g.translate(x, y, (z0 + z1) / 2);
@@ -114,7 +114,7 @@ export function connectorMeshes(points: { x: number; y: number }[], c: Connector
 }
 
 /**
- * Tongue and groove (Bambu's dovetail cut): a dovetail prism running across the whole cut, its flaps leaning
+ * Tongue and groove (dovetail cut): a dovetail prism running across the whole cut, its flaps leaning
  * out at `flapsAngle` from the cut plane so the two parts slide together along the groove and cannot pull apart.
  */
 export interface GrooveSettings {

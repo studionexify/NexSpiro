@@ -11,7 +11,7 @@ import { Modal } from './Modals';
 const usePlateDialog = create<{ index: number | null }>(() => ({ index: null }));
 export const openPlateSettings = (index: number) => usePlateDialog.setState({ index });
 
-/** Plate list down the right edge of the 3D view when the project has more than one plate (Bambu Studio's plate thumbnails). */
+/** Plate list down the right edge of the 3D view when the project has more than one plate (plate thumbnails). */
 export function PlateList() {
   const s = useStore();
   if (s.plates.length < 2) return null;

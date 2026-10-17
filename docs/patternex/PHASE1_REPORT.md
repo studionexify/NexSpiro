@@ -8,7 +8,7 @@ Status: **approved** — hooks implemented as proposed (see VALIDATION.md for th
 - Slicer runs in a Web Worker (`src/engine/worker.ts`); store → worker bridge in `src/state/slicing.ts`.
 
 ## 2. Core: original, not a fork
-- `src/engine/*` is an original TypeScript pipeline (~3.5k lines). It borrows Orca/Bambu
+- `src/engine/*` is an original TypeScript pipeline (~3.5k lines). It borrows common slicer
   *conventions* (config key names like `change_filament_gcode`, `[next_extruder]` macro placeholders,
   `M620/T/M621` AMS sequence) but contains no Orca/Prusa/Cura C++ code.
 
@@ -62,7 +62,7 @@ Status: **approved** — hooks implemented as proposed (see VALIDATION.md for th
 ## 7. Feasibility flags
 - **Single-colour + vertical-wall regions:** mid-layer manual swaps are flagged unsupported (per §3.5);
   fallback = layer bands.
-- **No-purge on Bambu AMS:** the AMS `T` sequence always cuts and flushes into the chute inside the
+- **No-purge on the AMS:** the AMS `T` sequence always cuts and flushes into the chute inside the
   macro; "no purge" can only zero the *tower/flush* volume, not the in-macro cut purge. True deliberate bleed
   needs a Klipper toolchanger/ERCF-style macro or `M600` printers.
 - **Change-point shift earlier** than the region boundary requires look-ahead across the move list —
@@ -72,5 +72,5 @@ Status: **approved** — hooks implemented as proposed (see VALIDATION.md for th
 ## 8. Questions blocking Phase 2 (owner: Ankit, spec §12)
 1. Approve extending `EnginePlugin` with `regions()` and `transition()` (§6), or prefer Patternex to
    write into `MeshInput.paint.color` UI-side (zero engine change, but loses per-region purge and depth control)?
-2. v1 multi-colour targets: Bambu AMS only (already wired), or also Prusa MMU / Klipper toolchanger?
+2. v1 multi-colour targets: AMS only (already wired), or also Prusa MMU / Klipper toolchanger?
 3. Default region depth: outer-wall thickness (spec default) or reuse existing `mmu_paint_depth` (1.5 mm)?

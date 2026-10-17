@@ -9,7 +9,7 @@ import { disconnectAll, registerDeviceIpc } from './devices';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 
-// Post-processing scripts (Bambu's post_process): each command runs with the G-code file path as its last
+// Post-processing scripts (post_process): each command runs with the G-code file path as its last
 // argument and may rewrite the file. Commands come from settings, which projects can carry, so each new set of
 // commands is shown to the user once for approval before it runs.
 const approvedScripts = new Set<string>();

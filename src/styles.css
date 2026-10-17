@@ -219,7 +219,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cube-face.top:hover { background: var(--accent); }
 .cube-fit { height: 30px; min-width: 30px; background: var(--surface-overlay); border: 1px solid var(--border); border-radius: 6px; }
 
-/* Bambu-style instant tooltip */
+/* instant tooltip */
 .instant-tip {
   position: fixed; z-index: 200; pointer-events: none; max-width: 320px; padding: 5px 9px; font-size: 12px; line-height: 1.4;
   color: var(--text-strong); background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); white-space: pre-line;
@@ -545,7 +545,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tb-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
 .tb-toggle .toggle { pointer-events: none; }
 
-/* ---------- top-right slice / print (Bambu Studio) */
+/* ---------- top-right slice / print */
 .slice-controls { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
 .slice-btn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font-weight: 600; white-space: nowrap; }
 .split-btn { display: flex; }
@@ -576,7 +576,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .lasso-overlay polygon.box-window { fill: rgba(0, 174, 66, .10); stroke: #00AE42; stroke-dasharray: none; }
 .lasso-overlay polygon.box-cross { fill: rgba(0, 174, 66, .06); stroke: #00AE42; stroke-dasharray: 5 4; }
 
-/* ---------- object list card and Objects mode (Bambu Studio) */
+/* ---------- object list card and Objects mode */
 .objects-card { padding-bottom: 6px; }
 .objects-card .card-head { margin-bottom: 2px; }
 .objects-card .objlist { max-height: 168px; min-height: 34px; margin: 0 -12px; }

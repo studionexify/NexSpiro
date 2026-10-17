@@ -107,7 +107,7 @@ export interface EmitOutput {
 export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
 export const AUX_STRIDE = 2; // part fan %, nozzle temperature
 
-/** Part fan % for a layer, Bambu Studio's cooling rules (fan by layer time, first layers, ramp, keep fan on). */
+/** Part fan % for a layer, by the cooling rules (fan by layer time, first layers, ramp, keep fan on). */
 export function layerFanSpeed(c: (k: string) => number, b: (k: string) => boolean, layer: number, layerTime: number): number {
   const first = Math.max(0, Math.round(c('close_fan_the_first_x_layers')));
   if (layer < first) return Math.max(0, c('first_x_layer_part_fan_speed'));
@@ -274,7 +274,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     push(`;HEIGHT:${n(L.h)}`);
     if (!relE) { push('G92 E0'); eAbs = 0; }
     if (flavor !== 'klipper') push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
-    if (flavor === 'bambu') push(`M73 L${li + 1}`);
+    if (flavor === 'bbl') push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
     if (lc) push(expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
@@ -350,9 +350,9 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
           }
           break;
         case 'lift': {
-          // spiral Z hop: Bambu firmware takes a full-circle G3 (P1); others get a short helix of G1 moves
+          // spiral Z hop: A1/P1/X1/H2 firmware takes a full-circle G3 (P1); others get a short helix of G1 moves
           const f2 = fmtF(op.f);
-          if (flavor === 'bambu') { push('G17'); push(`G3 Z${n(op.z)} I${n(op.r)} J0 P1 F${f2}`); }
+          if (flavor === 'bbl') { push('G17'); push(`G3 Z${n(op.z)} I${n(op.r)} J0 P1 F${f2}`); }
           else {
             const z0 = isNaN(z) ? op.z : z;
             for (let k = 1; k <= 8; k++) {

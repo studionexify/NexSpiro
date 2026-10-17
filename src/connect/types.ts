@@ -1,14 +1,14 @@
 // Printer connection layer. One interface for every printer family so the Device
 // workspace never needs to know which protocol is underneath.
 //
-//   bambu_lan  — MQTT over TLS on :8883 (user "bblp", LAN access code) for status & commands,
+//   bbl_lan  — MQTT over TLS on :8883 (user "bblp", LAN access code) for status & commands,
 //                implicit FTPS on :990 to upload files, JPEG stream on :6000 (A1/P1) for the camera.
 //                Needs raw sockets → desktop app only (runs in the Electron main process).
 //   moonraker  — Klipper's HTTP API on :7125 (Creality K/KE series, Elegoo Neptune 4, Voron…).
 //   octoprint  — OctoPrint REST API with an API key.
 //   serial     — USB serial (Marlin), streaming G-code line by line with ok-acknowledgement (Web Serial).
 
-export type ConnectionKind = 'bambu_lan' | 'moonraker' | 'octoprint' | 'serial';
+export type ConnectionKind = 'bbl_lan' | 'moonraker' | 'octoprint' | 'serial';
 
 export interface AmsTray { id: string; type: string; color: string; remain?: number; active?: boolean }
 export interface AmsUnit { id: string; humidity?: number; temp?: number; trays: AmsTray[] }
@@ -36,13 +36,13 @@ export interface PrinterStatus {
 export interface RemoteFile { name: string; size?: number; modified?: number }
 
 export interface PrintOptions {
-  /** Bambu: plate inside the .gcode.3mf. */
+  /** A1/P1/X1/H2: plate inside the .gcode.3mf. */
   plate?: number;
   bedLevelling?: boolean;
   flowCalibration?: boolean;
   timelapse?: boolean;
   useAms?: boolean;
-  /** Bambu: AMS tray for each filament slot of the project (-1 = external spool). */
+  /** A1/P1/X1/H2: AMS tray for each filament slot of the project (-1 = external spool). */
   amsMapping?: number[];
 }
 
@@ -70,8 +70,8 @@ export interface ConnectionConfig {
   kind: ConnectionKind;
   host?: string; // IP / hostname
   port?: number;
-  serial?: string; // Bambu printer serial number
-  accessCode?: string; // Bambu LAN access code
+  serial?: string; // printer serial number (LAN access-code printers)
+  accessCode?: string; // LAN access code
   apiKey?: string; // OctoPrint / Moonraker (optional)
   baudRate?: number;
 }
@@ -85,7 +85,7 @@ export interface SavedDevice {
 }
 
 export const CONNECTION_INFO: Record<ConnectionKind, { label: string; description: string; desktopOnly?: boolean }> = {
-  bambu_lan: { label: 'Bambu Lab LAN', description: 'Direct LAN control of A1, P1, X1 and H2 series using the printer access code (MQTT + FTPS + camera). Turn on LAN mode or note the access code under Settings → Network on the printer.', desktopOnly: true },
+  bbl_lan: { label: 'LAN (access code)', description: 'Direct LAN control of A1, P1, X1 and H2 series using the printer access code (MQTT + FTPS + camera). Turn on LAN mode or note the access code under Settings → Network on the printer.', desktopOnly: true },
   moonraker: { label: 'Klipper / Moonraker', description: 'Creality Ender-3 V3 KE, K1/K2, Elegoo Neptune 4 series and any Klipper printer with Moonraker (port 7125).' },
   octoprint: { label: 'OctoPrint', description: 'Any printer managed by OctoPrint, using an API key (Settings → Application Keys).' },
   serial: { label: 'USB (serial)', description: 'Marlin printers connected by USB cable — NexSpiro streams the G-code itself, so keep this computer awake while printing.' },

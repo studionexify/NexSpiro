@@ -126,7 +126,7 @@ import { buildCalibration, CALIBRATIONS } from '../src/state/calibration';
 describe('calibration routines', () => {
   const sliceCal = (id: Parameters<typeof buildCalibration>[0], printerId = 'bbl-p1s') => {
     const c = CALIBRATIONS.find((x) => x.id === id)!;
-    const r = buildCalibration(id, c.params({ nozzleTemp: 220, maxVolumetricSpeed: 21 } as any, printerId.startsWith('bbl') ? 'bambu' : 'klipper'), printerId, 'generic-pla');
+    const r = buildCalibration(id, c.params({ nozzleTemp: 220, maxVolumetricSpeed: 21 } as any, printerId.startsWith('bbl') ? 'bbl' : 'klipper'), printerId, 'generic-pla');
     const cfg = cfgFor(printerId, r.overrides);
     const meshes = r.objects.map((o) => {
       const v = o.mesh.vertices.slice();

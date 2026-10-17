@@ -96,16 +96,16 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
   const p = printerById(d.printerId);
   const kinds = useMemo(() => {
     const all = Object.keys(CONNECTION_INFO) as ConnectionKind[];
-    return [...p.connections, ...all.filter((k) => !p.connections.includes(k) && k !== 'bambu_lan')];
+    return [...p.connections, ...all.filter((k) => !p.connections.includes(k) && k !== 'bbl_lan')];
   }, [p]);
   const cfg = d.config;
   const setCfg = (c: Partial<SavedDevice['config']>) => setD({ ...d, config: { ...d.config, ...c } });
   const vendors = [...new Set(PRINTERS.map((x) => x.vendor))];
   const desktopOnly = CONNECTION_INFO[cfg.kind].desktopOnly && !isDesktop();
-  const valid = cfg.kind === 'serial' || (!!cfg.host && (cfg.kind !== 'bambu_lan' || (!!cfg.serial && !!cfg.accessCode)));
+  const valid = cfg.kind === 'serial' || (!!cfg.host && (cfg.kind !== 'bbl_lan' || (!!cfg.serial && !!cfg.accessCode)));
 
   const save = async () => {
-    const out: SavedDevice = { ...d, config: { ...d.config, ...(cfg.kind === 'bambu_lan' ? { cameraMode: p.cameraMode ?? 'jpeg' } : {}) } as SavedDevice['config'] };
+    const out: SavedDevice = { ...d, config: { ...d.config, ...(cfg.kind === 'bbl_lan' ? { cameraMode: p.cameraMode ?? 'jpeg' } : {}) } as SavedDevice['config'] };
     await saveDevice(out);
     onClose();
     return out;
@@ -137,7 +137,7 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
           {kinds.map((k) => <option key={k} value={k}>{CONNECTION_INFO[k].label}{p.connections.includes(k) ? '' : ' (generic)'}</option>)}
         </select>
         {cfg.kind !== 'serial' && <><span>IP address / host</span><input className="input mono" placeholder="192.168.1.50" value={cfg.host ?? ''} onChange={(e) => setCfg({ host: e.target.value.trim() })} /></>}
-        {cfg.kind === 'bambu_lan' && <>
+        {cfg.kind === 'bbl_lan' && <>
           <span>Serial number</span><input className="input mono" placeholder="01P00A..." value={cfg.serial ?? ''} onChange={(e) => setCfg({ serial: e.target.value.trim().toUpperCase() })} />
           <span>Access code</span><input className="input mono" type="password" placeholder="8 characters" value={cfg.accessCode ?? ''} onChange={(e) => setCfg({ accessCode: e.target.value.trim() })} />
         </>}
@@ -153,7 +153,7 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
         </>}
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{CONNECTION_INFO[cfg.kind].description}</p>
-      {cfg.kind === 'bambu_lan' && <p className="muted" style={{ fontSize: 12 }}>On the printer screen: <b>Settings → Network</b> (A1/P1) or <b>Settings → General</b> (X1) shows the IP and the access code; the serial number is under <b>Settings → Device</b>. Insert a microSD card — the printer stores LAN jobs on it.</p>}
+      {cfg.kind === 'bbl_lan' && <p className="muted" style={{ fontSize: 12 }}>On the printer screen: <b>Settings → Network</b> (A1/P1) or <b>Settings → General</b> (X1) shows the IP and the access code; the serial number is under <b>Settings → Device</b>. Insert a microSD card — the printer stores LAN jobs on it.</p>}
       {desktopOnly && <p style={{ color: '#E5484D', fontSize: 12 }}>This connection needs the NexSpiro desktop app.</p>}
       {p.note && <p className="muted" style={{ fontSize: 12 }}><Icon name="info" size={12} /> {p.note}</p>}
     </Modal>
@@ -216,7 +216,7 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
             {st.hms.map((h) => (
               <div key={h.code} className="row" style={{ marginBottom: 4 }}>
                 <Icon name="warn" size={14} style={{ color: h.severity === 'error' ? '#E5484D' : '#F2B33D' }} />
-                <a className="mono" href={`https://wiki.bambulab.com/en/hms/error-code?code=${h.code}`} target="_blank" rel="noreferrer">{h.code}</a>
+                <span className="mono" title="HMS error code (see the printer manufacturer's HMS documentation)">{h.code}</span>
               </div>
             ))}
           </div>
@@ -228,11 +228,11 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
 }
 
 function SpeedLight({ dev, st, online }: { dev: SavedDevice; st: PrinterStatus; online: boolean }) {
-  const bambu = dev.config.kind === 'bambu_lan';
+  const isBbl = dev.config.kind === 'bbl_lan';
   return (
     <div className="row" style={{ marginTop: 14, flexWrap: 'wrap' }}>
       <span className="muted">Speed</span>
-      {bambu ? (
+      {isBbl ? (
         <div className="seg">
           {[[1, 'Silent'], [2, 'Standard'], [3, 'Sport'], [4, 'Ludicrous']].map(([lvl, label]) => (
             <button key={lvl} disabled={!online} className={st.speedPercent === { 1: 50, 2: 100, 3: 124, 4: 166 }[lvl as number] ? 'on' : ''} onClick={() => tryRun(() => run(dev.id, 'Speed…', (h) => h.setSpeed(lvl as number)))}>{label}</button>
@@ -293,7 +293,7 @@ function FanRow({ label, pct, online, onSet }: { label: string; pct?: number; on
   );
 }
 
-/** Temperature history of a device (Bambu's device page graph): last 10 minutes of nozzle, bed and chamber. */
+/** Temperature history of a device : last 10 minutes of nozzle, bed and chamber. */
 const HISTORY = new Map<string, { t: number; n?: number; nt?: number; b?: number; bt?: number; c?: number }[]>();
 function TempChart({ id, st }: { id: string; st: PrinterStatus }) {
   const [, tick] = useState(0);
@@ -348,7 +348,7 @@ function Controls({ dev, st, online, printing }: { dev: SavedDevice; st: Printer
   const [line, setLine] = useState('');
   const [log, setLog] = useState<string[]>([]);
   const g = (code: string) => tryRun(() => run(dev.id, 'Sending…', (h) => h.sendGcode(code)));
-  const bambu = dev.config.kind === 'bambu_lan';
+  const isBbl = dev.config.kind === 'bbl_lan';
   const jog = (axis: string, d: number) => g(`G91\nG1 ${axis}${d} F${axis === 'Z' ? 600 : 6000}\nG90`);
   const send = async () => {
     if (!line.trim()) return;
@@ -363,7 +363,7 @@ function Controls({ dev, st, online, printing }: { dev: SavedDevice; st: Printer
       <TempRow label="Bed" cur={st.bedTemp} target={st.bedTarget} online={online} max={120} onSet={(v) => g(`M140 S${v}`)} />
       {st.chamberTemp != null && <div className="row" style={{ marginBottom: 6 }}><span style={{ width: 64 }}>Chamber</span><b className="mono">{st.chamberTemp.toFixed(0)}°</b></div>}
       <FanRow label="Part fan" pct={st.fanPercent} online={online} onSet={(v) => g(`M106 S${Math.round((v / 100) * 255)}`)} />
-      {bambu && <>
+      {isBbl && <>
         <FanRow label="Aux fan" online={online} onSet={(v) => g(`M106 P2 S${Math.round((v / 100) * 255)}`)} />
         <FanRow label="Chamber" online={online} onSet={(v) => g(`M106 P3 S${Math.round((v / 100) * 255)}`)} />
       </>}

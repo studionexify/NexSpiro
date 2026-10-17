@@ -1,4 +1,4 @@
-// Printer (machine) settings, laid out like Bambu Studio's printer settings pages.
+// Printer (machine) settings, laid out in printer settings pages.
 import type { Config, ParamDef } from './settings';
 
 const opts = (...pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
