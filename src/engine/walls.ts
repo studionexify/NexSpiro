@@ -1,5 +1,5 @@
 // Stage 4: perimeters of one island. Classic offset loops or Arachne-style variable-width beads, plus the extras
-// Bambu Studio adds around them: one wall on top surfaces, detect thin wall and gap fill.
+// around them: one wall on top surfaces, detect thin wall and gap fill.
 import { clipLines, difference, exToPaths, intersection, offset, opening, orientation, SCALE, union } from './clipper';
 import { medialAxis, splitNarrow, type VarPath } from './arachne';
 import type { ExPolygon, FeatureType, Path, Paths } from './types';

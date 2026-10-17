@@ -117,7 +117,7 @@ const SECONDARY_TABS = new Set<Workspace>(['home', 'motion', 'device', 'project'
 /** True when the active plate has a slice that matches the current scene and settings. */
 const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.result && !s.slice.dirty && s.slice.plate === s.activePlate);
 
-/** Bambu Studio's top-right buttons: Slice plate, then Print plate / export, which only work once the plate is sliced. */
+/** Top-right buttons: Slice plate, then Print plate / export, which only work once the plate is sliced. */
 function SliceControls() {
   const { slice, objects, printerId } = useStore();
   const sliced = useSliced();
@@ -129,9 +129,9 @@ function SliceControls() {
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [open]);
-  const bambu = printerById(printerId).flavor === 'bambu';
+  const isBbl = printerById(printerId).flavor === 'bbl';
   const busy = slice.status === 'slicing';
-  const main = bambu
+  const main = isBbl
     ? { label: 'Print plate', run: openPrintDialog }
     : { label: 'Export G-code file', run: exportGcode };
   const item = (label: string, kbd: string, fn: () => void) => (
@@ -145,7 +145,7 @@ function SliceControls() {
       <div className="split-btn menu">
         <button className="btn-secondary slice-btn" disabled={!sliced} onClick={() => void main.run()}
           title={sliced ? main.label : 'Slice the plate first'}>
-          <Icon name={bambu ? 'print' : 'download'} size={16} />{main.label}
+          <Icon name={isBbl ? 'print' : 'download'} size={16} />{main.label}
         </button>
         <button className="btn-secondary slice-btn caret" disabled={!sliced} aria-label="More print and export options" title={sliced ? 'More options' : 'Slice the plate first'}
           onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)}><Icon name="chevronDown" size={14} /></button>
@@ -187,7 +187,7 @@ function useShortcuts() {
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       if (mod && e.key === 'Tab') {
-        // Bambu: Ctrl+Tab steps through the tab pages
+        // Ctrl+Tab steps through the tab pages
         const tabs: Workspace[] = ['home', 'prepare', 'preview', 'device', 'project', 'calibration'];
         const i = tabs.indexOf(s.workspace);
         s.set({ workspace: tabs[(i + (e.shiftKey ? tabs.length - 1 : 1)) % tabs.length] }); e.preventDefault(); return;
@@ -291,7 +291,7 @@ export default function App() {
   );
 }
 
-/** Bambu Studio's keyboard shortcuts list (opened with ?). */
+/** Keyboard shortcuts list (opened with ?). */
 const SHORTCUTS: [string, [string, string][]][] = [
   ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
     ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],

@@ -1,4 +1,4 @@
-// G-code calibration programs that are drawn directly rather than sliced from a model, after Bambu Studio's
+// G-code calibration programs that are drawn directly rather than sliced from a model:
 // Calib.cpp: the pressure advance Line test (CalibPressureAdvanceLine) and Pattern test (CalibPressureAdvancePattern).
 import type { Config } from '../profiles/settings';
 import { emit, type LayerOps, type Op } from './gcode';
@@ -13,10 +13,10 @@ export interface CalibProgram {
 
 const paLine = (flavor: string, k: number) => (flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${k}` : `M900 K${k}`);
 
-/** Cross-section of an extrusion (Bambu's Flow::mm3_per_mm: a rectangle with round ends). */
+/** Cross-section of an extrusion (a rectangle with round ends). */
 const xsArea = (w: number, h: number) => (w - h) * h + Math.PI * (h / 2) ** 2;
 
-/** Bambu's convert_number_to_string: fixed notation without trailing zeros. */
+/** Fixed notation without trailing zeros. */
 export const numberText = (v: number) => {
   const s = v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
   return s === '-0' ? '0' : s;
@@ -98,7 +98,7 @@ function drawBox(pen: Pen, x0: number, y0: number, sx: number, sy: number, o: { 
     x -= sx - i * spacing * 2; pen.line(x, y, o.w, o.f);
   }
   if (!o.filled) return;
-  // 45° zig-zag fill inside the perimeters (same coverage as Bambu's diagonal fill)
+  // 45° zig-zag fill inside the perimeters 
   const b = spacing * (perims - 1) + o.w * (1 - 1 / 3);
   const ax = x0 + b, bx = x0 + sx - b, ay = y0 + b, by = y0 + sy - b;
   if (bx <= ax || by <= ay) return;

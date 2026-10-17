@@ -31,7 +31,7 @@ describe('technology registry', () => {
     const on = (id: string) => aesthetic.find((r) => r.def.id === id)!;
     expect(on('thick_vase').enabled).toBe(true);
     expect(on('quasicrystal').enabled).toBe(false);
-    expect(on('harmonic_dome').verdict.status).toBe('adapted'); // limited by the Bambu heater block
+    expect(on('harmonic_dome').verdict.status).toBe('adapted'); // limited by the A1/P1/X1 heater block
     expect(on('symplectic_shaper').verdict.status).toBe('adapted'); // firmware already shapes
     expect(on('knot_braiding').verdict.status).toBe('unavailable'); // two walls only
     const foam = resolveTechs({ intent: 'acoustic', printerId: 'bbl-x1c', techs: {} }, ctx).find((r) => r.def.id === 'foam_control')!;

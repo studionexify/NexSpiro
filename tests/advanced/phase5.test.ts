@@ -43,7 +43,7 @@ describe('symplectic shaper (#31)', () => {
     ran(r.status);
     sane(out.gcode);
   });
-  it('does not double-shape on Bambu (firmware input shaper)', () => {
+  it('does not double-shape on X1-class firmware (firmware input shaper)', () => {
     const { rep } = adv(indexed(box(80, 80, 0, 30, 30, 5), 'b'), 'bbl-x1c', ['symplectic_shaper'], 'aesthetic');
     expect(rep.get('symplectic_shaper')!.status).toBe('adapted');
     expect(String(rep.get('symplectic_shaper')!.stats!.firmware_shaper)).toContain('no double');

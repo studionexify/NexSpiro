@@ -3,7 +3,7 @@
 import { app, ipcMain, safeStorage, type WebContents } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { BambuConnection, type BambuConfig } from './bambu';
+import { LanConnection, type LanConfig } from './lan';
 import { MoonrakerConnection, OctoPrintConnection } from '../../src/connect/http';
 import type { PrinterConnection, SavedDevice } from '../../src/connect/types';
 
@@ -11,9 +11,9 @@ const conns = new Map<string, { c: PrinterConnection; off: (() => void)[]; cam?:
 const SECRET_KEYS = ['accessCode', 'apiKey'] as const;
 const file = () => path.join(app.getPath('userData'), 'devices.json');
 
-function create(cfg: BambuConfig): PrinterConnection {
+function create(cfg: LanConfig): PrinterConnection {
   switch (cfg.kind) {
-    case 'bambu_lan': return new BambuConnection(cfg);
+    case 'bbl_lan': return new LanConnection(cfg);
     case 'moonraker': return new MoonrakerConnection(cfg);
     case 'octoprint': return new OctoPrintConnection(cfg);
     default: throw new Error(`${cfg.kind} connections run in the window, not the main process`);
@@ -49,7 +49,7 @@ export function registerDeviceIpc() {
     return true;
   });
 
-  ipcMain.handle('nx:dev:connect', async (ev, id: string, cfg: BambuConfig) => {
+  ipcMain.handle('nx:dev:connect', async (ev, id: string, cfg: LanConfig) => {
     const old = conns.get(id);
     if (old) { old.off.forEach((f) => f()); old.cam?.(); await old.c.disconnect().catch(() => {}); }
     const c = create(cfg);

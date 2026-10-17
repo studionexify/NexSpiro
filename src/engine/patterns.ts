@@ -1,4 +1,4 @@
-// Stage 7b: the rest of Bambu Studio's infill patterns, plus sparse infill anchors (lines joined along the inner wall).
+// Stage 7b: the remaining infill patterns, plus sparse infill anchors (lines joined along the inner wall).
 import { bounds, clipLines, SCALE, toInt } from './clipper';
 import { linesFill } from './fill';
 import type { Path, Paths, Polyline2 } from './types';

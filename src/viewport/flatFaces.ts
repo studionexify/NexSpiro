@@ -1,4 +1,4 @@
-// Lay-on-face candidates, as Bambu Studio's GLGizmoFlatten builds them: facets of the object's convex hull,
+// Lay-on-face candidates: facets of the object's convex hull,
 // merged by normal into flat planes, the biggest planes offered as clickable surfaces.
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
@@ -40,7 +40,7 @@ export function flatFaces(vertices: ArrayLike<number>, matrix: THREE.Matrix4): F
   }
   geo.dispose();
   faces.sort((x, y) => y.area - x.area);
-  // Bambu drops planes too small to stand on
+  // planes too small to stand on are dropped
   const minArea = Math.max(faces[0]?.area ?? 0, 1) * 0.002;
   return faces.filter((f) => f.area >= minArea).slice(0, MAX_FACES);
 }

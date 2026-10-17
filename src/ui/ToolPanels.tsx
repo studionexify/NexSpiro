@@ -48,7 +48,7 @@ export function CutPanel() {
         <Slider label="Tilt X" value={cutPlane.tiltX} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltX: v } })} />
         <Slider label="Tilt Y" value={cutPlane.tiltY} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltY: v } })} />
         <Seg label="Cut mode" value={cutMode} options={[['planar', 'Planar'], ['dovetail', 'Dovetail']]} onChange={(v) => {
-          // Bambu sizes the default dovetail from the object
+          // the default dovetail is sized from the object
           const size = Math.min(b.max[0] - b.min[0], b.max[1] - b.min[1]);
           set(v === 'dovetail' && gv === DEFAULT_GROOVE ? { cutMode: 'dovetail', cutGroove: { ...gv, depth: +Math.max(1, size * 0.08).toFixed(1), width: +(4 * Math.max(1, size * 0.08)).toFixed(1) }, cutConnectorMode: false } : { cutMode: v as 'planar' | 'dovetail' });
         }} />

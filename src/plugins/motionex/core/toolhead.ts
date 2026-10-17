@@ -26,8 +26,8 @@ export type CollisionMode = "clamp" | "skip" | "fail";
 
 /** Reasonable starting shapes; users edit and save their own per printer. */
 export const DEFAULT_TOOLHEADS: Record<string, ToolheadProfile> = {
-  "bambu-x1c": {
-    device_id: "bambu-x1c", name: "Bambu X1C hotend",
+  "x1c-hotend": {
+    device_id: "x1c-hotend", name: "Bambu Lab X1C hotend",
     nozzle: { tip_len: 2.2, cone_angle_deg: 40, tip_diameter: 1.0 },
     volumes: [
       { name: "Heater block", shape: "box", dims: [14, 16, 10], offset: [0, 0, 2.2] },
@@ -60,13 +60,13 @@ export const DEFAULT_TOOLHEADS: Record<string, ToolheadProfile> = {
 
 /** Nexspiro printer ids → the closest starting shape. Measure your own head for tight motions. */
 const SHAPE_FOR: Record<string, string> = {
-  "bbl-a1": "bambu-x1c", "bbl-a1mini": "bambu-x1c", "bbl-p1s": "bambu-x1c", "bbl-p1p": "bambu-x1c",
-  "bbl-x1c": "bambu-x1c", "bbl-x1e": "bambu-x1c", "bbl-h2d": "bambu-x1c",
-  "creality-ender3v3ke": "voron-24-350", "elegoo-neptune4max": "voron-24-350", "elegoo-centauri": "bambu-x1c",
+  "bbl-a1": "x1c-hotend", "bbl-a1mini": "x1c-hotend", "bbl-p1s": "x1c-hotend", "bbl-p1p": "x1c-hotend",
+  "bbl-x1c": "x1c-hotend", "bbl-x1e": "x1c-hotend", "bbl-h2d": "x1c-hotend",
+  "creality-ender3v3ke": "voron-24-350", "elegoo-neptune4max": "voron-24-350", "elegoo-centauri": "x1c-hotend",
 };
 
 export function defaultToolhead(deviceId: string): ToolheadProfile {
-  const base = DEFAULT_TOOLHEADS[deviceId] ?? DEFAULT_TOOLHEADS[SHAPE_FOR[deviceId] ?? "bambu-x1c"];
+  const base = DEFAULT_TOOLHEADS[deviceId] ?? DEFAULT_TOOLHEADS[SHAPE_FOR[deviceId] ?? "x1c-hotend"];
   const known = deviceId in DEFAULT_TOOLHEADS || deviceId in SHAPE_FOR;
   return structuredClone({ ...base, device_id: deviceId, name: known ? base.name : "Generic hotend" });
 }

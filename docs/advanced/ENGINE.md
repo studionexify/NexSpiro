@@ -2,7 +2,7 @@
 
 The header's centre toggle switches the slicing engine:
 
-- **BASIC (Bambu Engine)** — the classic heuristic slicer, unchanged. `tests/advanced/basic-golden.test.ts` pins its G-code byte for byte.
+- **BASIC (Classic Engine)** — the classic heuristic slicer, unchanged. `tests/advanced/basic-golden.test.ts` pins its G-code byte for byte.
 - **ADVANCED (NexSpiro Physics Core)** — every part is analysed, split into zones, and compiled with the subset of the 35 technologies that the selected **intent** and **machine** call for.
 
 ## Pipeline
@@ -29,7 +29,7 @@ Modules are listed in pipeline order in `src/engine/advanced/modules/index.ts`. 
 
 `machine.ts` derives, for every printer profile: kinematics, axis count, firmware features (input shaping, pressure advance, arcs), Z limits, hotend flow, chamber, material changer, frame resonance, and the **head clearance** — the steepest slope a non-planar move can follow before the heater block or fan duct reaches printed plastic:
 
-`θ_max = min over head volumes of atan((lift − margin) / reach)`, with `reach` the farthest point of the volume's footprint from the nozzle (the worst slope direction). Stock Bambu heads give ≈ 11°, a Revo/Stealthburner ≈ 15–20°, a 5-axis machine is not limited by it.
+`θ_max = min over head volumes of atan((lift − margin) / reach)`, with `reach` the farthest point of the volume's footprint from the nozzle (the worst slope direction). Stock A1/P1/X1 heads give ≈ 11°, a Revo/Stealthburner ≈ 15–20°, a 5-axis machine is not limited by it.
 
 Every technology has a `mould()` rule returning *ok*, *adapted* (runs in a reduced or machine-specific form, with the reason) or *unavailable* (with the reason). Users can edit the capability model (tip length, resonance, flow, chamber, kinematics up to 5-axis) for modified or future machines.
 
@@ -48,7 +48,7 @@ Every technology has a `mould()` rule returning *ok*, *adapted* (runs in a reduc
 
 ## Verification
 
-- `tests/advanced/phase1.test.ts`: SDF against analytic distances, curvature (Gauss–Bonnet), thickness, topology (genus), zone detection, slicing in every intent on Bambu, Klipper and Marlin machines.
+- `tests/advanced/phase1.test.ts`: SDF against analytic distances, curvature (Gauss–Bonnet), thickness, topology (genus), zone detection, slicing in every intent on A1/P1/X1, Klipper and Marlin machines.
 - `tests/advanced/basic-golden.test.ts`: Basic-mode G-code hashes.
 
 ## Phase 2 — field, PDE & geometric solvers
@@ -81,7 +81,7 @@ Verification: `tests/advanced/phase2.test.ts` — PCG, Laplace linear solution, 
 
 The slicer gained two generic hooks for this phase: per-point Z offsets on wall loops (`zs`, kept through seam rotation) and a walls post-edit hook.
 
-Verification: `tests/advanced/phase3.test.ts`. A fully combined Seamless Aesthetic compile on Bambu, Klipper and Marlin machines leaves at most 0.1 % of non-planar points reported (worst < 0.25 mm), all of them listed in the warnings.
+Verification: `tests/advanced/phase3.test.ts`. A fully combined Seamless Aesthetic compile on A1/P1/X1, Klipper and Marlin machines leaves at most 0.1 % of non-planar points reported (worst < 0.25 mm), all of them listed in the warnings.
 
 ## Phase 4 — field solvers, metamaterials & lattices
 
@@ -121,4 +121,4 @@ Verification: `tests/advanced/fea.test.ts`, `homogenize.test.ts`, `bloch.test.ts
 | #5 Hot-on-hot | `modules/rheology.ts` | Lumped bead cooling ρch·dT/dt = −h(T − T_amb), h = 15 + 85·fan W/m²K, over the planned layer time; the fan is cut (up to the limit) until the layer below is still above Tg + margin when the next one lands; layers that cannot reach it are reported |
 | #32 Morse–Smale router | `modules/morse.ts` | Reeb graph from the cross-section islands (overlap links), births/deaths/merges/splits, elder-rule persistence and simplification below the threshold; branches routed to planar, helix, curved layers, support or reorientation (5-axis); the inspector's `branch` field |
 
-Verification: `tests/advanced/phase5.test.ts` — junction speed at a right angle, period-timed ramps cut ringing by > 70 %, no double shaping on Bambu, software PA on Marlin, overshoot corners, power-law shear scaling, one outer-wall speed across layers, matte vs gloss shear, fan cuts for the layer bond, the branches of an arch, a mid-air branch routed to support, and every intent compiled on Bambu X1C/A1/H2D, Voron (Klipper), Prusa MK4S and Ender-3 V2 (Marlin) with every technology present and < 1 % unresolved clearance points.
+Verification: `tests/advanced/phase5.test.ts` — junction speed at a right angle, period-timed ramps cut ringing by > 70 %, no double shaping on X1-class firmware, software PA on Marlin, overshoot corners, power-law shear scaling, one outer-wall speed across layers, matte vs gloss shear, fan cuts for the layer bond, the branches of an arch, a mid-air branch routed to support, and every intent compiled on Bambu X1C/A1/H2D, Voron (Klipper), Prusa MK4S and Ender-3 V2 (Marlin) with every technology present and < 1 % unresolved clearance points.

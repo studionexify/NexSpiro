@@ -36,7 +36,7 @@ export function PrinterModal({ onClose }: { onClose: () => void }) {
       <div className="row" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
         <span className="badge">{p.bed.x} × {p.bed.y} × {p.bed.z} mm</span>
         <span className="badge">Nozzle {p.nozzle} mm</span>
-        <span className="badge">{p.flavor === 'bambu' ? 'Bambu Lab (Marlin)' : p.flavor === 'klipper' ? 'Klipper' : 'Marlin'}</span>
+        <span className="badge">{p.flavor === 'bbl' ? 'Marlin (A1/P1/X1/H2 dialect)' : p.flavor === 'klipper' ? 'Klipper' : 'Marlin'}</span>
         <span className="spacer" />
         <input className="input" style={{ width: 180 }} placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
@@ -48,7 +48,7 @@ export function PrinterModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Filament settings of one slot (Bambu's filament settings tabs). Changes are kept on the slot. */
+/** Filament settings of one slot (filament settings pages). Changes are kept on the slot. */
 export function FilamentModal({ slot, onClose }: { slot: number; onClose: () => void }) {
   const { filaments, printerId, machineOverrides, set, markDirty } = useStore();
   const st = filaments[slot] ?? filaments[0];

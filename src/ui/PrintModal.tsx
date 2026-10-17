@@ -1,4 +1,4 @@
-// "Print plate" dialog: pick a saved printer, map filaments to AMS trays (Bambu), upload and start.
+// "Print plate" dialog: pick a saved printer, map filaments to AMS trays (A1/P1/X1/H2 printers), upload and start.
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { CONNECTION_INFO, type AmsTray } from '../connect/types';
@@ -42,7 +42,7 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
   const [devId, setDevId] = useState<string | null>(null);
   const dev = devices.find((d) => d.id === devId) ?? null;
   const st = dev ? status[dev.id] : undefined;
-  const bambu = dev?.config.kind === 'bambu_lan';
+  const isBbl = dev?.config.kind === 'bbl_lan';
   const [opts, setOpts] = useState({ bedLevelling: true, flowCalibration: false, timelapse: false, useAms: true });
   const [mapping, setMapping] = useState<number[] | null>(null);
   const [sending, setSending] = useState(false);
@@ -69,9 +69,9 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
     if (!dev) return;
     setSending(true);
     try {
-      const job = await buildPrintJob(bambu ? '3mf' : 'gcode');
+      const job = await buildPrintJob(isBbl ? '3mf' : 'gcode');
       if (!job) return;
-      const amsMapping = bambu && opts.useAms && mapping ? s.filaments.map((_, k) => mapping[k] ?? -1) : undefined;
+      const amsMapping = isBbl && opts.useAms && mapping ? s.filaments.map((_, k) => mapping[k] ?? -1) : undefined;
       await uploadAndPrint(dev.id, job.name, job.data, start, { plate: 1, ...opts, useAms: opts.useAms && !!trays.length, amsMapping });
       s.set({ toast: { kind: 'info', text: start ? `Print started on ${dev.name}.` : `${job.name} sent to ${dev.name}.` } });
       onClose();
@@ -107,7 +107,7 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
             <p style={{ color: '#E5484D', fontSize: 12 }}><Icon name="warn" size={12} /> This plate is sliced for {profile.vendor} {profile.model}; {dev.name} is a {printerById(dev.printerId).model}. Re-slice for the right printer first.</p>
           )}
           {busy && <p style={{ color: '#F2B33D', fontSize: 12 }}>The printer is busy. You can still send the file and start it later.</p>}
-          {bambu && (
+          {isBbl && (
             <>
               <h3 style={{ fontSize: 13, marginBottom: 6 }}>Options</h3>
               <div className="row" style={{ flexWrap: 'wrap', gap: 14 }}>

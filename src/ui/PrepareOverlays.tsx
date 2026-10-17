@@ -7,7 +7,7 @@ import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, sig
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
-/** The Prepare toolbar, in Bambu Studio's order: object commands, then the gizmos and tools. */
+/** The Prepare toolbar: object commands, then the gizmos and tools. */
 export function Toolbar() {
   const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates } = useStore();
   const has = selected.length > 0 || !!selectedPart;
@@ -75,7 +75,7 @@ const FACES: [CubeFace, string, number[], number[], number[]][] = [
 ];
 const CUBE = 62;
 
-/** Bambu Studio's view cube: turns with the camera, click a face to look at it, drag to orbit. */
+/** View cube: turns with the camera, click a face to look at it, drag to orbit. */
 export function ViewCube() {
   const cube = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -123,7 +123,7 @@ export function ViewCube() {
   );
 }
 
-/** Bambu Studio's object info box (bottom right) for the selected object: name, size, volume, triangles, mesh errors. */
+/** Object info box (bottom right) for the selected object: name, size, volume, triangles, mesh errors. */
 export function ObjectInfo() {
   const { objects, selected, selectedPart } = useStore();
   const [closedFor, setClosedFor] = useState<string | null>(null);
@@ -345,7 +345,7 @@ export function VlhPanel() {
 
 export { slotColor };
 
-/** Bambu's arrange settings popup (right click on the arrange button). */
+/** Arrange settings popup (right click on the arrange button). */
 function ArrangeSettings({ onClose }: { onClose: () => void }) {
   const { arrangeSettings: a, set } = useStore();
   const up = (p: Partial<typeof a>) => set({ arrangeSettings: { ...a, ...p } });
@@ -367,7 +367,7 @@ function ArrangeSettings({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Brim ears tool panel (Bambu's GLGizmoBrimEars). */
+/** Brim ears tool panel. */
 export function BrimEarsPanel() {
   const s = useStore();
   if (s.tool !== 'brim_ears') return null;

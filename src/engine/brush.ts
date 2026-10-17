@@ -1,4 +1,4 @@
-// Painting brushes of Bambu Studio's support / seam / colour painting gizmos. Each returns the triangles a stroke
+// Painting brushes of the support / seam / colour painting gizmos. Each returns the triangles a stroke
 // at one point covers. Coordinates are the object's local (mesh) space.
 import type { IndexedMesh } from './mesh';
 import { growFaces, triAdjacency, triNormals } from './facesets';

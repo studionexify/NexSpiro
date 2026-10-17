@@ -1,4 +1,4 @@
-// Seam treatments for closed wall loops: Bambu Studio's scarf joint seam and seam gap.
+// Seam treatments for closed wall loops: scarf joint seam and seam gap.
 // A loop arrives already rotated so it starts at the seam point.
 
 /** Length of a closed loop (flat xy). */

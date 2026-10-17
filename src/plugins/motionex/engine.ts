@@ -41,7 +41,7 @@ export function profilesFromConfig(cfg: Config, printerId: string): PrintProfile
   const maxFlow = num('filament_max_volumetric_speed', 15);
   return {
     machine: {
-      id: printerId, name: String(cfg.printer_model ?? printerId), firmware: (['klipper', 'marlin', 'bambu'].includes(flavor) ? flavor : 'marlin') as Firmware,
+      id: printerId, name: String(cfg.printer_model ?? printerId), firmware: (['klipper', 'marlin', 'bbl'].includes(flavor) ? flavor : 'marlin') as Firmware,
       bed: { x: num('bed_x', 256), y: num('bed_y', 256), z: num('bed_z', 256) }, nozzle: num('nozzle_diameter', 0.4),
       maxSpeed: { x: xy, y: xy, z: num('max_speed_z', 12), e: 60 },
       maxAccel: { x: acc, y: acc, z: 500, e: 5000 },

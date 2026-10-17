@@ -1,4 +1,4 @@
-// Bambu Studio parity: every setting added for parity changes the toolpaths or the G-code.
+// Settings wiring: every process, filament and printer setting changes the toolpaths or the G-code.
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import { weld } from '../src/engine/mesh';
@@ -157,7 +157,7 @@ describe('strength', () => {
     expect(g1).not.toBe(g2);
   });
 
-  it('every Bambu sparse infill pattern slices and differs from grid', () => {
+  it('every sparse infill pattern slices and differs from grid', () => {
     const b = mesh(box(100, 100, 0, 20, 20, 8));
     const grid = extrusionLen(parse(slice([b], cfgFor('bbl-p1s', { sparse_infill_pattern: 'grid', sparse_infill_density: 20 })).gcode).moves, 'sparse infill');
     for (const pat of ['line', 'cubic', 'tri-hexagon', 'honeycomb', '3dhoneycomb', 'adaptivecubic', 'supportcubic', 'lightning', 'hilbertcurve', 'archimedeanchords', 'octagramspiral', 'crosshatch']) {
@@ -363,7 +363,7 @@ describe('others', () => {
 });
 
 describe('cooling, retraction and machine G-code', () => {
-  it('fan speed follows layer time (Bambu cooling rules)', () => {
+  it('fan speed follows layer time (cooling rules)', () => {
     const big = mesh(box(60, 60, 0, 80, 80, 1));
     const fil = { fan_min_speed: 30, fan_max_speed: 100, slow_down_layer_time: 4, fan_cooling_layer_time: 20, reduce_fan_stop_start_freq: false, close_fan_the_first_x_layers: 1 };
     const g = slice([big], cfgFor('bbl-p1s', {}, {}, fil)).gcode;
@@ -381,7 +381,7 @@ describe('cooling, retraction and machine G-code', () => {
     expect(slice([t], cfgFor('bbl-p1s', {}, {}, fil)).gcode).toMatch(new RegExp(`^M106 S${Math.round(0.9 * 255)}`, 'm'));
   });
 
-  it('Z hop types: spiral (Bambu G3), slope, normal; lift boundaries', () => {
+  it('Z hop types: spiral (G3), slope, normal; lift boundaries', () => {
     const two = [mesh(box(60, 60, 0, 10, 10, 2), 'a'), mesh(box(150, 150, 0, 10, 10, 2), 'b')];
     expect(slice(two, cfgFor('bbl-p1s', {}, { z_hop_types: 'spiral' })).gcode).toMatch(/^G3 Z[\d.]+ I[\d.]+ J0 P1/m);
     const slope = parse(slice(two, cfgFor('generic-marlin', {}, { z_hop_types: 'slope', z_hop: 0.4 })).gcode).moves;

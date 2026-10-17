@@ -21,7 +21,7 @@ describe('cut connectors', () => {
     const c = { ...DEFAULT_CONNECTOR, type: 'plug' as const, shape: 'square' as const, size: 4, depth: 5 };
     cutObject(o.id, { ...opts, connectors: [{ x: 0, y: 0 }], connector: c });
     const v = vols();
-    const pin = 2 * 2 * 2 * 5; // square inscribed in the 4 mm circle (Bambu sizes polygons by their circumscribed circle)
+    const pin = 2 * 2 * 2 * 5; // square inscribed in the 4 mm circle (polygons are sized by their circumscribed circle)
     expect(v.find((x) => x.name.includes('upper'))!.v).toBeCloseTo(4000 + pin, -1);
     expect(v.find((x) => x.name.includes('lower'))!.v).toBeCloseTo(4000 - pin, -1);
   });

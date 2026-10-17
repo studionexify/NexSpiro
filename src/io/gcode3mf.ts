@@ -1,4 +1,4 @@
-// Bambu Lab print job container (.gcode.3mf): plate G-code + MD5, thumbnail, slice info and
+// Print job container (.gcode.3mf) of A1/P1/X1/H2 printers: plate G-code + MD5, thumbnail, slice info and
 // project settings — the format the printers' "project_file" command expects on the SD card.
 import JSZip from 'jszip';
 import { md5 } from './md5';

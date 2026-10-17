@@ -1,4 +1,4 @@
-// Printer connections against local mock servers (Moonraker, OctoPrint, Bambu MQTT broker over TLS).
+// Printer connections against local mock servers (Moonraker, OctoPrint, LAN MQTT broker over TLS).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import tls from 'node:tls';
@@ -9,7 +9,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { MoonrakerConnection, OctoPrintConnection } from '../src/connect/http';
 import { checksum, MarlinHost, type LineTransport } from '../src/connect/serial';
-import { BambuConnection, cameraAuthPacket, FrameParser, hmsCode, mergeReport, statusFromReport } from '../electron/src/bambu';
+import { LanConnection, cameraAuthPacket, FrameParser, hmsCode, mergeReport, statusFromReport } from '../electron/src/lan';
 
 type Handler = (req: http.IncomingMessage, body: Buffer) => { status?: number; json?: unknown };
 function mockServer(handler: Handler): Promise<{ port: number; close: () => void; log: { method: string; url: string; body: Buffer; headers: http.IncomingHttpHeaders }[] }> {
@@ -113,7 +113,7 @@ describe('OctoPrint', () => {
   });
 });
 
-describe('Bambu LAN protocol', () => {
+describe('LAN access-code protocol', () => {
   it('merges partial reports and maps status, AMS and HMS', () => {
     const acc: Record<string, any> = {};
     mergeReport(acc, { print: { gcode_state: 'RUNNING', mc_percent: 37, mc_remaining_time: 42, layer_num: 10, total_layer_num: 120, nozzle_temper: 219.5, spd_lvl: 2,
@@ -145,12 +145,12 @@ describe('Bambu LAN protocol', () => {
   });
 });
 
-describe('Bambu LAN over a real MQTT/TLS broker', () => {
+describe('LAN access-code connection over a real MQTT/TLS broker', () => {
   let broker: any, server: tls.Server, port = 0;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nx-mqtt-'));
   const received: any[] = [];
   beforeAll(async () => {
-    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=bambu-test'], { stdio: 'ignore' });
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=nexspiro-test'], { stdio: 'ignore' });
     const mod = (await import('aedes')) as any;
     broker = mod.Aedes ? await mod.Aedes.createBroker() : mod.default();
     broker.authenticate = (_c: unknown, user: string, pass: Buffer, cb: (e: Error | null, ok: boolean) => void) => cb(null, user === 'bblp' && pass?.toString() === 'CODE1234');
@@ -169,7 +169,7 @@ describe('Bambu LAN over a real MQTT/TLS broker', () => {
   afterAll(() => { server.close(); broker.close(); });
 
   it('connects with the access code, receives status and sends commands', async () => {
-    const c = new BambuConnection({ kind: 'bambu_lan', host: '127.0.0.1', serial: '01p00a000000001', accessCode: 'CODE1234', mqttPort: port });
+    const c = new LanConnection({ kind: 'bbl_lan', host: '127.0.0.1', serial: '01p00a000000001', accessCode: 'CODE1234', mqttPort: port });
     const got = new Promise<void>((r) => c.onStatus((s) => { if (s.state === 'idle') r(); }));
     await c.connect();
     await got;
@@ -189,17 +189,17 @@ describe('Bambu LAN over a real MQTT/TLS broker', () => {
   });
 
   it('rejects a wrong access code', async () => {
-    const c = new BambuConnection({ kind: 'bambu_lan', host: '127.0.0.1', serial: '01P00A000000001', accessCode: 'WRONG', mqttPort: port });
+    const c = new LanConnection({ kind: 'bbl_lan', host: '127.0.0.1', serial: '01P00A000000001', accessCode: 'WRONG', mqttPort: port });
     await expect(c.connect()).rejects.toThrow(/Access code rejected|Not authorized/i);
   });
 });
 
-describe('Bambu LAN file transfer (implicit FTPS)', () => {
+describe('LAN access-code file transfer (implicit FTPS)', () => {
   let ftpd: any, port = 0;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nx-ftp-'));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nx-ftp-root-'));
   beforeAll(async () => {
-    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=bambu-test'], { stdio: 'ignore' });
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=nexspiro-test'], { stdio: 'ignore' });
     const FtpSrv = (await import('ftp-srv')).default as any;
     port = 20000 + Math.floor(Math.random() * 20000);
     ftpd = new FtpSrv({
@@ -212,7 +212,7 @@ describe('Bambu LAN file transfer (implicit FTPS)', () => {
   afterAll(() => ftpd?.close());
 
   it('uploads, lists, downloads and deletes files', async () => {
-    const c = new BambuConnection({ kind: 'bambu_lan', host: '127.0.0.1', serial: 'X', accessCode: 'CODE1234', ftpPort: port });
+    const c = new LanConnection({ kind: 'bbl_lan', host: '127.0.0.1', serial: 'X', accessCode: 'CODE1234', ftpPort: port });
     const data = new TextEncoder().encode('PK fake 3mf '.repeat(1000));
     const prog: number[] = [];
     await c.upload('cube.gcode.3mf', data.buffer, (f) => prog.push(f));

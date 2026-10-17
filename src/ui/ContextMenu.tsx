@@ -1,4 +1,4 @@
-// Right-click menus on the 3D view, after Bambu Studio: one for an empty spot on a plate,
+// Right-click menus on the 3D view: one for an empty spot on a plate,
 // one for an object (or a selection of objects) and one for a part.
 import { addHeightRange } from '../state/ops';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';

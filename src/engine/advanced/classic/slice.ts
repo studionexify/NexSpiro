@@ -1,5 +1,5 @@
-// Frozen classic engine of Advanced mode (as on main before the Bambu parity work, 08b924a). Advanced mode
-// slices with this engine only, so Basic (Bambu) changes never alter Advanced output and vice versa.
+// Frozen classic engine of Advanced mode (as on main at 08b924a). Advanced mode slices with this engine
+// only, so Basic-engine changes never alter Advanced output and vice versa.
 // Stage 2: Z-plane mesh intersection + topological loop chaining.
 import { cleanPaths, SCALE, unionEvenOdd } from '../../clipper';
 import type { Paths } from '../../types';

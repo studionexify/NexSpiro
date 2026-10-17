@@ -109,7 +109,7 @@ export function Legend() {
         </div>
       )}
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn-secondary" style={{ flex: 1, minWidth: 0 }} onClick={() => exportPlateFile(printerById(useStore.getState().printerId).flavor === 'bambu' ? '3mf' : 'gcode')} title="Bambu printers: .gcode.3mf with thumbnail; others: G-code with thumbnails"><Icon name="download" />Export</button>
+        <button className="btn-secondary" style={{ flex: 1, minWidth: 0 }} onClick={() => exportPlateFile(printerById(useStore.getState().printerId).flavor === 'bbl' ? '3mf' : 'gcode')} title="A1/P1/X1/H2 printers: .gcode.3mf with thumbnail; others: G-code with thumbnails"><Icon name="download" />Export</button>
         <button className="btn-primary" style={{ flex: 1, minWidth: 0 }} onClick={openPrintDialog}><Icon name="print" />Print plate</button>
       </div>
     </div>
@@ -132,7 +132,7 @@ export function LayerSlider() {
       if (e.key === 'ArrowUp') { const h = Math.min(n - 1, hi + 1); set({ layerRange: [one ? h : lo, h], moveCursor: -1 }); e.preventDefault(); }
       if (e.key === 'ArrowDown') { const h = Math.max(one ? 0 : lo, hi - 1); set({ layerRange: [one ? h : lo, h], moveCursor: -1 }); e.preventDefault(); }
       if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
-        // Bambu: L shows only the current top layer; again restores the range
+        // L shows only the current top layer; again restores the range
         set(one ? { oneLayer: false, layerRange: [st.savedLow ?? 0, hi] } : { oneLayer: true, savedLow: lo, layerRange: [hi, hi] });
         e.preventDefault();
       }
@@ -212,7 +212,7 @@ export function MoveSlider() {
 }
 
 const lineCache = new WeakMap<object, string[]>();
-/** The G-code around the current move (Bambu shows it beside the horizontal slider), current line highlighted. */
+/** The G-code around the current move, shown beside the horizontal slider, current line highlighted. */
 function GcodeLines({ gcode, line, move }: { gcode: string; line: number; move: number }) {
   const r = useStore.getState().slice.result!;
   let lines = lineCache.get(r);

@@ -50,7 +50,7 @@ PATTERNEX_TEST_PRINTS=out/test-prints npx vitest run tests/patternex/test-prints
 Purge grams use the flush volumes actually applied (default `flush_volume` 280 mm³ when no matrix is set) at the filament density.
 
 ## 5. Corrections to the Phase 1 report
-- **No-purge on Bambu AMS is feasible.** With `flush_length = 0` the AMS still cuts and loads, but the old filament left in the melt zone is pushed into the part — that is the bleed. Patternex sets the flush to 0 and skips the tower band for those changes.
+- **No-purge on the AMS is feasible.** With `flush_length = 0` the AMS still cuts and loads, but the old filament left in the melt zone is pushed into the part — that is the bleed. Patternex sets the flush to 0 and skips the tower band for those changes.
 
 ## 6. Known limits (v1)
 - **Placement gizmo**: move is drag-on-surface (snaps to the face under the cursor); rotation, scale (uniform/non-uniform) and flip are numeric fields in the panel, not 3D handles.

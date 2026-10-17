@@ -1,4 +1,4 @@
-// Process parameter schema, laid out like Bambu Studio's process tabs (Quality, Strength, Speed, Support, Others):
+// Process parameter schema, laid out in process tabs (Quality, Strength, Speed, Support, Others):
 // same groups, same order, same keys, units and ranges. Every key listed here is read by the engine.
 export type ParamType = 'float' | 'int' | 'bool' | 'enum' | 'percent' | 'floatOrPercent' | 'string' | 'text';
 export type ProcessTab = 'Quality' | 'Strength' | 'Speed' | 'Support' | 'Others';
@@ -19,7 +19,7 @@ export interface ParamDef {
   options?: { value: string; label: string }[];
   def: ConfigValue;
   tip: string;
-  /** Shown only with the Advanced switch on (Bambu Studio's advanced / developer mode settings). */
+  /** Shown only with the Advanced switch on (advanced / developer settings). */
   advanced?: boolean;
   /** Disabled when this returns true for the current config. */
   disabledWhen?: (c: Config) => boolean;
@@ -51,7 +51,7 @@ const noSupportIron = (c: Config) => !c.enable_support || !c.enable_support_iron
 
 const o = (...pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
 
-/** Top / bottom surface patterns (Bambu's list). */
+/** Top / bottom surface patterns. */
 export const SURFACE_PATTERNS = o(
   ['concentric', 'Concentric'], ['rectilinear', 'Rectilinear'], ['monotonic', 'Monotonic'], ['monotonicline', 'Monotonic line'],
   ['aligned_rectilinear', 'Aligned Rectilinear'], ['hilbertcurve', 'Hilbert Curve'], ['archimedeanchords', 'Archimedean Chords'], ['octagramspiral', 'Octagram Spiral'],
@@ -302,7 +302,7 @@ export const PROCESS_PARAMS: ParamDef[] = [
   { key: 'prime_volume', label: 'Prime volume', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm³', min: 10, max: 1000, def: 45, disabledWhen: noTower, tip: 'Volume printed on the tower after each filament change (unless the filament sets its own).' },
   { key: 'prime_tower_x', label: 'Position X', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: -1, max: 1000, def: -1, disabledWhen: noTower, tip: 'Front-left corner of the tower (−1 = automatic, back right of the plate).' },
   { key: 'prime_tower_y', label: 'Position Y', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: -1, max: 1000, def: -1, disabledWhen: noTower, tip: 'Front-left corner of the tower (−1 = automatic).' },
-  { key: 'flush_volume', label: 'Flush volume', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm³', min: 0, max: 2000, def: 280, advanced: true, tip: 'Filament purged when changing colour if the flushing-volume matrix has no value (into the chute on Bambu printers, onto the tower on manual-change printers).' },
+  { key: 'flush_volume', label: 'Flush volume', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm³', min: 0, max: 2000, def: 280, advanced: true, tip: 'Filament purged when changing colour if the flushing-volume matrix has no value (into the chute on A1/P1/X1/H2 printers, onto the tower on manual-change printers).' },
   { key: 'mmu_paint_depth', label: 'Painted colour depth', tab: 'Others', group: 'Prime tower', type: 'float', unit: 'mm', min: 0.4, max: 10, step: 0.1, def: 1.5, advanced: true, tip: 'How deep painted colours extend inward from the surface.' },
 
   { key: 'flush_into_infill', label: 'Flush into objects\' infill', tab: 'Others', group: 'Flush options', type: 'bool', def: false, tip: 'After a filament change, the sparse infill still to be printed is printed with the new filament and counted as flush, so less is wasted.' },
@@ -380,7 +380,7 @@ export const MODIFIER_KEYS = ['sparse_infill_density', 'sparse_infill_pattern', 
 
 /**
  * Brings settings saved by older NexSpiro versions up to date: renamed keys and changed enum values.
- * `from` is the version the settings were saved with (1 = before the Bambu Studio key alignment).
+ * `from` is the version the settings were saved with (1 = before the settings key alignment).
  */
 export function migrateConfig(c: Config | undefined, from: number): Config {
   if (!c) return {};
@@ -389,7 +389,7 @@ export function migrateConfig(c: Config | undefined, from: number): Config {
     if ('label_objects' in out) { out.exclude_object = out.label_objects; delete out.label_objects; }
     if ('reduce_infill_retraction' in out) { out.reduce_infill_retraction_mode = out.reduce_infill_retraction ? 'auto' : 'disabled'; delete out.reduce_infill_retraction; }
     if ('overhang_speed' in out) { out.overhang_totally_speed = out.overhang_speed; delete out.overhang_speed; }
-    // NexSpiro 1 called "all walls" 'all'; Bambu's 'all' is outer walls of contours and holes
+    // NexSpiro 1 called "all walls" 'all'; now 'all' is outer walls of contours and holes
     if (out.fuzzy_skin === 'all') out.fuzzy_skin = 'allwalls';
   }
   return out;

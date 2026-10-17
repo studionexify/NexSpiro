@@ -33,7 +33,7 @@ export interface DeviceHandle {
   setLight(on: boolean): Promise<void>;
   setSpeed(level: number): Promise<void>;
   cameraUrl(): Promise<string | null>;
-  /** JPEG frame stream (Bambu A1/P1). Returns an unsubscribe function, or null if unsupported. */
+  /** JPEG frame stream (A1/P1). Returns an unsubscribe function, or null if unsupported. */
   camera(cb: (url: string) => void): Promise<(() => void) | null>;
 }
 
@@ -56,11 +56,11 @@ function ipcHandle(d: SavedDevice, b: DeviceBridge, onStatus: (s: PrinterStatus)
     pause: () => call('pause'), resume: () => call('resume'), cancel: () => call('cancel'),
     sendGcode: (l) => call('sendGcode', l),
     listFiles: () => call('listFiles'), deleteFile: (n) => call('deleteFile', n),
-    async setLight(on) { if (d.config.kind === 'bambu_lan') await call('setLight', on); else await call('sendGcode', on ? 'SET_LED LED=chamber_light WHITE=1' : 'SET_LED LED=chamber_light WHITE=0'); },
-    async setSpeed(level) { if (d.config.kind === 'bambu_lan') await call('setSpeed', level); else await call('sendGcode', `M220 S${level}`); },
+    async setLight(on) { if (d.config.kind === 'bbl_lan') await call('setLight', on); else await call('sendGcode', on ? 'SET_LED LED=chamber_light WHITE=1' : 'SET_LED LED=chamber_light WHITE=0'); },
+    async setSpeed(level) { if (d.config.kind === 'bbl_lan') await call('setSpeed', level); else await call('sendGcode', `M220 S${level}`); },
     cameraUrl: () => call('cameraUrl'),
     async camera(cb) {
-      if (d.config.kind !== 'bambu_lan') return null;
+      if (d.config.kind !== 'bbl_lan') return null;
       let last = '';
       const off = b.onFrame((id, jpg) => {
         if (id !== d.id) return;
@@ -106,8 +106,11 @@ export function deviceHandle(d: SavedDevice, onStatus: (s: PrinterStatus) => voi
 const LS_KEY = 'nexspiro.devices';
 export async function loadDevices(): Promise<SavedDevice[]> {
   const b = bridge();
-  if (b) return b.load();
-  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { return []; }
+  let list: SavedDevice[];
+  if (b) list = await b.load();
+  else try { list = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { list = []; }
+  // devices saved before the connection kind was renamed
+  return list.map((d) => ((d.config.kind as string) === 'bambu_lan' ? { ...d, config: { ...d.config, kind: 'bbl_lan' } } : d));
 }
 export async function saveDevices(list: SavedDevice[]) {
   const b = bridge();

@@ -9,7 +9,7 @@ import type { Kinematics, MachineOverrides } from './types';
 export interface MachineCaps {
   printerId: string;
   name: string;
-  firmware: 'bambu' | 'klipper' | 'marlin';
+  firmware: 'bbl' | 'klipper' | 'marlin';
   kinematics: Kinematics;
   /** 3 for gantry printers; 5 for machines with two rotary axes. */
   axes: number;

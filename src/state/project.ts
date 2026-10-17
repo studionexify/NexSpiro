@@ -7,7 +7,7 @@ import type { LayerAction } from '../engine/types';
 import { migrateConfig, type Config } from '../profiles/settings';
 import type { PatternexProjectData } from '../plugins/patternex/ui/state';
 
-const VERSION = 2; // 2: Bambu Studio setting keys (see migrateConfig)
+const VERSION = 2; // 2: current setting keys (see migrateConfig)
 
 const b64 = (a: Uint8Array) => { let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode(...a.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));

@@ -215,7 +215,7 @@ describe('Phase 2 in the slicer', () => {
     const t = new Map(out.advanced!.techs.map((x) => [x.id, x]));
     expect(t.get('eikonal_offsets')!.stats!.cache_hits).toBeGreaterThan(10); // repeated outline: solved once
     expect(out.advanced!.clearance).toBeUndefined();
-    // compared with Advanced mode's own classic core (Basic mode is the separate Bambu engine)
+    // compared with Advanced mode's own classic core (Basic mode is a separate engine)
     const basic = classicSlice([indexed(box(80, 80, 0, 20, 20, 10), 'cube')], legacyConfig(cfgFor('voron-24-350')));
     expect(Math.abs(out.stats.filamentGrams - basic.stats.filamentGrams) / basic.stats.filamentGrams).toBeLessThan(0.03);
   });

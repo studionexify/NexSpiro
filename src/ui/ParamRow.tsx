@@ -3,7 +3,7 @@ import type { Config, ParamDef } from '../profiles/settings';
 import { Icon } from './icons';
 
 /**
- * One settings row, as in Bambu Studio: a lock when the value is the system (preset) value, an orange revert
+ * One settings row: a lock when the value is the system (preset) value, an orange revert
  * arrow when it was changed, then the control. `nullable` rows (filament setting overrides) get a checkbox:
  * unchecked means "use the printer's value".
  */

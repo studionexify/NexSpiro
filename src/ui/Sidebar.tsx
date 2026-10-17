@@ -17,7 +17,7 @@ const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 's
 
 export function Sidebar() {
   const advanced = useAdvanced((a) => a.engineMode === 'advanced');
-  // Progressive disclosure: Basic shows the Bambu-style process settings; Advanced swaps them for the
+  // Progressive disclosure: Basic shows the classic process settings; Advanced swaps them for the
   // Intent Cards, Zone Inspector and technology graph (the base process stays one click away).
   return (
     <aside className={`sidebar ${advanced ? 'is-advanced' : ''}`}>
@@ -267,7 +267,7 @@ function ProcessCard() {
   );
 }
 
-/** Bambu Studio's object list: plates, their objects and parts. Click selects (Ctrl toggles), right click opens the object menu. */
+/** Object list: plates, their objects and parts. Click selects (Ctrl toggles), right click opens the object menu. */
 function ObjectsCard() {
   const s = useStore();
   const plates = s.plates.length;

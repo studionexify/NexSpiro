@@ -1,4 +1,4 @@
-// Measure tool, after Bambu Studio's GLGizmoMeasure: pick points, edges or planes on the models, read the distance
+// Measure tool: pick points, edges or planes on the models, read the distance
 // or angle between two features, and scale an object so a measured distance becomes a given value.
 import * as THREE from 'three';
 import type { Vec3 } from './store';
@@ -115,7 +115,7 @@ function segmentClosest(p1: THREE.Vector3, q1: THREE.Vector3, p2: THREE.Vector3,
 export const edgeLength = (f: MeasureFeature) => (f.kind === 'edge' ? V(f.a).distanceTo(V(f.b)) : f.kind === 'circle' ? f.r * 2 : null);
 
 /**
- * Circle feature (Bambu's measure picks hole and boss edges as circles): the boundary loop of the flat face
+ * Circle feature (hole and boss edges are picked as circles): the boundary loop of the flat face
  * `region` (triangle indices) nearest to `near`, fitted as a circle when its points lie within 3 % of a common
  * radius. Corners are world-space by `toWorld`.
  */
