@@ -6,7 +6,7 @@ import {
 } from './catalog';
 import {
   arcTube, bounds, box, cylinder, flip, lathe, latheTube, merge, polarRing, prism, ringSolid, rotateX, rotateZ, roundedPrism,
-  smooth, solidShell, strut, tau, translate, tubeShell, type Ring, type Soup, type V3,
+  smooth, solidShell, soupVolume, strut, tau, translate, tubeShell, type Ring, type Soup, type V3,
 } from './geom';
 import { app } from './geom';
 import { jointByKind, jointGeometry, spigotShell, type JointGeometry, type JointSpec } from './joinery';
@@ -30,6 +30,8 @@ export interface BuiltPart {
   printRot: V3;
   /** Rotation applied in the assembly (about the assembly origin) after building. */
   assemblyRot: V3;
+  /** Point the assembly rotation turns about (default: the origin). */
+  pivot?: V3;
   /** Preview only (bulb, holder, cord): never sliced. */
   ghost?: boolean;
   /** Print settings for this object (e.g. spiral vase). */
@@ -74,6 +76,14 @@ export function rotateXYZ(s: Soup, r: V3): Soup {
   return s;
 }
 
+/** A part's geometry as it sits in the finished lamp. */
+export function assembled(p: Pick<BuiltPart, 'soup' | 'assemblyRot' | 'pivot'>, s: Soup = p.soup): Soup {
+  const q = [...s], c = p.pivot ?? [0, 0, 0];
+  translate(q, -c[0], -c[1], -c[2]);
+  rotateXYZ(q, p.assemblyRot);
+  return translate(q, c[0], c[1], c[2]);
+}
+
 interface Piece { section: Section; index: number; count: number; tFrom: number; tTo: number; z0: number }
 
 /** How many pieces a section needs to fit the printer height. */
@@ -114,7 +124,7 @@ function planJoint(spec: JointSpec, lo: ShapeSpec, tLo: number, up: ShapeSpec, t
 }
 
 /** Collar ring inside a thin shell between z0 and z1 (assembled), from the shell wall in to rIn(a, zLocal). */
-function collar(s: ShapeSpec, sz0: number, z0: number, z1: number, rIn: (a: number, z: number) => number, around: number, chamferDown: boolean): Soup {
+function collar(s: ShapeSpec, sz0: number, z0: number, z1: number, rIn: (a: number, z: number) => number, around: number, chamferDown: boolean, floorZ = -Infinity): Soup {
   const rows: { z: number; ro: (a: number) => number; ri: (a: number) => number }[] = [];
   const minS = Math.min(s.scaleX, s.scaleY);
   const wallAt = (a: number, z: number) => innerRadius(s, a, Math.min(1, Math.max(0, (z - sz0) / s.height))) * minS + 0.6;
@@ -128,6 +138,7 @@ function collar(s: ShapeSpec, sz0: number, z0: number, z1: number, rIn: (a: numb
     for (let k = 0; k <= Math.ceil(w / 0.6); k++) {
       const dz = (k * 0.6) - w;
       if (dz >= 0) break;
+      if (z0 + dz < floorZ) continue;
       const f = k / Math.ceil(w / 0.6);
       out.push({ z: z0 + dz, ro: (a) => rIn(a, 0) + 0.3 + (wallAt(a, z0) - rIn(a, 0)) * f, ri: (a) => rIn(a, 0) });
     }
@@ -145,7 +156,7 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
   const cable = CABLES.find((c) => c.id === d.wiring.cable) ?? CABLES[0];
   const bore = cable.d / 2 + 0.8;
   const hc = d.fitting.clearance;
-  const add = (p: Omit<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'> & Partial<Pick<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'>>) =>
+  const add = (p: Omit<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'> & Partial<Pick<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot' | 'pivot'>>) =>
     parts.push({ copies: 1, assemblyRot: [0, 0, 0], cuts: [], printRot: [0, 0, 0], ...p });
   const hexOf = (s: Section) => swatch(s.material, s.color).hex;
 
@@ -220,7 +231,7 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
     }
     if (above) {
       const pl = above.plan;
-      if (!pl.carve) app(soup, collar(sh, p.z0, zB - 6, zB, () => pl.rb, r.around, true));
+      if (!pl.carve) app(soup, collar(sh, p.z0, Math.max(zA + (p.index === 0 ? sh.floor : 0) + 0.7, zB - 6), zB, () => pl.rb, r.around, true, zA + (p.index === 0 ? sh.floor : 0) + 0.4));
       app(soup, spigotShell(pl.g, pl.rb, zB, r.around));
       for (const c of pl.g.maleCuts) cuts.push(translate([...c], 0, 0, zB));
       for (const x of pl.g.extras) add({ key: `${s.id}-x${p.index}-${x.name}`, name: `${x.name} (${s.name})`, group: s.name, soup: x.soup, material: s.material, color: s.color, hex: hexOf(s) });
@@ -242,9 +253,15 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
     }
     if (s === holderSection && d.kind === 'mount' && p.index === 0) {
       app(soup, ledSeat(d, s, p.z0, r, bore));
-      // middle lug of the tilt knuckle under the head
-      app(soup, box(-7, -2, p.z0 - 14, 7, 2, p.z0 + 1));
-      cuts.push(strut([-9, 0, p.z0 - 7], [9, 0, p.z0 - 7], 2.7, 16));
+      // the head's prongs of the tilt knuckle (they sit between the arm's prongs; pivot axis along Y)
+      for (const [y0, y1] of knuckle(d.mount).head) app(soup, box(-7, y0, p.z0 - 14, 7, y1, p.z0 + 1));
+      cuts.push(strut([0, -12, p.z0 - 7], [0, 12, p.z0 - 7], 2.7, 16));
+    }
+    // ballast chamber and felt recess in the bottom of the base
+    if (s === stack[0] && s.role === 'base' && p.index === 0 && (d.kind === 'table' || d.kind === 'floor' || d.kind === 'ceiling')) {
+      const bb = baseExtras(d, s, p.z0, r, bore, warn, notes);
+      app(soup, bb.soup); app(cuts, bb.cuts);
+      if (bb.plug) add({ key: `${s.id}-plug`, name: 'Ballast fill plug', group: s.name, soup: bb.plug, material: s.material, color: s.color, hex: hexOf(s) });
     }
     // wire exits and switches go through the bottom piece of the first stacked section (or the head)
     const wireHost = d.kind === 'mount' || d.kind === 'lantern' ? holderSection : stack[0];
@@ -255,7 +272,8 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
     const flipped = s.attach === 'hung' && s.gallery >= 0.5;
     const overrides = sh.vase ? { spiral_mode: true, bottom_shell_layers: 0, top_shell_layers: 0 } : undefined;
     const label = p.count > 1 ? `${s.name} ${p.index + 1}/${p.count}` : s.name;
-    add({ key: `${s.id}-${p.index}`, name: label, group: s.name, soup, cuts, material: s.material, color: s.color, hex: hexOf(s), printRot: flipped ? [180, 0, 0] : [0, 0, 0], overrides });
+    const tilt = d.kind === 'mount' && s === holderSection && d.mount.tilt ? { assemblyRot: [0, d.mount.tilt, 0] as V3, pivot: [0, 0, p.z0 - 7] as V3 } : {};
+    add({ key: `${s.id}-${p.index}`, name: label, group: s.name, soup, cuts, material: s.material, color: s.color, hex: hexOf(s), printRot: flipped ? [180, 0, 0] : [0, 0, 0], overrides, ...tilt });
     // overhang check in print orientation
     const oh = worstOverhang(sh, flipped);
     if (oh > 62 && !sh.vase) warn(`${s.name}: ${Math.round(oh)}° overhang in print orientation — add supports, raise the handles, or flip the gallery.`);
@@ -285,7 +303,7 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
   for (const s of d.sections) {
     const z0 = z0Of.get(s.id)!, H = s.shape.height;
     // LED pucks and strips at a few watts run cool: only keep them off the wall
-    const need = lowPower ? 1 : Math.round(THERMAL[s.material].minGap * Math.sqrt(Math.min(1, Math.max(0.25, d.watts / 9))));
+    const need = lowPower ? 0 : Math.round(THERMAL[s.material].minGap * Math.sqrt(Math.min(1, Math.max(0.25, d.watts / 9))));
     let worst: number | null = null;
     for (const [rb, zb] of bulb.profile) {
       const z = bz0 + zb;
@@ -332,7 +350,7 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
     if (axis.includes('XY')) warn(`${p.name} is ${size[0].toFixed(0)} × ${size[1].toFixed(0)} mm — wider than the printer bed (${bed.x} × ${bed.y}). Reduce its diameter or pick a larger printer.`);
     if (axis.includes('Z')) warn(`${p.name} is ${size[2].toFixed(0)} mm tall — over the printer height (${bed.z}). Raise its piece count.`);
   }
-  const all = parts.filter((p) => !p.ghost).flatMap((p) => { const b = bounds(rotateXYZ([...p.soup], p.assemblyRot)); return [b.min[2], b.max[2]]; });
+  const all = parts.filter((p) => !p.ghost).flatMap((p) => { const b = bounds(assembled(p)); return [b.min[2], b.max[2]]; });
   const height = all.length ? Math.max(...all) - Math.min(...all) : 0;
   return { parts, report: { parts: fit, warnings, notes, hardware: [...new Set(hardware)], bulbGap: gap, minGap, height, pieces: parts.filter((p) => !p.ghost).reduce((a, p) => a + p.copies, 0) } };
 }
@@ -436,12 +454,15 @@ function wireCuts(d: LampDesign, s: Section, z0: number, cd: number, warn: (m: s
 }
 
 function legs(d: LampDesign, s: Section, z0: number): Soup {
+  // splayed legs from the hub down to the floor (the hub and everything above stand on them)
   const n = d.base.legs, sh = s.shape, R = sh.diameter / 2, out: Soup = [];
-  const spread = R + Math.tan((d.base.legSplay * Math.PI) / 180) * sh.height * 1.6;
+  const L = Math.max(100, sh.diameter * 1.4), t = Math.tan((d.base.legSplay * Math.PI) / 180);
+  const lr = Math.max(6, R * 0.14);
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * tau + Math.PI / n;
-    app(out, strut([R * 0.55 * Math.cos(a), R * 0.55 * Math.sin(a), z0 + sh.height * 0.9], [spread * Math.cos(a), spread * Math.sin(a), z0 + 3], Math.max(5, R * 0.12), 20));
-    app(out, cylinder(Math.max(7, R * 0.16), z0, z0 + 3, 24, spread * Math.cos(a), spread * Math.sin(a)));
+    const a = (i / n) * tau + Math.PI / n, c = Math.cos(a), sn = Math.sin(a);
+    const r0 = R * 0.55, r1 = r0 + t * L + R * 0.3;
+    app(out, strut([r0 * c, r0 * sn, z0 + sh.height * 0.6], [r1 * c, r1 * sn, z0 - L + 2], lr, 20));
+    app(out, cylinder(lr * 1.5, z0 - L, z0 - L + 2.5, 24, r1 * c, r1 * sn));
   }
   return out;
 }
@@ -449,7 +470,7 @@ function legs(d: LampDesign, s: Section, z0: number): Soup {
 // ---------------------------------------------------------------- per lamp type
 interface Ctx { holderRing: number; hc: number; bore: number; ringZ: number; stackTop: number; cableD: number; hexOf: (s: Section) => string }
 
-type Add = (p: Omit<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'> & Partial<Pick<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'>>) => void;
+type Add = (p: Omit<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot'> & Partial<Pick<BuiltPart, 'copies' | 'assemblyRot' | 'cuts' | 'printRot' | 'pivot'>>) => void;
 
 const keyhole = (x: number, y: number, z0: number, z1: number, screw: number): Soup[] => [
   cylinder(screw * 1.1, z0 - 1, z1 + 1, 24, x, y),
@@ -459,13 +480,84 @@ const keyhole = (x: number, y: number, z0: number, z1: number, screw: number): S
 ];
 
 /** Split clamp half: half annulus + two ears, extruded along Z (pipe axis along Z). */
-function clampHalf(rp: number, wall: number, width: number, earL: number): Soup {
+function clampHalf(rp: number, wall: number, width: number, earL: number, hinge: 'none' | 'top' | 'bottom' = 'none'): Soup {
   const ro = rp + wall, pts: [number, number][] = [], n = 40;
   for (let i = 0; i <= n; i++) { const a = (Math.PI * i) / n; pts.push([ro * Math.cos(a), ro * Math.sin(a)]); }
   for (let i = n; i >= 0; i--) { const a = (Math.PI * i) / n; pts.push([rp * Math.cos(a), rp * Math.sin(a)]); }
   const out = prism(pts, 0, width);
-  if (earL > 0) out.push(...box(rp + 0.3, 0, 0, ro + earL, wall * 1.2, width), ...box(-ro - earL, 0, 0, -rp - 0.3, wall * 1.2, width));
+  if (earL > 0) {
+    if (hinge !== 'bottom') app(out, box(rp + 0.3, 0, 0, ro + earL, wall * 1.2, width));
+    if (hinge === 'none') app(out, box(-ro - earL, 0, 0, -rp - 0.3, wall * 1.2, width));
+    else {
+      // hinge knuckles on the split line (pin axis along Z): the top half carries the outer two on −X; the bottom
+      // half (turned 180° afterwards) carries the middle one, built on +X here
+      const sx = hinge === 'top' ? -1 : 1, cx = sx * (ro + earL / 2), g = 0.3;
+      if (hinge === 'bottom') { app(out, box(-ro - earL, 0, 0, -rp - 0.3, wall * 1.2, width)); }
+      const spans: [number, number][] = hinge === 'top' ? [[0, width / 3 - g], [(2 * width) / 3 + g, width]] : [[width / 3 + g, (2 * width) / 3 - g]];
+      for (const [z0, z1] of spans) {
+        app(out, cylinder(earL / 2, z0, z1, 32, cx, 0));
+        app(out, sx < 0 ? box(cx, 0.01, z0, -rp - 0.3, earL / 2 - 0.2, z1) : box(rp + 0.3, 0.01, z0, cx, earL / 2 - 0.2, z1));
+      }
+    }
+  }
   return out;
+}
+
+/** Hex nut pocket opening downward (−Y) at x, centred on z. */
+function nutTrap(x: number, y: number, z: number, af: number, h: number): Soup {
+  const R = af / Math.sqrt(3) + 0.15;
+  const hx: [number, number][] = Array.from({ length: 6 }, (_, i) => [x + R * Math.cos((i / 6) * tau), z + R * Math.sin((i / 6) * tau)]);
+  // extrude along Y: build in XZ then swap (proper rotation keeps winding)
+  const s = prism(hx.map(([a, c]) => [a, c] as [number, number]), 0, h + 0.4);
+  for (let i = 0; i < s.length; i += 3) { const yy = s[i + 1], zz = s[i + 2]; s[i + 1] = y + zz - 0.01; s[i + 2] = yy; }
+  return orientCut(s);
+}
+
+const orientCut = (s: Soup): Soup => { if (soupVolume(s) < 0) for (let i = 0; i < s.length; i += 9) for (let k = 0; k < 3; k++) { const t = s[i + 3 + k]; s[i + 3 + k] = s[i + 6 + k]; s[i + 6 + k] = t; } return s; };
+
+/** Prong layout of the tilt knuckle: arm prongs (Z spans before the clamp is stood up) and head prongs (Y spans). */
+export function knuckle(m: LampDesign['mount']): { arm: [number, number][]; head: [number, number][] } {
+  return m.style === 'gopro'
+    ? { arm: [[-7.75, -4.6], [-1.55, 1.55], [4.6, 7.75]], head: [[-4.3, -1.85], [1.85, 4.3]] }
+    : { arm: [[-7, -4], [4, 7]], head: [[-2.6, 2.6]] };
+}
+
+/** Sealed ballast chamber (sand / steel shot) with a fill plug, and a felt recess under the floor. */
+function baseExtras(d: LampDesign, s: Section, z0: number, r: Resolution, bore: number, warn: (m: string) => void, notes: string[]): { soup: Soup; cuts: Soup[]; plug?: Soup } {
+  const sh = s.shape, out: Soup = [], cuts: Soup[] = [];
+  let plug: Soup | undefined;
+  const minS = Math.min(sh.scaleX, sh.scaleY);
+  const wall = (a: number, z: number) => innerRadius(sh, a, Math.min(1, Math.max(0, (z - z0) / sh.height))) * minS + 0.6;
+  if (d.base.ballast) {
+    if (sh.floor <= 0) { warn(`${s.name}: the ballast chamber needs a floor — set Floor above 0.`); }
+    else {
+      const top = z0 + Math.min(sh.height * 0.55, Math.max(20, sh.height - 25));
+      const tube = bore + 2;
+      const reach = Math.max(...Array.from({ length: 36 }, (_, j) => wall((j / 36) * tau, top))) - tube;
+      // cable tube through the chamber, then a roof with a 45° cone underneath
+      app(out, latheTube([[tube, bore, z0 + sh.floor - 0.2], [tube, bore, top - reach]], 32));
+      const rows: { z: number; ro: (a: number) => number; ri: (a: number) => number }[] = [];
+      const steps = Math.max(2, Math.ceil(reach / 0.8));
+      for (let k = 0; k <= steps; k++) { const z = top - reach + (reach * k) / steps; if (z < z0 + sh.floor + 1) continue; rows.push({ z, ro: (a) => tube + 0.4 + (wall(a, z) - tube - 0.4) * (k / steps), ri: () => bore }); }
+      rows.push({ z: top + 3, ro: (a) => wall(a, top + 3), ri: () => bore });
+      if (rows.length >= 2) app(out, rowsTube(rows, r.around));
+      const fx = (tube + Math.min(...Array.from({ length: 36 }, (_, j) => wall((j / 36) * tau, top)))) / 2;
+      cuts.push(cylinder(6, top - 4, top + 4, 32, fx, 0));
+      plug = merge(cylinder(5.85, 0, 6, 32), cylinder(8.5, 6, 8, 32));
+      translate(plug, fx, 0, top - 3);
+      const vol = Math.PI * (Math.min(...Array.from({ length: 36 }, (_, j) => wall((j / 36) * tau, z0))) ** 2 - tube ** 2) * (top - reach / 2 - z0 - sh.floor) / 1000;
+      notes.push(`${s.name}: ballast chamber ≈ ${Math.max(0, vol).toFixed(0)} cm³ (≈ ${(Math.max(0, vol) * 1.6 / 1000).toFixed(1)} kg sand, ${(Math.max(0, vol) * 4.5 / 1000).toFixed(1)} kg steel shot). Fill through the hole under the roof, then press in the plug.`);
+    }
+  }
+  if (d.base.feltRecess > 0) {
+    if (sh.floor <= d.base.feltRecess + 0.8) notes.push(`${s.name}: felt recess skipped — the floor is thinner than ${(d.base.feltRecess + 0.8).toFixed(1)} mm.`);
+    else {
+      const rr = Math.min(...Array.from({ length: 36 }, (_, j) => wall((j / 36) * tau, z0))) - 3;
+      cuts.push(cylinder(rr, z0 - 1, z0 + d.base.feltRecess, 96));
+      notes.push(`${s.name}: ${d.base.feltRecess} mm recess for a Ø${(rr * 2).toFixed(0)} felt disc.`);
+    }
+  }
+  return { soup: out, cuts, plug };
 }
 
 function accessories(d: LampDesign, add: Add, warn: (m: string) => void, notes: string[], hardware: string[], c: Ctx) {
@@ -603,17 +695,26 @@ function accessories(d: LampDesign, add: Add, warn: (m: string) => void, notes: 
     const holes = (y0: number) => [strut([ro + earL / 2, y0 - 1, m.clampWidth / 2], [ro + earL / 2, y0 + ro * 2, m.clampWidth / 2], b.hole / 2, 16), strut([-ro - earL / 2, y0 - 1, m.clampWidth / 2], [-ro - earL / 2, y0 + ro * 2, m.clampWidth / 2], b.hole / 2, 16)];
     if (m.style === 'strap') {
       const saddle = merge(box(-ro + 0.3, 0.1, 0, ro - 0.3, ro * 0.6, m.clampWidth), clampHalf(rp, m.clampWall, m.clampWidth, 0));
-      const cut = [cylinder(rp, -1, m.clampWidth + 1, 64), box(-ro - 1, -ro, m.clampWidth * 0.25, ro + 1, ro * 0.4, m.clampWidth * 0.25 + 3.5), box(-ro - 1, -ro, m.clampWidth * 0.75 - 3.5, ro + 1, ro * 0.4, m.clampWidth * 0.75)];
+      const cut: Soup[] = [cylinder(rp, -1, m.clampWidth + 1, 64), box(-ro - 1, -ro, m.clampWidth * 0.25, ro + 1, ro * 0.4, m.clampWidth * 0.25 + 3.5), box(-ro - 1, -ro, m.clampWidth * 0.75 - 3.5, ro + 1, ro * 0.4, m.clampWidth * 0.75)];
       const sd = merge(saddle, mountArm(m, ro, head));
+      cut.push(strut([0, ro + m.armLength + 7, -1], [0, ro + m.armLength + 7, m.clampWidth + 1], 2.7, 16));
       for (const x of [sd, ...cut]) translate(x, 0, -(ro + m.armLength + 14), -m.clampWidth / 2);
       P('clamp-top', 'Strap saddle', sd, { cuts: cut, assemblyRot: [90, 0, 0] });
       hardware.push('2 × zip ties or velcro straps (12 mm)');
     } else {
-      const top = merge(clampHalf(rp, m.clampWall, m.clampWidth, earL), mountArm(m, ro, head));
-      const bot = rotateZ(clampHalf(rp, m.clampWall, m.clampWidth, earL), 180);
-      const nutTraps = [cylinder((b.nutAF / Math.sqrt(3)) + 0.2, 0, 0, 6)];
-      void nutTraps;
-      const shift = -(ro + m.armLength + 14), tc = holes(-1), bc = holes(-ro * 2 - 1);
+      const hinge = m.style === 'hinge';
+      const top = merge(clampHalf(rp, m.clampWall, m.clampWidth, earL, hinge ? 'top' : 'none'), mountArm(m, ro, head));
+      const bot = rotateZ(clampHalf(rp, m.clampWall, m.clampWidth, earL, hinge ? 'bottom' : 'none'), 180);
+      const shift = -(ro + m.armLength + 14);
+      let tc = holes(-1), bc = holes(-ro * 2 + 1);
+      if (hinge) {
+        // one bolt on +X; a 3 mm pin through the knuckles on −X (bottom half is turned 180°, so its knuckle is at +X before turning)
+        tc = [tc[0], cylinder(1.65, -1, m.clampWidth + 1, 16, -ro - earL / 2, 0)];
+        bc = [bc[0], cylinder(1.65, -1, m.clampWidth + 1, 16, -ro - earL / 2, 0)];
+      }
+      // nut traps on the bottom half
+      bc.push(...(hinge ? [1] : [1, -1]).map((sx) => nutTrap(sx * (ro + earL / 2), -m.clampWall * 1.2, m.clampWidth / 2, b.nutAF, b.nutH)));
+      tc.push(strut([0, ro + m.armLength + 7, -1], [0, ro + m.armLength + 7, m.clampWidth + 1], 2.7, 16));
       for (const s of [top, bot, ...tc, ...bc]) translate(s, 0, shift, -m.clampWidth / 2);
       P('clamp-top', m.style === 'hinge' ? 'Clamp top (hinge + arm)' : 'Clamp top + arm', top, { cuts: tc, assemblyRot: [90, 0, 0] });
       P('clamp-bottom', 'Clamp bottom', bot, { cuts: bc, assemblyRot: [90, 0, 0] });
@@ -659,12 +760,9 @@ function mountArm(m: LampDesign['mount'], ro: number, head: Section | undefined)
   const L = m.armLength, out: Soup = [];
   const top: V3 = [0, ro + L, m.clampWidth / 2];
   app(out, strut([0, ro - 1, m.clampWidth / 2], top, 7, 24));
-  // two-lug knuckle (head carries the middle lug)
-  for (const z of [m.clampWidth / 2 - 7, m.clampWidth / 2 + 4]) app(out, box(-8, top[1], z, 8, top[1] + 14, z + 3));
-  if (head) {
-    const t = (m.tilt * Math.PI) / 180;
-    void t;
-  }
+  // the arm's prongs of the tilt knuckle (the head's prongs sit between them)
+  for (const [z0, z1] of knuckle(m).arm) app(out, box(-8, top[1] - 1, m.clampWidth / 2 + z0, 8, top[1] + 14, m.clampWidth / 2 + z1));
+  void head;
   return out;
 }
 

@@ -13,7 +13,7 @@ import { CATALOGUE, PRESETS, catalogueDesign, type Size } from '../presets';
 import { piecesFor } from '../build';
 import { applyMotionToObjects } from '../../motionex/ui/MotionexPanel';
 import { editObjectArtwork } from '../../patternex/ui/PatternexPanel';
-import { bedOf, changed, clearPlaced, deleteSaved, lx, place, placedShadeIds, previewBuild, saveDesign, savedDesigns, setDesign, useLx } from './state';
+import { bedOf, changed, clearPlaced, deleteSaved, lx, openStudio, placeAssembled, placedShadeIds, previewBuild, saveDesign, savedDesigns, setDesign, transferToPlate, useLx } from './state';
 
 // ---------------------------------------------------------------- small controls
 function Slider({ label, value, min, max, step = 1, unit, onChange }: { label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void }) {
@@ -60,7 +60,7 @@ const d = () => lx.design;
 const edit = (f: (x: LampDesign) => void) => { f(lx.design); changed(); };
 
 // ---------------------------------------------------------------- silhouette preview (side view)
-function Profile({ design, selected }: { design: LampDesign; selected: string }) {
+export function Profile({ design, selected }: { design: LampDesign; selected: string }) {
   const bed = bedOf();
   const rows = useMemo(() => {
     // assembled z per section, same rules as the builder (approximate for hung shades)
@@ -239,30 +239,28 @@ function SectionCard({ s, index }: { s: Section; index: number }) {
   );
 }
 
-// ---------------------------------------------------------------- main panel
-export function LumonexPanel() {
-  useLx();
+// ---------------------------------------------------------------- editor + report columns (Studio) and the dock launcher
+export function useReport() {
   const printerId = useStore((s) => s.printerId);
-  const printer = printerById(printerId);
+  const design = d();
+  return useMemo(() => { try { return previewBuild().report; } catch (e) { return { parts: [], warnings: [`Build failed: ${(e as Error).message}`], notes: [], hardware: [], bulbGap: null, minGap: 0, height: 0, pieces: 0 }; } },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(design), printerId]);
+}
+
+export function EditorColumn() {
+  useLx();
   const [size, setSize] = useState<Size>('M');
   const [msg, setMsg] = useState('');
   const design = d();
   const sel = design.sections.find((s) => s.id === lx.selected) ?? design.sections[0];
-  const report = useMemo(() => { try { return previewBuild().report; } catch (e) { return { parts: [], warnings: [`Build failed: ${(e as Error).message}`], notes: [], hardware: [], bulbGap: null, minGap: 0, height: 0, pieces: 0 }; } },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(design), printerId]);
-  const holder = holderById(design.fitting.holder);
   const groups = [...new Set(PRESETS.map((p) => p.group))];
   const saved = savedDesigns();
   const moveSection = (i: number, dir: -1 | 1) => edit((x) => { const j = i + dir; if (j < 0 || j >= x.sections.length) return; [x.sections[i], x.sections[j]] = [x.sections[j], x.sections[i]]; });
-
+  const printer = printerById(useStore((s) => s.printerId));
+  const holder = holderById(design.fitting.holder);
   return (
-    <div className="mx-panel">
-      <div className="mx-head">
-        <span className="mx-badge">L</span>
-        <div style={{ flex: 1 }}><div className="mx-title">Lumonex</div><div className="mx-sub">Parametric lamps: shades, bases, holders, joints, mounts</div></div>
-      </div>
-
+    <>
       <Card title="Lamp type">
         <div className="mx-chips">
           {LAMP_KINDS.map((k) => <label key={k.id} title={k.blurb} className={`mx-chip ${design.kind === k.id ? 'on' : ''}`} onClick={() => setDesign(defaultDesign(k.id))}>{k.name}</label>)}
@@ -281,6 +279,7 @@ export function LumonexPanel() {
           <button className="btn-secondary btn-small" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(design, null, 2)], { type: 'application/json' })); a.download = `${design.name || 'lumonex'}.lumonex.json`; a.click(); }}>Export</button>
           <label className="btn-secondary btn-small" style={{ cursor: 'pointer' }}>Import<input type="file" accept=".json" style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const x = JSON.parse(await f.text()); if (x.version === 1) setDesign({ ...defaultDesign(x.kind), ...x }); } catch { setMsg('Not a Lumonex design file.'); } }} /></label>
         </div>
+        {msg && <p className="mx-muted">{msg}</p>}
         {saved.length > 0 && (
           <div className="mx-chips">
             {saved.map((x) => <label key={x.name} className="mx-chip" onClick={() => setDesign(structuredClone(x))}>{x.name}<span onClick={(e) => { e.stopPropagation(); deleteSaved(x.name); }}> ✕</span></label>)}
@@ -288,9 +287,9 @@ export function LumonexPanel() {
         )}
       </Card>
 
-      <Card title={`Part stack · ${design.sections.length} parts · ${report.pieces} pieces to print`}>
+      <Card title={`Part stack · ${design.sections.length} parts`}>
         <Profile design={design} selected={sel?.id ?? ''} />
-        <p className="mx-muted">Dashed lines: printer height ({printer.bed.z} mm). Red lines: where a part is cut into pieces. Click a part to edit it.</p>
+        <p className="mx-muted">Dashed lines: printer height ({printer.bed.z} mm). Red lines: where a part is cut into pieces. Click a part here or in the 3D view to edit it.</p>
         {design.sections.map((s, i) => (
           <div key={s.id} className="mx-app-top" style={{ gap: 4 }}>
             <button className={`btn-small ${s.id === sel?.id ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, textAlign: 'left' }} onClick={() => { lx.selected = s.id; changed(false); }}>
@@ -319,7 +318,7 @@ export function LumonexPanel() {
           <Slider label="LED power" unit="W" value={design.watts} min={0.5} max={15} step={0.5} onChange={(v) => edit((x) => { x.watts = v; })} />
           <Slider label="Holder clearance" unit="mm" value={design.fitting.clearance} min={0} max={1} step={0.05} onChange={(v) => edit((x) => { x.fitting.clearance = v; })} />
         </div>
-        <Toggle label="Show bulb and holder in the assembled preview" on={design.showBulb} onChange={(v) => edit((x) => { x.showBulb = v; })} />
+        <Toggle label="Show bulb and holder" on={design.showBulb} onChange={(v) => edit((x) => { x.showBulb = v; })} />
       </Card>
 
       <Card title="Wire routing & switch" open={false}>
@@ -347,8 +346,19 @@ export function LumonexPanel() {
         <Toggle label="Reducer ring (E27 gallery → E14)" on={design.accessories.reducer} onChange={(v) => edit((x) => { x.accessories.reducer = v; })} />
         <Slider label="Cable clips" value={design.accessories.cableClips} min={0} max={12} onChange={(v) => edit((x) => { x.accessories.cableClips = v; })} />
       </Card>
+    </>
+  );
+}
 
-      <Card title={`Printer fit · ${printer.vendor} ${printer.model} (${printer.bed.x}×${printer.bed.y}×${printer.bed.z})`}>
+export function ReportColumn({ onTransfer }: { onTransfer?: () => void }) {
+  useLx();
+  const printer = printerById(useStore((s) => s.printerId));
+  const design = d();
+  const report = useReport();
+  return (
+    <>
+      <Card title={`Printer fit · ${printer.vendor} ${printer.model}`}>
+        <p className="mx-muted">Bed {printer.bed.x} × {printer.bed.y} × {printer.bed.z} mm — pick another printer in the left sidebar and the lamp re-splits to fit it.</p>
         <div className="mx-two">
           <Slider label="Bed margin" unit="mm" value={design.margin} min={0} max={20} onChange={(v) => edit((x) => { x.margin = v; })} />
           <Select label="Mesh quality" value={design.quality} options={[['draft', 'Draft'], ['normal', 'Normal'], ['fine', 'Fine']]} onChange={(v) => edit((x) => { x.quality = v; })} />
@@ -362,22 +372,46 @@ export function LumonexPanel() {
         ))}
         {report.warnings.map((w, i) => <p key={i} className="mx-muted px-warn">⚠ {w}</p>)}
       </Card>
-
-      <Card title="Place on plate">
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-primary" onClick={() => { const r = place('print'); setMsg(`${r.count} parts arranged for printing.`); }}>Place parts for printing</button>
-          <button className="btn-secondary" onClick={() => { const r = place('assembled'); setMsg(`Assembled preview: ${r.count} objects (not printable — switch to print layout to slice).`); }}>Assembled preview</button>
-          {lx.placed.length > 0 && <button className="btn-secondary btn-small" onClick={() => { clearPlaced(); setMsg('Removed.'); }}>Remove</button>}
-        </div>
-        <Toggle label="Update the plate as I edit" on={lx.auto} onChange={(v) => { lx.auto = v; changed(false); }} />
-        <PluginLinks />
-        {msg && <p className="mx-muted">{msg}</p>}
-      </Card>
-
+      {onTransfer && (
+        <Card title="Plate">
+          <button className="btn-primary" onClick={onTransfer}>Transfer to plate</button>
+          <p className="mx-muted">Takes the lamp apart: each piece goes on the bed in its print orientation, with its own plate(s) and filament slot for every material and colour.</p>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <button className="btn-secondary btn-small" onClick={() => placeAssembled()}>Assembled preview on plate</button>
+            {lx.placed.length > 0 && <button className="btn-secondary btn-small" onClick={() => clearPlaced()}>Remove placed parts</button>}
+          </div>
+          <PluginLinks />
+        </Card>
+      )}
       <Card title="Hardware & notes" open={false}>
         {report.hardware.map((h, i) => <p key={i} className="mx-muted">• {h}</p>)}
         {report.notes.map((n, i) => <p key={`n${i}`} className="mx-muted">{n}</p>)}
       </Card>
+    </>
+  );
+}
+
+/** Dock panel: opens the Studio, and transfers without opening it. */
+export function LumonexPanel() {
+  useLx();
+  const design = d();
+  const report = useReport();
+  const [msg, setMsg] = useState('');
+  return (
+    <div className="mx-panel">
+      <div className="mx-head">
+        <span className="mx-badge">L</span>
+        <div style={{ flex: 1 }}><div className="mx-title">Lumonex</div><div className="mx-sub">Parametric lamps: shades, bases, holders, joints, mounts</div></div>
+      </div>
+      <section className="mx-card">
+        <div className="mx-card-title">{design.name}</div>
+        <p className="mx-muted">{LAMP_KINDS.find((k) => k.id === design.kind)?.name} · {design.sections.length} parts · {report.pieces} pieces · {report.height.toFixed(0)} mm tall</p>
+        <Profile design={design} selected={lx.selected} />
+        <button className="btn-primary" onClick={() => openStudio()}>Open Lumonex Studio</button>
+        <button className="btn-secondary" onClick={() => { const r = transferToPlate(); setMsg(`${r.objects} pieces on ${r.plates.length} plate(s).`); }}>Transfer to plate</button>
+        {report.warnings.length > 0 && <p className="mx-muted px-warn">⚠ {report.warnings.length} warning(s) — open the Studio to review.</p>}
+        {msg && <p className="mx-muted">{msg}</p>}
+      </section>
     </div>
   );
 }
@@ -399,7 +433,9 @@ function KindCard({ design }: { design: LampDesign }) {
   switch (design.kind) {
     case 'table': case 'floor': return (
       <Card title="Base" open={false}>
-        <Toggle label="Ballast cavity (fill with sand / steel shot)" on={design.base.ballast} onChange={(v) => edit((x) => { x.base.ballast = v; })} />
+        <Toggle label="Ballast chamber (sand / steel shot, fill plug)" on={design.base.ballast} onChange={(v) => edit((x) => { x.base.ballast = v; const b = x.sections.find((q) => q.role === 'base'); if (v && b && b.shape.floor < 3) b.shape.floor = 3; })} />
+        <Slider label="Felt recess under the floor" unit="mm" value={design.base.feltRecess} min={0} max={3} step={0.1} onChange={(v) => edit((x) => { x.base.feltRecess = v; })} />
+        <p className="mx-muted">The ballast chamber and felt recess need a floor on the base part (Floor &gt; 0).</p>
         <div className="mx-two">
           <Slider label="Tripod legs (0 = off)" value={design.base.legs} min={0} max={5} onChange={(v) => edit((x) => { x.base.legs = v; })} />
           <Slider label="Leg splay" unit="°" value={design.base.legSplay} min={0} max={40} onChange={(v) => edit((x) => { x.base.legSplay = v; })} />

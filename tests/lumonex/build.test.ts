@@ -97,3 +97,38 @@ describe('Lumonex presets', () => {
     }
   }, 300000);
 });
+
+describe('Lumonex mechanics', () => {
+  it('ballast chamber adds a fill plug and felt recess cuts the floor', () => {
+    const d = defaultDesign('floor');
+    d.quality = 'draft';
+    d.base.ballast = true; d.base.feltRecess = 1;
+    const { parts, report } = buildLamp(d, A1);
+    expect(parts.some((p) => p.name.startsWith('Ballast fill plug'))).toBe(true);
+    expect(report.notes.some((n) => n.includes('ballast chamber'))).toBe(true);
+    expect(report.notes.some((n) => n.includes('felt disc'))).toBe(true);
+    for (const p of parts.filter((x) => !x.ghost)) expect(openEdgeCount(toMesh(p.soup)), p.name).toBe(0);
+  });
+  for (const style of ['two-bolt', 'hinge', 'strap', 'gopro'] as const) {
+    it(`${style} clamp with tilt builds closed parts`, () => {
+      const d = defaultDesign('mount');
+      d.quality = 'draft';
+      d.mount.style = style; d.mount.tilt = 30;
+      const { parts } = buildLamp(d, A1);
+      const head = parts.find((p) => p.name === 'Lamp head')!;
+      expect(head.assemblyRot[1]).toBe(30);
+      expect(head.pivot).toBeDefined();
+      for (const p of parts.filter((x) => !x.ghost)) expect(openEdgeCount(toMesh(p.soup)), p.name).toBe(0);
+      if (style === 'hinge') expect(parts.find((p) => p.key === 'clamp-top')!.name).toContain('hinge');
+    });
+  }
+  it('groups print pieces by filament for plates', async () => {
+    const { groupByFilament } = await import('../../src/plugins/lumonex/ui/state');
+    const d = defaultDesign('lantern');
+    d.quality = 'draft';
+    const groups = groupByFilament(buildLamp(d, A1).parts);
+    // black base + cap + handle share a group; the translucent body has its own
+    expect(groups.map((g) => g.key)).toEqual(expect.arrayContaining(['PLA Matte · Black', 'PETG Translucent · Orange']));
+    expect(groups.length).toBe(2);
+  });
+});
