@@ -1,5 +1,6 @@
 // Right-click menus on the 3D view, after Bambu Studio: one for an empty spot on a plate,
 // one for an object (or a selection of objects) and one for a part.
+import { addHeightRange } from '../state/ops';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { arrange, autoOrient, importDialog } from '../state/actions';
 import {
@@ -79,10 +80,12 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Printable', checked: printable, onClick: () => togglePrintable(ids) },
     ...(s.plates.length > 1 ? [{ label: 'Move to plate', sub: s.plates.map((p, k) => ({ label: p.name, disabled: k === m.plate, onClick: () => { s.set({ selected: ids }); moveToPlate(k); } })) }] : []),
     { sep: true },
+    partSub('part'),
     partSub('negative'),
     partSub('modifier'),
     partSub('support_enforcer'),
     partSub('support_blocker'),
+    { label: 'Add height range modifier', disabled: !one, onClick: () => one && addHeightRange(one.id) },
     { sep: true },
     { label: 'Paint support', kbd: 'L', onClick: () => s.set({ selected: ids, tool: 'paint_support' }) },
     { label: 'Paint seam', kbd: 'P', onClick: () => s.set({ selected: ids, tool: 'paint_seam' }) },

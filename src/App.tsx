@@ -1,3 +1,4 @@
+import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
 import { PluginsButton, RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
@@ -174,6 +175,8 @@ function useShortcuts() {
       const s = useStore.getState();
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
+      if (mod && e.key === 'Tab') { s.set({ workspace: s.workspace === 'preview' ? 'prepare' : 'preview' }); e.preventDefault(); return; }
+      if (e.key === '?' && !mod) { s.set({ shortcutsOpen: !s.shortcutsOpen }); e.preventDefault(); return; }
       if (mod && k >= '1' && k <= '5') { s.set({ workspace: (['prepare', 'preview', 'device', 'project', 'calibration'] as Workspace[])[+k - 1] }); e.preventDefault(); return; }
       if (mod && k === 'z') { e.shiftKey ? s.redo() : s.undo(); e.preventDefault(); return; }
       if (mod && k === 'y') { s.redo(); e.preventDefault(); return; }
@@ -266,6 +269,37 @@ export default function App() {
       <PlateSettingsHost />
       <FillBedHost />
       <InstantTooltips />
+      <ShortcutsHost />
     </div>
+  );
+}
+
+/** Bambu Studio's keyboard shortcuts list (opened with ?). */
+const SHORTCUTS: [string, [string, string][]][] = [
+  ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
+    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Switch Prepare / Preview'],
+    ['Ctrl+1…5', 'Prepare, Preview, Device, Project, Calibration'], ['?', 'Show this list']]],
+  ['Camera', [['0', 'Iso view'], ['1', 'Top view'], ['2', 'Bottom view'], ['3', 'Front view'], ['4', 'Rear view'], ['5', 'Left view'], ['6', 'Right view'], ['Z', 'Zoom to selection / plate']]],
+  ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Esc', 'Clear selection / leave tool'],
+    ['A / Shift+A', 'Arrange all / selection'], ['O', 'Auto orient'], ['M', 'Move'], ['R', 'Rotate'], ['S', 'Scale'], ['F', 'Lay on face'], ['C', 'Cut'], ['B', 'Boolean'],
+    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'],
+    ['Shift (rotate)', 'Snap to 5° ticks; outer ring snaps to 45°']]],
+  ['Preview', [['↑ / ↓', 'Layer up / down'], ['← / →', 'Move slider back / forward'], ['L', 'Show one layer only']]],
+];
+
+function ShortcutsHost() {
+  const { shortcutsOpen, set } = useStore();
+  if (!shortcutsOpen) return null;
+  return (
+    <Modal title="Keyboard shortcuts" onClose={() => set({ shortcutsOpen: false })}>
+      <div className="shortcut-cols">
+        {SHORTCUTS.map(([g, rows]) => (
+          <div key={g}>
+            <div className="group-title">{g}</div>
+            {rows.map(([k, l]) => <div key={k + l} className="shortcut-row"><kbd>{k}</kbd><span>{l}</span></div>)}
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }

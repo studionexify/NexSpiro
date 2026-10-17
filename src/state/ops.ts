@@ -5,6 +5,7 @@ import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, wor
 import { weld, type IndexedMesh } from '../engine/mesh';
 import { adaptiveProfile, applyHeightRange, smoothProfile, uniformProfile } from '../engine/layers';
 import type { PartType } from '../engine/types';
+import type { Config } from '../profiles/settings';
 import { currentConfig } from './slicing';
 
 const DEG = 180 / Math.PI;
@@ -315,4 +316,26 @@ export function vlhRange(id: string, z0: number, z1: number, h: number) {
 }
 export function vlhReset(id: string) {
   useStore.getState().updateObjects((x) => ({ ...x, layerHeights: undefined }), [id]);
+}
+
+/** Bambu's "Height range modifier": a Z band of the object with its own settings (starts as the middle third). */
+export function addHeightRange(id: string) {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === id);
+  if (!o) return;
+  const h = objectHeight(o);
+  const r = { id: newId('range'), z0: +(h / 3).toFixed(2), z1: +((2 * h) / 3).toFixed(2), overrides: {} };
+  s.updateObjects((x) => ({ ...x, heightRanges: [...(x.heightRanges ?? []), r] }), [id]);
+  s.set({ selected: [id], selectedPart: null, selectedRange: r.id, processMode: 'objects' });
+  s.markDirty();
+}
+
+export function updateHeightRange(id: string, rangeId: string, patch: Partial<{ z0: number; z1: number; overrides: Config }> | null) {
+  const s = useStore.getState();
+  s.updateObjects((x) => {
+    const rs = (x.heightRanges ?? []).flatMap((r) => (r.id !== rangeId ? [r] : patch ? [{ ...r, ...patch }] : []));
+    return { ...x, heightRanges: rs.length ? rs : undefined };
+  }, [id]);
+  if (!patch && s.selectedRange === rangeId) s.set({ selectedRange: null });
+  s.markDirty();
 }

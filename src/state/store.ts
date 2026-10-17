@@ -94,6 +94,9 @@ interface State {
   objects: SceneObject[];
   selected: string[];
   selectedPart: string | null;
+  /** Height range modifier being edited (object id is the single selection). */
+  selectedRange: string | null;
+  shortcutsOpen: boolean;
   undoStack: SceneObject[][];
   redoStack: SceneObject[][];
 
@@ -179,6 +182,8 @@ export const useStore = create<State>((set, get) => ({
   objects: [],
   selected: [],
   selectedPart: null,
+  selectedRange: null,
+  shortcutsOpen: false,
   undoStack: [],
   redoStack: [],
 

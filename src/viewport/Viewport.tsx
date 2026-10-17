@@ -395,6 +395,7 @@ export function Viewport() {
           entry.mesh.add(entry.hull);
         }
         if (entry.hull) entry.hull.visible = sel;
+        entry.mesh.visible = !o.hidden;
         // see-through while the live toolpath is shown on it, and for objects left out of the print
         const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }

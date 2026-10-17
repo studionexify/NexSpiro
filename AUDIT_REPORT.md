@@ -143,6 +143,15 @@ Parameter coverage against Bambu's `Tab.cpp` layout went from 116 to 296 of 418 
 - **Preview data**: each move now records its fan speed, temperature and G-code line, which the preview colour modes use.
 
 
+### Milestone: workspace and settings UI markers
+
+- **Settings rows**: a grey lock means the system value; changed values turn orange and get a revert arrow. Percent-or-value fields accept `50%`. Text settings use G-code editors. Each tab shows a count of changed values. A modified preset shows `*` and "(modified)".
+- **Filament settings dialog**: editable on Bambu's five pages (Filament, Cooling, Setting overrides, Advanced, Notes), with search. On the Setting overrides page, a checkbox per printer retraction setting turns the filament's own value on. Each slot keeps its own changes, marked by a material badge with `*` on the slot.
+- **Printer settings dialog**: editable on Bambu's pages (Basic information, Machine G-code, Motion ability, Extruder, Notes), with search and "Revert all".
+- **Object list**: an eye button per object (hides it in the 3D view only) and paint badges (S support, Z seam, C colour, B brim ears). Height range modifier rows have inline Z editing and their own settings in Objects mode. "Part" volumes can be added from the context menu.
+- **Plates**: plate settings add a print sequence (same as global, by layer, or by object).
+- **Shortcuts**: Ctrl+Tab switches between Prepare and Preview. `?` opens Bambu's grouped shortcut list.
+
 ## 7. Per-setting tables
 
 <!-- PARAMS:BEGIN -->
