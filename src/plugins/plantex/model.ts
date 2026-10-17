@@ -60,6 +60,8 @@ export interface TextureLayer {
   planeBlend: 'linear' | 'smooth';
   /** Cut-through threshold 0..1 (higher = smaller holes). */
   cutLevel: number;
+  /** Filament slot (0-based) the layer's raised / recessed area prints in; -1 = same as the body. */
+  filament: number;
 }
 
 export interface SectionSpec {
@@ -110,6 +112,9 @@ export interface FootSpec { enabled: boolean; count: number; height: number; siz
  */
 export interface SelfWaterSpec { enabled: boolean; reservoir: number; gap: number; wall: number; wick: number; slots: number; overflow: number }
 
+/** Filament slot (0-based) of each separate part. */
+export interface PartFilaments { body: number; saucer: number; insert: number }
+
 export interface PlantexSpec {
   name: string;
   kind: PlantexKind;
@@ -138,6 +143,7 @@ export interface PlantexSpec {
   feet: FootSpec;
   selfWater: SelfWaterSpec;
   textures: TextureLayer[];
+  filaments: PartFilaments;
   /** Mesh resolution: segments around, max row step (mm). */
   around: number;
   step: number;
@@ -150,7 +156,7 @@ export function textureLayer(patch: Partial<TextureLayer> = {}): TextureLayer {
   return {
     id: uid(), name: 'Texture', enabled: true, kind: 'ribs', mode: 'emboss', depth: 1.6, countU: 48, countV: 1,
     rotate: 0, offsetU: 0, offsetV: 0, z0: 0, z1: 1, fade: 0, shape: 0.5, sharp: 0.5, invert: false, seed: 1,
-    waveAmp: 0, wavePeriod: 40, planes: [], planeBlend: 'smooth', cutLevel: 0.5, ...patch,
+    waveAmp: 0, wavePeriod: 40, planes: [], planeBlend: 'smooth', cutLevel: 0.5, filament: -1, ...patch,
   };
 }
 
@@ -167,7 +173,7 @@ export function defaultSpec(): PlantexSpec {
     saucer: { enabled: false, gap: 2, wall: 2, floor: 2, height: 14, flare: 4, ribs: 6 },
     feet: { enabled: false, count: 3, height: 4, size: 14, ring: 0.7 },
     selfWater: { enabled: false, reservoir: 25, gap: 1.5, wall: 1.6, wick: 14, slots: 8, overflow: 6 },
-    textures: [], around: 360, step: 0.6,
+    textures: [], filaments: { body: 0, saucer: 0, insert: 0 }, around: 360, step: 0.6,
   };
 }
 
@@ -177,7 +183,7 @@ export function normalizeSpec(s: Partial<PlantexSpec>): PlantexSpec {
   return {
     ...d, ...s,
     section: { ...d.section, ...s.section },
-    drain: { ...d.drain, ...s.drain }, saucer: { ...d.saucer, ...s.saucer }, feet: { ...d.feet, ...s.feet }, selfWater: { ...d.selfWater, ...s.selfWater },
+    drain: { ...d.drain, ...s.drain }, saucer: { ...d.saucer, ...s.saucer }, feet: { ...d.feet, ...s.feet }, filaments: { ...d.filaments, ...s.filaments }, selfWater: { ...d.selfWater, ...s.selfWater },
     profile: (s.profile ?? d.profile).map((p) => ({ ...p })),
     textures: (s.textures ?? []).map((t) => textureLayer({ ...t, id: t.id ?? uid() })),
   };

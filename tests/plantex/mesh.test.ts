@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildBody, buildInsert, buildSaucer } from '../../src/plugins/plantex/mesh';
 import { defaultSpec, normalizeSpec, textureLayer } from '../../src/plugins/plantex/model';
+import { paintBody } from '../../src/plugins/plantex/paint';
 import { PRESETS } from '../../src/plugins/plantex/presets';
 import type { IndexedMesh } from '../../src/engine/mesh';
 
@@ -60,6 +61,17 @@ describe('plantex mesh', () => {
     expect(manifold(ins.mesh)).toBe(0);
     expect(volume(ins.mesh)).toBeGreaterThan(0);
     expect(ins.warnings).toEqual([]);
+  });
+  it('colour layers paint only their area of the outer wall', () => {
+    const s = defaultSpec();
+    s.textures = [textureLayer({ kind: 'rings', countU: 1, countV: 6, depth: 0, filament: 1 })];
+    const r = buildBody(s, undefined, true);
+    const p = paintBody(r.mesh, s, () => undefined)!;
+    const n = p.filter((c) => c === 2).length;
+    expect(n).toBeGreaterThan(p.length * 0.05);
+    expect(n).toBeLessThan(p.length * 0.6);
+    s.textures[0].filament = -1;
+    expect(paintBody(r.mesh, s, () => undefined)).toBeUndefined();
   });
   it('vase mode is one closed solid', () => {
     const s = { ...defaultSpec(), vaseMode: true, twist: 90 };

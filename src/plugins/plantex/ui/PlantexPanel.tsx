@@ -9,7 +9,10 @@ import { KINDS } from '../textures';
 import { patternEntry } from '../patternLink';
 import { ProfileEditor } from './ProfileEditor';
 import { WallMap } from './WallMap';
-import { changed, deleteDesign, generate, loadSpec, ownedObject, pt, saveDesign, usePt } from './state';
+import { changed, deleteDesign, ensureSlot, loadSpec, openStudio, pt, saveDesign, transferToPlate, usePt } from './state';
+import { StudioViewer } from './StudioViewer';
+import { useStore } from '../../../state/store';
+import { createPortal } from 'react-dom';
 import { designThumb, textureThumb } from './thumbs';
 
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -244,6 +247,7 @@ function LayerEditor({ L }: { L: TextureLayer }) {
       {entry && <div className="muted" style={{ fontSize: 11 }}>Linked Patternex artwork: {entry.name}</div>}
       <Seg value={L.mode} options={MODES} set={(v) => { L.mode = v; }} />
       <WallMap L={L} />
+      {L.mode !== 'cut' && <><div className="mx-label">Filament</div><FilamentSelect value={L.filament} set={(v) => { L.filament = v; }} allowBody /></>}
       {L.mode === 'cut' && pt.spec.vaseMode && <div className="px-warn" style={{ fontSize: 11 }}>Vase mode: cut-through prints as deboss.</div>}
       <div className="mx-two">
         {L.mode !== 'cut' ? <Num label="Depth" unit="mm" value={L.depth} set={(v) => { L.depth = v; }} min={0} max={30} step={0.1} /> : <Slider label="Hole size" value={1 - L.cutLevel} set={(v) => { L.cutLevel = 1 - v; }} min={0.02} max={0.98} step={0.01} />}
@@ -337,27 +341,52 @@ function TexturesCard() {
   );
 }
 
-function OutputCard() {
-  const s = pt.spec;
-  const [busy, setBusy] = useState(false);
-  const [saveName, setSaveName] = useState('');
-  const has = !!ownedObject();
-  const run = (draft: boolean, asNew = false) => { setBusy(true); setTimeout(() => { try { generate(draft, asNew); } finally { setBusy(false); } }, 10); };
+function FilamentSelect({ value, set, allowBody }: { value: number; set: (v: number) => void; allowBody?: boolean }) {
+  const fils = useStore((st) => st.filaments);
+  const opts = Math.max(fils.length, value + 1);
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {allowBody && <button className={`mx-chip ${value < 0 ? 'on' : ''}`} onClick={() => { set(-1); changed(); }}>Same as body</button>}
+      {Array.from({ length: opts }, (_, k) => (
+        <button key={k} className={`mx-chip ${value === k ? 'on' : ''}`} title={fils[k] ? fils[k].presetId : 'Not set up yet'} onClick={() => { set(k); changed(); }}>
+          <i style={{ background: fils[k]?.color ?? '#999' }} />{k + 1}
+        </button>
+      ))}
+      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>+</button>
+    </div>
+  );
+}
+
+function FilamentsCard() {
+  const s = pt.spec, f = s.filaments;
+  const planter = s.kind === 'planter' && !s.vaseMode;
+  const coloured = s.textures.filter((t) => t.enabled && t.filament >= 0 && t.filament !== f.body);
   return (
     <section className="mx-card">
-      <div className="mx-card-title">Output</div>
+      <div className="mx-card-title">Filaments & parts</div>
+      <div className="mx-label">Body</div>
+      <FilamentSelect value={f.body} set={(v) => { f.body = Math.max(0, v); }} />
+      {planter && s.saucer.enabled && <><div className="mx-label">Saucer</div><FilamentSelect value={f.saucer} set={(v) => { f.saucer = Math.max(0, v); }} /></>}
+      {planter && s.selfWater.enabled && <><div className="mx-label">Insert</div><FilamentSelect value={f.insert} set={(v) => { f.insert = Math.max(0, v); }} /></>}
+      <div className="muted" style={{ fontSize: 11 }}>
+        Texture layers can print in their own filament (open a layer → Filament); depth 0 gives a colour-only zone.
+        {coloured.length ? ` ${coloured.length} colour layer(s) on the body.` : ''} On transfer the parts are split and placed on plates by filament: same material together on AMS printers, one plate per colour set otherwise.
+      </div>
+    </section>
+  );
+}
+
+function QualityCard() {
+  const s = pt.spec;
+  const [saveName, setSaveName] = useState('');
+  return (
+    <section className="mx-card">
+      <div className="mx-card-title">Mesh quality & files</div>
       <div className="mx-two">
         <Num label="Segments around" value={s.around} set={(v) => { s.around = Math.round(v); }} min={48} max={1440} step={4} hint="More = finer texture detail, bigger mesh" />
         <Num label="Row height" unit="mm" value={s.step} set={(v) => { s.step = v; }} min={0.2} max={5} step={0.1} hint="Vertical mesh step" />
       </div>
-      <Check label="Live draft preview on the plate while editing" value={pt.live} set={(v) => { pt.live = v; }} />
-      <div className="mx-two">
-        <button className="btn-primary" disabled={busy} onClick={() => run(false)}>{busy ? 'Building…' : has ? 'Update on plate' : 'Add to plate'}</button>
-        <button className="btn-secondary" disabled={busy} onClick={() => run(false, true)}>Add as new copy</button>
-      </div>
-      {has && pt.draft && <div className="px-warn" style={{ fontSize: 11 }}>The plate shows a draft mesh — press Update on plate for full quality before slicing.</div>}
-      {pt.triangles > 0 && <div className="muted" style={{ fontSize: 11 }}>{pt.triangles.toLocaleString()} triangles{pt.draft ? ' (draft)' : ''}</div>}
-      {pt.warnings.map((w, i) => <div key={i} className="px-warn" style={{ fontSize: 11 }}>{w}</div>)}
+      <Check label="Full-quality preview (slower; transfer always uses full quality)" value={pt.fullPreview} set={(v) => { pt.fullPreview = v; }} />
       <div className="mx-label">Save to My designs</div>
       <div style={{ display: 'flex', gap: 6 }}>
         <input className="input" style={{ flex: 1 }} placeholder={s.name} value={saveName} onChange={(e) => setSaveName(e.target.value)} />
@@ -373,6 +402,53 @@ function OutputCard() {
   );
 }
 
+const TABS = ['Shape', 'Textures', 'Planter', 'Colours'] as const;
+
+/** Full-screen Plantex studio (98% of the screen): library, live 3D preview, all controls, Transfer to plate. */
+export function PlantexStudio() {
+  usePt();
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Shape');
+  const [busy, setBusy] = useState(false);
+  const close = () => openStudio(false);
+  const transfer = (asNew: boolean) => {
+    setBusy(true);
+    setTimeout(() => { try { transferToPlate(asNew); if (!pt.warnings.length) close(); } finally { setBusy(false); } }, 20);
+  };
+  return createPortal(
+    <div className="pxl-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="pxl-win" role="dialog" aria-label="Plantex studio">
+        <div className="pxl-head">
+          <span className="mx-badge">Pt</span>
+          <div className="pxl-title">Plantex studio</div>
+          <input className="input" style={{ maxWidth: 260 }} value={pt.spec.name} onChange={(e) => { pt.spec.name = e.target.value; changed(false); }} aria-label="Design name" />
+          <span className="spacer" style={{ flex: 1 }} />
+          {pt.placed.length > 0 && <button className="btn-secondary" disabled={busy} onClick={() => transfer(true)}>Transfer as new copy</button>}
+          <button className="btn-primary" disabled={busy} onClick={() => transfer(false)}>{busy ? 'Building parts…' : pt.placed.length ? 'Transfer to plate (replace)' : 'Transfer to plate'}</button>
+          <button className="icon-btn" aria-label="Close" title="Close" onClick={close}>✕</button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr) 420px' }}>
+          <div style={{ overflowY: 'auto', padding: 10, borderRight: '1px solid var(--border)' }}><DesignLibrary /></div>
+          <div style={{ minWidth: 0, minHeight: 0, position: 'relative' }}><StudioViewer /></div>
+          <div style={{ overflowY: 'auto', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+            <div className="seg mx-seg" style={{ padding: 8, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-primary)' }}>
+              {TABS.map((t) => <button key={t} aria-label={`${t} tab`} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}
+            </div>
+            <div className="mx-panel" style={{ padding: 8 }}>
+              {pt.warnings.map((w, i) => <div key={i} className="px-warn" style={{ fontSize: 12 }}>{w}</div>)}
+              {tab === 'Shape' && <><BodyCard /><SectionCard /></>}
+              {tab === 'Textures' && <TexturesCard />}
+              {tab === 'Planter' && <PlanterCard />}
+              {tab === 'Colours' && <><FilamentsCard /><QualityCard /></>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Dock tab: opens the studio and shows what the last transfer placed. */
 export function PlantexPanel() {
   usePt();
   return (
@@ -381,12 +457,19 @@ export function PlantexPanel() {
         <span className="mx-badge">Pt</span>
         <div style={{ flex: 1 }}><div className="mx-title">Plantex</div><div className="mx-sub">Parametric vases and planters</div></div>
       </div>
-      <DesignLibrary />
-      <BodyCard />
-      <SectionCard />
-      <TexturesCard />
-      <PlanterCard />
-      <OutputCard />
+      <section className="mx-card">
+        <img src={designThumb(pt.spec, `cur:${JSON.stringify(pt.spec)}`, 120)} alt="" style={{ width: 120, alignSelf: 'center', borderRadius: 8 }} />
+        <div style={{ textAlign: 'center', fontWeight: 600 }}>{pt.spec.name}</div>
+        <button className="btn-primary" onClick={() => openStudio()}>Open Plantex studio</button>
+      </section>
+      {pt.lastTransfer && (
+        <section className="mx-card">
+          <div className="mx-card-title">Last transfer</div>
+          {pt.lastTransfer.split('\n').map((l, i) => <div key={i} style={{ fontSize: 12 }}>{l}</div>)}
+          {pt.warnings.map((w, i) => <div key={i} className="px-warn" style={{ fontSize: 11 }}>{w}</div>)}
+        </section>
+      )}
+      {pt.studioOpen && <PlantexStudio />}
     </div>
   );
 }
