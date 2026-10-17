@@ -7,7 +7,7 @@ self.onmessage = (ev: MessageEvent<{ id: number; meshes: MeshInput[]; cfg: Confi
   const { id, meshes, cfg, opts } = ev.data;
   try {
     const out = slice(meshes, cfg, (stage, pct) => (self as any).postMessage({ id, type: 'progress', stage, pct }), opts);
-    (self as any).postMessage({ id, type: 'done', out }, [out.moves.buffer, out.moveFeatures.buffer]);
+    (self as any).postMessage({ id, type: 'done', out }, [out.moves.buffer, out.moveFeatures.buffer, ...(out.moveAux ? [out.moveAux.buffer] : []), ...(out.moveLines ? [out.moveLines.buffer] : [])]);
   } catch (e: any) {
     (self as any).postMessage({ id, type: 'error', message: e?.message ?? String(e) });
   }

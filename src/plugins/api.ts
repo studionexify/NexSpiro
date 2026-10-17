@@ -81,6 +81,8 @@ export interface PluginSession {
   /** Sparse-infill settings inside regions (applied like modifier volumes). */
   modifiersAt?(object: number, layer: number): ModifierContribution[];
   transition?(t: { layer: number; from: number; to: number; flushVolume?: number }): TransitionPlan | undefined;
+  /** Overhang areas (Clipper paths, plate) on a layer that must not get support (e.g. printed mid-air by the plugin). */
+  supportBlockersAt?(layer: number): Paths;
   /** Regions to share with other plugins (published before postToolpath runs). */
   sharedRegions?(): PatternexRegion[];
 }

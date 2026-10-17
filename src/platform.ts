@@ -5,6 +5,7 @@ declare global {
       platform: string;
       saveFile: (opts: { defaultName: string; data: string | ArrayBuffer; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
       openFiles: (opts: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; data: ArrayBuffer }[]>;
+      postProcess?: (opts: { gcode: string; scripts: string[]; env: Record<string, string>; outputName: string }) => Promise<{ gcode: string; skipped?: boolean }>;
     };
   }
 }

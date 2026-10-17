@@ -1,5 +1,5 @@
 // Helpers for editing a layer's ordered move list: extrusion runs, positions, splitting and resampling.
-import type { LayerOps, Op } from '../gcode';
+import type { LayerOps, Op } from './classic/gcode';
 import type { FeatureType } from '../types';
 
 export type Move = Extract<Op, { k: 'move' }>;

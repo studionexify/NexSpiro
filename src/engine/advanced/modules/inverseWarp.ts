@@ -5,7 +5,7 @@
 // by x′ = x − g·u(x) in the layer plane, and long thick sections get stress-relief kerfs (short gaps in
 // the interior infill) that break the continuous shrinkage path.
 import { HEX_OFF, latticeIndex, nodePos, solveElastic, stiffnessOp, hexMatrices, isoC, type VoxelModel } from '../fea';
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import { moveLike, type Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 import { partModel, PLA } from '../stress';

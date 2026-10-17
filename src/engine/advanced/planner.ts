@@ -2,7 +2,7 @@
 // deviation. Junction speed v_j² = a·δ·sin(θ/2)/(1 − sin(θ/2)) (θ the angle between the moves, π for
 // straight), δ = scv²(√2 − 1)/a from the square-corner velocity; a backward pass caps every entry speed
 // so the head can still stop, a forward pass caps it by what acceleration can reach.
-import type { LayerOps } from '../gcode';
+import type { LayerOps } from './classic/gcode';
 import type { Move } from './runs';
 
 export interface Planned { op: number; len: number; vIn: number; vOut: number; vMax: number; a: number; t: number; tAccel: number; tDecel: number }

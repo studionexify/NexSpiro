@@ -282,6 +282,53 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
   );
 }
 
+function FanRow({ label, pct, online, onSet }: { label: string; pct?: number; online: boolean; onSet: (v: number) => void }) {
+  const [v, setV] = useState(pct ?? 0);
+  return (
+    <div className="row" style={{ marginBottom: 6 }}>
+      <span style={{ width: 64 }}>{label}</span>
+      <input type="range" min={0} max={100} step={10} disabled={!online} value={v} onChange={(e) => setV(+e.target.value)} onMouseUp={() => onSet(v)} onKeyUp={() => onSet(v)} style={{ flex: 1 }} aria-label={label} />
+      <span className="badge">{pct ?? v}%</span>
+    </div>
+  );
+}
+
+/** Temperature history of a device (Bambu's device page graph): last 10 minutes of nozzle, bed and chamber. */
+const HISTORY = new Map<string, { t: number; n?: number; nt?: number; b?: number; bt?: number; c?: number }[]>();
+function TempChart({ id, st }: { id: string; st: PrinterStatus }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (st.state === 'offline' || st.state === 'connecting') return;
+    const h = HISTORY.get(id) ?? [];
+    const now = Date.now();
+    if (!h.length || now - h[h.length - 1].t > 900) {
+      h.push({ t: now, n: st.nozzleTemp, nt: st.nozzleTarget, b: st.bedTemp, bt: st.bedTarget, c: st.chamberTemp });
+      while (h.length && now - h[0].t > 600_000) h.shift();
+      HISTORY.set(id, h);
+      tick((x) => x + 1);
+    }
+  }, [id, st]);
+  const h = HISTORY.get(id) ?? [];
+  if (h.length < 2) return null;
+  const W = 300, H = 90, t0 = h[0].t, t1 = h[h.length - 1].t;
+  const top = Math.max(60, ...h.flatMap((p) => [p.n ?? 0, p.nt ?? 0, p.b ?? 0])) * 1.05;
+  const X = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * W, Y = (v: number) => H - (v / top) * H;
+  const path = (k: 'n' | 'b' | 'c' | 'nt' | 'bt') => h.filter((p) => p[k] != null).map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${Y(p[k]!).toFixed(1)}`).join('');
+  return (
+    <div className="temp-chart" aria-label="Temperature history">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height={H}>
+        {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} className="grid" />)}
+        <path d={path('nt')} className="target nozzle" /><path d={path('bt')} className="target bed" />
+        <path d={path('n')} className="nozzle" /><path d={path('b')} className="bed" /><path d={path('c')} className="chamber" />
+      </svg>
+      <div className="row muted" style={{ fontSize: 11, gap: 10 }}>
+        <span><i className="key nozzle" />Nozzle</span><span><i className="key bed" />Bed</span>{h.some((p) => p.c != null) && <span><i className="key chamber" />Chamber</span>}
+        <span className="spacer" />{Math.round((t1 - t0) / 60000)} min · max {Math.round(top / 1.05)}°
+      </div>
+    </div>
+  );
+}
+
 function TempRow({ label, cur, target, online, onSet, max }: { label: string; cur?: number; target?: number; online: boolean; onSet: (v: number) => void; max: number }) {
   const [v, setV] = useState('');
   return (
@@ -301,6 +348,7 @@ function Controls({ dev, st, online, printing }: { dev: SavedDevice; st: Printer
   const [line, setLine] = useState('');
   const [log, setLog] = useState<string[]>([]);
   const g = (code: string) => tryRun(() => run(dev.id, 'Sending…', (h) => h.sendGcode(code)));
+  const bambu = dev.config.kind === 'bambu_lan';
   const jog = (axis: string, d: number) => g(`G91\nG1 ${axis}${d} F${axis === 'Z' ? 600 : 6000}\nG90`);
   const send = async () => {
     if (!line.trim()) return;
@@ -314,11 +362,12 @@ function Controls({ dev, st, online, printing }: { dev: SavedDevice; st: Printer
       <TempRow label="Nozzle" cur={st.nozzleTemp} target={st.nozzleTarget} online={online} max={320} onSet={(v) => g(`M104 S${v}`)} />
       <TempRow label="Bed" cur={st.bedTemp} target={st.bedTarget} online={online} max={120} onSet={(v) => g(`M140 S${v}`)} />
       {st.chamberTemp != null && <div className="row" style={{ marginBottom: 6 }}><span style={{ width: 64 }}>Chamber</span><b className="mono">{st.chamberTemp.toFixed(0)}°</b></div>}
-      <div className="row" style={{ marginBottom: 10 }}>
-        <span style={{ width: 64 }}>Part fan</span>
-        <input type="range" min={0} max={100} step={10} disabled={!online} defaultValue={st.fanPercent ?? 0} onMouseUp={(e) => g(`M106 S${Math.round((Number((e.target as HTMLInputElement).value) / 100) * 255)}`)} style={{ flex: 1 }} />
-        <span className="badge">{st.fanPercent ?? '—'}%</span>
-      </div>
+      <FanRow label="Part fan" pct={st.fanPercent} online={online} onSet={(v) => g(`M106 S${Math.round((v / 100) * 255)}`)} />
+      {bambu && <>
+        <FanRow label="Aux fan" online={online} onSet={(v) => g(`M106 P2 S${Math.round((v / 100) * 255)}`)} />
+        <FanRow label="Chamber" online={online} onSet={(v) => g(`M106 P3 S${Math.round((v / 100) * 255)}`)} />
+      </>}
+      <TempChart id={dev.id} st={st} />
       <div className="jog">
         <div className="jog-xy">
           <span /><button disabled={!online || printing} onClick={() => jog('Y', step)}>Y+</button><span />

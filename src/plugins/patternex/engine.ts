@@ -151,7 +151,8 @@ export class PatternexSession implements PluginSession {
     for (const { g, fil } of this.groups) {
       if (g.object !== object) continue;
       let paths = g.at(layer);
-      if (!paths.length) continue;
+      // slivers touching the layer (closing radius / compensated outlines) are not artwork on this layer
+      if (!paths.length || Math.abs(areaTotal(paths)) < 0.01) continue;
       if (!this.ctx.hasAms && this.config.singleColour !== 'allow') {
         const slice = this.ctx.sliceAt(object, layer);
         const covers = areaTotal(difference(slice, paths)) < 0.05;

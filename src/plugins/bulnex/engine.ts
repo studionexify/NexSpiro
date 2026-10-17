@@ -17,6 +17,7 @@ export function ejectBlock(cfg: BulnexConfig, row: PushRow, opts: { cycle: numbe
   const k = Math.max(0.2, Math.min(1, cfg.currentFraction));
   const out = [
     `; ===== BULNEX eject: cycle ${opts.cycle} of ${cfg.cycles} =====`,
+    'M83 ; relative E (each cycle body sets its own mode again)',
     `G1 E-${f1(opts.retract)} F1800 ; retract`,
     'G91', 'G1 Z2 F900', 'G90',
     `G1 Z${f1(opts.safeZ)} F900 ; clear the parts`,
@@ -56,7 +57,7 @@ export function calibrationBlock(cfg: BulnexConfig, parts: PartGeometry[], opts:
   const k = Math.max(0.2, Math.min(1, cfg.currentFraction));
   const v = Math.round(Math.max(1, cfg.pushSpeed) * 60);
   const out = [
-    '; ===== BULNEX calibration: release ladder =====',
+    '; ===== BULNEX calibration: release ladder =====', 'M83',
     `G1 E-${f1(opts.retract)} F1800`, 'G91', 'G1 Z2 F900', 'G90', `G1 Z${f1(opts.safeZ)} F900`,
     `M140 S${Math.round(cfg.releaseBedTemp)} ; cool the bed to release the parts`, 'M104 S0',
     cfg.fanDuringCool ? 'M106 S255' : 'M107', 'M400',
@@ -127,7 +128,7 @@ export const bulnexEngine: EnginePlugin<BulnexConfig, BulnexReport> = {
     const safeZ = Math.min(num('bed_z', 256), tallest + 10);
     const base = { safeZ, bedTemp: num('bed_temperature_initial_layer', 60), nozzleTemp: num('nozzle_temperature_initial_layer', 220), retract: num('retraction_length', 0.8) };
     if (config.calibration) return body.concat(calibrationBlock(config, s.parts, { safeZ, retract: base.retract, pause: String(cfg.machine_pause_gcode || 'M400 U1') }));
-    const out: string[] = [`; ===== BULNEX cycle 1 of ${config.cycles} =====`];
+    const out: string[] = [];
     for (let c = 1; c <= config.cycles; c++) {
       for (const l of body) out.push(l);
       out.push(...ejectBlock(config, s.row, { ...base, cycle: c, last: c === config.cycles }));

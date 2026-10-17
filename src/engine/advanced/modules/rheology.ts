@@ -1,7 +1,7 @@
 // #27 Iso-thermal velocity gloss mapping, #17 shear-induced gloss modulation and #5 transient thermal
 // "hot-on-hot" planning (lumped bead cooling ρch·dT/dt = −h_conv(T − T_amb) over the planned layer time): the passes that set speed, fan and layer time for what the surface and the
 // layer bond need.
-import type { LayerOps } from '../../gcode';
+import type { LayerOps } from '../classic/gcode';
 import { planLayer } from '../planner';
 import type { Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';

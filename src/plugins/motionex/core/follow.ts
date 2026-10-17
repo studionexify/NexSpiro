@@ -8,7 +8,7 @@
 // tall bump does not drag them away from the infill.
 import { intersection, offset, union, SCALE } from "../../../engine/clipper";
 import type { Path, Paths } from "../../../engine/types";
-import type { Layer, Toolpath, ToolpathPoint } from "./types";
+import { SEAM_TOL, type Layer, type Toolpath, type ToolpathPoint } from "./types";
 
 const OUTER = new Set(["outer_wall", "overhang_wall"]);
 const toPath = (pts: { x: number; y: number }[]): Path => pts.map((q) => ({ X: Math.round(q.x * SCALE), Y: Math.round(q.y * SCALE) }));
@@ -22,7 +22,7 @@ export function outerLoops(layer: Layer): Loop[] {
   const loops: Loop[] = [];
   let cur: Loop | null = null;
   const close = () => {
-    if (cur && cur.now.length > 3 && near(cur.now[0], cur.now[cur.now.length - 1], 0.05) && near(cur.base[0], cur.base[cur.base.length - 1], 0.05)) loops.push(cur);
+    if (cur && cur.now.length > 3 && near(cur.now[0], cur.now[cur.now.length - 1], SEAM_TOL) && near(cur.base[0], cur.base[cur.base.length - 1], SEAM_TOL)) loops.push(cur);
     cur = null;
   };
   for (const p of layer.paths) {
@@ -31,7 +31,7 @@ export function outerLoops(layer: Layer): Loop[] {
     if (cur && near(cur.now[cur.now.length - 1], now[0], 0.05) && near(cur.base[cur.base.length - 1], base[0], 0.05)) {
       cur.now.push(...now.slice(1)); cur.base.push(...base.slice(1)); cur.moved ||= moved;
     } else { close(); cur = { now: [...now], base: [...base], moved }; }
-    if (near(cur.now[0], cur.now[cur.now.length - 1], 1e-3) && cur.now.length > 3) close();
+    if (near(cur.now[0], cur.now[cur.now.length - 1], SEAM_TOL) && cur.now.length > 3) close();
   }
   close();
   return loops;
@@ -80,7 +80,7 @@ export function offsetInnerWalls(layer: Layer, cap: number): number {
   const inners: Inner[] = [];
   layer.paths.forEach((p, k) => {
     if (p.feature !== "inner_wall" || p.modifiedBy === "motionex" || p.points.length < 4) return;
-    if (!near(p.points[0], p.points[p.points.length - 1], 1e-3)) return;
+    if (!near(p.points[0], p.points[p.points.length - 1], SEAM_TOL)) return;
     // its distance from the slicer's outer wall: the median over a few points
     const ds: number[] = [];
     const step = Math.max(1, Math.floor(p.points.length / 9));

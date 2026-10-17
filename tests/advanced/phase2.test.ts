@@ -10,9 +10,10 @@ import { clearancePass } from '../../src/engine/advanced/clearance';
 import { DisplacementField, unwarpLayers } from '../../src/engine/advanced/warp';
 import { defaultToolhead } from '../../src/plugins/motionex/core/toolhead';
 import { toExPolygons, SCALE } from '../../src/engine/clipper';
-import { slice } from '../../src/engine/slicer';
+import { legacyConfig, slice } from '../../src/engine/slicer';
+import { slice as classicSlice } from '../../src/engine/advanced/classic/slicer';
 import { resolveConfig } from '../../src/profiles/resolve';
-import type { LayerOps } from '../../src/engine/gcode';
+import type { LayerOps } from '../../src/engine/advanced/classic/gcode';
 import { box, dome, indexed } from './shapes';
 import { tee } from '../fixtures';
 
@@ -214,7 +215,8 @@ describe('Phase 2 in the slicer', () => {
     const t = new Map(out.advanced!.techs.map((x) => [x.id, x]));
     expect(t.get('eikonal_offsets')!.stats!.cache_hits).toBeGreaterThan(10); // repeated outline: solved once
     expect(out.advanced!.clearance).toBeUndefined();
-    const basic = slice([indexed(box(80, 80, 0, 20, 20, 10), 'cube')], cfgFor('voron-24-350'));
+    // compared with Advanced mode's own classic core (Basic mode is the separate Bambu engine)
+    const basic = classicSlice([indexed(box(80, 80, 0, 20, 20, 10), 'cube')], legacyConfig(cfgFor('voron-24-350')));
     expect(Math.abs(out.stats.filamentGrams - basic.stats.filamentGrams) / basic.stats.filamentGrams).toBeLessThan(0.03);
   });
 });

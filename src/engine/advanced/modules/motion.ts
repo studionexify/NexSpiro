@@ -1,6 +1,6 @@
 // #6 Kinematics-coupled dynamic extrusion, #31 symplectic phase-space trajectory compilation and #10
 // viscoelastic corner-overshoot compensation: the passes that work from the planned motion.
-import type { LayerOps, Op } from '../../gcode';
+import type { LayerOps, Op } from '../classic/gcode';
 import { planLayer } from '../planner';
 import { moveLike, type Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';

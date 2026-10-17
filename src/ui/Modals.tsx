@@ -1,4 +1,9 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { FILAMENT_PAGES, FILAMENT_PARAMS, NULLABLE_FILAMENT_KEYS, filamentConfig } from '../profiles/filamentParams';
+import { MACHINE_PAGES, MACHINE_PARAMS } from '../profiles/machineParams';
+import { machineConfig } from '../profiles/resolve';
+import type { Config } from '../profiles/settings';
+import { ParamPages } from './ParamRow';
 import { filamentById } from '../profiles/filaments';
 import { printerById, printerName } from '../profiles/printers';
 import { useStore } from '../state/store';
@@ -16,90 +21,62 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
   );
 }
 
-const MACHINE_FIELDS: { key: string; label: string; unit: string }[] = [
-  { key: 'retraction_length', label: 'Retraction length', unit: 'mm' },
-  { key: 'retraction_speed', label: 'Retraction speed', unit: 'mm/s' },
-  { key: 'deretraction_speed', label: 'Deretraction speed', unit: 'mm/s' },
-  { key: 'z_hop', label: 'Z hop when retracting', unit: 'mm' },
-  { key: 'retraction_minimum_travel', label: 'Retract only when travel exceeds', unit: 'mm' },
-  { key: 'max_speed_z', label: 'Maximum Z speed', unit: 'mm/s' },
-];
-
 export function PrinterModal({ onClose }: { onClose: () => void }) {
-  const { printerId, machineOverrides, setMachine } = useStore();
+  const { printerId, machineOverrides, setMachine, markDirty } = useStore();
   const p = printerById(printerId);
-  const value = (k: string) => (k in machineOverrides ? machineOverrides[k] : p.machine[k]);
-  const [tab, setTab] = useState<'basic' | 'gcode'>('basic');
+  const base = machineConfig(printerId);
+  const [q, setQ] = useState('');
+  const n = Object.keys(machineOverrides).length;
   return (
-    <Modal title={`Printer settings — ${printerName(p)}`} onClose={onClose}>
-      <div className="seg" style={{ marginBottom: 14 }}>
-        <button className={tab === 'basic' ? 'on' : ''} onClick={() => setTab('basic')}>Basic & extruder</button>
-        <button className={tab === 'gcode' ? 'on' : ''} onClick={() => setTab('gcode')}>Machine G-code</button>
+    <Modal title={`Printer settings — ${n ? '* ' : ''}${printerName(p)}`} onClose={onClose} footer={<>
+      <button className="btn-secondary btn-small" disabled={!n} onClick={() => { for (const k of Object.keys(machineOverrides)) setMachine(k, undefined); markDirty(); }}>Revert all</button>
+      <span className="spacer" />
+      <button className="btn-primary btn-small" onClick={onClose}>Done</button>
+    </>}>
+      <div className="row" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+        <span className="badge">{p.bed.x} × {p.bed.y} × {p.bed.z} mm</span>
+        <span className="badge">Nozzle {p.nozzle} mm</span>
+        <span className="badge">{p.flavor === 'bambu' ? 'Bambu Lab (Marlin)' : p.flavor === 'klipper' ? 'Klipper' : 'Marlin'}</span>
+        <span className="spacer" />
+        <input className="input" style={{ width: 180 }} placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      {tab === 'basic' ? (
-        <div className="form-grid">
-          <span>Printable area</span><span className="badge" style={{ textAlign: 'center' }}>{p.bed.x} × {p.bed.y} mm</span><span className="unit">mm</span>
-          <span>Printable height</span><span className="badge" style={{ textAlign: 'center' }}>{p.bed.z}</span><span className="unit">mm</span>
-          <span>Nozzle diameter</span><span className="badge" style={{ textAlign: 'center' }}>{p.nozzle}</span><span className="unit">mm</span>
-          <span>G-code flavour</span><span className="badge" style={{ textAlign: 'center' }}>{p.flavor === 'bambu' ? 'Bambu Lab (Marlin)' : p.flavor === 'klipper' ? 'Klipper' : 'Marlin'}</span><span />
-          {MACHINE_FIELDS.map((f) => (
-            <MachineNumber key={f.key} label={f.label} unit={f.unit} value={Number(value(f.key))} modified={f.key in machineOverrides}
-              onChange={(v) => setMachine(f.key, v === p.machine[f.key] ? undefined : v)} />
-          ))}
-        </div>
-      ) : (
-        <>
-          {(['machine_start_gcode', 'machine_end_gcode', 'layer_change_gcode'] as const).map((k) => (
-            <div key={k} style={{ marginBottom: 12 }}>
-              <div className="row" style={{ marginBottom: 4 }}>
-                <b>{k === 'machine_start_gcode' ? 'Machine start G-code' : k === 'machine_end_gcode' ? 'Machine end G-code' : 'Layer change G-code'}</b>
-                <span className="spacer" />
-                {k in machineOverrides && <button className="icon-btn" style={{ color: 'var(--modified)' }} title="Reset" onClick={() => setMachine(k, undefined)}><Icon name="reset" size={14} /></button>}
-              </div>
-              <textarea spellCheck={false} value={String(value(k) ?? '')} onChange={(e) => setMachine(k, e.target.value)} />
-            </div>
-          ))}
-          <p style={{ color: 'var(--text-muted)' }}>Placeholders such as <span className="mono">[nozzle_temperature_initial_layer]</span>, <span className="mono">[bed_temperature_initial_layer]</span>, <span className="mono">[layer_num]</span> and <span className="mono">[layer_z]</span> are expanded when slicing.</p>
-        </>
-      )}
+      <ParamPages params={MACHINE_PARAMS} pages={MACHINE_PAGES} search={q}
+        value={(k) => (k in machineOverrides ? machineOverrides[k] : base[k])} base={(k) => base[k]} modified={(k) => k in machineOverrides}
+        onCommit={(k, v) => { setMachine(k, v === base[k] ? undefined : v); markDirty(); }} onReset={(k) => { setMachine(k, undefined); markDirty(); }} />
+      <p className="muted" style={{ fontSize: 11 }}>G-code placeholders such as <span className="mono">[nozzle_temperature_initial_layer]</span>, <span className="mono">[layer_num]</span> and <span className="mono">[layer_z]</span> are expanded when slicing.</p>
     </Modal>
   );
 }
 
-function MachineNumber({ label, unit, value, modified, onChange }: { label: string; unit: string; value: number; modified: boolean; onChange: (v: number) => void }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <>
-      <span style={{ color: modified ? 'var(--modified)' : undefined }}>{label}</span>
-      <input className="input" style={{ textAlign: 'right', color: modified ? 'var(--modified)' : undefined }} value={draft ?? String(value)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { if (draft !== null) { const v = parseFloat(draft); if (isFinite(v) && v >= 0) onChange(v); setDraft(null); } }}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-      <span className="unit">{unit}</span>
-    </>
-  );
-}
-
+/** Filament settings of one slot (Bambu's filament settings tabs). Changes are kept on the slot. */
 export function FilamentModal({ slot, onClose }: { slot: number; onClose: () => void }) {
-  const { filaments, plate } = useStore();
-  const f = filamentById(filaments[slot]?.presetId ?? filaments[0].presetId);
-  const rows: [string, string][] = [
-    ['Type', f.type],
-    ['Diameter', `${f.diameter} mm`],
-    ['Density', `${f.density} g/cm³`],
-    ['Price', `${f.cost} / kg`],
-    ['Nozzle temperature', `${f.nozzleTemp} °C (first layer ${f.nozzleTempInitial} °C)`],
-    ['Bed temperature (this plate)', f.bedTemp[plate] ? `${f.bedTemp[plate]} °C` : 'not supported'],
-    ['Part cooling fan', `${f.fanMin}–${f.fanMax}% (off for first ${f.fanOffFirstLayers} layer${f.fanOffFirstLayers > 1 ? 's' : ''})`],
-    ['Slow down if layer time below', `${f.slowDownLayerTime} s (min ${f.slowDownMinSpeed} mm/s)`],
-    ['Max volumetric speed', `${f.maxVolumetricSpeed} mm³/s`],
-    ['Flow ratio', String(f.flowRatio)],
-  ];
+  const { filaments, printerId, machineOverrides, set, markDirty } = useStore();
+  const st = filaments[slot] ?? filaments[0];
+  const f = filamentById(st.presetId);
+  const base = filamentConfig(f);
+  const ov = st.overrides ?? {};
+  const machine = machineConfig(printerId, machineOverrides);
+  const [q, setQ] = useState('');
+  const n = Object.keys(ov).length;
+  const write = (o: Config) => { set({ filaments: filaments.map((x, i) => (i === slot ? { ...x, overrides: Object.keys(o).length ? o : undefined } : x)) }); markDirty(); };
+  const commit = (k: string, v: Config[string]) => { const o = { ...ov }; if (v === base[k] && !NULLABLE_FILAMENT_KEYS.has(k)) delete o[k]; else o[k] = v; write(o); };
+  const reset = (k: string) => { const o = { ...ov }; delete o[k]; write(o); };
   return (
-    <Modal title={`Filament ${slot + 1} — ${f.name}`} onClose={onClose}>
-      <div className="summary" style={{ marginTop: 0, border: 0 }}>
-        {rows.map(([k, v]) => <Fragment key={k}><span className="k">{k}</span><span className="v">{v}</span></Fragment>)}
+    <Modal title={`Filament ${slot + 1} — ${n ? '* ' : ''}${f.name}${n ? ' (modified)' : ''}`} onClose={onClose} footer={<>
+      <button className="btn-secondary btn-small" disabled={!n} onClick={() => write({})}>Revert all</button>
+      <span className="spacer" />
+      <button className="btn-primary btn-small" onClick={onClose}>Done</button>
+    </>}>
+      <div className="row" style={{ marginBottom: 8, gap: 8 }}>
+        <span className="swatch" style={{ background: st.color, display: 'inline-block' }} />
+        <span className="badge">{String(ov.filament_type ?? base.filament_type)}</span>
+        <span className="spacer" />
+        <input className="input" style={{ width: 180 }} placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
+      <ParamPages params={FILAMENT_PARAMS} pages={FILAMENT_PAGES} search={q}
+        value={(k) => (k in ov ? ov[k] : base[k])} base={(k) => base[k] ?? machine[k.replace(/^filament_/, '')]} modified={(k) => k in ov}
+        onCommit={commit} onReset={reset}
+        nullable={(k) => (NULLABLE_FILAMENT_KEYS.has(k) ? { inherited: machine[k.replace(/^filament_/, '')] } : undefined)} />
     </Modal>
   );
 }

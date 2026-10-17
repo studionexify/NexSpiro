@@ -49,11 +49,13 @@ function PlateSettings({ index, onClose }: { index: number; onClose: () => void 
   const [bed, setBed] = useState<PlateType | 'global'>(p.bedType ?? 'global');
   const [vase, setVase] = useState(tri(p.spiralVase));
   const [locked, setLocked] = useState(!!p.locked);
+  const [seq, setSeq] = useState<string>(p.printSequence ?? 'global');
   const ok = () => {
     updatePlate(index, {
       name: name.trim() || p.name, locked,
       bedType: bed === 'global' ? undefined : bed,
       spiralVase: vase === 'global' ? undefined : vase === 'on',
+      printSequence: seq === 'global' ? undefined : (seq as 'by_layer' | 'by_object'),
     });
     onClose();
   };
@@ -73,6 +75,12 @@ function PlateSettings({ index, onClose }: { index: number; onClose: () => void 
           <option value="global">Same as global ({s.overrides.spiral_mode === true ? 'Enable' : 'Disable'})</option>
           <option value="on">Enable</option>
           <option value="off">Disable</option>
+        </select>
+        <span>Print sequence</span>
+        <select className="select" value={seq} onChange={(e) => setSeq(e.target.value)}>
+          <option value="global">Same as global ({s.overrides.print_sequence === 'by_object' ? 'By object' : 'By layer'})</option>
+          <option value="by_layer">By layer</option>
+          <option value="by_object">By object</option>
         </select>
         <span>Locked</span>
         <label className="row" style={{ margin: 0 }}><button className={`toggle ${locked ? 'on' : ''}`} onClick={() => setLocked(!locked)} aria-label="Lock plate" />

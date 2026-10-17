@@ -3,7 +3,7 @@
 // layer prints its loops in the same canonical order (outer walls by size, inner walls, then infill),
 // so every point sits at the same fraction of the helix turn layer after layer. Hops that stay inside
 // the part lose their retraction, and the infill is a connected spiral.
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import { spiralFill } from '../eulerian';
 import type { SessionCtx, TechModule } from '../session';
 import type { PartAnalysis } from '../analysis';

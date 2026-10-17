@@ -4,8 +4,8 @@
 // temperature change is commanded τ·ln(|ΔT|/2 K) seconds ahead of the zone (look-ahead), zones shorter
 // than τ/2 keep the current setting (hysteresis), and every extrusion's flow is divided by the expansion
 // the observer predicts for the nozzle at that moment.
-import type { LayerOps, Op } from '../../gcode';
-import { moveTime } from '../../gcode';
+import type { LayerOps, Op } from '../classic/gcode';
+import { moveTime } from '../classic/gcode';
 import { smoothstep } from '../grid';
 import type { SessionCtx, TechModule } from '../session';
 
