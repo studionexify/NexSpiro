@@ -22,8 +22,13 @@ import { dovetail } from './dovetail';
 import { coMolding } from './coMolding';
 import { metricMorph } from './metricMorph';
 import { mongeAmpere } from './mongeAmpere';
+import { cornerOvershoot, kinematicExtrusion, symplecticShaper } from './motion';
+import { glossModulation, hotOnHot, isoGloss } from './rheology';
+import { morseRouter } from './morse';
 
 export const MODULES: TechModule[] = [
+  // topology first: the Morse–Smale router reads the whole part
+  morseRouter,
   // cross-sections and material regions: cast cavities, carved lenses, interface fingers
   coMolding, mongeAmpere, dovetail,
   // layer plan (curved layers): dome field first, SGD refines it
@@ -36,9 +41,10 @@ export const MODULES: TechModule[] = [
   // technology made for it (stress paths where loaded, …)
   thickVase, eulerianSpiral, feaStress, quasicrystal, bandGap, turingInfill, metamaterial, homogenization,
   // toolpath passes, in order: surfaces, helix, interlocking, seams, final burnishing
-  conformalLayers, subvoxelAA, perimeterFeathering, zWeave, tangentEntry, scarfSplice, conformalIroning,
+  conformalLayers, subvoxelAA, perimeterFeathering, zWeave, tangentEntry, scarfSplice, conformalIroning, cornerOvershoot,
   // passes that replace the part (truss, flat morph sheet), then the shrinkage pre-distortion of everything
   spatialLattice, metricMorph, inverseWarp,
-  // rheology on the final move list
-  foamControl,
+  // rheology on the final move list (surface gloss, layer bond, foam), then motion (flow from the
+  // planner, acceleration timing against the frame resonance)
+  isoGloss, glossModulation, hotOnHot, foamControl, kinematicExtrusion, symplecticShaper,
 ];

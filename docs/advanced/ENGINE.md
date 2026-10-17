@@ -107,3 +107,18 @@ New slicer hooks: a **zone router** for sparse infill (each technology claims th
 | #30 Monge–Ampère | `modules/mongeAmpere.ts` | Log-domain Sinkhorn with ε-scaling (separable log-sum-exp), barycentric map, ∇h = (T − x)/((n − 1)·throw), Poisson-integrated; lens mode carves the top, lampshade mode sets outer-wall widths by Beer–Lambert |
 
 Verification: `tests/advanced/fea.test.ts`, `homogenize.test.ts`, `bloch.test.ts`, `phase4.test.ts` (cantilever streamlines align with bending tension, Fibonacci gaps, rib continuity between layers, band gap holds the target, auxetic ν, foam schedule, ABS warp compensation and kerfs, truss, dovetail area/phase, co-mold material saving, flat sheet, lens and lampshade). Structural Armor on a 60×30×12 mm part slices in about 8 s (Basic: 0.06 s).
+
+## Phase 5 — rheology, kinematics & the topological router
+
+| Technology | File | Method |
+| --- | --- | --- |
+| Motion planner | `planner.ts` | Trapezoidal look-ahead with junction deviation v_j² = a·δ·sin(θ/2)/(1 − sin(θ/2)), δ = scv²(√2 − 1)/a; backward (stoppable) and forward (reachable) passes, per-move entry/cruise/exit speeds and times |
+| #6 Kinematic extrusion | `modules/motion.ts` | Corners where the planner slows are reported; without firmware PA, software pressure advance ΔE = K·Δv·E/len on each speed change; with PA: planning only |
+| #31 Symplectic shaper | `modules/motion.ts` | Frame as a damped oscillator (resonance from the machine model) integrated with Störmer–Verlet; accelerations retimed so each ramp lasts a whole number of periods (residual ringing ≈ 0). With firmware input shaping only ramps still ringing over 4× the tolerance are retimed (no double shaping) |
+| #10 Corner overshoot | `modules/motion.ts` | At outer-wall corners sharper than the threshold the nozzle swings d = g·w/2·(1 − sin(φ/2)) past the corner at 60 % flow and returns dry; halved with firmware PA |
+| #27 Iso-gloss | `modules/rheology.ts` | Outer wall at one speed on every layer (exempt from the cooling slowdown); short layers take their time from the other features, the rest from the fan: fan′ = fan·(t_min/t)^γ. Reports τ_w |
+| #17 Gloss modulation | `modules/rheology.ts` | Painted matte/gloss faces (values 3/4) set the outer-wall speed: τ_w = K((3n+1)/4n · 4Q/πR³)ⁿ (PLA K = 4500 Pa·sⁿ, n = 0.35), high shear for matte, low for gloss |
+| #5 Hot-on-hot | `modules/rheology.ts` | Lumped bead cooling ρch·dT/dt = −h(T − T_amb), h = 15 + 85·fan W/m²K, over the planned layer time; the fan is cut (up to the limit) until the layer below is still above Tg + margin when the next one lands; layers that cannot reach it are reported |
+| #32 Morse–Smale router | `modules/morse.ts` | Reeb graph from the cross-section islands (overlap links), births/deaths/merges/splits, elder-rule persistence and simplification below the threshold; branches routed to planar, helix, curved layers, support or reorientation (5-axis); the inspector's `branch` field |
+
+Verification: `tests/advanced/phase5.test.ts` — junction speed at a right angle, period-timed ramps cut ringing by > 70 %, no double shaping on Bambu, software PA on Marlin, overshoot corners, power-law shear scaling, one outer-wall speed across layers, matte vs gloss shear, fan cuts for the layer bond, the branches of an arch, a mid-air branch routed to support, and every intent compiled on Bambu X1C/A1/H2D, Voron (Klipper), Prusa MK4S and Ender-3 V2 (Marlin) with every technology present and < 1 % unresolved clearance points.
