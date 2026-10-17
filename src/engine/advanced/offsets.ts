@@ -182,6 +182,30 @@ export function eikonalDistance(r: RasterRegion, paths: Paths, speed?: Float64Ar
   return d;
 }
 
+/** Distance to the edge of a raster mask (boundary cells at half a cell), by fast sweeping. */
+export function maskDistance(r: RasterRegion): Float64Array {
+  const { nx, ny, h, mask } = r;
+  const d = new Float64Array(nx * ny).fill(Infinity);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const p = i + nx * j;
+    if (!mask[p]) { d[p] = 0; continue; }
+    const edge = i === 0 || j === 0 || i === nx - 1 || j === ny - 1 || !mask[p - 1] || !mask[p + 1] || !mask[p - nx] || !mask[p + nx];
+    if (edge) d[p] = h / 2;
+  }
+  for (let round = 0; round < 2; round++) for (let o = 0; o < 4; o++) {
+    const di = o & 1 ? -1 : 1, dj = o & 2 ? -1 : 1;
+    for (let j = dj > 0 ? 0 : ny - 1; j >= 0 && j < ny; j += dj) for (let i = di > 0 ? 0 : nx - 1; i >= 0 && i < nx; i += di) {
+      const p = i + nx * j;
+      if (!mask[p]) continue;
+      const a = Math.min(i > 0 ? d[p - 1] : Infinity, i < nx - 1 ? d[p + 1] : Infinity);
+      const b = Math.min(j > 0 ? d[p - nx] : Infinity, j < ny - 1 ? d[p + nx] : Infinity);
+      const u = Math.abs(a - b) >= h ? Math.min(a, b) + h : (a + b + Math.sqrt(2 * h * h - (a - b) * (a - b))) / 2;
+      if (u < d[p]) d[p] = u;
+    }
+  }
+  return d;
+}
+
 /** Closed isolines φ = level by marching squares (cell centres as samples), in mm. */
 export function isolines(r: RasterRegion, phi: Float64Array, level: number): number[][] {
   const { nx, ny, h, ox, oy } = r;
