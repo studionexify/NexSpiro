@@ -67,3 +67,58 @@ describe('FEA stress-aligned paths (#1) and spinor frames (#33)', () => {
     sane(out.gcode);
   });
 });
+
+import { orientQuasicrystal, fibonacci } from '../../src/engine/advanced/modules/quasicrystal';
+import { designBandGap } from '../../src/engine/advanced/modules/bandGap';
+
+describe('quasicrystal infill (#28)', () => {
+  it('puts a five-fold axis up: five printable families at 26.6°, isotropic in the layer', () => {
+    const o = orientQuasicrystal(45);
+    expect(o.normals.length).toBe(5);
+    expect(Math.max(...o.tilts)).toBeCloseTo(26.57, 0);
+    expect(o.aniso).toBeLessThan(0.02);
+  });
+  it('spaces planes as a Fibonacci chain (gaps 1 and τ)', () => {
+    const gaps = new Set<string>();
+    for (let n = 0; n < 50; n++) gaps.add((fibonacci(n + 1, 0.3) - fibonacci(n, 0.3)).toFixed(6));
+    expect([...gaps].sort()).toEqual(['1.000000', '1.618034']);
+  });
+  it('fills the core of a block', () => {
+    const { out, rep } = adv(indexed(box(80, 80, 0, 40, 40, 20), 'blk'), 'bbl-x1c', ['quasicrystal']);
+    ran(rep.get('quasicrystal')!.status);
+    expect(Number(rep.get('quasicrystal')!.stats!.lines)).toBeGreaterThan(100);
+    sane(out.gcode);
+  });
+});
+
+describe('Gray–Scott Turing infill (#9)', () => {
+  it('grows ribs and keeps them from layer to layer', () => {
+    const { out, rep } = adv(indexed(box(80, 80, 0, 40, 40, 12), 'blk'), 'bbl-x1c', ['turing_infill']);
+    const r = rep.get('turing_infill')!;
+    console.log('turing', r.stats, r.ms);
+    ran(r.status);
+    expect(Number(r.stats!.ribs)).toBeGreaterThan(50);
+    // consecutive layers print nearly the same ribs (Z continuation)
+    const a = segments(out, layerAt(out, 6), 'sparse_infill'), b = segments(out, layerAt(out, 6.2), 'sparse_infill');
+    const la = a.reduce((t, s) => t + Math.hypot(s[2] - s[0], s[3] - s[1]), 0), lb = b.reduce((t, s) => t + Math.hypot(s[2] - s[0], s[3] - s[1]), 0);
+    expect(la).toBeGreaterThan(100);
+    expect(Math.abs(la - lb) / la).toBeLessThan(0.15);
+    sane(out.gcode);
+  });
+});
+
+describe('metamaterial, band gap and homogenization (#12, #34, #35)', () => {
+  it('designs a resonator lattice whose gap holds the target frequency', () => {
+    const d = designBandGap(800, 0.45, false)!;
+    console.log(d);
+    expect(d.inGap).toBe(true);
+    expect(d.chern).toBe(0);
+  });
+  it('acoustic intent: band-gap core, graded auxetic cells, homogenized design', () => {
+    const { out, rep } = adv(indexed(box(70, 70, 0, 60, 60, 10), 'pad'), 'bbl-x1c', ['band_gap', 'metamaterial', 'homogenization'], 'acoustic', { params: { homogenization: { targetNu: -0.5 } } });
+    for (const id of ['band_gap', 'metamaterial', 'homogenization'] as const) { console.log(id, rep.get(id)!.stats, rep.get(id)!.ms); ran(rep.get(id)!.status); }
+    expect(Number(rep.get('homogenization')!.stats!.poisson_homogenized)).toBeLessThan(0);
+    expect(Number(rep.get('band_gap')!.stats!.resonators)).toBeGreaterThan(0);
+    sane(out.gcode);
+  });
+});

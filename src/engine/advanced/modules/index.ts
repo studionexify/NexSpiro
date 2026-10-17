@@ -11,6 +11,10 @@ import { tangentEntry, scarfSplice } from './seams';
 import { conformalIroning, perimeterFeathering, subvoxelAA } from './surfacePasses';
 import { knotBraiding, zWeave } from './weave';
 import { feaStress, spinorFields } from './fea';
+import { quasicrystal } from './quasicrystal';
+import { turingInfill } from './turing';
+import { bandGap } from './bandGap';
+import { homogenization, metamaterial } from './cells';
 
 export const MODULES: TechModule[] = [
   // layer plan (curved layers): dome field first, SGD refines it
@@ -21,7 +25,7 @@ export const MODULES: TechModule[] = [
   spinorFields,
   // infill: helical bands claim their regions first, then the zone router hands each sub-region to the
   // technology made for it (stress paths where loaded, …)
-  thickVase, eulerianSpiral, feaStress,
+  thickVase, eulerianSpiral, feaStress, quasicrystal, bandGap, turingInfill, metamaterial, homogenization,
   // toolpath passes, in order: surfaces, helix, interlocking, seams, final burnishing
   conformalLayers, subvoxelAA, perimeterFeathering, zWeave, tangentEntry, scarfSplice, conformalIroning,
 ];

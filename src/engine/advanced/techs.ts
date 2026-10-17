@@ -147,7 +147,7 @@ export const TECHS: TechDef[] = [
       { key: 'F', label: 'Feed F', type: 'number', def: 0.037, min: 0.01, max: 0.08, step: 0.001 },
       { key: 'k', label: 'Kill k', type: 'number', def: 0.06, min: 0.03, max: 0.07, step: 0.001 },
       { key: 'aniso', label: 'Anisotropy β', type: 'number', def: 0.6, min: 0, max: 0.95, step: 0.05, tip: 'D = D₀(I + β d⊗d) along the stress or boundary direction.' },
-      { key: 'scale', label: 'Pattern scale', type: 'number', def: 1.6, min: 0.6, max: 4, step: 0.1, unit: 'mm/cell' },
+      { key: 'scale', label: 'Pattern scale', type: 'number', def: 1, min: 0.4, max: 3, step: 0.05, tip: '1 = rib spacing matched to the sparse infill density.' },
     ],
     mould: () => ok,
   },
@@ -348,7 +348,7 @@ export const TECHS: TechDef[] = [
     summary: 'Aperiodic icosahedral infill with Fibonacci-spaced plane families: no cleavage planes, near-isotropic stiffness.',
     intents: ['structural'], reads: ['core'],
     params: [
-      { key: 'spacing', label: 'Mean spacing', type: 'number', def: 5, min: 1.5, max: 20, step: 0.1, unit: 'mm' },
+      { key: 'spacing', label: 'Mean plane spacing', type: 'number', def: 0, min: 0, max: 20, step: 0.1, unit: 'mm', tip: '0 = from the sparse infill density.' },
       { key: 'maxTilt', label: 'Max plane tilt', type: 'number', def: 45, min: 20, max: 60, step: 1, unit: '°' },
     ],
     mould: () => ok,
