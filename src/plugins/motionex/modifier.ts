@@ -6,7 +6,7 @@ import type { PrintProfiles } from "./core/profiles";
 import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
-import { wallMatches, type MotionApplication, type MotionBrush } from "./model";
+import { DEFAULT_TIP, type CurveKey, wallMatches, type MotionApplication, type MotionBrush, type TipControl } from "./model";
 import { offsetInnerWalls } from "./core/follow";
 
 export interface ModifierOptions {
@@ -84,12 +84,25 @@ function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number, fixedP
   const ph = (((phaseDeg % 360) + 360) % 360 / 360) * period;
   if (b.repeat_mode === "once" && s + ph > period) return null;
   const u = (((s + ph) / period) % 1 + 1) % 1;
-  let lat = evalCurve(b.curves.lateral_offset, u);
+  const r = Math.min(b.round_mm ?? 0, period / 2);
+  // Rounding: the shape is averaged under a triangle window of half-width r (two box filters in a
+  // row), which turns every step into a smooth S whose slope changes gradually, and leaves the
+  // shape untouched wherever it is straight for longer than r.
+  const ev = (c: CurveKey) => {
+    if (r <= 1e-6) return evalCurve(b.curves[c], u);
+    let sum = 0, wsum = 0;
+    for (let k = -ROUND_TAPS; k <= ROUND_TAPS; k++) {
+      const w = ROUND_TAPS + 1 - Math.abs(k), uk = (((u + (k / ROUND_TAPS) * (r / period)) % 1) + 1) % 1;
+      sum += w * evalCurve(b.curves[c], uk); wsum += w;
+    }
+    return sum / wsum;
+  };
+  let lat = ev("lateral_offset");
   if (b.noise?.enabled) lat += noise1d((s + ph) / (period * b.noise.scale), b.noise.seed, b.noise.octaves, b.noise.persistence);
   return {
     lat: lat * b.amplitude,
-    along: evalCurve(b.curves.along_offset, u) * b.amplitude,
-    z: evalCurve(b.curves.z_offset, u) * (b.z_amplitude ?? 0),
+    along: ev("along_offset") * b.amplitude,
+    z: ev("z_offset") * (b.z_amplitude ?? 0),
     flow: evalCurve(b.curves.extrusion_mult, u),
     speed: evalCurve(b.curves.speed_mult, u),
   };
@@ -112,6 +125,16 @@ export function eventPositions(b: MotionBrush, L: number, layer: number, fixedPe
   return out.sort((a, b) => a.s - b.s || a.i - b.i);
 }
 
+const ROUND_TAPS = 8;
+
+/** The motion as one placement uses it: its size slider and corner rounding applied. */
+export function placedBrush(app: MotionApplication, found: MotionBrush): MotionBrush {
+  const k = app.scale ?? 1;
+  const round = app.round_mm ?? found.round_mm ?? 0;
+  if (k === 1 && round === (found.round_mm ?? 0)) return found;
+  return { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k, round_mm: round * k };
+}
+
 export type Weight = (x: number, y: number, z: number, slope: number) => number;
 /** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
 export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
@@ -123,6 +146,8 @@ export interface PathLayer {
   /** add: displacement adds to earlier motions · override: cross-fades from earlier motions to this one. */
   blend: "add" | "override";
   repeats?: RepeatLock;
+  /** Behaviour on loops too small for this motion. */
+  tip?: TipControl;
 }
 
 /**
@@ -175,12 +200,30 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
   const post: (ToolpathPoint["post"] | undefined)[] = new Array(N);
   const travel = new Uint8Array(N);
   let flowClamps = 0, canLoop = false;
-  for (const { brush: b, weight, blend, repeats } of layers) {
+  // Inner radius of a closed loop (2·area / perimeter): how much room a motion has before the line folds over itself.
+  let inradius = Infinity;
+  if (path.closed) {
+    let a2 = 0;
+    for (let i = 1; i < N; i++) a2 += samples[i - 1].x * samples[i].y - samples[i].x * samples[i - 1].y;
+    inradius = Math.abs(a2) / L;
+  }
+  for (const { brush: b, weight, blend, repeats, tip = DEFAULT_TIP } of layers) {
     const w = new Float64Array(N);
     let any = false;
     for (let i = 0; i < N; i++) { const c = samples[i]; w[i] = clamp(weight(c.x, c.y, c.z, c.slope), 0, 1); if (w[i] > 0) any = true; }
     if (!any) continue;
     const prm = pathParam(samples, path.closed, b, repeats);
+    // Small loops (the tip of a cone or pyramid): shrink the motion to fit, or drop it on this loop.
+    let fit = 1;
+    if (tip.mode !== "full" && Number.isFinite(inradius)) {
+      let peak = 0;
+      for (let i = 0; i < N; i++) if (w[i] > 0) {
+        const m = brushAt(b, prm.at(i), prm.L, layer, prm.period);
+        if (m) peak = Math.max(peak, (Math.abs(m.lat) + Math.abs(m.along)) * w[i]);
+      }
+      const cap = clamp(tip.share, 0.05, 1) * inradius;
+      if (peak > cap) { if (tip.mode === "off") continue; fit = cap / peak; }
+    }
     if (b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0) canLoop = true;
     // Events: positions are found in the same measure as the motion, then mapped back onto the path.
     const evs = eventPositions(b, prm.L, layer, prm.period).map((e) => ({ s: prm.toS(e.s), i: e.i })).sort((a, c) => a.s - c.s || a.i - c.i);
@@ -188,7 +231,7 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     for (let i = 0; i < N; i++) {
       const c = samples[i], wi = w[i];
       const m = wi > 0 ? brushAt(b, prm.at(i), prm.L, layer, prm.period) : null;
-      const mLat = m ? m.lat : 0, mAlong = m ? m.along : 0, mZ = m ? m.z : 0;
+      const mLat = m ? m.lat * fit : 0, mAlong = m ? m.along * fit : 0, mZ = m ? m.z : 0;
       const mFlow = m ? m.flow * flowState : 1, mSpeed = m ? m.speed : 1;
       if (blend === "override") {
         lat[i] = lat[i] * (1 - wi) + mLat * wi; along[i] = along[i] * (1 - wi) + mAlong * wi; dz[i] = dz[i] * (1 - wi) + mZ * wi;
@@ -228,21 +271,8 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     }
     if (pendingUnretract > 0) post[N - 1] = { ...post[N - 1], unretract_mm: pendingUnretract };
   }
-  // Small loops (the tip of a cone or pyramid) can't hold the full motion: the offset would fold the
-  // line over itself. Scale the side-to-side movement down so it never exceeds a share of the loop's
-  // inner radius; this changes smoothly from layer to layer, so the motion fades out towards the tip.
   let maxLat = 0;
   for (let i = 0; i < N; i++) maxLat = Math.max(maxLat, Math.abs(lat[i]) + Math.abs(along[i]));
-  if (path.closed && maxLat > 0) {
-    let a2 = 0;
-    for (let i = 1; i < N; i++) a2 += samples[i - 1].x * samples[i].y - samples[i].x * samples[i - 1].y;
-    const cap = LOOP_SHARE * (Math.abs(a2) / L);  // inradius = 2·area / perimeter
-    if (maxLat > cap) {
-      const k = cap / maxLat;
-      for (let i = 0; i < N; i++) { lat[i] *= k; along[i] *= k; }
-      maxLat = cap;
-    }
-  }
   // Direction of the offset. A sample's own tangent jumps at every corner of the slicer's path, so an
   // inward offset would cross itself there and an outward one would leave a gap. Instead the tangent is
   // the chord over ±R of arc length: identical on straight runs, turning gradually through a corner.
@@ -314,8 +344,6 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
   return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
 }
 
-/** Largest side-to-side movement on a closed loop, as a share of the loop's inner radius. */
-const LOOP_SHARE = 0.3;
 /** Junction deviation (mm) used to work out how fast the nozzle may take a turn. */
 const JUNCTION_DEV = 0.02;
 /** Never slow below this (mm/s): slower lines over-melt more than a slightly rounded corner hurts. */
@@ -363,8 +391,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const prepared: Prepared[] = [];
   for (const app of sorted) {
     const found = app.brush ?? brushes(app.brush_id);
-    const k = app.scale ?? 1;
-    const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
+    const brush = found && placedBrush(app, found);
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Motion ${app.brush_id} was not found` }); continue; }
     const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is PatternexRegion => !!r) : [];
     if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A motion is set to picked surfaces but none are picked, so it was skipped" }); continue; }
@@ -412,7 +439,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
         // Leave paths the mask never reaches untouched (keeps G-code small and exact there).
         if ((a.faces.length || a.app.mask.angle_min !== undefined || a.app.mask.angle_max !== undefined)
           && !resample(path.points, 1).some((q) => weights[k](q.x, q.y, layer.z, q.slope) > 0)) return;
-        parts.push({ brush: a.brush, weight: weights[k], blend: a.app.blend, repeats: a.lockFor(path.feature) });
+        parts.push({ brush: a.brush, weight: weights[k], blend: a.app.blend, repeats: a.lockFor(path.feature), tip: a.app.tip });
       });
       return parts.length ? composePath(path, parts, p, opt, warn, layer.index, check) : path;
     });

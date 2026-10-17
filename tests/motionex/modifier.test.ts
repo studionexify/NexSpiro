@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { applyBrushToPath, brushAt, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
+import { applyBrushToPath, brushAt, composePath, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
 import { PRESETS } from "../../src/plugins/motionex/presets";
 import type { Toolpath } from "../../src/plugins/motionex/core/types";
 import { profiles } from "./helpers";
@@ -108,4 +108,22 @@ test("teeth slow into their corners and speed up within the printer's accelerati
     const a = out.points[i - 1], b = out.points[i], l = Math.hypot(b.x - a.x, b.y - a.y);
     assert.ok(b.f ** 2 <= a.f ** 2 + 2 * acc * l + 1, `speed jump at ${i}`);
   }
+});
+
+test("tip control: switch off leaves small loops plain, keep full size leaves them alone", () => {
+  const b = { ...sine, amplitude: 1, period_mm: 1 };
+  const base = resample(square(2).points, DEFAULT_OPTIONS.resampleStep);
+  const dev = (t: Toolpath) => Math.max(...t.points.map((p, i) => Math.hypot(p.x - base[i].x, p.y - base[i].y)));
+  const run = (mode: "off" | "full") => composePath(square(2), [{ brush: b, weight: () => 1, blend: "add", tip: { mode, share: 0.3 } }], profiles(), DEFAULT_OPTIONS, () => {});
+  assert.equal(dev(run("off")), 0);
+  assert.ok(dev(run("full")) > 0.9);
+});
+
+test("corner rounding softens a square tooth's corners", () => {
+  const teeth = structuredClone(PRESETS.find((b) => /square/i.test(b.name))!);
+  // sharpest bend: largest change of slope between neighbouring 0.02 mm steps
+  const bend = (b: typeof teeth) => { const h = 0.02; let m = 0; for (let s = h; s < 4; s += h) { const f = (x: number) => brushAt(b, x, 100)!.lat; m = Math.max(m, Math.abs(f(s + h) - 2 * f(s) + f(s - h)) / (h * h)); } return m; };
+  const crisp = bend({ ...teeth, period_mm: 4, amplitude: 0.5 }), round = bend({ ...teeth, period_mm: 4, amplitude: 0.5, round_mm: 0.3 });
+  // a kink of slope change Δ filtered by a triangle of half-width r bends at most Δ/r
+  assert.ok(round < crisp * 0.6, `${round} vs ${crisp}`);
 });

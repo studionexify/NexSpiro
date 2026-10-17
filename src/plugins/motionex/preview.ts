@@ -163,7 +163,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
         // on the picked faces full strength, easing to nothing over the soft edge outside them
         const w: Weight = f ? (x, y) => { const d = f(x, y); return d < 0.05 ? zw : blend > 0 ? zw * (1 - smooth(d / blend)) : 0; } : () => zw;
         ws.push(w);
-        parts.push({ brush: a.brush, weight: w, blend: a.app.blend, repeats: lockFor(`${o.id}|${a.app.brush_id}|${k}`) });
+        parts.push({ brush: a.brush, weight: w, blend: a.app.blend, tip: a.app.tip, repeats: lockFor(`${o.id}|${a.app.brush_id}|${k}`) });
       });
       if (!parts.length) return;
       const near = (x: number, y: number) => fields.some((f, k) => (f ? f(x, y) < (mine[k].app.mask.blend_mm ?? 1.5) + CONTEXT_MM : true));

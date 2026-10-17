@@ -209,7 +209,7 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     return config.applications.filter((a) => a.enabled).map((a) => {
       const b = a.brush ?? names.get(a.brush_id);
       const where = a.target.type === 'faces' ? `${(a.target.faces ?? []).length} picked surface(s)` : 'whole body';
-      return `; motionex: ${b?.name ?? a.brush_id} v${b?.version ?? '?'} on ${where}, ${a.target.walls} walls, z ${a.mask.z_start}-${a.mask.z_end}${a.scale && a.scale !== 1 ? ` size x${a.scale}` : ''}${a.blend === 'override' ? ' replace' : ''}`;
+      return `; motionex: ${b?.name ?? a.brush_id} v${b?.version ?? '?'} on ${where}, ${a.target.walls} walls, z ${a.mask.z_start}-${a.mask.z_end}${a.scale && a.scale !== 1 ? ` size x${a.scale}` : ''}${a.blend === 'override' ? ' replace' : ''}${a.round_mm ? ` round ${a.round_mm}mm` : ''}${a.tip ? ` tip ${a.tip.mode} ${a.tip.share}` : ''}`;
     });
   },
 };
