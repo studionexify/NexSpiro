@@ -19,6 +19,10 @@ export interface AnalysisParams {
   overhangDeg: number;
   /** Paint colour per triangle (multi-material interfaces), if any. */
   color?: Uint8Array;
+  /** Advanced paint per triangle: 1 fixture, 2 load face, 3 matte, 4 gloss. */
+  advPaint?: Uint8Array;
+  /** Load case of the FEA (direction, total force). */
+  load?: { dir: [number, number, number]; newtons: number };
 }
 
 export interface PartAnalysis {

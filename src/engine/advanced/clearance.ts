@@ -117,7 +117,7 @@ export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { 
       while (head0 < pending.length && pending[head0].s < s - lag) { const q = pending[head0++]; cur.stamp(q.x, q.y, q.z); }
       if (op.travel || op.e <= 0) continue;
       // conformal ironing ploughs the stair-step peaks on purpose and checks the head itself
-      if (op.feature === 'ironing') continue;
+      if (op.feature === 'ironing' || op.noClear) continue;
       if (Math.abs(op.z - L.z) > 1e-3) {
         rep.checked++;
         const why = onCollision ? { by: '' } : undefined;

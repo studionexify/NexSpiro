@@ -7,7 +7,9 @@ import { fitArc } from './arc';
 export type Op =
   | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean;
       /** Advanced mode: how far (mm, signed) surface passes have already moved this bead off its layer surface. */
-      dev?: number }
+      dev?: number;
+      /** Advanced mode: free-space draw whose head clearance is guaranteed by construction (skipped by the checker). */
+      noClear?: boolean }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
   | { k: 'tool'; tool: number }

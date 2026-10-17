@@ -159,6 +159,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   while (z + hN * 0.5 < maxZ) { z = +(z + hN).toFixed(4); zs.push(z); hs.push(hN); }
   const N = zs.length;
   const planes = zs.map((zz, i) => zz - hs[i] / 2);
+  adv?.setLayers(zs, hs);
 
   // ---------- stage 2/3: slice objects & parts
   progress('Slicing mesh', 0.04);
@@ -267,7 +268,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     // merge regions sharing a filament
     const merged = new Map<number, Paths>();
     for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
-    return [...merged].map(([fil, paths]) => ({ fil, paths }));
+    const regs = [...merged].map(([fil, paths]) => ({ fil, paths }));
+    // Advanced: material interfaces (dovetail fingers)
+    return adv?.regions && regs.length > 1 ? adv.regions(o, i, regs) : regs;
   };
 
   // ---------- stage 4: perimeters (classic), per object & filament region
@@ -648,7 +651,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         ? Math.PI * (nozzle / 2) ** 2
         : it.width > hEff ? (it.width - hEff) * hEff + Math.PI * (hEff / 2) ** 2 : it.width * hEff;
       const ePerMm = (xs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow;
-      const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
+      const varW = it.widths && it.widths.length * 2 === pts.length ? (it.closed ? [...it.widths, it.widths[0]] : it.widths) : null;
       const zoff = it.zs && it.zs.length * 2 === pts.length ? (it.closed ? [...it.zs, it.zs[0]] : it.zs) : null;
       const xsOf = (w: number) => (w > h ? (w - h) * h + Math.PI * (h / 2) ** 2 : w * h);
       let v = speedFor(it.feature, i);
@@ -796,8 +799,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (rg.sparse.length && dens > 0) {
           const reg = clipTo(rg.sparse, spw);
           const custom = adv?.infill && reg.length ? adv.infill(o, reg, { width: spw, density: dens, z: zTop, h, layer: i, pattern: ostr(o, 'sparse_infill_pattern') }) : undefined;
-          if (custom) for (const p of custom) fills.push({ ...p, pts: p.widths ? p.pts : simplify(p.pts, resolution, p.closed), feature: p.feature ?? 'sparse_infill', width: p.width, flow: p.flow ?? 1 });
-          else add(sparseFill(reg, ostr(o, 'sparse_infill_pattern') as SparsePattern, spw, dens, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
+          if (custom) for (const p of custom.paths) fills.push({ ...p, pts: p.widths ? p.pts : simplify(p.pts, resolution, p.closed), feature: p.feature ?? 'sparse_infill', width: p.width, flow: p.flow ?? 1 });
+          // what the Advanced zone router left (or everything in Basic mode) gets the regular pattern
+          const rest = custom ? custom.rest : reg;
+          if (rest.length) add(sparseFill(rest, ostr(o, 'sparse_infill_pattern') as SparsePattern, spw, dens, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
         }
         for (const m of rg.sparseMods) add(sparseFill(clipTo(m.paths, spw), m.pattern, spw, m.density, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
         if (rg.top.length) surface(rg.top, ostr(o, 'top_surface_pattern'), twid, 'top_surface');
@@ -841,18 +846,20 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           for (const k of seq) {
             const ordered = orderPaths(isl.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
             for (const loop of ordered) {
-              // loops with per-point data (Z offsets) keep every point so the arrays stay aligned
-              let pts = loop.zs ? loop.pts : simplify(loop.pts, resolution, true);
+              // loops with per-point data (Z offsets, widths) keep every point so the arrays stay aligned
+              const perPoint = !!(loop.zs || loop.widths);
+              let pts = perPoint ? loop.pts : simplify(loop.pts, resolution, true);
               const prev = seamMode === 'aligned' && prevSeams.length
                 ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
                 : null;
               const si = pickSeam(pts, seamMode, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, prev, rnd, hints);
               pts = rotateLoop(pts, si);
               const zs = loop.zs && loop.zs.length * 2 === loop.pts.length ? [...loop.zs.slice(si), ...loop.zs.slice(0, si)] : undefined;
+              const widths = loop.widths && loop.widths.length * 2 === loop.pts.length ? [...loop.widths.slice(si), ...loop.widths.slice(0, si)] : undefined;
               if (k === 0) seams.push([pts[0], pts[1]]);
-              if (!zs && fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
-              const item: PathItem = { ...loop, pts, zs, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
-              wallItems.push(...(i > 0 && !vase && !zs ? splitOverhang(item, lowerSupport) : [item]));
+              if (!perPoint && fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
+              const item: PathItem = { ...loop, pts, zs, widths, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
+              wallItems.push(...(i > 0 && !vase && !perPoint ? splitOverhang(item, lowerSupport) : [item]));
             }
           }
           if (isl.thin.length) wallItems.push(...orderPaths(isl.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice() })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);

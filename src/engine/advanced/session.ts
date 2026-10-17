@@ -12,8 +12,9 @@ import type { AdvancedConfig, AdvancedReport, TechId, TechReport, ParamValue } f
 import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
 import { clearancePass, type ClearanceReport } from './clearance';
+import { difference } from '../clipper';
 
-export interface WallLoop { pts: number[]; closed: boolean; feature: FeatureType; width: number; flow: number; /** Per-point Z offsets from the layer top. */ zs?: number[] }
+export interface WallLoop { pts: number[]; closed: boolean; feature: FeatureType; width: number; flow: number; /** Per-point Z offsets from the layer top. */ zs?: number[]; /** Per-point bead widths. */ widths?: number[] }
 export interface WallResult { loops: WallLoop[][]; inner: Paths }
 export interface InfillPath extends Polyline2 { width: number; flow?: number; feature?: 'sparse_infill' | 'internal_solid_infill'; /** Width per point (variable-width beads). */ widths?: number[] }
 
@@ -21,6 +22,10 @@ export interface InfillPath extends Polyline2 { width: number; flow?: number; fe
 export interface WallCtx { walls: number; wo: number; wi: number; so: number; si: number; h: number; z: number; layer: number }
 /** Context for the infill hook. */
 export interface InfillCtx { width: number; density: number; z: number; h: number; layer: number; pattern: string }
+/** Part of a sparse region an infill technology fills (the rest goes to the next one, then the regular pattern). */
+export interface InfillClaim { paths: InfillPath[]; used: Paths }
+/** One material region of a layer cross-section. */
+export interface MaterialRegion { fil: number; paths: Paths }
 
 export interface StageCtx {
   cfg: Config;
@@ -51,6 +56,13 @@ export interface SessionCtx {
   warp?: Warp;
   /** Layer indices compiled as one continuous helix (seam passes skip them). */
   helicalLayers: Set<number>;
+  /** Layer tops and heights of the plan (sliced space), set once the slicer has planned the layers. */
+  layerZ: number[];
+  layerH: number[];
+  /** Results shared between technologies (stress field, cell designs…), keyed by name. */
+  shared: Map<string, unknown>;
+  /** Shared result computed on first use. */
+  memo<T>(key: string, make: () => T): T;
 }
 
 /** A technology implementation: any subset of the stage hooks. */
@@ -62,10 +74,16 @@ export interface TechModule {
   /** Z displacement field for curved layers: real z = z′ + dz(x, y, z′). `base` is the warp so far. */
   warp?(s: SessionCtx, base?: Warp): Warp | undefined;
   reshape?(s: SessionCtx, object: number, layer: number, slice: Paths, z: number): Paths;
+  /** Edit the material regions of one layer of an object (multi-material interfaces). */
+  regions?(s: SessionCtx, object: number, layer: number, regions: MaterialRegion[]): MaterialRegion[];
   walls?(s: SessionCtx, object: number, ex: ExPolygon, c: WallCtx): WallResult | undefined;
   /** Edit the finished wall rings of one island (any generator), ring 0 = outer wall. */
   wallsPost?(s: SessionCtx, object: number, layer: number, ex: ExPolygon, rings: WallLoop[][]): void;
-  infill?(s: SessionCtx, object: number, region: Paths, c: InfillCtx): InfillPath[] | undefined;
+  /**
+   * Infill for a sparse region: paths for the whole region, or a claim on part of it. Technologies are
+   * asked in order; `last` is set for the last one still to be asked, which should fill what is left.
+   */
+  infill?(s: SessionCtx, object: number, region: Paths, c: InfillCtx, last: boolean): InfillPath[] | InfillClaim | undefined;
   post?(s: SessionCtx, layers: LayerOps[], c: StageCtx): void;
   finalize?(s: SessionCtx, layers: LayerOps[], c: StageCtx): void;
 }
@@ -88,8 +106,11 @@ export interface AdvancedSession {
   plugin: PluginSession;
   /** Wall generator override for one island (first technology that answers wins). */
   walls?: (object: number, ex: ExPolygon, c: WallCtx) => WallResult | undefined;
-  /** Infill override for one sparse region. */
-  infill?: (object: number, region: Paths, c: InfillCtx) => InfillPath[] | undefined;
+  /** Infill for one sparse region: paths, and what is left for the regular pattern. */
+  infill?: (object: number, region: Paths, c: InfillCtx) => { paths: InfillPath[]; rest: Paths } | undefined;
+  regions?: (object: number, layer: number, regions: MaterialRegion[]) => MaterialRegion[];
+  /** The slicer's layer plan (before walls and infill). */
+  setLayers(z: number[], h: number[]): void;
   wallsPost?: (object: number, layer: number, ex: ExPolygon, rings: WallLoop[][]) => void;
   post(layers: LayerOps[], c: StageCtx): void;
   finalize(layers: LayerOps[], c: StageCtx): void;
@@ -107,6 +128,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
   const cells = RESOLUTION_CELLS[adv.resolution ?? 'normal'];
   const parts = meshes.map((m) => analyzePart(m as IndexedMesh, {
     cells, shell, lineWidth: lw('line_width'), layerHeight: num('layer_height') || 0.2, overhangDeg: num('support_threshold_angle') || 30, color: m.paint?.color,
+    advPaint: m.paint?.adv, load: adv.load,
   }));
   const usedFils = new Set(meshes.map((m) => m.filament ?? 0));
   for (const m of meshes) m.paint?.color?.forEach((c) => { if (c) usedFils.add(c - 1); });
@@ -125,6 +147,12 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     pnum(id, key) { return Number(techs.get(id)!.params[key]); },
     nonPlanar: false,
     helicalLayers: new Set(),
+    layerZ: [], layerH: [],
+    shared: new Map(),
+    memo<T>(key: string, make: () => T): T {
+      if (!ctx.shared.has(key)) ctx.shared.set(key, make());
+      return ctx.shared.get(key) as T;
+    },
   };
   const active = MODULES.filter((m) => ctx.on(m.id));
   const timed = <T>(id: TechId, fn: () => T): T => {
@@ -144,23 +172,38 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
   const fillers = active.filter((m) => m.infill);
   const wallPosts = active.filter((m) => m.wallsPost);
   const plugin: PluginSession = {
-    reshape: reshapers.length ? (o, i, sl) => reshapers.reduce((acc, m) => m.reshape!(ctx, o, i, acc, NaN), sl) : undefined,
+    reshape: reshapers.length ? (o, i, sl) => reshapers.reduce((acc, m) => timed(m.id, () => m.reshape!(ctx, o, i, acc, ctx.layerZ[i] ?? NaN)), sl) : undefined,
   };
   const walls = wallers.length ? (o: number, ex: ExPolygon, c: WallCtx) => {
     for (const m of wallers) { const r = timed(m.id, () => m.walls!(ctx, o, ex, c)); if (r) return r; }
     return undefined;
   } : undefined;
+  // zone routing of the sparse infill: each technology fills the part of the region it is made for
+  // (stress paths where the part is loaded, quasicrystal cores…) and passes on the rest
   const infill = fillers.length ? (o: number, region: Paths, c: InfillCtx) => {
-    for (const m of fillers) { const r = timed(m.id, () => m.infill!(ctx, o, region, c)); if (r) return r; }
-    return undefined;
+    const paths: InfillPath[] = [];
+    let rest = region, any = false;
+    for (let k = 0; k < fillers.length && rest.length; k++) {
+      const m = fillers[k];
+      const r = timed(m.id, () => m.infill!(ctx, o, rest, c, k === fillers.length - 1));
+      if (!r) continue;
+      any = true;
+      if (Array.isArray(r)) { paths.push(...r); rest = []; break; }
+      paths.push(...r.paths);
+      if (r.used.length) rest = difference(rest, r.used);
+    }
+    return any ? { paths, rest } : undefined;
   } : undefined;
+  const regioners = active.filter((m) => m.regions);
+  const regions = regioners.length ? (o: number, i: number, regs: MaterialRegion[]) => regioners.reduce((acc, m) => timed(m.id, () => m.regions!(ctx, o, i, acc)), regs) : undefined;
 
   const wallsPost = wallPosts.length ? (o: number, i: number, ex: ExPolygon, rings: WallLoop[][]) => {
     for (const m of wallPosts) timed(m.id, () => m.wallsPost!(ctx, o, i, ex, rings));
   } : undefined;
 
   return {
-    ctx, meshes: sliceMeshes, warp, plugin, walls, infill, wallsPost,
+    ctx, meshes: sliceMeshes, warp, plugin, walls, infill, wallsPost, regions,
+    setLayers(z, h) { ctx.layerZ = z; ctx.layerH = h; },
     post(layers, c) {
       // curved layers back to real space first, then every geometry pass, then the head-clearance check
       if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
