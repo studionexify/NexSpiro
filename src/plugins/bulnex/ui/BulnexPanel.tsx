@@ -209,7 +209,7 @@ function Monitor({ s }: { s: Saved }) {
           : <button className="btn-primary btn-small" disabled={!online} title={online ? '' : 'Connect the printer in the Device tab'} onClick={() => void start()}>Start</button>}
       </div>
       <p className="mx-muted">An on-device model learns what this print looks like and alerts your phone on spaghetti, a detached part or a plate that is not clear after a push. It only alerts — you decide whether to stop.</p>
-      {!cams.length ? <p className="mx-muted px-warn">Add your A1 in the Device tab (LAN (access code), desktop app) to use the camera.</p> : (
+      {!cams.length ? <p className="mx-muted px-warn">Add your A1 in the Device tab (LAN connection, desktop app) to use the camera.</p> : (
         <label className="mx-field">Printer
           <select className="select" value={dev?.id ?? ''} disabled={m.running} onChange={(e) => update({ deviceId: e.target.value })}>
             {cams.map((d) => <option key={d.id} value={d.id}>{d.name}{status[d.id]?.state && status[d.id].state !== 'offline' ? '' : ' (offline)'}</option>)}
