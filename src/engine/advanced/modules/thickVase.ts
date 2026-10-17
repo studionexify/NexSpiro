@@ -3,7 +3,7 @@
 // layer prints its loops in the same canonical order (outer walls by size, inner walls, then infill),
 // so every point sits at the same fraction of the helix turn layer after layer. Hops that stay inside
 // the part lose their retraction, and the infill is a connected spiral.
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import { spiralFill } from '../eulerian';
 import type { SessionCtx, TechModule } from '../session';
 import type { PartAnalysis } from '../analysis';
@@ -59,11 +59,7 @@ export const thickVase: TechModule = {
       if (li === 0 || !layerIsHelical(s, L.z)) return;
       // only layers made of plain moves, retractions, acceleration changes and one object's label pair
       // (Klipper EXCLUDE_OBJECT / Marlin M486) can be re-ordered
-      // raw commands before the first extrusion (layer change, timelapse) stay at the start of the layer
-      const firstExtr = L.ops.findIndex((op) => op.k === 'move' && !op.travel && op.e > 0);
-      const isRaw = (op: Op): op is Extract<Op, { k: 'raw' }> => op.k === 'raw';
-      const lead = firstExtr < 0 ? [] : L.ops.slice(0, firstExtr).filter((op) => isRaw(op) && !/^EXCLUDE_OBJECT_START|^M486 S\d/.test(op.text)) as Extract<Op, { k: 'raw' }>[];
-      const raws = L.ops.filter((op): op is Extract<Op, { k: 'raw' }> => isRaw(op) && !lead.includes(op));
+      const raws = L.ops.filter((op): op is Extract<Op, { k: 'raw' }> => op.k === 'raw');
       const isStart = (t: string) => /^EXCLUDE_OBJECT_START|^M486 S\d/.test(t), isEnd = (t: string) => /^EXCLUDE_OBJECT_END|^M486 S-1/.test(t);
       const labels = raws.length === 2 && isStart(raws[0].text) && isEnd(raws[1].text);
       if ((raws.length && !labels) || L.ops.some((op) => op.k === 'tool' || (op.k === 'move' && !op.travel && SKIN.has(op.feature)))) return;
@@ -73,7 +69,6 @@ export const thickVase: TechModule = {
       let accel: Op | null = null;
       for (const op of L.ops) {
         if (op.k === 'accel') { accel = op; continue; }
-        if (op.k === 'raw' && lead.includes(op)) { cur = null; if (op.resetPos) { px = NaN; py = NaN; } continue; }
         if (op.k !== 'move') { cur = null; continue; }
         if (op.travel || op.e <= 0) { cur = null; px = op.x; py = op.y; continue; }
         if (!cur || cur.moves[cur.moves.length - 1].feature !== op.feature) {
@@ -96,7 +91,7 @@ export const thickVase: TechModule = {
       // 2) canonical order: outer walls (largest loop first), inner walls (largest first), infill by angle
       pieces.sort((a, b) => a.rank - b.rank || (a.rank < 2 ? b.area - a.area : a.angle - b.angle));
       // 3) rebuild: hops inside the part travel without retraction
-      const ops: Op[] = [...lead];
+      const ops: Op[] = [];
       if (labels) ops.push(raws[0]);
       if (accel) ops.push(accel);
       let qx = NaN, qy = NaN;
@@ -105,10 +100,7 @@ export const thickVase: TechModule = {
       // where the nozzle really is when the layer starts: the previous layer's last move
       const prev = layers[li - 1]?.ops;
       for (let i = (prev?.length ?? 0) - 1; i >= 0; i--) { const m = prev![i]; if (m.k === 'move') { qx = m.x; qy = m.y; break; } }
-      // a leading command that parks the head (timelapse) leaves the position unknown: travel to the first piece
-      let parked = lead.some((op) => op.resetPos);
       for (const p of pieces) {
-        if (parked) { ops.push({ k: 'move', x: p.x0, y: p.y0, z: L.z, e: 0, f: travelF, feature: 'travel', w: 0, h: L.h, travel: true }); qx = p.x0; qy = p.y0; parked = false; }
         const d = Math.hypot(p.x0 - qx, p.y0 - qy);
         if (d > 1e-4) {
           const inside = d <= 3 * w || (d <= 20 && travelInside(s.parts, qx, qy, p.x0, p.y0, L.z - L.h / 2, w * 0.3));

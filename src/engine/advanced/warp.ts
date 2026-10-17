@@ -1,7 +1,7 @@
 // Curved layers by deform–slice–undeform: a displacement field d(x, y, z′) maps the flat layers of
 // the warped space onto curved layers in real space, z = z′ + d. Meshes are warped into z′, sliced
 // with the ordinary planar slicer, and every move is mapped back here (flow scaled by ∂z/∂z′).
-import type { LayerOps, Op } from '../gcode';
+import type { LayerOps, Op } from './classic/gcode';
 import type { Warp } from './session';
 import type { TechId } from './types';
 

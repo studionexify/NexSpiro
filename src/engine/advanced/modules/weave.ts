@@ -1,6 +1,6 @@
 // #7 Sinusoidal Z-weaving & Z-pinning and #19 topological knot braiding: interlocking between layers
 // and between neighbouring walls.
-import type { Op } from '../../gcode';
+import type { Op } from '../classic/gcode';
 import { moveLike, type Move } from '../runs';
 import type { TechModule, WallLoop } from '../session';
 import type { PartAnalysis } from '../analysis';
