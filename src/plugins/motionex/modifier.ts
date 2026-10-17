@@ -136,8 +136,21 @@ export function placedBrush(app: MotionApplication, found: MotionBrush): MotionB
 }
 
 export type Weight = (x: number, y: number, z: number, slope: number) => number;
-/** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
-export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
+/**
+ * Returns the repeat count to use for a loop centred at (x, y). A loop's count sticks from layer to layer
+ * so the motion stacks straight, until `fits` says it no longer suits the loop (it shrank or grew too much).
+ */
+export type RepeatLock = (cx: number, cy: number, suggested: number, fits: (n: number) => boolean) => number;
+/** Sticky repeat count per loop position, re-picked when the loop outgrows it. */
+export function makeRepeatLock(m: Map<string, number>, prefix = ""): RepeatLock {
+  return (x, y, suggested, fits) => {
+    const key = `${prefix}${Math.round(x / 2)}|${Math.round(y / 2)}`;
+    const n = m.get(key);
+    if (n !== undefined && fits(n)) return n;
+    m.set(key, suggested);
+    return suggested;
+  };
+}
 
 /** One motion taking part in a path: how strongly it applies where, and how it combines with earlier ones. */
 export interface PathLayer {
@@ -162,7 +175,10 @@ function pathParam(samples: Sample[], closed: boolean, b: MotionBrush, repeats?:
   for (const q of samples) { cx += q.x; cy += q.y; }
   cx /= samples.length; cy /= samples.length;
   const suggested = Math.max(1, Math.round(L / b.period_mm));
-  const n = repeats ? repeats(cx, cy, suggested) : suggested;
+  // A locked count may drift from the brush's own period as the loop shrinks (a pyramid's tip); past
+  // ±30 % it is re-picked, otherwise the base's count crammed into the tip turns the motion to noise.
+  const fits = (n: number) => { const r = L / n / b.period_mm; return r > 0.7 && r < 1.3; };
+  const n = repeats ? repeats(cx, cy, suggested, fits) : suggested;
   const period = L / n;
   if (repeats && b.repeat_mode === "stretch") {
     // "Fit evenly": placed by angle round the loop, so it stacks straight up when the loop grows or shrinks.
@@ -405,11 +421,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
       return Math.min(a, b);
     };
     const locked = new Map<string, number>();
-    const lockFor = (feature: string): RepeatLock => (x, y, suggested) => {
-      const key = `${feature}|${Math.round(x / 2)}|${Math.round(y / 2)}`;
-      if (!locked.has(key)) locked.set(key, suggested);
-      return locked.get(key)!;
-    };
+    const lockFor = (feature: string): RepeatLock => makeRepeatLock(locked, `${feature}|`);
     prepared.push({ app, brush, faces, zWeight, lockFor });
   }
   for (const layer of layers) {

@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { applyBrushToPath, brushAt, composePath, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
+import { applyBrushToPath, brushAt, composePath, makeRepeatLock, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
 import { PRESETS } from "../../src/plugins/motionex/presets";
 import type { Toolpath } from "../../src/plugins/motionex/core/types";
 import { profiles } from "./helpers";
@@ -126,4 +126,19 @@ test("corner rounding softens a square tooth's corners", () => {
   const crisp = bend({ ...teeth, period_mm: 4, amplitude: 0.5 }), round = bend({ ...teeth, period_mm: 4, amplitude: 0.5, round_mm: 0.3 });
   // a kink of slope change Δ filtered by a triangle of half-width r bends at most Δ/r
   assert.ok(round < crisp * 0.6, `${round} vs ${crisp}`);
+});
+
+test("repeat count re-picks as a pyramid shrinks, so the tip keeps the motion's own period", () => {
+  const lock = makeRepeatLock(new Map());
+  const b = { ...sine, amplitude: 0.3, period_mm: 4 };
+  const peaks = (h: number) => {
+    const out = composePath(square(h), [{ brush: b, weight: () => 1, blend: "add", repeats: lock, tip: { mode: "full", share: 1 } }], profiles(), DEFAULT_OPTIONS, () => {});
+    const base = resample(square(h).points, DEFAULT_OPTIONS.resampleStep);
+    const d = out.points.map((p, i) => Math.hypot(p.x - base[i].x, p.y - base[i].y));
+    let n = 0; for (let i = 1; i < d.length - 1; i++) if (d[i] > d[i - 1] && d[i] >= d[i + 1] && d[i] > 0.2) n++;
+    return n;
+  };
+  for (let h = 40; h >= 8; h -= 1) peaks(h);
+  // 32 mm perimeter at 4 mm: about 8 repeats (16 peaks), not the 40 locked in at the base.
+  assert.ok(peaks(8) <= 24, `got ${peaks(8)}`);
 });

@@ -4,7 +4,7 @@
 import { sliceMesh } from '../../engine/slice';
 import { SCALE } from '../../engine/clipper';
 import type { IndexedMesh } from '../../engine/mesh';
-import { composePath, resample, type PathLayer, type RepeatLock, type Weight } from './modifier';
+import { composePath, makeRepeatLock, resample, type PathLayer, type RepeatLock, type Weight } from './modifier';
 import type { PrintProfiles } from './core/profiles';
 import type { Toolpath } from './core/types';
 import type { MotionApplication, MotionBrush } from './model';
@@ -112,11 +112,9 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
   };
   const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
   const locks = new Map<string, Map<string, number>>();
-  const lockFor = (id: string): RepeatLock => (x, y, suggested) => {
+  const lockFor = (id: string): RepeatLock => {
     let m = locks.get(id); if (!m) locks.set(id, (m = new Map()));
-    const key = `${Math.round(x / 2)}|${Math.round(y / 2)}`;
-    if (!m.has(key)) m.set(key, suggested);
-    return m.get(key)!;
+    return makeRepeatLock(m);
   };
   for (const o of objects) {
     // which motions touch this object, and which of its triangles each one covers
