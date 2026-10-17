@@ -29,7 +29,25 @@ export interface BulnexConfig {
   minHeight: number;
   /** Override the material's contact-area limit, mm² (0 = material default). */
   maxContactArea: number;
+  /** Calibration print: the release ladder, every block pushed on its own with a pause after each. */
+  calibration?: boolean;
 }
+
+/**
+ * Release ladder: five 15 mm blocks of growing footprint along the front of the plate. Each is pushed
+ * on its own (smallest first) so the largest footprint that still releases can be read off directly.
+ */
+export const CALIBRATION_HEIGHT = 15;
+export const CALIBRATION_FRONT_Y = 10;
+export const CALIBRATION_BLOCKS = [
+  { label: 'A', side: 20, x: 22 },
+  { label: 'B', side: 30, x: 55 },
+  { label: 'C', side: 40, x: 98 },
+  { label: 'D', side: 50, x: 151 },
+  { label: 'E', side: 60, x: 214 },
+];
+/** Safety factor applied to the largest block that released. */
+export const CALIBRATION_MARGIN = 0.7;
 
 export const DEFAULT_BULNEX: BulnexConfig = {
   cycles: 10, pushHeightPct: 0.3, passes: 2, pushSpeed: 20, currentFraction: 0.5,
@@ -103,6 +121,11 @@ export function checkParts(parts: PartGeometry[], cfg: BulnexConfig, filamentTyp
   const warn = (text: string) => out.push({ level: 'warn', text });
   if (!parts.length) { warn('No parts on the plate.'); return out; }
   const mat = materialOf(filamentType);
+  if (cfg.calibration) {
+    if (!mat) warn(`${filamentType || 'This filament'} is not supported by Bulnex (PLA and PETG families only).`);
+    out.push({ level: 'ok', text: `Calibration: ${parts.length} blocks, each pushed on its own (smallest first) with a pause after each push.` });
+    return out;
+  }
   if (!mat) warn(`${filamentType || 'This filament'} is not supported by Bulnex (PLA and PETG families only): it may not release from the plate.`);
   const names = new Set(parts.map((p) => p.name.replace(/\s*\(\d+\)$/, '').replace(/\s*\(copy\)$/, '')));
   if (names.size > 1) warn('Bulnex prints one design per row; the plate holds different designs.');

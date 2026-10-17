@@ -6,15 +6,17 @@ import { plateObjects } from '../../../state/slicing';
 import { initDevices, useDevices } from '../../../state/devices';
 import { printerById } from '../../../profiles/printers';
 import { filamentById } from '../../../profiles/filaments';
-import { DEFAULT_BULNEX, materialOf, pushZFor, type BulnexConfig, type BulnexReport } from '../model';
+import { CALIBRATION_BLOCKS, CALIBRATION_MARGIN, DEFAULT_BULNEX, materialOf, pushZFor, type BulnexConfig, type BulnexReport } from '../model';
 import { arrangeRow, suggestRow } from '../arrange';
+import { addCalibrationPlate } from '../calibration';
 import { DEFAULT_NOTIFY, GRID_H, GRID_W, learnEmptyNow, monitorState, monitorSubscribe, notify, startMonitor, stopMonitor, type NotifySettings } from '../monitor';
 import { DEFAULT_VISION } from '../vision';
 
 const KEY = 'nexspiro.bulnex.v1';
-interface Saved { cfg: BulnexConfig; notify: NotifySettings; gap: number; rotate: boolean; referenceCycles: number; sensitivity: number; deviceId: string }
+interface CalibResult { t: number; filament: string; releaseTemp: number; current: number; passes: number; released: string; limit: number }
+interface Saved { calib: CalibResult[]; cfg: BulnexConfig; notify: NotifySettings; gap: number; rotate: boolean; referenceCycles: number; sensitivity: number; deviceId: string }
 const load = (): Saved => {
-  const d: Saved = { cfg: { ...DEFAULT_BULNEX }, notify: { ...DEFAULT_NOTIFY }, gap: 3, rotate: true, referenceCycles: 1, sensitivity: 5, deviceId: '' };
+  const d: Saved = { calib: [], cfg: { ...DEFAULT_BULNEX }, notify: { ...DEFAULT_NOTIFY }, gap: 3, rotate: true, referenceCycles: 1, sensitivity: 5, deviceId: '' };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (s) return { ...d, ...s, cfg: { ...d.cfg, ...s.cfg }, notify: { ...d.notify, ...s.notify } };
@@ -69,7 +71,7 @@ export function BulnexPanel() {
       </div>
       {!isA1 && <p className="mx-muted px-warn">Bulnex is tuned for the Bambu Lab A1 (bed slinger, front drop). On the {printer.vendor} {printer.model} the push moves and motor currents may not suit the machine.</p>}
 
-      <section className="mx-card">
+      {!c.calibration && <section className="mx-card">
         <div className="mx-card-title">Row</div>
         {!tpl ? <p className="mx-muted">Add a part to the plate.</p> : <>
           <p className="mx-muted">Parts line up along Y at the plate centre; the head sweeps them off the front edge. Template: <b>{tpl.name}</b>.</p>
@@ -81,7 +83,9 @@ export function BulnexPanel() {
             <button className="btn-secondary btn-small" onClick={() => arrangeRow(tpl.id, 1, s.gap, s.rotate)}>Single part</button>
           </div>
         </>}
-      </section>
+      </section>}
+
+      <Calibration s={s} filament={filamentById(st.filaments[0]?.presetId ?? 'generic-pla').name} />
 
       <section className="mx-card">
         <div className="mx-card-title">Cycles</div>
@@ -110,13 +114,53 @@ export function BulnexPanel() {
         <div className="mx-card-title">Checks</div>
         {!rep ? <p className="mx-muted">Slice to check the parts. Problems are warnings — the file is still written.</p> : <>
           {rep.checks.map((k, i) => <p key={i} className={`mx-muted${k.level === 'warn' ? ' px-warn' : ''}`}>{k.level === 'warn' ? '⚠ ' : '✓ '}{k.text}</p>)}
-          {rep.row && <p className="mx-muted">Push line X {rep.row.x.toFixed(1)} mm, from Y {rep.row.startY.toFixed(1)} mm to the front edge at Z {rep.row.z.toFixed(1)} mm.</p>}
-          {cycleS > 0 && <p className="mx-muted">≈ {fmtH(cycleS)} per cycle · {rep.cycles} cycles ≈ <b>{fmtH(cycleS * rep.cycles)}</b> · {rep.cycles * (rep.row?.parts ?? 0)} parts.</p>}
+          {rep.row && !c.calibration && <p className="mx-muted">Push line X {rep.row.x.toFixed(1)} mm, from Y {rep.row.startY.toFixed(1)} mm to the front edge at Z {rep.row.z.toFixed(1)} mm.</p>}
+          {cycleS > 0 && !c.calibration && <p className="mx-muted">≈ {fmtH(cycleS)} per cycle · {rep.cycles} cycles ≈ <b>{fmtH(cycleS * rep.cycles)}</b> · {rep.cycles * (rep.row?.parts ?? 0)} parts.</p>}
         </>}
       </section>
 
       <Monitor s={s} />
     </div>
+  );
+}
+
+function Calibration({ s, filament }: { s: Saved; filament: string }) {
+  const c = s.cfg;
+  const [released, setReleased] = useState('');
+  const on = !!c.calibration;
+  const set = (patch: Partial<BulnexConfig>) => update({ cfg: { ...c, ...patch } }, true);
+  const apply = () => {
+    const b = CALIBRATION_BLOCKS.find((x) => x.label === released);
+    const limit = b ? Math.round((b.side * b.side * CALIBRATION_MARGIN) / 50) * 50 : 0;
+    const r: CalibResult = { t: Date.now(), filament, releaseTemp: c.releaseBedTemp, current: c.currentFraction, passes: c.passes, released: released || 'none', limit };
+    update({ calib: [r, ...s.calib].slice(0, 20), cfg: { ...c, calibration: false, maxContactArea: limit || c.maxContactArea } }, true);
+    setReleased('');
+  };
+  return (
+    <section className="mx-card">
+      <div className="mx-card-title">Calibration · release ladder</div>
+      <p className="mx-muted">Five 15 mm blocks (400 → 3600 mm²) on textured PEI. After printing, the bed cools to the release temperature and each block is pushed on its own, smallest first, with the push settings below. The printer pauses after each push: note whether the block fell off, then resume.</p>
+      {!on ? (
+        <button className="btn-primary btn-small" onClick={() => { addCalibrationPlate(); set({ calibration: true }); }}>Create calibration plate</button>
+      ) : <>
+        <p className="mx-muted px-warn">Calibration mode is on: the next slice writes the ladder test, not production cycles. Slice and print this plate.</p>
+        <label className="mx-field">Largest block that fell off cleanly
+          <select className="select" value={released} onChange={(e) => setReleased(e.target.value)}>
+            <option value="">None released</option>
+            {CALIBRATION_BLOCKS.map((b) => <option key={b.label} value={b.label}>{b.label} — {b.side}×{b.side} mm ({b.side * b.side} mm²)</option>)}
+          </select>
+        </label>
+        <p className="mx-muted">{released ? `Max contact area becomes ${Math.round((CALIBRATION_BLOCKS.find((b) => b.label === released)!.side ** 2 * CALIBRATION_MARGIN) / 50) * 50} mm² (70 % of block ${released}).` : 'If none released: lower the release temperature or add cool-down time, then test again.'} A block that moved but stuck counts as not released — try 2 passes before raising the current.</p>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn-primary btn-small" onClick={apply}>Save result</button>
+          <button className="btn-secondary btn-small" onClick={() => set({ calibration: false })}>Cancel calibration</button>
+        </div>
+      </>}
+      {s.calib.length > 0 && <table style={{ width: '100%', fontSize: 11, marginTop: 6 }}>
+        <thead><tr><th align="left">Filament</th><th>Bed</th><th>Current</th><th>Passes</th><th>Released</th><th>Limit</th></tr></thead>
+        <tbody>{s.calib.map((r) => <tr key={r.t}><td>{r.filament}</td><td align="center">{r.releaseTemp}°</td><td align="center">{Math.round(r.current * 100)}%</td><td align="center">{r.passes}</td><td align="center">{r.released}</td><td align="center">{r.limit ? `${r.limit} mm²` : '—'}</td></tr>)}</tbody>
+      </table>}
+    </section>
   );
 }
 

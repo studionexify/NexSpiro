@@ -257,7 +257,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     layerRes.push({ index: li, z: L.z, height: L.h, moveStart, moveEnd: feats.length, time: layerTimes[li] });
   });
 
-  if (bodyTransform) out.push(...bodyTransform(out.splice(bodyStart)));
+  if (bodyTransform) {
+    // large programs (repeated prints): no spread — it overflows the call stack
+    const body = bodyTransform(out.splice(bodyStart));
+    for (const l of body) out.push(l);
+  }
   out.push('M73 P100 R0');
   out.push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
 

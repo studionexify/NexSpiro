@@ -4,7 +4,7 @@
 import type { EnginePlugin, PluginSession } from '../api';
 import { areaTotal, bounds, pointIn, SCALE } from '../../engine/clipper';
 import {
-  A1_CURRENT, checkParts, cycleOverhead, planRow, PUSH_END_Y,
+  A1_CURRENT, APPROACH_GAP, checkParts, cycleOverhead, planRow, PUSH_END_Y, pushZFor,
   type BulnexConfig, type BulnexReport, type PartGeometry, type PushRow,
 } from './model';
 
@@ -48,6 +48,31 @@ export function ejectBlock(cfg: BulnexConfig, row: PushRow, opts: { cycle: numbe
     `G1 Z${f1(opts.safeZ)} F900`, `G1 E${f1(opts.retract)} F1800`, 'G92 E0',
     `; ===== BULNEX cycle ${opts.cycle + 1} of ${cfg.cycles} =====`,
   );
+  return out;
+}
+
+/** Calibration: cool once, then push every block on its own (smallest first) and pause so the result can be noted. */
+export function calibrationBlock(cfg: BulnexConfig, parts: PartGeometry[], opts: { safeZ: number; retract: number; pause: string }): string[] {
+  const k = Math.max(0.2, Math.min(1, cfg.currentFraction));
+  const v = Math.round(Math.max(1, cfg.pushSpeed) * 60);
+  const out = [
+    '; ===== BULNEX calibration: release ladder =====',
+    `G1 E-${f1(opts.retract)} F1800`, 'G91', 'G1 Z2 F900', 'G90', `G1 Z${f1(opts.safeZ)} F900`,
+    `M140 S${Math.round(cfg.releaseBedTemp)} ; cool the bed to release the parts`, 'M104 S0',
+    cfg.fanDuringCool ? 'M106 S255' : 'M107', 'M400',
+  ];
+  let wait = Math.round(cfg.coolWaitMin * 60);
+  while (wait > 0) { const s = Math.min(60, wait); out.push(`G4 S${s}`); wait -= s; }
+  out.push('M107');
+  [...parts].sort((a, b) => a.contactArea - b.contactArea).forEach((p, i) => {
+    const x = (p.minX + p.maxX) / 2, y0 = p.maxY + APPROACH_GAP, z = pushZFor(p.height, cfg.pushHeightPct);
+    out.push(`; block ${i + 1}: ${p.name}, ${Math.round(p.contactArea)} mm²`);
+    out.push(`M17 X${f1(A1_CURRENT.x * k)} Y${f1(A1_CURRENT.y * k)} Z${f1(A1_CURRENT.z)}`);
+    for (let n = 0; n < Math.max(1, cfg.passes); n++) out.push(`G1 Z${f1(opts.safeZ)} F900`, `G1 X${f1(x)} Y${f1(y0)} F6000`, `G1 Z${f1(z)} F600`, `G1 Y${f1(PUSH_END_Y)} F${v}`, 'M400');
+    out.push(`M17 X${A1_CURRENT.x} Y${A1_CURRENT.y} Z${A1_CURRENT.z}`, `G1 Z${f1(opts.safeZ)} F900`, 'G1 X128 Y200 F6000 ; out of the camera view');
+    out.push(`; note whether ${p.name} released, then resume`, opts.pause);
+  });
+  out.push('; ===== BULNEX calibration done =====');
   return out;
 }
 
@@ -101,9 +126,10 @@ export const bulnexEngine: EnginePlugin<BulnexConfig, BulnexReport> = {
     const tallest = Math.max(...s.parts.map((p) => p.height));
     const safeZ = Math.min(num('bed_z', 256), tallest + 10);
     const base = { safeZ, bedTemp: num('bed_temperature_initial_layer', 60), nozzleTemp: num('nozzle_temperature_initial_layer', 220), retract: num('retraction_length', 0.8) };
+    if (config.calibration) return body.concat(calibrationBlock(config, s.parts, { safeZ, retract: base.retract, pause: String(cfg.machine_pause_gcode || 'M400 U1') }));
     const out: string[] = [`; ===== BULNEX cycle 1 of ${config.cycles} =====`];
     for (let c = 1; c <= config.cycles; c++) {
-      out.push(...body);
+      for (const l of body) out.push(l);
       out.push(...ejectBlock(config, s.row, { ...base, cycle: c, last: c === config.cycles }));
     }
     return out;

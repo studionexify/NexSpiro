@@ -61,3 +61,29 @@ describe('bulnex g-code', () => {
     expect(out.warnings.join('\n')).toMatch(/nozzle would pass through/);
   });
 });
+
+describe('bulnex calibration', () => {
+  it('pushes each ladder block on its own, smallest first, with a pause after each', async () => {
+    const { CALIBRATION_BLOCKS, CALIBRATION_FRONT_Y } = await import('../../src/plugins/bulnex/model');
+    const blocks = CALIBRATION_BLOCKS.map((b) => mesh(box(b.x - b.side / 2, CALIBRATION_FRONT_Y, 0, b.side, b.side, 15), `Ladder ${b.label}`));
+    const out = slice(blocks, cfgFor(), () => {}, { plugins: { bulnex: { ...DEFAULT_BULNEX, calibration: true, passes: 1 } } });
+    const g = out.gcode;
+    expect(g.match(/BULNEX eject/g)).toBeNull();
+    const order = [...g.matchAll(/^; block \d: (Ladder \w)/gm)].map((m) => m[1]);
+    expect(order).toEqual(['Ladder A', 'Ladder B', 'Ladder C', 'Ladder D', 'Ladder E']);
+    expect(g.match(/^M400 U1/gm)?.length).toBe(5);
+    expect(g).toMatch(/G1 X214 Y78 F6000/); // block E: centre X, 8 mm behind its back edge
+    expect(g).toMatch(/G1 Z4\.5 F600/);
+    expect(out.warnings.join('\n')).not.toMatch(/different designs|not in line/);
+  });
+});
+
+describe('bulnex large programs', () => {
+  it('writes a full row × 10 cycles without overflowing the stack', () => {
+    const ms = Array.from({ length: 10 }, (_, k) => mesh(box(118, 3 + k * 23, 0, 20, 20, 15), k ? `A (${k + 1})` : 'A'));
+    const out = slice(ms, cfgFor(), () => {}, { plugins: { bulnex: DEFAULT_BULNEX } });
+    expect(out.gcode.match(/BULNEX eject/g)?.length).toBe(10);
+    expect((out.pluginReports?.bulnex as any).row.parts).toBe(10);
+    expect(out.warnings).toEqual([]);
+  });
+});
