@@ -8,6 +8,7 @@ import { MotionStudio } from './motionex/ui/MotionStudio';
 import { toConfig } from './motionex';
 import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patternex/ui/PatternexPanel';
 import { patternexPreview } from './patternex/ui/preview';
+import { bulnexConfig, BulnexPanel } from './bulnex/ui/BulnexPanel';
 
 export interface UiPlugin {
   id: string;
@@ -49,6 +50,12 @@ export const PLUGINS: UiPlugin[] = [
     Panel: PatternexPanel,
     sliceConfig: () => patternexConfig(),
     preview: () => patternexPreview(px),
+  },
+  {
+    id: 'bulnex', name: 'Bulnex', badge: 'B',
+    description: 'Bulk production: print one part (or a row of copies) again and again, pushing the parts off the plate between prints. Camera monitor with phone alerts.',
+    Panel: BulnexPanel,
+    sliceConfig: () => bulnexConfig(),
   },
 ];
 

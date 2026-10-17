@@ -1,6 +1,7 @@
 // Nexspiro plugin API.
 // A plugin can (1) add material regions before walls are generated, (2) shape each filament change,
-// (3) change finished toolpaths (post-toolpath, pre-G-code) and (4) add a panel to the right dock.
+// (3) change finished toolpaths (post-toolpath, pre-G-code), (4) rewrite the program body (e.g. repeat it)
+// and (5) add a panel to the right dock.
 // Nexspiro always writes the G-code: plugins only add regions and edit the move list that Nexspiro then emits.
 import type { Config } from '../profiles/settings';
 import type { LayerOps } from '../engine/gcode';
@@ -93,6 +94,11 @@ export interface EnginePlugin<C = unknown, R = unknown> {
   prepare?(config: C, ctx: PrepareContext): PluginSession | undefined;
   /** Edits the ordered move list in place. Returns a report for the UI (plain data). */
   postToolpath(layers: LayerOps[], config: C, ctx: PluginContext): R;
+  /**
+   * Whole-program pass: rewrite the G-code lines between the start and end macros (e.g. repeat the
+   * print). Runs after every plugin's postToolpath, in plugin order.
+   */
+  programBody?(body: string[], config: C, ctx: PluginContext): string[];
   /** Comment lines for the G-code header. */
   gcodeHeader?(config: C): string[];
 }

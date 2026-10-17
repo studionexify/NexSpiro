@@ -53,6 +53,7 @@
 | --- | --- |
 | **Motionex** | Waves, loops, dots and textures on walls, with a print-head collision check. |
 | **Patternex** | SVG or built-in patterns (stripes, checker, dots, hex) projected onto the model (planar or wrapped), a filament per colour region — AMS tool changes or manual swaps — with full / reduced / no purge, a movable change point for deliberate colour bleed, and a pre-export report. See `docs/patternex/`. |
+| **Bulnex** | Bulk production (tuned for the Bambu Lab A1): one G-code with N cycles — print, cool the bed to a release temperature, sweep the row off the front edge at a % of the part height with reduced motor current and user-set passes, re-heat, repeat; homing, levelling and purge run once. Row auto-arrange with rotation and parts-per-row suggestion, height / contact-area / push-line checks (warn and proceed), and a camera monitor whose on-device model learns the print and the empty plate, sending phone alerts via ntfy. |
 
 > Not covered yet: H2D dual-nozzle, Creality CFS / Anycubic ACE multi-colour, X1/H2 camera (RTSPS — open the shown URL in VLC). Profiles beyond the original four printers use generic start G-code — check the first print.
 

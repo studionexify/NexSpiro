@@ -37,6 +37,9 @@ export interface DeviceHandle {
   camera(cb: (url: string) => void): Promise<(() => void) | null>;
 }
 
+/** Camera viewers per device: the stream stays on until the last one (Device page, Bulnex monitor) stops. */
+const cameraUsers = new Map<string, number>();
+
 /** Desktop: connection lives in the main process. */
 function ipcHandle(d: SavedDevice, b: DeviceBridge, onStatus: (s: PrinterStatus) => void): DeviceHandle {
   const call = (m: string, ...a: unknown[]) => b.call(d.id, m, a);
@@ -68,9 +71,20 @@ function ipcHandle(d: SavedDevice, b: DeviceBridge, onStatus: (s: PrinterStatus)
         last = URL.createObjectURL(new Blob([jpg], { type: 'image/jpeg' }));
         cb(last);
       });
-      const ok = await b.camera(d.id, true);
+      const users = cameraUsers.get(d.id) ?? 0;
+      const ok = users > 0 || await b.camera(d.id, true);
       if (!ok) { off(); return null; }
-      return () => { off(); void b.camera(d.id, false); if (last) URL.revokeObjectURL(last); };
+      cameraUsers.set(d.id, users + 1);
+      let stopped = false;
+      return () => {
+        if (stopped) return;
+        stopped = true;
+        off();
+        const left = (cameraUsers.get(d.id) ?? 1) - 1;
+        cameraUsers.set(d.id, left);
+        if (left <= 0) void b.camera(d.id, false);
+        if (last) URL.revokeObjectURL(last);
+      };
     },
   };
 }

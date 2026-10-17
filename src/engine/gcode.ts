@@ -49,6 +49,8 @@ export interface EmitInput {
   objectLabels: { name: string; cx: number; cy: number; polygon: [number, number][] }[];
   /** Extra comment lines for the header (from plugins). */
   headerLines?: string[];
+  /** Rewrites the lines between the start and end G-code (plugins that repeat the print). */
+  bodyTransform?: (body: string[]) => string[];
 }
 
 export interface EmitOutput {
@@ -62,7 +64,7 @@ export interface EmitOutput {
 export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
-export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }: EmitInput): EmitOutput {
+export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], bodyTransform }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const flavor = String(cfg.gcode_flavor);
   const minLayerTime = num('slow_down_layer_time');
@@ -139,6 +141,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     }
   }
   out.push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  const bodyStart = out.length;
   if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '') out.push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
   out.push('G90 ; absolute XYZ');
   out.push('M83 ; relative E');
@@ -254,6 +257,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     layerRes.push({ index: li, z: L.z, height: L.h, moveStart, moveEnd: feats.length, time: layerTimes[li] });
   });
 
+  if (bodyTransform) out.push(...bodyTransform(out.splice(bodyStart)));
   out.push('M73 P100 R0');
   out.push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
 

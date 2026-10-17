@@ -11,7 +11,7 @@ import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh } from './slice';
-import { preparePlugins, runPlugins } from '../plugins/engine';
+import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
@@ -955,7 +955,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   // ---------- Advanced: rheology & motion passes on the final move list
   if (adv) { progress('Advanced rheology & motion', 0.91); adv.finalize(layerOps, stageCtx); }
   const advHeader = adv ? [`; NexSpiro Advanced engine: intent=${opts.advanced!.intent} machine=${adv.ctx.caps.name}`] : [];
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: [...pluginRun.header, ...advHeader] });
+  const bodyTransform = programBodyPlugins(opts.plugins, { cfg, layerZ: zs, faceRegions: [], warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: [...pluginRun.header, ...advHeader], bodyTransform });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
