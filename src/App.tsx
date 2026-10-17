@@ -1,3 +1,4 @@
+import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
 import { PluginsButton, RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
@@ -10,16 +11,19 @@ import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
-import { LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
+import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
+import { FillBedHost } from './ui/FillBedDialog';
 import { PlateList, PlateSettingsHost } from './ui/PlateControls';
 import { InstantTooltips } from './ui/Tooltip';
 import { arrangeAll, arrangeSelected } from './state/ops';
 import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
+import { ModeToggle } from './ui/advanced/ModeToggle';
+import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
 const TABS: { id: Workspace; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
@@ -55,7 +59,7 @@ function FileMenu() {
         <div className="menu-pop" role="menu">
           {item('New project', 'Ctrl+N', newProject)}
           {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
-          {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length)}
+          {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length && !useStore.getState().plates[useStore.getState().activePlate]?.program)}
           {item('Export G-code…', 'Ctrl+G', exportGcode, !sliced)}
           {item('Export plate sliced file (.gcode.3mf)…', '', () => exportPlateFile('3mf'), !sliced)}
           {item('Print plate…', 'Ctrl+P', openPrintDialog, !sliced)}
@@ -73,34 +77,42 @@ function TopBar() {
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   return (
     <header className="topbar">
-      <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
-      <FileMenu />
-      <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
-      <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
-      <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
-      <nav className="tabs" role="tablist">
-        {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
-          <button key={t.id} role="tab" aria-selected={workspace === t.id} className={`tab ${workspace === t.id ? 'active' : ''}`} onClick={() => set({ workspace: t.id })}>
-            {t.label}
+      <div className="tb-left">
+        <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
+        <FileMenu />
+        <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
+        <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
+        <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
+        <nav className="tabs" role="tablist">
+          {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
+            <button key={t.id} role="tab" aria-selected={workspace === t.id} title={t.label}
+              className={`tab ${workspace === t.id ? 'active' : ''} ${SECONDARY_TABS.has(t.id) ? 'secondary' : ''}`} onClick={() => set({ workspace: t.id })}>
+              <Icon name={t.icon} size={15} className="tab-icon" /><span className="tab-label">{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="tb-center"><ModeToggle /></div>
+      <div className="tb-right">
+        {(workspace === 'prepare' || workspace === 'motion') && (
+          <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
+            title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
+            onClick={() => set({ liveToolpaths: !liveToolpaths })}>
+            <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
           </button>
-        ))}
-      </nav>
-      <span className="spacer" />
-      {(workspace === 'prepare' || workspace === 'motion') && (
-        <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
-          title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
-          onClick={() => set({ liveToolpaths: !liveToolpaths })}>
-          <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
+        )}
+        <PluginsButton />
+        <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
-      )}
-      <PluginsButton />
-      <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
-        <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-      </button>
-      {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
+        {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
+      </div>
     </header>
   );
 }
+
+/** Tabs that collapse to icons when the header is narrow (the engine toggle keeps the centre). */
+const SECONDARY_TABS = new Set<Workspace>(['home', 'motion', 'device', 'project', 'calibration']);
 
 /** True when the active plate has a slice that matches the current scene and settings. */
 const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.result && !s.slice.dirty && s.slice.plate === s.activePlate);
@@ -109,6 +121,7 @@ const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.r
 function SliceControls() {
   const { slice, objects, printerId } = useStore();
   const sliced = useSliced();
+  const hasProgram = useStore((s) => !!s.plates[s.activePlate]?.program);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -126,7 +139,7 @@ function SliceControls() {
   );
   return (
     <div className="slice-controls">
-      <button className="btn-primary slice-btn" disabled={!objects.length || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
+      <button className="btn-primary slice-btn" disabled={(!objects.length && !hasProgram) || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
         <Icon name="slice" size={16} />{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : 'Slice plate'}
       </button>
       <div className="split-btn menu">
@@ -173,7 +186,14 @@ function useShortcuts() {
       const s = useStore.getState();
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
-      if (mod && k >= '1' && k <= '5') { s.set({ workspace: (['prepare', 'preview', 'device', 'project', 'calibration'] as Workspace[])[+k - 1] }); e.preventDefault(); return; }
+      if (mod && e.key === 'Tab') {
+        // Bambu: Ctrl+Tab steps through the tab pages
+        const tabs: Workspace[] = ['home', 'prepare', 'preview', 'device', 'project', 'calibration'];
+        const i = tabs.indexOf(s.workspace);
+        s.set({ workspace: tabs[(i + (e.shiftKey ? tabs.length - 1 : 1)) % tabs.length] }); e.preventDefault(); return;
+      }
+      if (mod && k >= '0' && k <= '7') { viewApi.current?.setView((['iso', 'top', 'bottom', 'front', 'back', 'left', 'right', 'iso'] as const)[+k]); e.preventDefault(); return; }
+      if (e.key === '?' && !mod) { s.set({ shortcutsOpen: !s.shortcutsOpen }); e.preventDefault(); return; }
       if (mod && k === 'z') { e.shiftKey ? s.redo() : s.undo(); e.preventDefault(); return; }
       if (mod && k === 'y') { s.redo(); e.preventDefault(); return; }
       if (mod && k === 'i') { importDialog(); e.preventDefault(); return; }
@@ -203,8 +223,9 @@ function useShortcuts() {
       else if (k === 'h') s.set({ tool: s.tool === 'vlh' ? 'select' : 'vlh' });
       else if (k === 'c') s.set({ tool: s.tool === 'cut' ? 'select' : 'cut' });
       else if (k === 't') s.set({ tool: s.tool === 'text' ? 'select' : 'text' });
-      else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measurePoints: [] });
+      else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measureFeatures: [] });
       else if (k === 'b') s.set({ tool: s.tool === 'boolean' ? 'select' : 'boolean' });
+      else if (k === 'e') s.set({ tool: s.tool === 'brim_ears' ? 'select' : 'brim_ears' });
       else if (s.tool === 'paint_color' && k >= '1' && k <= '9' && +k <= s.filaments.length) s.set({ paintColor: +k });
       else if (k === 'm') s.set({ tool: s.tool === 'move' ? 'select' : 'move' });
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
@@ -246,7 +267,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -263,7 +284,38 @@ export default function App() {
       <ContextMenu />
       <PrintDialogHost />
       <PlateSettingsHost />
+      <FillBedHost />
       <InstantTooltips />
+      <ShortcutsHost />
     </div>
+  );
+}
+
+/** Bambu Studio's keyboard shortcuts list (opened with ?). */
+const SHORTCUTS: [string, [string, string][]][] = [
+  ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
+    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],
+  ['Camera', [['Ctrl+0', 'Default view'], ['Ctrl+1', 'Top view'], ['Ctrl+2', 'Bottom view'], ['Ctrl+3', 'Front view'], ['Ctrl+4', 'Rear view'], ['Ctrl+5', 'Left view'], ['Ctrl+6', 'Right view'], ['Ctrl+7', 'Isometric view'], ['Z', 'Fit to scene or selection']]],
+  ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Esc', 'Clear selection / leave tool'],
+    ['A / Shift+A', 'Arrange all / selection'], ['O', 'Auto orient'], ['M', 'Move'], ['R', 'Rotate'], ['S', 'Scale'], ['F', 'Lay on face'], ['C', 'Cut'], ['B', 'Boolean'],
+    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'], ['E', 'Brim ears'],
+    ['Shift (rotate)', 'Snap to 5° ticks; outer ring snaps to 45°']]],
+  ['Preview', [['↑ / ↓', 'Layer up / down'], ['← / →', 'Move slider back / forward'], ['L', 'Show one layer only']]],
+];
+
+function ShortcutsHost() {
+  const { shortcutsOpen, set } = useStore();
+  if (!shortcutsOpen) return null;
+  return (
+    <Modal title="Keyboard shortcuts" onClose={() => set({ shortcutsOpen: false })}>
+      <div className="shortcut-cols">
+        {SHORTCUTS.map(([g, rows]) => (
+          <div key={g}>
+            <div className="group-title">{g}</div>
+            {rows.map(([k, l]) => <div key={k + l} className="shortcut-row"><kbd>{k}</kbd><span>{l}</span></div>)}
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }

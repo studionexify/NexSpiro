@@ -1,12 +1,14 @@
 // Right-click menus on the 3D view, after Bambu Studio: one for an empty spot on a plate,
 // one for an object (or a selection of objects) and one for a part.
+import { addHeightRange } from '../state/ops';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { arrange, autoOrient, importDialog } from '../state/actions';
 import {
-  addShape, centreObjects, clearPlate, cloneObjects, copyObjects, dropObjects, exportStl, fillBed, hasClipboard, mirrorObjects,
+  addShape, centreObjects, clearPlate, cloneObjects, copyObjects, dropObjects, exportStl, hasClipboard, mirrorObjects,
   pasteObjects, renameObject, selectPlate, setObjectFilament, splitObject, togglePrintable,
 } from '../state/objectOps';
 import { addPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
+import { openFillBed } from './FillBedDialog';
 import { openPlateSettings } from './PlateControls';
 import { useStore, type ContextMenuState } from '../state/store';
 import type { PartType } from '../engine/types';
@@ -37,7 +39,7 @@ function plateItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
     { sep: true },
     { label: 'Select all on plate', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
-    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(6, m.plate) },
+    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(undefined, m.plate) },
     { label: 'Arrange all plates', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
     { label: 'Auto orient plate', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
     { label: 'Delete all on plate', disabled: !count, onClick: () => clearPlate(m.plate) },
@@ -65,7 +67,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects() },
     { label: 'Duplicate', kbd: 'Ctrl+D', onClick: () => cloneObjects(1, ids) },
     { label: 'Clone…', onClick: () => { const n = parseInt(prompt('Number of copies', '2') ?? '', 10); if (n > 0) cloneObjects(Math.min(n, 200), ids); } },
-    { label: 'Fill bed with copies', disabled: !one, onClick: () => one && fillBed(one.id) },
+    { label: 'Fill bed with copies…', disabled: !one, onClick: () => one && openFillBed(one.id) },
     { label: 'Delete', kbd: 'Del', onClick: () => s.removeSelected() },
     { sep: true },
     { label: 'Center on plate', onClick: () => centreObjects(ids) },
@@ -78,10 +80,12 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Printable', checked: printable, onClick: () => togglePrintable(ids) },
     ...(s.plates.length > 1 ? [{ label: 'Move to plate', sub: s.plates.map((p, k) => ({ label: p.name, disabled: k === m.plate, onClick: () => { s.set({ selected: ids }); moveToPlate(k); } })) }] : []),
     { sep: true },
+    partSub('part'),
     partSub('negative'),
     partSub('modifier'),
     partSub('support_enforcer'),
     partSub('support_blocker'),
+    { label: 'Add height range modifier', disabled: !one, onClick: () => one && addHeightRange(one.id) },
     { sep: true },
     { label: 'Paint support', kbd: 'L', onClick: () => s.set({ selected: ids, tool: 'paint_support' }) },
     { label: 'Paint seam', kbd: 'P', onClick: () => s.set({ selected: ids, tool: 'paint_seam' }) },

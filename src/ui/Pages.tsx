@@ -46,7 +46,7 @@ export function HomePage() {
       <h2>Keyboard shortcuts</h2>
       <div className="tile" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
         {[['Ctrl+I', 'Add model'], ['Ctrl+R', 'Slice plate'], ['Ctrl+G', 'Export G-code'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['M / R / S / F', 'Move / Rotate / Scale / Lay on face'],
-          ['A', 'Arrange'], ['O', 'Auto orient'], ['Del', 'Delete'], ['Ctrl+D', 'Duplicate'], ['Ctrl+A', 'Select all'], ['Ctrl+1…5', 'Switch workspace'], ['↑ / ↓', 'Layer slider (Preview)'], ['Ctrl+P', 'Print plate'], ['Ctrl+S / Ctrl+O', 'Save / open project'], ['C / T / U / B', 'Cut / Text / Measure / Boolean']].map(([k, v]) => (
+          ['A', 'Arrange'], ['O', 'Auto orient'], ['Del', 'Delete'], ['Ctrl+D', 'Duplicate'], ['Ctrl+A', 'Select all'], ['Ctrl+Tab', 'Next tab page'], ['Shift+?', 'All shortcuts'], ['↑ / ↓', 'Layer slider (Preview)'], ['Ctrl+P', 'Print plate'], ['Ctrl+S / Ctrl+O', 'Save / open project'], ['C / T / U / B', 'Cut / Text / Measure / Boolean']].map(([k, v]) => (
           <div key={k} className="row" style={{ margin: 0 }}><span className="badge mono">{k}</span><span>{v}</span></div>
         ))}
       </div>

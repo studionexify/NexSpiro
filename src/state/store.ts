@@ -1,18 +1,22 @@
 // Application state (zustand). Scene objects are immutable records; meshes are shared by reference.
+import type { CalibProgram } from '../engine/calibGcode';
+import type { MeasureFeature, MeasureMode } from './measure';
+import type { BrushType } from '../engine/brush';
+import { DEFAULT_CONNECTOR, DEFAULT_GROOVE, type ConnectorSettings, type GrooveSettings } from './cutConnectors';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { IndexedMesh } from '../engine/mesh';
 import type { LayerAction, PartType, SliceOutput } from '../engine/types';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
-import type { Config, ProcessTab } from '../profiles/settings';
+import { CONFIG_VERSION, migrateConfig, type Config, type ProcessTab } from '../profiles/settings';
 import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears';
 export type Theme = 'dark' | 'light';
-export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
+export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
 export type Vec3 = [number, number, number];
 
@@ -27,8 +31,8 @@ export interface ScenePart {
   overrides: Config; // modifier settings
 }
 
-/** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). */
-export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
+/** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). adv: Advanced mode (1 fixture, 2 load, 3 matte, 4 gloss). */
+export interface ObjectPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array; adv?: Uint8Array }
 
 export interface SceneObject {
   id: string;
@@ -47,11 +51,21 @@ export interface SceneObject {
   printable?: boolean;
   /** Patternex artwork on this object (object-local), so undo, project files and object operations carry it. */
   patternex?: ObjectPatternex;
+  /** Height range modifiers: their own settings for a band of layers (object-relative mm). */
+  heightRanges?: HeightRange[];
+  /** Brim ear points painted with the brim ears tool (object-local XY, mm). */
+  /** Painted brim ears, object-local points (z kept so tilted objects map correctly). */
+  brimEars?: [number, number, number?][];
+  /** Hidden in the 3D view (object list eye); still sliced unless not printable. */
+  hidden?: boolean;
 }
+
+export interface HeightRange { id: string; z0: number; z1: number; overrides: Config }
 
 /** Values found with the Calibration workspace, applied on top of the filament preset. */
 export interface FilamentTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
-export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning }
+/** A filament slot: preset, colour, the user's own setting edits and calibration results. */
+export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning; overrides?: Config }
 export interface ProjectInfo { title: string; author: string; description: string; license: string; notes: string; photos: { name: string; dataUrl: string }[] }
 export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
 /** A build plate. bedType / spiralVase override the global settings for this plate (undefined = same as global). */
@@ -61,6 +75,10 @@ export interface Plate {
   locked?: boolean;
   bedType?: PlateType;
   spiralVase?: boolean;
+  /** Print sequence of this plate (undefined = same as global). */
+  printSequence?: 'by_layer' | 'by_object';
+  /** Drawn calibration program printed instead of the plate's objects (PA line / pattern). */
+  program?: CalibProgram;
 }
 
 /** Right-click menu: where it opened and what was under the cursor. */
@@ -83,6 +101,13 @@ interface State {
   objects: SceneObject[];
   selected: string[];
   selectedPart: string | null;
+  /** Height range modifier being edited (object id is the single selection). */
+  selectedRange: string | null;
+  shortcutsOpen: boolean;
+  /** Preview: show only the top layer (L), the bottom layer it replaced, the G-code beside the move slider. */
+  oneLayer: boolean;
+  savedLow?: number;
+  showGcode: boolean;
   undoStack: SceneObject[][];
   redoStack: SceneObject[][];
 
@@ -102,6 +127,13 @@ interface State {
   showOverhangs: boolean;
 
   brushSize: number; // mm
+  brushType: BrushType;
+  /** Smart fill: largest angle between neighbouring triangles the fill crosses (°). */
+  smartFillAngle: number;
+  /** Gap fill: largest unpainted area filled (mm²). */
+  gapArea: number;
+  /** Overhang highlight angle in support painting (°). */
+  paintOverhangAngle: number;
   paintColor: number; // 1-based slot for colour painting
   /** Surface set being picked/painted for plugins (1-based). */
   motionSet: number;
@@ -127,8 +159,19 @@ interface State {
   flushMultiplier: number;
   /** Cut tool plane: world height and tilt (degrees). */
   cutPlane: { height: number; tiltX: number; tiltY: number };
+  /** Cut connectors placed on the cut plane (plane coordinates), the connector settings and the placing mode. */
+  cutConnectors: { x: number; y: number }[];
+  cutConnector: ConnectorSettings;
+  cutConnectorMode: boolean;
+  cutMode: 'planar' | 'dovetail';
+  cutGroove: GrooveSettings;
   /** Measure tool: picked world points (up to 2). */
-  measurePoints: Vec3[];
+  measureFeatures: MeasureFeature[];
+  measureMode: MeasureMode;
+  /** Bambu's arrange settings: spacing between objects, try rotations, where the group goes. */
+  arrangeSettings: { spacing: number; rotate: boolean; align: 'center' | 'x' | 'y' };
+  /** Surface point picked for Text / SVG volumes. */
+  surfacePick: { objId: string; point: Vec3; normal: Vec3 } | null;
   contextMenu: ContextMenuState | null;
   /** Draw the plugins' quick motion preview on the model in Prepare (no slicing). */
   liveToolpaths: boolean;
@@ -168,6 +211,10 @@ export const useStore = create<State>((set, get) => ({
   objects: [],
   selected: [],
   selectedPart: null,
+  selectedRange: null,
+  shortcutsOpen: false,
+  oneLayer: false,
+  showGcode: true,
   undoStack: [],
   redoStack: [],
 
@@ -177,7 +224,15 @@ export const useStore = create<State>((set, get) => ({
   flushMatrix: null,
   flushMultiplier: 1,
   cutPlane: { height: 10, tiltX: 0, tiltY: 0 },
-  measurePoints: [],
+  cutConnectors: [],
+  cutConnector: DEFAULT_CONNECTOR,
+  cutConnectorMode: false,
+  cutMode: 'planar',
+  cutGroove: DEFAULT_GROOVE,
+  measureFeatures: [],
+  measureMode: 'auto',
+  arrangeSettings: { spacing: 6, rotate: false, align: 'center' },
+  surfacePick: null,
   contextMenu: null,
   liveToolpaths: !!prefs.liveToolpaths,
 
@@ -185,7 +240,7 @@ export const useStore = create<State>((set, get) => ({
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
   filaments: defaultFilaments(),
   presetId: prefs.presetId ?? '0.20',
-  overrides: prefs.overrides ?? {},
+  overrides: migrateConfig(prefs.overrides, prefs.configVersion ?? 1),
   machineOverrides: prefs.machineOverrides ?? {},
   processTab: 'Quality',
   processMode: 'global',
@@ -194,6 +249,10 @@ export const useStore = create<State>((set, get) => ({
   showOverhangs: false,
 
   brushSize: 4,
+  brushType: 'circle',
+  smartFillAngle: 30,
+  gapArea: 2,
+  paintOverhangAngle: 30,
   paintColor: 2,
   motionSet: 1,
   motionGrowAngle: 15,
@@ -281,7 +340,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, configVersion: CONFIG_VERSION,
     }));
   } catch { /* storage unavailable */ }
 });

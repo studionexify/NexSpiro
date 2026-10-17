@@ -1,15 +1,25 @@
 // Stage 2: Z-plane mesh intersection + topological loop chaining.
-import { cleanPaths, SCALE, unionEvenOdd } from './clipper';
+import { cleanPaths, SCALE, union, unionEvenOdd } from './clipper';
 import type { Paths } from './types';
 import type { IndexedMesh } from './mesh';
+import ClipperLib from 'clipper-lib';
+
+const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 /**
  * Slice an indexed mesh at each given plane height.
  * Intersection points are keyed by the mesh edge they lie on, so loops chain
- * by topology rather than float comparison. Regions use even-odd fill, which is
- * robust to inconsistent triangle winding.
+ * by topology rather than float comparison.
+ *
+ * Modes (Bambu Studio's "Slicing mode"):
+ *  - 'even_odd' (default here): every nested loop toggles inside/outside; robust to bad triangle winding.
+ *  - 'regular': loops are oriented by the triangle normals and merged with non-zero winding, so overlapping
+ *    shells of one mesh are unioned instead of cancelling each other.
+ *  - 'close_holes': like regular, then every hole is filled.
  */
-export function sliceMesh(mesh: IndexedMesh, planes: number[]): Paths[] {
+export type SlicingMode = 'regular' | 'even_odd' | 'close_holes';
+
+export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode = 'even_odd'): Paths[] {
   const v = mesh.vertices, ix = mesh.indices;
   const nV = v.length / 3;
   const triCount = ix.length / 3;
@@ -33,6 +43,8 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[]): Paths[] {
     // edgeKey -> intersection point
     const ptX = new Map<number, number>(), ptY = new Map<number, number>();
     const segA: number[] = [], segB: number[] = [];
+    // per segment: true when going segA → segB keeps the solid on the left (counter-clockwise outer loops)
+    const segDir: boolean[] = [];
 
     for (const t of active) {
       const i0 = ix[t * 3], i1 = ix[t * 3 + 1], i2 = ix[t * 3 + 2];
@@ -53,7 +65,19 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[]): Paths[] {
         }
         keys.push(key);
       }
-      if (keys.length === 2) { segA.push(keys[0]); segB.push(keys[1]); }
+      if (keys.length === 2) {
+        segA.push(keys[0]); segB.push(keys[1]);
+        if (mode !== 'even_odd') {
+          // face normal (from the winding) projected on XY: the solid lies opposite to it
+          const ax = v[i0 * 3], ay = v[i0 * 3 + 1], az = v[i0 * 3 + 2];
+          const ux = v[i1 * 3] - ax, uy = v[i1 * 3 + 1] - ay, uz = v[i1 * 3 + 2] - az;
+          const wx = v[i2 * 3] - ax, wy = v[i2 * 3 + 1] - ay, wz = v[i2 * 3 + 2] - az;
+          const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz;
+          const dx = ptX.get(keys[1])! - ptX.get(keys[0])!, dy = ptY.get(keys[1])! - ptY.get(keys[0])!;
+          // CCW around the solid: the outward normal is on the right of the direction of travel, right(d) = (dy, -dx)
+          segDir.push(nx * dy - ny * dx > 0);
+        }
+      }
     }
 
     // adjacency: point key -> segment ids
@@ -70,6 +94,8 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[]): Paths[] {
       if (used[s0]) continue;
       used[s0] = 1;
       const keys = [segA[s0], segB[s0]];
+      // orientation vote: segments walked in their solid-on-the-left direction
+      let vote = mode === 'even_odd' ? 0 : segDir[s0] ? 1 : -1;
       let cur = segB[s0];
       for (;;) {
         const cand = adj.get(cur);
@@ -77,15 +103,23 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[]): Paths[] {
         if (cand) for (const s of cand) if (!used[s]) { nextSeg = s; break; }
         if (nextSeg < 0) break;
         used[nextSeg] = 1;
-        cur = segA[nextSeg] === cur ? segB[nextSeg] : segA[nextSeg];
+        const forward = segA[nextSeg] === cur;
+        if (mode !== 'even_odd') vote += forward === segDir[nextSeg] ? 1 : -1;
+        cur = forward ? segB[nextSeg] : segA[nextSeg];
         if (cur === keys[0]) break;
         keys.push(cur);
       }
       if (keys.length >= 3) {
-        loops.push(keys.map((k) => ({ X: Math.round(ptX.get(k)! * SCALE), Y: Math.round(ptY.get(k)! * SCALE) })));
+        const loop = keys.map((k) => ({ X: Math.round(ptX.get(k)! * SCALE), Y: Math.round(ptY.get(k)! * SCALE) }));
+        if (vote < 0) loop.reverse();
+        loops.push(loop);
       }
     }
-    result.push(loops.length ? cleanPaths(unionEvenOdd(loops)) : []);
+    if (!loops.length) { result.push([]); continue; }
+    if (mode === 'even_odd') { result.push(cleanPaths(unionEvenOdd(loops))); continue; }
+    let r = union(loops); // non-zero winding: overlapping shells merge
+    if (mode === 'close_holes') r = r.filter((p) => C.Clipper.Orientation(p));
+    result.push(cleanPaths(r));
   }
   return result;
 }

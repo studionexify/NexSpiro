@@ -1,4 +1,5 @@
 // Core engine types. All engine geometry is in millimetres unless noted.
+import type { AdvancedConfig, AdvancedReport } from './advanced/types';
 
 /** Clipper integer point (scaled by SCALE). */
 export interface IntPoint { X: number; Y: number }
@@ -17,6 +18,7 @@ export type FeatureType =
   | 'top_surface'
   | 'bottom_surface'
   | 'bridge'
+  | 'gap_infill'
   | 'ironing'
   | 'skirt'
   | 'brim'
@@ -35,6 +37,7 @@ export const FEATURE_LABELS: Record<FeatureType, string> = {
   top_surface: 'Top surface',
   bottom_surface: 'Bottom surface',
   bridge: 'Bridge',
+  gap_infill: 'Gap infill',
   ironing: 'Ironing',
   skirt: 'Skirt',
   brim: 'Brim',
@@ -77,7 +80,7 @@ export interface LayerResult {
   time: number;
 }
 
-export type PartType = 'negative' | 'modifier' | 'support_enforcer' | 'support_blocker';
+export type PartType = 'part' | 'negative' | 'modifier' | 'support_enforcer' | 'support_blocker';
 
 export interface PartInput {
   type: PartType;
@@ -89,7 +92,8 @@ export interface PartInput {
 }
 
 /** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */
-export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array }
+/** adv (Advanced mode): 1 fixture, 2 load face, 3 matte, 4 gloss. */
+export interface MeshPaint { support?: Uint8Array; seam?: Uint8Array; color?: Uint8Array; motion?: Uint8Array; adv?: Uint8Array }
 
 export interface MeshInput {
   id: string;
@@ -107,6 +111,10 @@ export interface MeshInput {
   layerHeights?: number[];
   /** Named sets of picked triangles (used by plugins such as Motionex). */
   faceSets?: FaceSet[];
+  /** Height range modifiers: settings for layers whose top lies in [z0, z1) (object-relative mm). */
+  heightRanges?: { z0: number; z1: number; overrides: Record<string, number | boolean | string> }[];
+  /** Brim ear points painted with the brim ears tool (world XY, mm). */
+  brimEars?: [number, number][];
 }
 
 export interface FaceSet { id: string; name: string; tris: Uint32Array }
@@ -124,6 +132,8 @@ export interface FilamentSlot {
   flowRatio: number;
   maxVolumetricSpeed: number;
   pressureAdvance?: number;
+  /** The slot's full filament config (cooling, retraction overrides, scarf, G-code…), see filamentParams.ts. */
+  settings?: Record<string, number | boolean | string>;
 }
 
 /** Actions inserted at a layer height (from the preview slider). */
@@ -140,6 +150,10 @@ export interface SliceOptions {
   layerActions?: LayerAction[];
   /** Config for each enabled plugin, keyed by plugin id (plain data). */
   plugins?: Record<string, unknown>;
+  /** A drawn calibration program (PA line / pattern) instead of sliced models. */
+  program?: import('./calibGcode').CalibProgram;
+  /** Advanced mode (NexSpiro physics core). Undefined: Basic mode, the classic engine only. */
+  advanced?: AdvancedConfig;
 }
 
 export interface SliceStats {
@@ -151,22 +165,30 @@ export interface SliceStats {
   toolChanges: number;
   perFilament: { grams: number; mm: number; cost: number }[];
   towerGrams: number;
-  byFeature: Partial<Record<FeatureType, { time: number; filamentMm: number }>>;
+  byFeature: Partial<Record<FeatureType, { time: number; filamentMm: number; grams?: number }>>;
+  /** Filament purged during filament changes (flush), per slot in grams. */
+  flushGrams?: number;
 }
 
 export interface SliceOutput {
   gcode: string;
   moves: Float32Array; // packed moves, see packMoves()
   moveFeatures: Uint8Array;
+  /** Per move: part fan % and nozzle temperature (stride 2). */
+  moveAux?: Float32Array;
+  /** Per move: 0-based G-code line the move ends on. */
+  moveLines?: Uint32Array;
   layers: LayerResult[];
   stats: SliceStats;
   warnings: string[];
   /** What each plugin reported (e.g. Motionex print check). */
   pluginReports?: Record<string, unknown>;
+  /** What the Advanced engine did (Advanced mode only). */
+  advanced?: AdvancedReport;
 }
 
 export const FEATURE_ORDER: FeatureType[] = [
   'outer_wall', 'inner_wall', 'overhang_wall', 'sparse_infill', 'internal_solid_infill',
   'top_surface', 'bottom_surface', 'bridge', 'ironing', 'skirt', 'brim', 'support',
-  'support_interface', 'travel', 'prime_tower', 'wave_overhang',
+  'support_interface', 'travel', 'prime_tower', 'gap_infill', 'wave_overhang',
 ];
