@@ -5,7 +5,7 @@ import type { IndexedMesh } from '../engine/mesh';
 import type { LayerAction, PartType, SliceOutput } from '../engine/types';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
-import type { Config, ProcessTab } from '../profiles/settings';
+import { CONFIG_VERSION, migrateConfig, type Config, type ProcessTab } from '../profiles/settings';
 import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
@@ -47,11 +47,20 @@ export interface SceneObject {
   printable?: boolean;
   /** Patternex artwork on this object (object-local), so undo, project files and object operations carry it. */
   patternex?: ObjectPatternex;
+  /** Height range modifiers: their own settings for a band of layers (object-relative mm). */
+  heightRanges?: HeightRange[];
+  /** Brim ear points painted with the brim ears tool (object-local XY, mm). */
+  brimEars?: [number, number][];
+  /** Hidden in the 3D view (object list eye); still sliced unless not printable. */
+  hidden?: boolean;
 }
+
+export interface HeightRange { id: string; z0: number; z1: number; overrides: Config }
 
 /** Values found with the Calibration workspace, applied on top of the filament preset. */
 export interface FilamentTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
-export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning }
+/** A filament slot: preset, colour, the user's own setting edits and calibration results. */
+export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning; overrides?: Config }
 export interface ProjectInfo { title: string; author: string; description: string; license: string; notes: string; photos: { name: string; dataUrl: string }[] }
 export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
 /** A build plate. bedType / spiralVase override the global settings for this plate (undefined = same as global). */
@@ -61,6 +70,8 @@ export interface Plate {
   locked?: boolean;
   bedType?: PlateType;
   spiralVase?: boolean;
+  /** Print sequence of this plate (undefined = same as global). */
+  printSequence?: 'by_layer' | 'by_object';
 }
 
 /** Right-click menu: where it opened and what was under the cursor. */
@@ -185,7 +196,7 @@ export const useStore = create<State>((set, get) => ({
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
   filaments: defaultFilaments(),
   presetId: prefs.presetId ?? '0.20',
-  overrides: prefs.overrides ?? {},
+  overrides: migrateConfig(prefs.overrides, prefs.configVersion ?? 1),
   machineOverrides: prefs.machineOverrides ?? {},
   processTab: 'Quality',
   processMode: 'global',
@@ -281,7 +292,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, configVersion: CONFIG_VERSION,
     }));
   } catch { /* storage unavailable */ }
 });

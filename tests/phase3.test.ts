@@ -74,7 +74,8 @@ describe('arc fitting', () => {
     const c = mesh(cylinder(100, 100, 15, 4, 128));
     const a = slice([c], cfgFor('bbl-p1s', { enable_arc_fitting: false }));
     const b = slice([c], cfgFor('bbl-p1s', { enable_arc_fitting: true }));
-    const arcs = b.gcode.split('\n').filter((l) => /^G[23] /.test(l));
+    // arc-fitted paths (the spiral Z hop is a full-circle G3 with only Z, I, J)
+    const arcs = b.gcode.split('\n').filter((l) => /^G[23] X/.test(l));
     expect(arcs.length).toBeGreaterThan(10);
     expect(b.gcode.length).toBeLessThan(a.gcode.length * 0.9);
     expect(Math.abs(b.stats.filamentMm - a.stats.filamentMm)).toBeLessThan(0.01 * a.stats.filamentMm);

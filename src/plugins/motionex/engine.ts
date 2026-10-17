@@ -8,7 +8,7 @@ import { applyMotion, DEFAULT_OPTIONS, type ModifierOptions } from './modifier';
 import { checkCollisions, limitZSpeed, type CollisionMode, type ToolheadProfile } from './core/toolhead';
 import { RegionRegistry } from './core/regions';
 import { clearOverlaps, type ClearanceOptions } from './core/clearance';
-import { emptyCheck, type Layer, type PointAction, type PrintCheck, type Toolpath, type ToolpathPoint } from './core/types';
+import { emptyCheck, SEAM_TOL, type Layer, type PointAction, type PrintCheck, type Toolpath, type ToolpathPoint } from './core/types';
 import type { PrintProfiles, Firmware } from './core/profiles';
 import type { MotionApplication, MotionBrush } from './model';
 
@@ -98,7 +98,7 @@ export function opsToLayers(layers: LayerOps[]): { layers: Layer[]; runs: Run[] 
         j++;
       }
       const a = pts[0], b = pts[pts.length - 1];
-      const path: Toolpath = { feature, closed: Math.hypot(a.x - b.x, a.y - b.y) < 1e-3, points: pts };
+      const path: Toolpath = { feature, closed: Math.hypot(a.x - b.x, a.y - b.y) < (lenSum > SEAM_TOL * 8 ? SEAM_TOL : 1e-3), points: pts };
       paths.push(path);
       runs.push({ layer: li, start: i, end: j, path, ePerMm: lenSum > 0 ? eSum / lenSum : 0, w: op.w, h: op.h, feature });
       last = { x: b.x, y: b.y, z: b.z };

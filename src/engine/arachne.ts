@@ -10,14 +10,17 @@ export interface VarPath extends Polyline2 { widths: number[] }
 /**
  * Split `region` into the part that fits normal beads of width `w` (returned as `wide`)
  * and the narrow remainder, converted to medial-axis centerlines with per-point widths.
+ * `margin`: a strip at least 2·w − margin wide still gets two (slightly squeezed) beads.
+ * `dropW`: narrower features are not printed at all; between dropW and minW they are widened to minW.
  */
-export function splitNarrow(region: Paths, w: number, minW: number, maxW: number): { wide: Paths; thin: VarPath[] } {
+export function splitNarrow(region: Paths, w: number, minW: number, maxW: number, opts: { margin?: number; dropW?: number } = {}): { wide: Paths; thin: VarPath[] } {
   if (!region.length) return { wide: [], thin: [] };
-  // anything that survives an opening by w can hold two beads side by side
-  const wide = opening(region, w * 0.999);
+  const margin = Math.max(0, Math.min(w * 0.9, opts.margin ?? 0));
+  // anything that survives an opening by (w - margin/2) can hold two beads side by side
+  const wide = opening(region, w * 0.999 - margin / 2);
   const rest = wide.length ? difference(region, offset(wide, 0.002)) : region;
   if (!rest.length || areaTotal(rest) < minW * minW) return { wide, thin: [] };
-  const thin = medialAxis(rest, minW, Math.max(maxW, 2 * w)).filter((p) => pathLen(p.pts) >= w * 1.5);
+  const thin = medialAxis(rest, opts.dropW ?? minW * 0.5, Math.max(maxW, 2 * w), 0.12, opts.dropW !== undefined).filter((p) => pathLen(p.pts) >= w * 1.5);
   return { wide, thin: thin.map((p) => ({ ...p, widths: p.widths.map((x) => Math.min(maxW, Math.max(minW, x))) })) };
 }
 
@@ -34,7 +37,8 @@ interface Seg { ax: number; ay: number; bx: number; by: number }
  * inward normal to the opposite side; the midpoint is a medial point and the hit distance is the
  * local width. Medial points are deduplicated and chained into polylines.
  */
-export function medialAxis(paths: Paths, minWidth: number, maxWidth: number, step = 0.12): VarPath[] {
+/** `exactMin`: drop points narrower than minWidth (default: narrower than half of it). */
+export function medialAxis(paths: Paths, minWidth: number, maxWidth: number, step = 0.12, exactMin = false): VarPath[] {
   const segs: Seg[] = [];
   for (const p of paths) for (let k = 0; k < p.length; k++) {
     const a = p[k], b = p[(k + 1) % p.length];
@@ -56,7 +60,7 @@ export function medialAxis(paths: Paths, minWidth: number, maxWidth: number, ste
         const d = rayHit(ox, oy, nx, ny, segs[q]);
         if (d > 1e-5 && d < best) best = d;
       }
-      if (best > maxWidth * 1.15 || best < minWidth * 0.5) continue;
+      if (best > maxWidth * 1.15 || best < minWidth * (exactMin ? 1 : 0.5)) continue;
       pts.push({ x: ox + nx * best / 2, y: oy + ny * best / 2, w: best });
     }
   }

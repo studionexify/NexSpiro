@@ -1,6 +1,7 @@
 // Stage 7: surface & sparse infill pattern generators. Output: open/closed polylines in mm.
 import { bounds, clipLines, offset, SCALE, toInt } from './clipper';
 import type { Path, Paths, Polyline2 } from './types';
+import { archimedeanFill, crossHatchFill, cubicFill, hilbertFill, honeycomb3dFill, honeycombFill, octagramFill, triHexagonFill } from './patterns';
 
 function rotatePaths(paths: Paths, ang: number): Paths {
   const c = Math.cos(ang), s = Math.sin(ang);
@@ -131,17 +132,52 @@ export function gyroidFill(region: Paths, spacing: number, z: number): Polyline2
   return clipLines(lines, region).map((p) => toPoly(p, false));
 }
 
-export type SparsePattern = 'rectilinear' | 'aligned_rectilinear' | 'grid' | 'triangles' | 'gyroid' | 'concentric';
+export type SparsePattern =
+  | 'rectilinear' | 'aligned_rectilinear' | 'grid' | 'triangles' | 'gyroid' | 'concentric' | 'line' | 'cubic' | 'tri-hexagon'
+  | 'honeycomb' | 'adaptivecubic' | '3dhoneycomb' | 'hilbertcurve' | 'archimedeanchords' | 'octagramspiral' | 'supportcubic' | 'lightning' | 'crosshatch';
 
+/** Patterns whose lines are joined along the inner wall by the sparse infill anchors. */
+export const ANCHORED_PATTERNS = new Set<SparsePattern>(['rectilinear', 'aligned_rectilinear', 'grid', 'triangles', 'gyroid', 'cubic', 'tri-hexagon', 'honeycomb', '3dhoneycomb', 'adaptivecubic', 'supportcubic', 'crosshatch']);
+
+/**
+ * Sparse infill lines for one region. Adaptive / support cubic and lightning need neighbouring layers and are
+ * produced by the slicer (it passes the cubic spacing it wants here as `pattern: 'cubic'`).
+ */
 export function sparseFill(region: Paths, pattern: SparsePattern, width: number, density: number, layer: number, z: number, baseAngle: number): Polyline2[] {
   if (density <= 0) return [];
   const s = width / Math.min(1, density);
   switch (pattern) {
     case 'grid': return [...linesFill(region, s * 2, baseAngle), ...linesFill(region, s * 2, baseAngle + 90)];
     case 'triangles': return [0, 60, 120].flatMap((a) => linesFill(region, s * 3, baseAngle + a));
+    case 'tri-hexagon': return triHexagonFill(region, s, baseAngle);
+    case 'cubic': case 'adaptivecubic': case 'supportcubic': return cubicFill(region, s, z, baseAngle);
     case 'gyroid': return gyroidFill(region, s, z);
     case 'concentric': return concentricFill(region, s, s / 2);
     case 'aligned_rectilinear': return linesFill(region, s, baseAngle);
+    case 'line': return linesFill(region, s, baseAngle + (layer % 2 ? 90 : 0));
+    case 'honeycomb': return honeycombFill(region, width, density, baseAngle);
+    case '3dhoneycomb': return honeycomb3dFill(region, s, z, baseAngle);
+    case 'hilbertcurve': return hilbertFill(region, s);
+    case 'archimedeanchords': return archimedeanFill(region, s);
+    case 'octagramspiral': return octagramFill(region, s);
+    case 'crosshatch': return crossHatchFill(region, s, z, baseAngle);
     default: return linesFill(region, s, baseAngle + (layer % 2 ? 90 : 0));
+  }
+}
+
+/**
+ * Solid surface fill (top, bottom, internal solid, sub-top) with spacing `spacing`.
+ * `angle` alternates per layer for zig-zag patterns; `alignedAngle` is used by aligned patterns.
+ */
+export function surfaceFill(region: Paths, pattern: string, spacing: number, angle: number, alignedAngle: number): Polyline2[] {
+  switch (pattern) {
+    case 'concentric': return concentricFill(region, spacing, spacing / 2);
+    case 'aligned_rectilinear': return linesFill(region, spacing, alignedAngle);
+    case 'monotonic': return linesFill(region, spacing, angle, true);
+    case 'monotonicline': return linesFill(region, spacing, angle, true);
+    case 'hilbertcurve': return hilbertFill(region, spacing);
+    case 'archimedeanchords': return archimedeanFill(region, spacing);
+    case 'octagramspiral': return octagramFill(region, spacing);
+    default: return linesFill(region, spacing, angle);
   }
 }

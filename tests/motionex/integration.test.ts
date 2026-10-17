@@ -27,7 +27,7 @@ function wallXY(gcode: string, layerZ: string, type: string): [number, number][]
     if (l.startsWith(';TYPE:')) cur = l.slice(6);
     const mx = /X([-\d.]+)/.exec(l), my = /Y([-\d.]+)/.exec(l);
     if (mx) x = +mx[1]; if (my) y = +my[1];
-    if (cur === type && l.startsWith('G1') && / E[\d.]/.test(l)) out.push([x, y]);
+    if (cur === type && l.startsWith('G1') && / E[\d.]/.test(l) && (mx || my)) out.push([x, y]); // a bare G1 E (deretraction) is not a wall move
   }
   return out;
 }

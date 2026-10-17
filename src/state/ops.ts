@@ -242,6 +242,7 @@ export function primitive(shape: ShapeKind, size: number): IndexedMesh {
 }
 
 export const PART_LABELS: Record<PartType, string> = {
+  part: 'Part',
   negative: 'Negative part', modifier: 'Modifier', support_enforcer: 'Support enforcer', support_blocker: 'Support blocker',
 };
 

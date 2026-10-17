@@ -1,6 +1,8 @@
 // Resolve the flat engine config: system defaults ← printer ← preset ← user overrides, plus machine & filament.
 import type { FilamentSlot } from '../engine/types';
 import { filamentById } from './filaments';
+import { FILAMENT_OVERRIDE_KEYS, filamentConfig, PLATE_TEMP_KEYS } from './filamentParams';
+import { MACHINE_DEFAULTS } from './machineParams';
 import { printerById, type PlateType } from './printers';
 import { PROCESS_DEFAULTS, PROCESS_PRESETS, type Config } from './settings';
 
@@ -11,6 +13,8 @@ export interface ProfileSelection {
   presetId: string;
   overrides: Config;
   machineOverrides?: Config;
+  /** The first filament slot's own setting overrides. */
+  filamentOverrides?: Config;
 }
 
 /** Base process values before user overrides (used for "modified" detection). */
@@ -26,38 +30,46 @@ export function baseProcess(sel: Pick<ProfileSelection, 'printerId' | 'presetId'
   return { ...PROCESS_DEFAULTS, ...scaled, ...printer.processOverrides, ...preset.values };
 }
 
+/** Printer settings: defaults ← printer profile ← user edits. */
+export function machineConfig(printerId: string, overrides: Config = {}): Config {
+  return { ...MACHINE_DEFAULTS, ...printerById(printerId).machine, ...overrides };
+}
+
+/** Printer retraction settings with a filament's "Setting overrides" applied. */
+export function retractionOverrides(fcfg: Config): Config {
+  const out: Config = {};
+  for (const k of FILAMENT_OVERRIDE_KEYS) if (fcfg[`filament_${k}`] !== undefined) out[k] = fcfg[`filament_${k}`];
+  return out;
+}
+
+/** Bed temperatures (initial layer, other layers) of a filament config on a plate type. */
+export function bedTemps(fcfg: Config, plate: PlateType): [number, number] {
+  const [k0, k1] = PLATE_TEMP_KEYS[plate] ?? PLATE_TEMP_KEYS.textured_pei_plate;
+  return [Number(fcfg[k0] ?? 0), Number(fcfg[k1] ?? 0)];
+}
+
 export function resolveConfig(sel: ProfileSelection): Config {
   const printer = printerById(sel.printerId);
   const fil = filamentById(sel.filamentId);
-  const bed = fil.bedTemp[sel.plate] ?? 0;
+  const fcfg = filamentConfig(fil, sel.filamentOverrides);
+  const [bed0, bed] = bedTemps(fcfg, sel.plate);
   return {
     ...baseProcess(sel),
     ...sel.overrides,
-    ...printer.machine,
-    ...(sel.machineOverrides ?? {}),
+    ...machineConfig(sel.printerId, sel.machineOverrides),
+    ...fcfg,
+    ...retractionOverrides(fcfg),
     printer_model: `${printer.vendor} ${printer.model}`,
     gcode_flavor: printer.flavor,
     nozzle_diameter: printer.nozzle,
     bed_x: printer.bed.x, bed_y: printer.bed.y, bed_z: printer.bed.z,
+    printable_height: printer.bed.z,
     curr_bed_type: sel.plate,
-    filament_type: fil.type,
     filament_settings_id: fil.name,
-    filament_diameter: fil.diameter,
-    filament_density: fil.density,
-    filament_cost: fil.cost,
     filament_colour: fil.color,
-    nozzle_temperature: fil.nozzleTemp,
-    nozzle_temperature_initial_layer: fil.nozzleTempInitial,
     bed_temperature: bed,
-    bed_temperature_initial_layer: bed,
-    fan_min_speed: fil.fanMin,
-    fan_max_speed: fil.fanMax,
-    close_fan_the_first_x_layers: fil.fanOffFirstLayers,
-    slow_down_layer_time: fil.slowDownLayerTime,
-    slow_down_min_speed: fil.slowDownMinSpeed,
-    filament_max_volumetric_speed: fil.maxVolumetricSpeed,
-    filament_flow_ratio: fil.flowRatio,
-    ...(fil.retractionLength !== undefined ? { retraction_length: fil.retractionLength } : {}),
+    bed_temperature_initial_layer: bed0,
+    chamber_temperature: Number(fcfg.chamber_temperatures ?? 0),
   };
 }
 
@@ -65,34 +77,46 @@ export function resolveConfig(sel: ProfileSelection): Config {
 export function validate(sel: ProfileSelection): string[] {
   const w: string[] = [];
   const fil = filamentById(sel.filamentId);
-  if (!fil.bedTemp[sel.plate]) w.push(`${fil.name} is not recommended on this build plate.`);
   const c = resolveConfig(sel);
+  if (!c.bed_temperature) w.push(`${fil.name} is not recommended on this build plate.`);
   if ((c.layer_height as number) > (c.nozzle_diameter as number) * 0.8) w.push('Layer height exceeds 80% of the nozzle diameter.');
+  const lo = Number(c.min_layer_height), hi = Number(c.max_layer_height);
+  if (lo > 0 && hi > 0 && (Number(c.layer_height) < lo - 1e-9 || Number(c.layer_height) > hi + 1e-9)) w.push(`Layer height ${c.layer_height} mm is outside the printer's ${lo}–${hi} mm range.`);
+  const t = Number(c.nozzle_temperature), tl = Number(c.nozzle_temperature_range_low), th = Number(c.nozzle_temperature_range_high);
+  if (tl > 0 && th > 0 && (t < tl || t > th)) w.push(`Nozzle temperature ${t} °C is outside the recommended ${tl}–${th} °C for ${fil.name}.`);
   return w;
 }
 
-/** Engine filament slots from the UI slot list (preset + colour). */
+/** Values found with the Calibration workspace (stored per filament slot). */
 export interface SlotTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
-export function filamentSlots(slots: { presetId: string; color: string; tuning?: SlotTuning }[]): FilamentSlot[] {
-  return slots.map((s) => {
-    const f = filamentById(s.presetId);
-    const t = s.tuning ?? {};
-    return {
-      name: f.name, type: f.type, color: s.color, diameter: f.diameter, density: f.density, cost: f.cost,
-      nozzleTemp: t.nozzleTemp ?? f.nozzleTemp, nozzleTempInitial: t.nozzleTemp ?? f.nozzleTempInitial,
-      flowRatio: t.flowRatio ?? f.flowRatio, maxVolumetricSpeed: t.maxVolumetricSpeed ?? f.maxVolumetricSpeed, pressureAdvance: t.pressureAdvance,
-    };
-  });
-}
 
-/** Config keys overridden by the tuning of the first filament slot. */
+/** Filament settings a calibration result stands for. */
 export function tuningConfig(t: SlotTuning | undefined): Config {
   if (!t) return {};
   const c: Config = {};
   if (t.flowRatio !== undefined) c.filament_flow_ratio = t.flowRatio;
-  if (t.pressureAdvance !== undefined) c.pressure_advance = t.pressureAdvance;
+  if (t.pressureAdvance !== undefined) { c.enable_pressure_advance = true; c.pressure_advance = t.pressureAdvance; }
   if (t.maxVolumetricSpeed !== undefined) c.filament_max_volumetric_speed = t.maxVolumetricSpeed;
   if (t.nozzleTemp !== undefined) { c.nozzle_temperature = t.nozzleTemp; c.nozzle_temperature_initial_layer = t.nozzleTemp; }
-  if (t.retractionLength !== undefined) c.retraction_length = t.retractionLength;
+  if (t.retractionLength !== undefined) c.filament_retraction_length = t.retractionLength;
   return c;
+}
+
+export interface SlotState { presetId: string; color: string; tuning?: SlotTuning; overrides?: Config }
+/** A slot's own filament settings: its edits, with calibration results on top. */
+export const slotOverrides = (s: SlotState): Config => ({ ...(s.overrides ?? {}), ...tuningConfig(s.tuning) });
+
+/** Engine filament slots from the UI slot list (preset + colour + own settings). */
+export function filamentSlots(slots: SlotState[]): FilamentSlot[] {
+  return slots.map((s) => {
+    const f = filamentById(s.presetId);
+    const c = filamentConfig(f, slotOverrides(s));
+    return {
+      name: f.name, type: String(c.filament_type), color: s.color, diameter: Number(c.filament_diameter), density: Number(c.filament_density), cost: Number(c.filament_cost),
+      nozzleTemp: Number(c.nozzle_temperature), nozzleTempInitial: Number(c.nozzle_temperature_initial_layer),
+      flowRatio: Number(c.filament_flow_ratio), maxVolumetricSpeed: Number(c.filament_max_volumetric_speed),
+      pressureAdvance: c.enable_pressure_advance ? Number(c.pressure_advance) : undefined,
+      settings: { ...c, ...retractionOverrides(c) },
+    };
+  });
 }

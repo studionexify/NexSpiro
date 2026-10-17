@@ -1,5 +1,6 @@
 // Filament profiles (material defaults). Bed temperatures are per plate type.
 import type { PlateType } from './printers';
+import type { Config } from './settings';
 
 export interface FilamentProfile {
   id: string;
@@ -20,6 +21,8 @@ export interface FilamentProfile {
   maxVolumetricSpeed: number; // mm³/s
   flowRatio: number;
   retractionLength?: number; // overrides printer when set
+  /** Any other filament setting (see filamentParams.ts) that differs from the material defaults. */
+  settings?: Config;
 }
 
 export const FILAMENTS: FilamentProfile[] = [

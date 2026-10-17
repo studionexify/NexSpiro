@@ -1,17 +1,37 @@
-// Stage 9–10: kinematic estimate, cooling slowdown and G-code emission.
+// Stage 9–10: kinematic estimate, cooling (slowdown + fan), G-code emission.
 import type { Config } from '../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from './types';
 import { FEATURE_ORDER } from './types';
 import { fitArc } from './arc';
 
 export type Op =
-  | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean }
+  | {
+    k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean;
+    /** Part fan at least this % while printing this move (overhang / bridge cooling). */
+    fanMin?: number;
+    /** Part fan exactly this % while printing this move (ironing fan). */
+    fanSet?: number;
+    /** Excluded from the cooling slowdown (outer walls when "Don't slow down outer walls" is on). */
+    noSlow?: boolean;
+  }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
   | { k: 'tool'; tool: number }
-  | { k: 'accel'; a: number };
+  | { k: 'accel'; a: number }
+  | { k: 'jerk'; j: number }
+  /** Spiral Z hop: a full circle of radius r around (x + r, y) while rising to z. */
+  | { k: 'lift'; x: number; y: number; z: number; r: number; f: number };
 
-export interface LayerOps { z: number; h: number; ops: Op[]; fan: number; temp?: number; bedTemp?: number }
+export interface LayerOps {
+  z: number; h: number; ops: Op[];
+  /** Kept for plugins; the part fan is worked out from the layer time when emitting. */
+  fan: number;
+  temp?: number; bedTemp?: number;
+  /** Layer index in the layer plan (equals the position in the list except when printing by object). */
+  layer?: number;
+  /** Filament active when the layer starts (its cooling settings apply to the layer). */
+  tool?: number;
+}
 
 /** Duration of a move with a symmetric trapezoidal profile (junction speeds approximated). */
 export function moveTime(len: number, v: number, a: number): number {
@@ -51,36 +71,76 @@ export interface EmitOutput {
   gcode: string;
   moves: Float32Array;
   moveFeatures: Uint8Array;
+  moveAux: Float32Array;
+  moveLines: Uint32Array;
   layers: LayerResult[];
   stats: SliceStats;
 }
 
 export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
+export const AUX_STRIDE = 2; // part fan %, nozzle temperature
+
+/** Part fan % for a layer, Bambu Studio's cooling rules (fan by layer time, first layers, ramp, keep fan on). */
+export function layerFanSpeed(c: (k: string) => number, b: (k: string) => boolean, layer: number, layerTime: number): number {
+  const first = Math.max(0, Math.round(c('close_fan_the_first_x_layers')));
+  if (layer < first) return Math.max(0, c('first_x_layer_part_fan_speed'));
+  const fmin = c('fan_min_speed'), fmax = c('fan_max_speed');
+  const slowT = c('slow_down_layer_time'), coolT = c('fan_cooling_layer_time');
+  let f: number;
+  if (layerTime < slowT || coolT <= 0) f = fmax;
+  else if (layerTime < coolT) f = fmax - ((fmax - fmin) * (layerTime - slowT)) / Math.max(1e-6, coolT - slowT);
+  else f = b('reduce_fan_stop_start_freq') ? fmin : 0;
+  const full = Math.round(c('full_fan_speed_layer'));
+  if (full > first && layer < full) f *= Math.min(1, (layer - first + 1) / (full - first + 1));
+  return Math.max(0, Math.min(100, Math.round(f)));
+}
+
+/** Auxiliary fan % for a layer (printers with an aux fan). */
+export function auxFanSpeed(c: (k: string) => number, layer: number): number {
+  const first = Math.max(0, Math.round(c('close_additional_fan_first_x_layers')));
+  if (layer < first) return Math.max(0, c('first_x_layer_fan_speed'));
+  let f = c('additional_cooling_fan_speed');
+  const full = Math.round(c('additional_fan_full_speed_layer'));
+  if (full > first && layer < full) f *= Math.min(1, (layer - first + 1) / (full - first + 1));
+  return Math.max(0, Math.min(100, Math.round(f)));
+}
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
 export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const flavor = String(cfg.gcode_flavor);
-  const minLayerTime = num('slow_down_layer_time');
-  const minSpeed = num('slow_down_min_speed');
-  const filArea = Math.PI * (num('filament_diameter') / 2) ** 2;
+  const relE = cfg.use_relative_e_distances !== false;
+  const maxAccel = num('max_acceleration');
+  const maxXY = num('max_speed_xy');
   const byFeature: SliceStats['byFeature'] = {};
   const arcs = cfg.enable_arc_fitting === true && !cfg.spiral_mode;
+  // filament-level settings (cooling) of the tool that starts each layer, falling back to the global config
+  const toolCfg = (t: number | undefined) => {
+    const s = filaments[Math.max(0, Math.min(filaments.length - 1, t ?? 0))]?.settings;
+    return { c: (k: string) => Number(s?.[k] ?? cfg[k] ?? 0), b: (k: string) => (s?.[k] ?? cfg[k]) === true };
+  };
+  const clampA = (a: number) => (maxAccel > 0 ? Math.min(a, maxAccel) : a);
 
   // 1) timing + cooling slowdown per layer
   const layerTimes: number[] = [];
+  const preSlowTimes: number[] = [];
   for (const L of layers) {
-    const timeOf = (scale: number) => {
-      let t = 0; let a = num('default_acceleration');
+    const { c } = toolCfg(L.tool);
+    const minSpeed = c('slow_down_min_speed');
+    const slowOn = (filaments[L.tool ?? 0]?.settings?.slow_down_for_layer_cooling ?? cfg.slow_down_for_layer_cooling) !== false;
+    const minLayerTime = slowOn ? c('slow_down_layer_time') : 0;
+    const timeOf = () => {
+      let t = 0; let a = clampA(num('default_acceleration'));
       let px = NaN, py = NaN, pz = NaN;
       for (const op of L.ops) {
-        if (op.k === 'accel') a = op.a;
+        if (op.k === 'accel') a = clampA(op.a);
         else if (op.k === 'raw' && op.time) t += op.time;
         else if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; pz = NaN; }
         else if (op.k === 'retract') t += Math.abs(op.len) / op.speed;
+        else if (op.k === 'lift') { t += (2 * Math.PI * op.r) / Math.max(1, op.f) + 0.05; pz = op.z; }
         else if (op.k === 'move') {
           const len = isNaN(px) ? 0 : Math.hypot(op.x - px, op.y - py, op.z - pz);
-          const f = op.travel || op.fixed ? op.f : Math.max(Math.min(op.f, op.f * scale), Math.min(op.f, minSpeed));
+          const f = maxXY > 0 ? Math.min(op.f, maxXY) : op.f;
           op.t = moveTime(len, f, a);
           t += op.t;
           px = op.x; py = op.y; pz = op.z;
@@ -88,17 +148,18 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
       }
       return t;
     };
-    let t = timeOf(1);
+    let t = timeOf();
+    preSlowTimes.push(t);
     if (minLayerTime > 0 && t > 0 && t < minLayerTime) {
-      // slow printing moves proportionally (travel unaffected)
-      let travelT = 0;
-      for (const op of L.ops) if (op.k === 'move' && op.travel) travelT += op.t ?? 0;
-      const printT = t - travelT;
-      const want = minLayerTime - travelT;
+      // slow printing moves proportionally (travel and protected moves unaffected)
+      let fixedT = 0;
+      for (const op of L.ops) if (op.k === 'move' && (op.travel || op.fixed || op.noSlow)) fixedT += op.t ?? 0;
+      const printT = t - fixedT;
+      const want = minLayerTime - fixedT;
       if (printT > 0 && want > printT) {
         const scale = printT / want;
-        for (const op of L.ops) if (op.k === 'move' && !op.travel && !op.fixed) op.f = Math.max(Math.min(op.f, minSpeed), op.f * scale);
-        t = timeOf(1);
+        for (const op of L.ops) if (op.k === 'move' && !op.travel && !op.fixed && !op.noSlow) op.f = Math.max(Math.min(op.f, minSpeed), op.f * scale);
+        t = timeOf();
       }
     }
     layerTimes.push(t);
@@ -107,7 +168,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
 
   // 2) write
   const out: string[] = [];
+  let lineNo = 0;
+  const push = (text: string) => { out.push(text); lineNo += text.split('\n').length; };
   const moves: number[] = [];
+  const aux: number[] = [];
+  const lines: number[] = [];
   const feats: number[] = [];
   const layerRes: LayerResult[] = [];
   let filamentMm = 0;
@@ -117,76 +182,107 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
   const perFil = filaments.map(() => 0);
   let towerMm = 0;
 
-  out.push('; generated by NexSpiro 0.1.0');
-  out.push(`; printer_model = ${cfg.printer_model}`);
-  out.push(`; filament_type = ${cfg.filament_type}`);
-  out.push(`; layer_height = ${cfg.layer_height}`);
-  out.push(`; total layer number: ${layers.length}`);
-  out.push('; estimated printing time (normal mode) = __TIME__');
-  out.push('; filament used [mm] = __FILMM__');
-  out.push('; filament used [g] = __FILG__');
-  out.push(...headerLines);
-  out.push('');
+  push('; generated by NexSpiro 0.1.0');
+  push(`; printer_model = ${cfg.printer_model}`);
+  push(`; filament_type = ${cfg.filament_type}`);
+  push(`; layer_height = ${cfg.layer_height}`);
+  push(`; total layer number: ${layers.length}`);
+  push('; estimated printing time (normal mode) = __TIME__');
+  push('; filament used [mm] = __FILMM__');
+  push('; filament used [g] = __FILG__');
+  for (const h of headerLines) push(h);
+  push('');
 
-  if (cfg.label_objects && flavor === 'klipper') {
+  if (cfg.exclude_object !== false && flavor === 'klipper') {
     for (const o of objectLabels) {
       const poly = o.polygon.map(([x, y]) => `[${n(x)},${n(y)}]`).join(',');
-      out.push(`EXCLUDE_OBJECT_DEFINE NAME=${o.name} CENTER=${n(o.cx)},${n(o.cy)} POLYGON=[${poly}]`);
+      push(`EXCLUDE_OBJECT_DEFINE NAME=${o.name} CENTER=${n(o.cx)},${n(o.cy)} POLYGON=[${poly}]`);
     }
   }
-  out.push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
-  if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '') out.push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
-  out.push('G90 ; absolute XYZ');
-  out.push('M83 ; relative E');
-  out.push('G92 E0');
+  const chamber = num('chamber_temperature');
+  if (chamber > 0) push(`M141 S${Math.round(chamber)} ; chamber temperature`);
+  push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  if (chamber > 0 && flavor !== 'klipper') push(`M191 S${Math.round(chamber)} ; wait for chamber`);
+  if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '' && cfg.enable_pressure_advance !== false) push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
+  push('G90 ; absolute XYZ');
+  push(relE ? 'M83 ; relative E' : 'M82 ; absolute E');
+  push('G92 E0');
 
-  let x = 0, y = 0, z = 0, f = 0, fan = -1, accel = -1;
+  let x = 0, y = 0, z = 0, f = 0, fanOut = -1, auxOut = -1, accel = -1, jerk = -1;
+  let eAbs = 0;
+  let temp = filaments[0]?.nozzleTempInitial ?? num('nozzle_temperature_initial_layer');
   let elapsed = 0;
+  const hasAux = cfg.auxiliary_fan === true;
+  const a2d = cfg.accel_to_decel_enable === true ? num('accel_to_decel_factor') / 100 : 0;
   const fmtF = (v: number) => n(v * 60, 0);
-  const pushMove = (feature: FeatureType, w: number, h: number, speed: number, t: number) => {
+  const eTok = (e: number) => { if (relE) return `E${n(e, 5)}`; eAbs += e; return `E${n(eAbs, 5)}`; };
+  const pushMove = (feature: FeatureType, w: number, h: number, speed: number, t: number, fan: number) => {
     moves.push(x, y, z, w, h, speed, t, tool);
+    aux.push(fan, temp);
+    lines.push(lineNo - 1);
     feats.push(FEATURE_ORDER.indexOf(feature));
+  };
+  const setFan = (pct: number) => {
+    if (pct === fanOut) return;
+    fanOut = pct;
+    push(pct > 0 ? `M106 S${Math.round((pct / 100) * 255)}` : 'M107');
+  };
+  const tempIn = (text: string) => {
+    for (const m of text.matchAll(/^M10[49](?![^;\n]*\bT\d)[^;\n]*\bS(\d+(?:\.\d+)?)/gm)) temp = Number(m[1]);
   };
 
   layers.forEach((L, li) => {
     const moveStart = feats.length;
-    out.push(';LAYER_CHANGE');
-    out.push(`;Z:${n(L.z)}`);
-    out.push(`;HEIGHT:${n(L.h)}`);
-    if (flavor !== 'klipper') out.push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
-    if (flavor === 'bambu') out.push(`M73 L${li + 1}`);
-    else if (flavor === 'klipper') out.push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
+    const { c } = toolCfg(L.tool);
+    const layerIndex = L.layer ?? li;
+    const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li]);
+    const bl = String(cfg.before_layer_change_gcode ?? '');
+    if (bl) push(expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    push(';LAYER_CHANGE');
+    push(`;Z:${n(L.z)}`);
+    push(`;HEIGHT:${n(L.h)}`);
+    if (!relE) { push('G92 E0'); eAbs = 0; }
+    if (flavor !== 'klipper') push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
+    if (flavor === 'bambu') push(`M73 L${li + 1}`);
+    else if (flavor === 'klipper') push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
-    if (lc) out.push(expandMacro(lc, cfg, { layer_num: li, layer_z: n(L.z) }));
-    if (L.temp !== undefined) out.push(`M104 S${L.temp}`);
-    if (L.bedTemp !== undefined) out.push(`M140 S${L.bedTemp}`);
-    if (L.fan !== fan) {
-      fan = L.fan;
-      out.push(fan > 0 ? `M106 S${Math.round((fan / 100) * 255)}` : 'M107');
+    if (lc) push(expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    if (L.temp !== undefined) { push(`M104 S${L.temp}`); temp = L.temp; }
+    if (L.bedTemp !== undefined) push(`M140 S${L.bedTemp}`);
+    L.fan = layerFan;
+    setFan(layerFan);
+    if (hasAux) {
+      const a = auxFanSpeed(c, layerIndex);
+      if (a !== auxOut) { auxOut = a; push(`M106 P2 S${Math.round((a / 100) * 255)}`); }
     }
     let curFeature: FeatureType | null = null;
     for (let oi = 0; oi < L.ops.length; oi++) {
       const op = L.ops[oi];
+      if (op.k === 'move' && !op.travel && op.e > 0) setFan(op.fanSet !== undefined ? op.fanSet : Math.max(layerFan, op.fanMin ?? 0));
       if (arcs && op.k === 'move' && !op.travel && !op.noArc && op.e > 0 && op.z === z && !isNaN(x)) {
         const fit = fitArc(L.ops, oi, x, y);
         if (fit) {
-          if (curFeature !== op.feature) { curFeature = op.feature; out.push(`;TYPE:${op.feature.replace(/_/g, ' ')}`); }
+          if (curFeature !== op.feature) { curFeature = op.feature; push(`;TYPE:${op.feature.replace(/_/g, ' ')}`); }
           const last = L.ops[fit.end] as Extract<Op, { k: 'move' }>;
           let e = 0;
           const i0 = fit.cx - x, j0 = fit.cy - y;
+          const arcMoves: [Extract<Op, { k: 'move' }>, number, number][] = [];
           for (let k = oi; k <= fit.end; k++) {
             const m = L.ops[k] as Extract<Op, { k: 'move' }>;
             e += m.e;
-            x = m.x; y = m.y;
+            arcMoves.push([m, m.x, m.y]);
+          }
+          const parts = [fit.cw ? 'G2' : 'G3', `X${n(last.x)}`, `Y${n(last.y)}`, `I${n(i0)}`, `J${n(j0)}`, eTok(e)];
+          if (op.f !== f) { parts.push(`F${fmtF(op.f)}`); f = op.f; }
+          push(parts.join(' '));
+          for (const [m, mx, my] of arcMoves) {
+            x = mx; y = my;
             const t = m.t ?? 0;
             elapsed += t;
-            pushMove(m.feature, m.w, m.h, m.f, t);
+            pushMove(m.feature, m.w, m.h, m.f, t, fanOut);
             const bf = byFeature[m.feature] ?? (byFeature[m.feature] = { time: 0, filamentMm: 0 });
             bf.time += t; bf.filamentMm += m.e;
           }
-          const parts = [fit.cw ? 'G2' : 'G3', `X${n(last.x)}`, `Y${n(last.y)}`, `I${n(i0)}`, `J${n(j0)}`, `E${n(e, 5)}`];
-          if (op.f !== f) { parts.push(`F${fmtF(op.f)}`); f = op.f; }
-          out.push(parts.join(' '));
           filamentMm += e;
           perFil[tool] += e;
           if (op.feature === 'prime_tower') towerMm += e;
@@ -196,42 +292,68 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
       }
       switch (op.k) {
         case 'raw':
-          out.push(op.text);
+          push(op.text);
+          tempIn(op.text);
           if (op.time) elapsed += op.time;
           if (op.resetPos) { x = NaN; y = NaN; z = NaN; f = NaN; accel = -1; }
+          // a macro that touched the part fan (filament change): put the layer's fan speed back right away
+          if (op.resetPos && /^\s*M10[67](?!\s*P[2-9])/m.test(op.text)) { fanOut = -1; setFan(layerFan); }
           break;
         case 'tool':
           if (toolSeen && op.tool !== tool) toolChanges++;
           toolSeen = true;
           tool = op.tool;
           break;
-        case 'accel':
-          if (op.a !== accel) {
-            accel = op.a;
-            out.push(flavor === 'klipper' ? `SET_VELOCITY_LIMIT ACCEL=${n(op.a, 0)}` : `M204 S${n(op.a, 0)}`);
+        case 'accel': {
+          const a = clampA(op.a);
+          if (a !== accel) {
+            accel = a;
+            push(flavor === 'klipper' ? `SET_VELOCITY_LIMIT ACCEL=${n(a, 0)}${a2d ? ` ACCEL_TO_DECEL=${n(a * a2d, 0)}` : ''}` : `M204 S${n(a, 0)}`);
           }
           break;
+        }
+        case 'jerk':
+          if (op.j !== jerk && op.j > 0) {
+            jerk = op.j;
+            push(flavor === 'klipper' ? `SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=${n(op.j, 1)}` : `M205 X${n(op.j, 1)} Y${n(op.j, 1)}`);
+          }
+          break;
+        case 'lift': {
+          // spiral Z hop: Bambu firmware takes a full-circle G3 (P1); others get a short helix of G1 moves
+          const f2 = fmtF(op.f);
+          if (flavor === 'bambu') { push('G17'); push(`G3 Z${n(op.z)} I${n(op.r)} J0 P1 F${f2}`); }
+          else {
+            const z0 = isNaN(z) ? op.z : z;
+            for (let k = 1; k <= 8; k++) {
+              const a = (k / 8) * 2 * Math.PI;
+              push(`G1 X${n(op.x + op.r - op.r * Math.cos(a))} Y${n(op.y - op.r * Math.sin(a))} Z${n(z0 + ((op.z - z0) * k) / 8)} F${f2}`);
+            }
+          }
+          x = op.x; y = op.y; z = op.z; f = op.f;
+          elapsed += (2 * Math.PI * op.r) / Math.max(1, op.f);
+          break;
+        }
         case 'retract':
-          out.push(`G1 E${n(-op.len, 5)} F${fmtF(op.speed)}`);
+          push(`G1 ${eTok(-op.len)} F${fmtF(op.speed)}`);
           filamentMm -= op.len;
           perFil[tool] -= op.len;
           break;
         case 'move': {
           if (!op.travel && curFeature !== op.feature) {
             curFeature = op.feature;
-            out.push(`;TYPE:${op.feature.replace(/_/g, ' ')}`);
+            push(`;TYPE:${op.feature.replace(/_/g, ' ')}`);
           }
-          const parts = [op.travel ? 'G0' : 'G1'];
+          const parts = [op.travel && op.e === 0 ? 'G0' : 'G1'];
           if (op.x !== x) parts.push(`X${n(op.x)}`);
           if (op.y !== y) parts.push(`Y${n(op.y)}`);
           if (op.z !== z) parts.push(`Z${n(op.z)}`);
-          if (op.e !== 0) parts.push(`E${n(op.e, 5)}`);
+          if (op.e !== 0) parts.push(eTok(op.e));
           if (op.f !== f) { parts.push(`F${fmtF(op.f)}`); f = op.f; }
           if (parts.length === 1 || (parts.length === 2 && parts[1].startsWith('F'))) {
-            if (parts.length === 2) out.push(parts.join(' '));
+            if (parts.length === 2) push(parts.join(' '));
             break;
           }
-          out.push(parts.join(' '));
+          push(parts.join(' '));
           const moved = op.x !== x || op.y !== y || op.z !== z;
           x = op.x; y = op.y; z = op.z;
           filamentMm += op.e;
@@ -239,7 +361,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
           if (op.feature === 'prime_tower') towerMm += op.e;
           const t = op.t ?? 0;
           elapsed += t;
-          if (moved) pushMove(op.travel ? 'travel' : op.feature, op.w, op.h, op.f, t);
+          if (moved) pushMove(op.travel ? 'travel' : op.feature, op.w, op.h, op.f, t, fanOut);
           const fk = op.travel ? 'travel' : op.feature;
           const bf = byFeature[fk] ?? (byFeature[fk] = { time: 0, filamentMm: 0 });
           bf.time += t; bf.filamentMm += op.e;
@@ -250,8 +372,9 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     layerRes.push({ index: li, z: L.z, height: L.h, moveStart, moveEnd: feats.length, time: layerTimes[li] });
   });
 
-  out.push('M73 P100 R0');
-  out.push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
+  push('M73 P100 R0');
+  setFan(0);
+  push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
 
   const gramsOf = (mm: number, k: number) => {
     const fl = filaments[k] ?? filaments[0];
@@ -261,24 +384,40 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     const g = gramsOf(mm, k);
     return { mm, grams: g, cost: (g / 1000) * (filaments[k] ?? filaments[0]).cost };
   });
+  for (const v of Object.values(byFeature)) if (v) v.grams = gramsOf(v.filamentMm, 0);
   const grams = perFilament.reduce((a, b) => a + b.grams, 0);
   const cost = perFilament.reduce((a, b) => a + b.cost, 0);
-  void filArea;
+  const filArea = Math.PI * (num('filament_diameter') / 2) ** 2;
   const fmtTime = (s: number) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.round(s % 60);
     return `${h ? h + 'h ' : ''}${m}m ${sec}s`;
   };
-  out.push('');
-  out.push(`; filament used [cm3] = ${n(filamentMm * filArea / 1000, 2)}`);
-  out.push(`; total filament cost = ${n(cost, 2)}`);
-  out.push(`; total filament change = ${toolChanges}`);
+  push('');
+  push(`; filament used [cm3] = ${n(filamentMm * filArea / 1000, 2)}`);
+  push(`; total filament cost = ${n(cost, 2)}`);
+  push(`; total filament change = ${toolChanges}`);
+  // settings block, as other slicers write it (read back by printer UIs and post-processors)
+  push('; CONFIG_BLOCK_START');
+  for (const k of Object.keys(cfg).sort()) {
+    if (k.endsWith('_gcode') || k === 'post_process') continue; // G-code templates stay out of the block
+    const v = cfg[k];
+    if (typeof v === 'string' && v.includes('\n')) push(`; ${k} = ${v.replace(/\n/g, '\\n')}`);
+    else push(`; ${k} = ${String(v)}`);
+  }
+  push('; CONFIG_BLOCK_END');
   let gcode = out.join('\n') + '\n';
   gcode = gcode.replace('__TIME__', fmtTime(total)).replace('__FILMM__', n(filamentMm, 2)).replace('__FILG__', n(grams, 2));
+  if (cfg.gcode_add_line_number === true) {
+    let nLine = 0;
+    gcode = gcode.split('\n').map((l) => (l && !l.startsWith(';') ? `N${++nLine} ${l}` : l)).join('\n');
+  }
 
   return {
     gcode,
     moves: new Float32Array(moves),
     moveFeatures: new Uint8Array(feats),
+    moveAux: new Float32Array(aux),
+    moveLines: new Uint32Array(lines),
     layers: layerRes,
     stats: {
       timeSeconds: total,
