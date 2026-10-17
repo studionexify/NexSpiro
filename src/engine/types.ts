@@ -25,7 +25,8 @@ export type FeatureType =
   | 'support'
   | 'support_interface'
   | 'prime_tower'
-  | 'travel';
+  | 'travel'
+  | 'wave_overhang';
 
 export const FEATURE_LABELS: Record<FeatureType, string> = {
   outer_wall: 'Outer wall',
@@ -42,6 +43,7 @@ export const FEATURE_LABELS: Record<FeatureType, string> = {
   brim: 'Brim',
   support: 'Support',
   support_interface: 'Support interface',
+  wave_overhang: 'Wave overhang',
   prime_tower: 'Prime tower',
   travel: 'Travel',
 };
@@ -188,5 +190,5 @@ export interface SliceOutput {
 export const FEATURE_ORDER: FeatureType[] = [
   'outer_wall', 'inner_wall', 'overhang_wall', 'sparse_infill', 'internal_solid_infill',
   'top_surface', 'bottom_surface', 'bridge', 'ironing', 'skirt', 'brim', 'support',
-  'support_interface', 'travel', 'prime_tower', 'gap_infill',
+  'support_interface', 'travel', 'prime_tower', 'gap_infill', 'wave_overhang',
 ];
