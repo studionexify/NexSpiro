@@ -12,7 +12,8 @@
     "test": "vitest run",
     "electron:dev": "node scripts/build-electron.mjs && concurrently -k \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && cross-env NEXSPIRO_DEV_URL=http://localhost:5173 electron .\"",
     "electron:build": "npm run build && electron-builder",
-    "build:electron": "node scripts/build-electron.mjs"
+    "build:electron": "node scripts/build-electron.mjs",
+    "hanex:prints": "cross-env HANEX_TEST_PRINTS=out/hanex vitest run tests/hanex/calibration.test.ts"
   },
   "build": {
     "appId": "com.nexspiro.app",
