@@ -15,6 +15,7 @@ import { preparePlugins, runPlugins } from '../plugins/engine';
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
+import { createAdvancedSession } from './advanced/session';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -121,6 +122,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
   const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
 
+  // Advanced mode: analyse the parts, route zones to technologies; curved layers warp the meshes
+  let realMaxZ = 0;
+  for (const m of meshes) for (let i = 2; i < m.vertices.length; i += 3) realMaxZ = Math.max(realMaxZ, m.vertices[i]);
+  const adv = opts.advanced ? (progress('Analysing parts (Advanced)', 0.01), createAdvancedSession(meshes, cfg, opts.advanced, filaments, () => {})) : undefined;
+  if (adv) meshes = adv.meshes;
+
   // per-object effective config
   const ocfg: Config[] = meshes.map((m) => ({ ...cfg, ...pick(m.overrides, OBJECT_KEYS) }));
   const onum = (o: number, k: string) => Number(ocfg[o][k] ?? 0);
@@ -206,6 +213,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
     filamentCount: filaments.length, hasAms: bool('has_ams'), warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); },
   });
+  if (adv) sessions.set('nexspiro-advanced', adv.plugin);
   // raised / recessed artwork changes the cross-sections themselves, before walls, surfaces and support
   const reshapers = [...sessions.values()].filter((x) => x.reshape);
   if (reshapers.length) {
@@ -285,6 +293,13 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         for (const ex of toExPolygons(reg.paths)) {
           const ip = exToPaths(ex);
           const loops: PathItem[][] = [];
+          const custom = adv?.walls && !vase && walls > 0 ? adv.walls(oi, ex, { walls, wo, wi, so, si, h, z: zs[i], layer: i }) : undefined;
+          if (custom) {
+            for (const ring of custom.loops) loops.push(ring.map((l) => ({ ...l })));
+            regInner.push(...custom.inner);
+            islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: custom.inner, thin: [] });
+            continue;
+          }
           if (arachne && walls > 0) {
             // variable-width walls: narrow areas get one bead whose width follows the region
             const thin: PathItem[] = [];
@@ -773,7 +788,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           add(linesFill(clipTo(rg.solid, ww), spacingOf(ww, h), solidAngle), 'internal_solid_infill', ww);
         }
         const dens = vase ? 0 : onum(o, 'sparse_infill_density') / 100;
-        if (rg.sparse.length && dens > 0) add(sparseFill(clipTo(rg.sparse, spw), ostr(o, 'sparse_infill_pattern') as SparsePattern, spw, dens, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
+        if (rg.sparse.length && dens > 0) {
+          const reg = clipTo(rg.sparse, spw);
+          const custom = adv?.infill && reg.length ? adv.infill(o, reg, { width: spw, density: dens, z: zTop, h, layer: i, pattern: ostr(o, 'sparse_infill_pattern') }) : undefined;
+          if (custom) for (const p of custom) fills.push({ ...p, pts: p.widths ? p.pts : simplify(p.pts, resolution, p.closed), feature: p.feature ?? 'sparse_infill', width: p.width, flow: p.flow ?? 1 });
+          else add(sparseFill(reg, ostr(o, 'sparse_infill_pattern') as SparsePattern, spw, dens, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
+        }
         for (const m of rg.sparseMods) add(sparseFill(clipTo(m.paths, spw), m.pattern, spw, m.density, i, zTop, onum(o, 'infill_direction')), 'sparse_infill', spw);
         if (rg.top.length) surface(rg.top, ostr(o, 'top_surface_pattern'), twid, 'top_surface');
         const ironing = ostr(o, 'ironing_type');
@@ -884,6 +904,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const x0 = b.minX / SCALE, y0 = b.minY / SCALE, x1 = b.maxX / SCALE, y1 = b.maxY / SCALE;
     return { name: labelName(o), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as [number, number][] };
   }).filter((l) => isFinite(l.cx));
+  // ---------- Advanced: geometry passes (curved layers, helices, seams, weaving…) before the plugins
+  const stageCtx = { cfg, layerZ: zs, layerH: hs, warn: (msg: string) => { if (!warnings.includes(msg)) warnings.push(msg); } };
+  if (adv) { progress('Advanced toolpath passes', 0.88); adv.post(layerOps, stageCtx); }
   // ---------- plugins: post-toolpath, pre-G-code
   let pluginRun: ReturnType<typeof runPlugins> = { header: [], reports: {} };
   if (opts.plugins && Object.keys(opts.plugins).length) {
@@ -915,15 +938,20 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }));
     pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
   }
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header });
+  // ---------- Advanced: rheology & motion passes on the final move list
+  if (adv) { progress('Advanced rheology & motion', 0.91); adv.finalize(layerOps, stageCtx); }
+  const advHeader = adv ? [`; NexSpiro Advanced engine: intent=${opts.advanced!.intent} machine=${adv.ctx.caps.name}`] : [];
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: [...pluginRun.header, ...advHeader] });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
   if (all.minX / SCALE < -0.01 || all.minY / SCALE < -0.01 || all.maxX / SCALE > bx + 0.01 || all.maxY / SCALE > by + 0.01) {
     warnings.push('Some geometry lies outside the printable area.');
   }
-  if (maxZ > num('bed_z')) warnings.push(`Model height ${maxZ.toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
+  if (realMaxZ > num('bed_z')) warnings.push(`Model height ${realMaxZ.toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warnings.push(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
-  return { ...res, warnings, pluginReports: pluginRun.reports };
+  const advanced = adv?.report();
+  if (advanced) for (const w of advanced.warnings) if (!warnings.includes(w)) warnings.push(w);
+  return { ...res, warnings, pluginReports: pluginRun.reports, ...(advanced ? { advanced } : {}) };
 }

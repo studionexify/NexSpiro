@@ -6,6 +6,7 @@ import { filamentSlots, resolveConfig, tuningConfig } from '../profiles/resolve'
 import { effectiveFlush } from '../profiles/flush';
 import { faceSetsOf, pluginConfigs } from '../plugins/registry';
 import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } from './store';
+import { advancedSliceConfig } from './advanced';
 
 let worker: Worker | null = null;
 let seq = 0;
@@ -76,7 +77,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     };
     worker!.postMessage({
       id, meshes, cfg: currentConfig(plate),
-      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
 }

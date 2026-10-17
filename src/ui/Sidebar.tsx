@@ -9,17 +9,40 @@ import { updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
+import { useAdvanced } from '../state/advanced';
+import { AdvancedPanel } from './advanced/AdvancedPanel';
 
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 
 export function Sidebar() {
+  const advanced = useAdvanced((a) => a.engineMode === 'advanced');
+  // Progressive disclosure: Basic shows the Bambu-style process settings; Advanced swaps them for the
+  // Intent Cards, Zone Inspector and technology graph (the base process stays one click away).
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${advanced ? 'is-advanced' : ''}`}>
       <PrinterCard />
       <FilamentCard />
       <ObjectsCard />
-      <ProcessCard />
+      {advanced ? <><BaseProcessRow /><AdvancedPanel /></> : <ProcessCard />}
     </aside>
+  );
+}
+
+/** Advanced mode: the base process preset, with the full Basic settings in a dialog. */
+function BaseProcessRow() {
+  const s = useStore();
+  const [open, setOpen] = useState(false);
+  const n = Object.keys(s.overrides).length;
+  return (
+    <div className="base-process">
+      <Icon name="layers" size={15} />
+      <span className="muted">Base process</span>
+      <select className="select" value={s.presetId} aria-label="Base process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
+        {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}{n && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+      </select>
+      <button className="icon-btn" title="Layer height, walls, speeds… (shared with Basic mode)" onClick={() => setOpen(true)}><Icon name="edit" size={15} /></button>
+      {open && <Modal title="Base process settings (shared with Basic mode)" onClose={() => setOpen(false)}><div className="base-process-modal"><ProcessCard /></div></Modal>}
+    </div>
   );
 }
 
