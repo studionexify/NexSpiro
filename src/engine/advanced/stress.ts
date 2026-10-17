@@ -116,6 +116,19 @@ export function partLoadCase(a: PartAnalysis, m: VoxelModel, newtons: number, di
       sources.push('top face');
     }
   }
+  // a piece that touches no fixture floats free (singular stiffness, the solve cannot converge): it
+  // stands on support, so hold its lowest nodes
+  const root = new Int32Array(m.nodes).map((_, i) => i);
+  const find = (x: number): number => { while (root[x] !== x) { root[x] = root[root[x]]; x = root[x]; } return x; };
+  for (let e = 0; e < m.cells.length; e++) { const r0 = find(m.en[e * 8]); for (let q = 1; q < 8; q++) { const r = find(m.en[e * 8 + q]); if (r !== r0) root[r] = r0; } }
+  const held = new Set<number>();
+  for (const n of fix) held.add(find(n));
+  const low = new Map<number, number>();
+  for (let n = 0; n < m.nodes; n++) { const r = find(n); if (held.has(r)) continue; const z = nodePos(m, n)[2]; if (!(low.get(r)! <= z)) low.set(r, z); }
+  if (low.size) {
+    for (let n = 0; n < m.nodes; n++) { const r = find(n); const z0 = low.get(r); if (z0 !== undefined && nodePos(m, n)[2] <= z0 + 1e-6) fix.add(n); }
+    sources.push('support under floating pieces');
+  }
   for (const n of fix) load.delete(n);
   const d = dir ?? a.params.load?.dir ?? [0, 0, -1];
   const dl = Math.hypot(d[0], d[1], d[2]) || 1;

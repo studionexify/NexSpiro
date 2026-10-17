@@ -21,9 +21,25 @@ export function reebGraph(a: PartAnalysis, threshold: number): ReebGraph {
   let minima = 0, maxima = 0, saddles = 0;
   const zmin = a.sdf.min[2];
   const step = sec.z.length > 1 ? sec.z[1] - sec.z[0] : 0.2;
+  // island bounding boxes, so only boxes that overlap go to the polygon intersection
+  const boxes = planes.map((pl) => pl.map((q) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const path of q) for (const pt of path) { if (pt.X < x0) x0 = pt.X; if (pt.X > x1) x1 = pt.X; if (pt.Y < y0) y0 = pt.Y; if (pt.Y > y1) y1 = pt.Y; }
+    return [x0, y0, x1, y1];
+  }));
   for (let k = 0; k < planes.length; k++) {
+    // overlaps between the islands of plane k − 1 and plane k, computed once per plane pair
+    const pred: number[][] = planes[k].map(() => []), succ: number[][] = k ? planes[k - 1].map(() => []) : [];
+    if (k) for (let i = 0; i < planes[k].length; i++) {
+      const b = boxes[k][i];
+      for (let j = 0; j < planes[k - 1].length; j++) {
+        const c = boxes[k - 1][j];
+        if (c[0] > b[2] || c[2] < b[0] || c[1] > b[3] || c[3] < b[1]) continue;
+        if (intersection(planes[k - 1][j], planes[k][i]).length) { pred[i].push(j); succ[j].push(i); }
+      }
+    }
     for (let i = 0; i < planes[k].length; i++) {
-      const prev = k ? planes[k - 1].map((q, j) => (intersection(q, planes[k][i]).length ? j : -1)).filter((j) => j >= 0) : [];
+      const prev = pred[i];
       if (!prev.length) {
         // a birth: on the bed or a local minimum of the height function
         const bed = sec.z[k] <= zmin + step * 1.5;
@@ -43,15 +59,15 @@ export function reebGraph(a: PartAnalysis, threshold: number): ReebGraph {
       }
       // one predecessor: continue its branch, or start a new one at a split
       const pid = nodeBranch[k - 1][prev[0]];
-      const siblings = planes[k].filter((q, j) => j !== i && intersection(q, planes[k - 1][prev[0]]).length).length;
-      if (siblings && planes[k].findIndex((q) => intersection(q, planes[k - 1][prev[0]]).length) !== i) {
+      const kids = succ[prev[0]];
+      if (kids.length > 1 && kids[0] !== i) {
         saddles++;
         nodeBranch[k][i] = branches.length;
         branches.push({ id: branches.length, z0: sec.z[k] - step / 2, z1: sec.z[k] + step / 2, birth: 'split', death: 'top', persistence: 0, route: '' });
       } else { nodeBranch[k][i] = pid; branches[pid].z1 = sec.z[k] + step / 2; }
     }
     // deaths: islands of plane k − 1 with no successor
-    if (k) planes[k - 1].forEach((q, j) => { if (!planes[k].some((p) => intersection(q, p).length)) { const b = branches[nodeBranch[k - 1][j]]; if (b.death === 'top' && k < planes.length) { b.death = 'maximum'; maxima++; } } });
+    if (k) planes[k - 1].forEach((_q, j) => { if (!succ[j].length) { const b = branches[nodeBranch[k - 1][j]]; if (b.death === 'top') { b.death = 'maximum'; maxima++; } } });
   }
   for (const b of branches) b.persistence = b.z1 - b.z0;
   // simplification: short arcs fold into the branch they touch
@@ -73,8 +89,8 @@ export function branchField(a: PartAnalysis, g: ReebGraph): Float32Array {
   const order = new Map(g.branches.map((b, i) => [b.id, i]));
   for (let t = 0; t < T; t++) {
     const x = a.surf.centroid[t * 3], y = a.surf.centroid[t * 3 + 1], z = a.surf.centroid[t * 3 + 2];
-    let k = 0, bd = Infinity;
-    g.z.forEach((zz, i) => { const d = Math.abs(zz - z); if (d < bd) { bd = d; k = i; } });
+    // the planes are evenly spaced: the nearest one by index
+    const k = g.z.length > 1 ? Math.max(0, Math.min(g.z.length - 1, Math.round((z - g.z[0]) / (g.z[1] - g.z[0])))) : 0;
     // the island holding the centroid (surface points sit on the outline: fall back to the first island)
     const best = Math.max(0, (g.planes[k] ?? []).findIndex((p) => pointIn(x, y, p)));
     out[t] = order.get(g.nodeBranch[k]?.[best] ?? 0) ?? 0;
