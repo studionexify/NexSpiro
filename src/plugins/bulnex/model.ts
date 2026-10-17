@@ -1,7 +1,7 @@
 // Bulnex: bulk production by printing the same part (or a row of copies) again and again, pushing the
 // finished parts off the front of the plate with the print head between prints.
 //
-// Push geometry (Bambu A1, bed slinger): the head parks at the part's X centre behind the row, drops to
+// Push geometry (A1, bed slinger): the head parks at the part's X centre behind the row, drops to
 // the push height and the bed moves so the head sweeps towards Y = 0 — the parts slide off the front edge.
 // Everything here is plain data so the config can cross into the slicing worker.
 
@@ -55,7 +55,7 @@ export const DEFAULT_BULNEX: BulnexConfig = {
   minHeight: 8, maxContactArea: 0,
 };
 
-/** Bambu A1 normal stepper currents (A), restored after every push. */
+/** A1 normal stepper currents (A), restored after every push. */
 export const A1_CURRENT = { x: 0.65, y: 1.2, z: 0.6 };
 /** Lowest push height above the plate: the nozzle tip must clear the first layers and the plate texture. */
 export const MIN_PUSH_Z = 2;

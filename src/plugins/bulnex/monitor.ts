@@ -1,4 +1,4 @@
-// Bulnex monitor: watches a running Bulnex job through the printer's status and camera (Bambu LAN,
+// Bulnex monitor: watches a running Bulnex job through the printer's status and camera (LAN,
 // desktop app) and sends a phone notification when something looks wrong. It only alerts — the user
 // decides whether to stop the printer.
 //
@@ -174,7 +174,7 @@ export async function startMonitor(s: MonitorSettings): Promise<void> {
   if (st) onStatus(st);
   stopFns.push(useDevices.subscribe((d, p) => { const x = d.status[s.deviceId]; if (x && x !== p.status[s.deviceId]) onStatus(x); }));
   const stop = await handleOf(s.deviceId).camera((u) => { void onFrame(u); });
-  if (!stop) { log('alert', 'This printer has no camera stream here — status alerts only (needs the desktop app and a Bambu A1/P1).'); return; }
+  if (!stop) { log('alert', 'This printer has no camera stream here — status alerts only (needs the desktop app and an A1 or P1).'); return; }
   stopFns.push(stop);
   log('info', 'Monitoring started.');
 }
