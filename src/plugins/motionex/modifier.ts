@@ -169,15 +169,6 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
   const { machine, process, filament } = p;
   const maxXY = Math.min(machine.maxSpeed.x, machine.maxSpeed.y);
   const filArea = Math.PI * (filament.diameter / 2) ** 2;
-  // Tangent and outward normal of the slicer's path (walls are CCW, so outward is the right-hand normal).
-  const tx = new Float64Array(N), ty = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    // for closed paths wrap around so the seam has no kink
-    const prev = samples[i > 0 ? i - 1 : path.closed ? N - 2 : 0];
-    const next = samples[i < N - 1 ? i + 1 : path.closed ? 1 : N - 1];
-    const dx = next.x - prev.x, dy = next.y - prev.y, l = Math.hypot(dx, dy) || 1;
-    tx[i] = dx / l; ty[i] = dy / l;
-  }
   const lat = new Float64Array(N), along = new Float64Array(N), dz = new Float64Array(N);
   const flow = new Float64Array(N).fill(1), speed = new Float64Array(N).fill(1), total = new Float64Array(N);
   const lo = new Float64Array(N).fill(-Infinity), hi = new Float64Array(N).fill(Infinity);
@@ -237,6 +228,44 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     }
     if (pendingUnretract > 0) post[N - 1] = { ...post[N - 1], unretract_mm: pendingUnretract };
   }
+  // Small loops (the tip of a cone or pyramid) can't hold the full motion: the offset would fold the
+  // line over itself. Scale the side-to-side movement down so it never exceeds a share of the loop's
+  // inner radius; this changes smoothly from layer to layer, so the motion fades out towards the tip.
+  let maxLat = 0;
+  for (let i = 0; i < N; i++) maxLat = Math.max(maxLat, Math.abs(lat[i]) + Math.abs(along[i]));
+  if (path.closed && maxLat > 0) {
+    let a2 = 0;
+    for (let i = 1; i < N; i++) a2 += samples[i - 1].x * samples[i].y - samples[i].x * samples[i - 1].y;
+    const cap = LOOP_SHARE * (Math.abs(a2) / L);  // inradius = 2·area / perimeter
+    if (maxLat > cap) {
+      const k = cap / maxLat;
+      for (let i = 0; i < N; i++) { lat[i] *= k; along[i] *= k; }
+      maxLat = cap;
+    }
+  }
+  // Direction of the offset. A sample's own tangent jumps at every corner of the slicer's path, so an
+  // inward offset would cross itself there and an outward one would leave a gap. Instead the tangent is
+  // the chord over ±R of arc length: identical on straight runs, turning gradually through a corner.
+  // With R ≥ A·θ/2 the offset line can't fold back (|A·dn/ds| < 1), so corners come out as clean arcs.
+  const R = Math.min(Math.max(opt.resampleStep, 1.6 * maxLat), L / 4);
+  const ss = samples.map((c) => c.s);
+  const posAt = (s: number): [number, number] => {
+    if (path.closed) s = ((s % L) + L) % L; else s = clamp(s, 0, L);
+    let lo2 = 0, hi2 = N - 1;
+    while (hi2 - lo2 > 1) { const m = (lo2 + hi2) >> 1; if (ss[m] <= s) lo2 = m; else hi2 = m; }
+    const a = samples[lo2], b = samples[hi2], d = ss[hi2] - ss[lo2], u = d > 0 ? (s - ss[lo2]) / d : 0;
+    return [a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u];
+  };
+  const tx = new Float64Array(N), ty = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const [ax, ay] = posAt(ss[i] - R), [bx, by] = posAt(ss[i] + R);
+    let dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy);
+    if (l < 1e-9) { // hairpin: fall back to the neighbours
+      const prev = samples[i > 0 ? i - 1 : path.closed ? N - 2 : 0], next = samples[i < N - 1 ? i + 1 : path.closed ? 1 : N - 1];
+      dx = next.x - prev.x; dy = next.y - prev.y; l = Math.hypot(dx, dy) || 1;
+    }
+    tx[i] = dx / l; ty[i] = dy / l;
+  }
   const out: ToolpathPoint[] = [];
   for (let i = 0; i < N; i++) {
     const c = samples[i];
@@ -273,24 +302,51 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     if (q.f > maxXY) { q.f = maxXY; speedClamps++; }
     const len3 = Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z), ddz = Math.abs(q.z - a.z);
     if (ddz > 1e-6 && len3 > 0 && (q.f * ddz) / len3 > machine.maxSpeed.z) { q.f = (machine.maxSpeed.z * len3) / ddz; zClamps++; }
-    if (i > 1) {
-      const z0 = out[i - 2];
-      const v1x = a.x - z0.x, v1y = a.y - z0.y, v2x = q.x - a.x, v2y = q.y - a.y;
-      const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
-      if (l1 > 1e-6 && l2 > 1e-6) {
-        const turn = Math.acos(clamp((v1x * v2x + v1y * v2y) / (l1 * l2), -1, 1));
-        if ((q.f * q.f * turn) / ((l1 + l2) / 2) > machine.maxAccel.x) accel++;
-      }
-    }
   }
+  accel = limitCornerSpeeds(out, machine.maxAccel.x);
   check.speedHits += speedClamps; check.zSpeedHits += zClamps; check.accelHits += accel; check.loopSlowed += loops;
   const name = layers.length === 1 ? layers[0].brush.name : "Motions";
   if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this motion's plastic limit` });
   if (speedClamps) warn({ code: "motionex_speed_limit", message: `Some spots were slowed to your printer's top speed (${maxXY} mm/s)` });
   if (loops) warn({ code: "motionex_loops", message: `${name}: loops lay plastic over itself, so those parts print slower (${Math.round(loopSpeed)} mm/s)` });
   if (zClamps) warn({ code: "motionex_z_speed", message: `Up-and-down moves slowed to your printer's top up/down speed (${machine.maxSpeed.z} mm/s)` });
-  if (accel) warn({ code: "motionex_accel", message: "Some tight turns are sharper than your printer can follow at full speed; it will round them off slightly" });
+  if (accel) warn({ code: "motionex_accel", message: "Tight turns in the motion print slower so the line stays clean" });
   return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
+}
+
+/** Largest side-to-side movement on a closed loop, as a share of the loop's inner radius. */
+const LOOP_SHARE = 0.3;
+/** Junction deviation (mm) used to work out how fast the nozzle may take a turn. */
+const JUNCTION_DEV = 0.02;
+/** Never slow below this (mm/s): slower lines over-melt more than a slightly rounded corner hurts. */
+const MIN_CORNER_SPEED = 8;
+
+/**
+ * Plan speeds the way the firmware will: each turn gets the junction-deviation speed limit, then a
+ * backward and a forward pass keep every speed change within the printer's acceleration. The nozzle
+ * then reaches each turn already at the speed it can hold, instead of the firmware braking hard (and
+ * the line bulging) on every tooth. Returns how many points were slowed.
+ */
+export function limitCornerSpeeds(pts: ToolpathPoint[], accel: number): number {
+  const n = pts.length;
+  if (n < 3 || !(accel > 0)) return 0;
+  const v = pts.map((q) => q.f), len = new Float64Array(n);
+  for (let i = 1; i < n; i++) len[i] = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z);
+  for (let i = 1; i < n - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+    if (b.travel || c.travel || len[i] < 1e-6 || len[i + 1] < 1e-6) continue;
+    const cos = ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) + (b.z - a.z) * (c.z - b.z)) / (len[i] * len[i + 1]);
+    const half = Math.sqrt(Math.max(0, (1 + clamp(cos, -1, 1)) / 2)); // cos(turn/2)
+    if (half > 0.9999) continue;
+    const vj = Math.max(MIN_CORNER_SPEED, Math.sqrt((accel * JUNCTION_DEV * half) / (1 - half)));
+    if (vj < v[i]) v[i] = vj;
+  }
+  // a move's speed is its end speed: brake before slow turns, speed up smoothly after them
+  for (let i = n - 2; i >= 1; i--) if (!pts[i + 1].travel) v[i] = Math.min(v[i], Math.max(MIN_CORNER_SPEED, Math.sqrt(v[i + 1] ** 2 + 2 * accel * len[i + 1])));
+  for (let i = 2; i < n; i++) if (!pts[i].travel && !pts[i - 1].travel) v[i] = Math.min(v[i], Math.max(MIN_CORNER_SPEED, Math.sqrt(v[i - 1] ** 2 + 2 * accel * len[i])));
+  let slowed = 0;
+  for (let i = 1; i < n; i++) if (!pts[i].travel && v[i] < pts[i].f - 1e-6) { if (v[i] < pts[i].f * 0.8) slowed++; pts[i].f = Math.round(v[i] * 100) / 100; }
+  return slowed;
 }
 
 /** Smooth 0..1 step over the soft band around a slope limit (degrees). */

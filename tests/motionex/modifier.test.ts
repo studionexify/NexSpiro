@@ -79,3 +79,33 @@ test("size slider scales wave height and length together", () => {
   // Twice the wave length: the first peak moves from 1 mm to 2 mm along the line.
   assert.ok(Math.abs(Math.abs(big.find((q) => Math.abs(q.x - 2) < 1e-9)!.y) - 1.2) < 0.02);
 });
+
+const square = (h: number): Toolpath => ({ feature: "outer_wall", closed: true, points: [
+  [0, 0], [h, 0], [h, h], [0, h], [0, 0]].map(([x, y]) => ({ x, y, z: 1, f: 60, flow: 1, e: 0 })) });
+
+test("small loops scale the motion down instead of folding over (pyramid tip)", () => {
+  const out = applyBrushToPath(square(2), { ...sine, amplitude: 1, period_mm: 1 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const base = resample(square(2).points, DEFAULT_OPTIONS.resampleStep);
+  const worst = Math.max(...out.points.map((p, i) => Math.hypot(p.x - base[i].x, p.y - base[i].y)));
+  assert.ok(worst <= 0.3 * 1 + 1e-6, `offset ${worst} exceeds 30% of the 1 mm inradius`);
+});
+
+test("offsets turn smoothly through sharp corners: no segment runs backwards", () => {
+  const out = applyBrushToPath(square(40), { ...sine, amplitude: 0.6, period_mm: 2 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const base = resample(square(40).points, DEFAULT_OPTIONS.resampleStep);
+  for (let i = 1; i < out.points.length; i++) {
+    const a = out.points[i - 1], b = out.points[i], bx = base[i].x - base[i - 1].x, by = base[i].y - base[i - 1].y;
+    if (Math.hypot(bx, by) < 1e-9) continue;
+    assert.ok((b.x - a.x) * bx + (b.y - a.y) * by > -1e-9, `backwards move at ${i}`);
+  }
+});
+
+test("teeth slow into their corners and speed up within the printer's acceleration", () => {
+  const teeth = structuredClone(PRESETS.find((b) => /square/i.test(b.name)) ?? sine);
+  const out = applyBrushToPath(line(20), { ...teeth, amplitude: 0.5, period_mm: 2 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const acc = profiles().machine.maxAccel.x;
+  for (let i = 2; i < out.points.length; i++) {
+    const a = out.points[i - 1], b = out.points[i], l = Math.hypot(b.x - a.x, b.y - a.y);
+    assert.ok(b.f ** 2 <= a.f ** 2 + 2 * acc * l + 1, `speed jump at ${i}`);
+  }
+});
