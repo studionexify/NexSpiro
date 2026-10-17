@@ -25,6 +25,11 @@ export interface WallParams {
   minBead: number; minFeature: number; margin: number;
   thinWalls: boolean;
   gapFill: boolean;
+  /** Arachne: length (mm) over which bead widths blend, wedge angle (°) above which tips get no centre bead,
+   *  number of walls from the centre that share a width difference. */
+  transitionLength?: number; transitionAngle?: number; distributionCount?: number;
+  /** Precise wall: the first inner wall keeps a full half-line from the outer wall (no overlap squeezing it out). */
+  precise?: boolean;
   /** Part of the island that is a top surface and should keep only its outer wall (null = none). */
   topOneWall: Paths | null;
 }
@@ -60,11 +65,16 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
       const w = k === 0 ? p.wo : p.wi, sp = k === 0 ? p.so : p.si;
       const feature: FeatureType = k === 0 ? 'outer_wall' : 'inner_wall';
       const sn = splitNarrow(A, w, p.minBead, Math.min(2 * w, p.nozzle * 2), { margin: p.margin, dropW: p.minFeature });
-      for (const t of sn.thin) thin.push(varItem(t, feature, k));
+      for (const t of sn.thin) {
+        const v = shapeBead(t, w, p);
+        if (v) thin.push(varItem(v, feature, k));
+      }
       const ps = sn.wide.length ? offset(sn.wide, -w / 2).filter((q) => q.length >= 3) : [];
       if (ps.length) loops.push(ps.map((q) => ({ pts: toPts(q), closed: true, feature, width: w, ring: k, hole: !orientation(q) })));
-      A = sn.wide.length ? offset(sn.wide, -sp) : [];
+      // precise wall: the next bead centre ends up (wo + wi) / 2 from the outer wall's centre
+      A = sn.wide.length ? offset(sn.wide, -(k === 0 && p.precise ? p.wo : sp)) : [];
     }
+    distribute(loops, thin, p);
     return { loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(A, ip, p), thin, gaps };
   }
 
@@ -72,7 +82,9 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
   const polys: Paths[] = [];
   let boundary = 0;
   for (let k = 0; k < p.walls; k++) {
-    const d = k === 0 ? p.wo / 2 : p.wo / 2 + (p.so + p.si) / 2 + (k - 1) * p.si;
+    // precise wall: outer and first inner bead centres a full (wo + wi) / 2 apart instead of the overlapped spacing
+    const first = p.precise ? (p.wo + p.wi) / 2 : (p.so + p.si) / 2;
+    const d = k === 0 ? p.wo / 2 : p.wo / 2 + first + (k - 1) * p.si;
     const ps = offset(ip, -d).filter((q) => q.length >= 3);
     if (!ps.length) break;
     const w = k === 0 ? p.wo : p.wi;
@@ -104,6 +116,62 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
     }
   }
   return { loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(inner, ip, p), thin, gaps };
+}
+
+/**
+ * Arachne transitions on one centre bead: widths blend over the transition length, and a tip that opens wider
+ * than the transition angle (a blunt wedge) is trimmed back to where the bead reaches its nominal width.
+ */
+function shapeBead(v: VarPath, w: number, p: WallParams): VarPath | null {
+  let pts = v.pts.slice(), widths = v.widths.slice();
+  const ang = ((p.transitionAngle ?? 10) * Math.PI) / 180;
+  const trimEnd = (rev: boolean) => {
+    if (rev) { pts = reversePts(pts); widths.reverse(); }
+    // tip opening angle: the bead reaches its nominal width w after s mm (tip widths are clamped, so measure the reach)
+    let s = 0, k = 1;
+    while (k < widths.length && widths[k] < w) { s += Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]); k++; }
+    const tip = k < widths.length ? 2 * Math.atan2(w / 2, Math.max(1e-6, s)) : 0;
+    if (tip > ang) {
+      let cut = 0;
+      while (cut < widths.length - 2 && widths[cut] < w * 0.999) cut++;
+      if (cut) { pts = pts.slice(cut * 2); widths = widths.slice(cut); }
+    }
+    if (rev) { pts = reversePts(pts); widths.reverse(); }
+  };
+  trimEnd(false); trimEnd(true);
+  if (widths.length < 2 || lenOf(pts) < w) return null;
+  // blend widths over the transition length (moving average along the bead)
+  const L = p.transitionLength ?? 0;
+  if (L > 0 && widths.length > 2) {
+    const acc = [0];
+    for (let k = 1; k < widths.length; k++) acc.push(acc[k - 1] + Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]));
+    const out = widths.map((_, k) => {
+      let sum = 0, n = 0;
+      for (let j = 0; j < widths.length; j++) if (Math.abs(acc[j] - acc[k]) <= L / 2) { sum += widths[j]; n++; }
+      return sum / n;
+    });
+    widths = out;
+  }
+  return { ...v, pts, widths };
+}
+const reversePts = (pts: number[]) => { const o: number[] = []; for (let k = pts.length - 2; k >= 0; k -= 2) o.push(pts[k], pts[k + 1]); return o; };
+
+/**
+ * Wall distribution count: a centre bead's deviation from the nominal width is shared with the innermost
+ * (count − 1) wall rings, so each changes by an equal part instead of the centre bead taking all of it.
+ */
+function distribute(loops: WallItem[][], thin: WallItem[], p: WallParams) {
+  const n = Math.min(p.distributionCount ?? 1, loops.length + 1);
+  if (n <= 1 || !thin.length) return;
+  let dev = 0, cnt = 0;
+  for (const t of thin) for (const x of t.widths ?? []) { dev += x - p.wi; cnt++; }
+  if (!cnt) return;
+  const share = dev / cnt / n;
+  for (const t of thin) t.widths = t.widths!.map((x) => x - share * (n - 1));
+  for (let r = loops.length - 1, used = 1; r >= 0 && used < n; r--, used++) {
+    // each side of the centre bead belongs to the same ring, so the ring takes half the share per bead
+    for (const l of loops[r]) l.width = Math.max(p.nozzle * 0.5, l.width + share / 2);
+  }
 }
 
 function lenOf(pts: number[]) {

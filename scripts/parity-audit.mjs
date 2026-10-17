@@ -78,7 +78,9 @@ function sources(ref) {
 // read indirectly: plate temps via PLATE_TEMP_KEYS in resolve.ts; notes/vendor are metadata Bambu does not slice with either
 const INDIRECT = new Set(['cool_plate_temp', 'eng_plate_temp', 'hot_plate_temp', 'textured_plate_temp',
   'cool_plate_temp_initial_layer', 'eng_plate_temp_initial_layer', 'hot_plate_temp_initial_layer', 'textured_plate_temp_initial_layer',
-  'process_notes', 'filament_notes', 'printer_notes', 'filament_vendor']);
+  'process_notes', 'filament_notes', 'printer_notes', 'filament_vendor',
+  // read when exporting (src/state/printjob.ts)
+  'filename_format', 'post_process']);
 const ALIASES = {
   exclude_object: 'label_objects',
   reduce_infill_retraction_mode: 'reduce_infill_retraction',

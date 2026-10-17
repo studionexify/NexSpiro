@@ -43,7 +43,7 @@ describe('settings are wired, not dummies', () => {
   const engine = ['src/engine/slicer.ts', 'src/engine/gcode.ts', 'src/engine/walls.ts', 'src/engine/support.ts', 'src/profiles/resolve.ts']
     .map((f) => fs.readFileSync(f, 'utf8')).join('\n');
   // keys that are stored and written into the G-code config block, rather than steering toolpaths
-  const metadata = new Set(['process_notes', 'filament_notes', 'printer_notes', 'filament_vendor', 'filename_format']);
+  const metadata = new Set(['process_notes', 'filament_notes', 'printer_notes', 'filament_vendor', 'filename_format', 'post_process']);
   const referenced = (k: string) => engine.includes(`'${k}'`) || engine.includes(`.${k}`) || engine.includes(`"${k}"`);
   it('every process setting is read by the engine', () => {
     const missing = PROCESS_PARAMS.map((p) => p.key).filter((k) => !metadata.has(k) && !referenced(k));
@@ -439,5 +439,67 @@ describe('preview data', () => {
     for (let i = 0; i < aux.length; i += 2) { maxFan = Math.max(maxFan, aux[i]); temp = Math.max(temp, aux[i + 1]); }
     expect(maxFan).toBeGreaterThan(0);
     expect(temp).toBeGreaterThan(180);
+  });
+});
+
+describe('the last eleven settings', () => {
+  const P = 'bbl-p1s';
+  const sliceOne = (soup: Float32Array, ov = {}) => slice([mesh(soup)], cfgFor(P, ov));
+  it('precise wall moves the first inner wall a full half-line further from the outer wall', async () => {
+    const { islandWalls } = await import('../src/engine/walls');
+    const { toExPolygons, SCALE } = await import('../src/engine/clipper');
+    const sq = [[0, 0], [20, 0], [20, 20], [0, 20]].map(([x, y]) => ({ X: x * SCALE, Y: y * SCALE }));
+    const ex = toExPolygons([sq])[0];
+    const base = { walls: 2, wo: 0.42, wi: 0.45, so: 0.38, si: 0.41, nozzle: 0.4, arachne: false, minBead: 0.34, minFeature: 0.1, margin: 0.1, thinWalls: false, gapFill: false, topOneWall: null };
+    const xmin = (w: ReturnType<typeof islandWalls>) => Math.min(...w.loops[1][0].pts.filter((_, k) => k % 2 === 0));
+    expect(xmin(islandWalls(ex, { ...base, precise: true })) - xmin(islandWalls(ex, base))).toBeCloseTo((0.42 + 0.45) / 2 - (0.38 + 0.41) / 2, 3);
+  });
+  it('Arachne transition length blends centre-bead widths; a blunt wedge loses its centre-bead tip', async () => {
+    const { islandWalls } = await import('../src/engine/walls');
+    const { toExPolygons, SCALE } = await import('../src/engine/clipper');
+    // a wedge from 0.2 to 1.4 mm wide over 30 mm
+    const ex = toExPolygons([[[0, -0.1], [30, -0.7], [30, 0.7], [0, 0.1]].map(([x, y]) => ({ X: x * SCALE, Y: y * SCALE }))])[0];
+    const p = { walls: 1, wo: 0.42, wi: 0.45, so: 0.38, si: 0.41, nozzle: 0.4, arachne: true, minBead: 0.34, minFeature: 0.1, margin: 0.1, thinWalls: false, gapFill: false, topOneWall: null };
+    const sharp = islandWalls(ex, { ...p, transitionAngle: 59, transitionLength: 0 }).thin;
+    const blunt = islandWalls(ex, { ...p, transitionAngle: 1, transitionLength: 0 }).thin;
+    const len = (t: typeof sharp) => t.reduce((a, b) => a + b.pts.length, 0);
+    expect(len(blunt)).toBeLessThan(len(sharp));
+    const rough = islandWalls(ex, { ...p, transitionLength: 0 }).thin[0]?.widths ?? [];
+    const smooth = islandWalls(ex, { ...p, transitionLength: 5 }).thin[0]?.widths ?? [];
+    const jump = (w: number[]) => Math.max(0, ...w.slice(1).map((x, k) => Math.abs(x - w[k])));
+    if (rough.length > 3) expect(jump(smooth)).toBeLessThanOrEqual(jump(rough) + 1e-9);
+  });
+  it('interface shells make the layer where two painted materials meet solid', () => {
+    const m = mesh(box(100, 100, 0, 20, 20, 10), 'a');
+    const color = new Uint8Array(12); color[2] = 2; color[3] = 2; // top face painted with filament 2
+    m.paint = { color } as any;
+    const slots = filamentSlots([{ presetId: 'generic-pla', color: '#ffffff' }, { presetId: 'generic-pla', color: '#000000' }]);
+    const run = (on: boolean) => parse(slice([m], cfgFor(P, { interface_shells: on, mmu_paint_depth: 3, sparse_infill_density: 10 }), undefined, { filaments: slots }).gcode);
+    const solid = (p: ReturnType<typeof parse>) => p.moves.filter((x) => x.z > 5.5 && x.z < 7.6 && x.type === 'internal solid infill').length;
+    expect(solid(run(true))).toBeGreaterThan(solid(run(false)));
+  });
+  it('short travel acceleration applies to hops shorter than the retraction minimum travel', () => {
+    const g = sliceOne(box(100, 100, 0, 20, 20, 2), { travel_short_distance_acceleration: 333 }).gcode;
+    expect(g).toMatch(/M204 S333/);
+  });
+  it('max volumetric slopes ease speed changes between extrusions', () => {
+    const fast = sliceOne(cylinder(120, 120, 10, 3), { max_volumetric_extrusion_rate_slope_positive: 5, max_volumetric_extrusion_rate_slope_negative: 5 });
+    const free = sliceOne(cylinder(120, 120, 10, 3));
+    expect(fast.stats.timeSeconds).toBeGreaterThan(free.stats.timeSeconds);
+  });
+  it('monotonic line travel extend approaches each line from inside the wall', () => {
+    const a = sliceOne(box(100, 100, 0, 20, 20, 2), { monotonic_travel_into_wall: 100, top_surface_pattern: 'monotonic' });
+    const b = sliceOne(box(100, 100, 0, 20, 20, 2), { top_surface_pattern: 'monotonic' });
+    const travels = (o: typeof a) => parse(o.gcode).moves.filter((m) => m.type === 'travel').length;
+    expect(travels(a)).toBeGreaterThan(travels(b));
+  });
+  it('independent support layer height prints the support base every second layer at double height', () => {
+    const run = (on: boolean) => parse(slice([mesh(tee(120, 120))], cfgFor(P, { layer_height: 0.12, enable_support: true, support_type: 'normal_auto', independent_support_layer_height: on })).gcode);
+    const layersWith = (p: ReturnType<typeof parse>) => new Set(p.moves.filter((m) => m.type === 'support' && m.e > 0 && m.z > 1 && m.z < 8).map((m) => m.layer)).size;
+    expect(layersWith(run(true))).toBeLessThan(layersWith(run(false)) * 0.8);
+  });
+  it('filename format expands placeholders', async () => {
+    const { formatFilename } = await import('../src/state/printjob');
+    expect(formatFilename('[input_filename_base]_[layer_height]mm_[filament_type]_[print_time].gcode', { base: 'cube', plate: 'Plate 1', cfg: { layer_height: 0.2, filament_type: 'PLA' }, seconds: 3725, grams: 1 }, 'gcode')).toBe('cube_0.2mm_PLA_1h2m.gcode');
   });
 });

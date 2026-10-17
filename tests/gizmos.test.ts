@@ -171,3 +171,39 @@ describe('arrange', () => {
     expect(convexHull([[0, 0], [2, 0], [1, 1], [2, 2], [0, 2], [1, 0.5]])).toHaveLength(4);
   });
 });
+
+import { DEFAULT_GROOVE } from '../src/state/cutConnectors';
+describe('dovetail cut', () => {
+  it('moves a dovetail key from the lower part onto the upper part, with a looser groove', () => {
+    const o = cubeObject();
+    const g = { ...DEFAULT_GROOVE, depth: 3, width: 6, flapsAngle: 60, depthTol: 0.2, widthTol: 0.2 };
+    cutObject(o.id, { height: 10, tiltX: 0, tiltY: 0, keepAbove: true, keepBelow: true, flipAbove: false, groove: g });
+    const objs = useStore.getState().objects;
+    const up = objs.find((x) => x.name.includes('upper'))!, lo = objs.find((x) => x.name.includes('lower'))!;
+    // trapezoid 6 mm at the plane, 6 + 2·3/tan60 at the bottom, 3 deep, 20 long
+    const key = ((6 + (6 + (2 * 3) / Math.tan(Math.PI / 3))) / 2) * 3 * 20;
+    expect(meshVolume(up.mesh)).toBeCloseTo(4000 + key, -1);
+    expect(meshVolume(lo.mesh)).toBeLessThan(4000 - key);
+    // the key reaches 3 mm below the cut plane
+    expect(worldBounds(up).max[2] - worldBounds(up).min[2]).toBeCloseTo(13, 1);
+  });
+});
+
+import { circleFeature } from '../src/state/measure';
+import { booleanMeshes } from '../src/state/tools';
+import { fillTriangles } from '../src/engine/brush';
+describe('measure circles', () => {
+  it('finds a hole edge as a circle with its centre and diameter', () => {
+    const m = booleanMeshes(weld(box(0, 0, 0, 30, 30, 10)), weld(cylinderFix(15, 12, 5, 12, 64)), 'difference');
+    // a triangle of the top face
+    let top = -1;
+    for (let t = 0; t < m.indices.length / 3 && top < 0; t++) if ([0, 1, 2].every((k) => Math.abs(m.vertices[m.indices[t * 3 + k] * 3 + 2] - 10) < 1e-4)) top = t;
+    const region = fillTriangles(m, top, 1);
+    const vert = (i: number) => new THREE.Vector3().fromArray(m.vertices, i * 3);
+    const c = circleFeature('a', m, region, vert, new THREE.Vector3(20, 12, 10))!;
+    expect(c).not.toBeNull();
+    expect(c.r).toBeCloseTo(5, 1);
+    expect(c.center[0]).toBeCloseTo(15, 1); expect(c.center[1]).toBeCloseTo(12, 1); expect(c.center[2]).toBeCloseTo(10, 3);
+    expect(measure(c, { kind: 'point', objId: 'a', p: [15, 12, 0] }).distance).toBeCloseTo(10, 2);
+  });
+});

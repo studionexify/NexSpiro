@@ -112,3 +112,34 @@ export function connectorMeshes(points: { x: number; y: number }[], c: Connector
   }
   return out;
 }
+
+/**
+ * Tongue and groove (Bambu's dovetail cut): a dovetail prism running across the whole cut, its flaps leaning
+ * out at `flapsAngle` from the cut plane so the two parts slide together along the groove and cannot pull apart.
+ */
+export interface GrooveSettings {
+  depth: number; width: number;
+  /** Angle between the flaps and the cut plane (°); 90 gives a straight-sided key. */
+  flapsAngle: number;
+  /** Direction of the groove about the plane normal (°). */
+  angle: number;
+  /** Clearance of the groove: added to its depth and to each side (mm). */
+  depthTol: number; widthTol: number;
+}
+export const DEFAULT_GROOVE: GrooveSettings = { depth: 3, width: 12, flapsAngle: 60, angle: 0, depthTol: 0.1, widthTol: 0.1 };
+
+/** The dovetail key in cut-plane space (plane z = 0, lower part below), `length` long, grown by `grow` per side. */
+export function grooveMesh(g: GrooveSettings, length: number, grow = 0, growDepth = 0): IndexedMesh {
+  const d = g.depth + growDepth, out = 1 / Math.tan((Math.max(1, Math.min(90, g.flapsAngle)) * Math.PI) / 180);
+  const top = g.width / 2 + grow, bot = g.width / 2 + grow + d * out;
+  const eps = 0.02;
+  // trapezoid in X-Z, extruded along Y
+  const prof: [number, number][] = [[-bot, -d], [bot, -d], [top, eps], [-top, eps]];
+  const shape = new THREE.Shape(prof.map(([x, z]) => new THREE.Vector2(x, z)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
+  geo.translate(0, 0, -length / 2);
+  // rotateX(90°) maps (x, y, z) to (x, -z, y): the profile's height becomes Z, the extrusion runs along Y
+  geo.rotateX(Math.PI / 2);
+  geo.rotateZ((g.angle * Math.PI) / 180);
+  return toIndexed(geo);
+}

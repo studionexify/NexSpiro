@@ -33,6 +33,33 @@ export interface LayerOps {
   tool?: number;
 }
 
+/**
+ * Pressure equalizer (max volumetric extrusion rate slopes): along each run of extrusions, the volumetric flow
+ * (width × height × speed) may rise by at most `up` mm³/s per second and fall by at most `down` mm³/s per second.
+ * Rises are limited going forwards, falls going backwards, by lowering speeds only. Retractions end a run
+ * (the pressure is released there), travels in between do not.
+ */
+export function equalizePressure(ops: Op[], up: number, down: number) {
+  type M = Extract<Op, { k: 'move' }>;
+  const runs: M[][] = [[]];
+  for (const op of ops) {
+    if (op.k === 'move' && !op.travel && op.e > 0) runs[runs.length - 1].push(op);
+    else if (op.k === 'retract' && op.len > 0) { if (runs[runs.length - 1].length) runs.push([]); }
+  }
+  const flow = (m: M) => m.w * m.h * m.f;
+  const dur = (m: M) => Math.max(1e-3, m.t ?? 0.05);
+  for (const r of runs) {
+    if (up > 0) for (let k = 1; k < r.length; k++) {
+      const cap = flow(r[k - 1]) + up * dur(r[k]);
+      if (flow(r[k]) > cap) r[k].f = cap / (r[k].w * r[k].h);
+    }
+    if (down > 0) for (let k = r.length - 2; k >= 0; k--) {
+      const cap = flow(r[k + 1]) + down * dur(r[k]);
+      if (flow(r[k]) > cap) r[k].f = cap / (r[k].w * r[k].h);
+    }
+  }
+}
+
 /** Duration of a move with a symmetric trapezoidal profile (junction speeds approximated). */
 export function moveTime(len: number, v: number, a: number): number {
   if (len <= 0 || v <= 0) return 0;
@@ -161,6 +188,10 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
         for (const op of L.ops) if (op.k === 'move' && !op.travel && !op.fixed && !op.noSlow) op.f = Math.max(Math.min(op.f, minSpeed), op.f * scale);
         t = timeOf();
       }
+    }
+    if (num('max_volumetric_extrusion_rate_slope_positive') > 0 || num('max_volumetric_extrusion_rate_slope_negative') > 0) {
+      equalizePressure(L.ops, num('max_volumetric_extrusion_rate_slope_positive'), num('max_volumetric_extrusion_rate_slope_negative'));
+      t = timeOf();
     }
     layerTimes.push(t);
   }

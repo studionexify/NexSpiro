@@ -2,7 +2,7 @@
 import type { CalibProgram } from '../engine/calibGcode';
 import type { MeasureFeature, MeasureMode } from './measure';
 import type { BrushType } from '../engine/brush';
-import { DEFAULT_CONNECTOR, type ConnectorSettings } from './cutConnectors';
+import { DEFAULT_CONNECTOR, DEFAULT_GROOVE, type ConnectorSettings, type GrooveSettings } from './cutConnectors';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { IndexedMesh } from '../engine/mesh';
@@ -163,6 +163,8 @@ interface State {
   cutConnectors: { x: number; y: number }[];
   cutConnector: ConnectorSettings;
   cutConnectorMode: boolean;
+  cutMode: 'planar' | 'dovetail';
+  cutGroove: GrooveSettings;
   /** Measure tool: picked world points (up to 2). */
   measureFeatures: MeasureFeature[];
   measureMode: MeasureMode;
@@ -225,6 +227,8 @@ export const useStore = create<State>((set, get) => ({
   cutConnectors: [],
   cutConnector: DEFAULT_CONNECTOR,
   cutConnectorMode: false,
+  cutMode: 'planar',
+  cutGroove: DEFAULT_GROOVE,
   measureFeatures: [],
   measureMode: 'auto',
   arrangeSettings: { spacing: 6, rotate: false, align: 'center' },

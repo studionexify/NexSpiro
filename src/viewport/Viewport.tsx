@@ -4,8 +4,9 @@ import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { flatFaces } from './flatFaces';
+import { grooveMesh } from '../state/cutConnectors';
 import { BRUSHES, fillTriangles, gapFill, heightRangeTriangles, meshCache } from '../engine/brush';
-import { measure, pickFeature } from '../state/measure';
+import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
@@ -334,7 +335,18 @@ export function Viewport() {
         connGroup.clear();
         const c = s.cutConnector;
         const seg = { triangle: 3, square: 4, hexagon: 6, circle: 32 }[c.shape];
-        for (const p of s.cutConnectors) {
+        if (s.cutMode === 'dovetail') {
+          const ob = worldBounds(s.objects.find((x) => x.id === s.selected[0])!);
+          const L = Math.hypot(ob.max[0] - ob.min[0], ob.max[1] - ob.min[1]) + 4;
+          const key = grooveMesh(s.cutGroove, L);
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(key.vertices, 3));
+          g.setIndex(new THREE.BufferAttribute(key.indices, 1));
+          const m = new THREE.Mesh(g, connMat);
+          m.renderOrder = 12;
+          connGroup.add(m);
+        }
+        for (const p of s.cutMode === 'dovetail' ? [] : s.cutConnectors) {
           const r = c.size / 2, top = c.style === 'frustum' && c.type !== 'dowel' ? r * 0.6 : r;
           const g = new THREE.CylinderGeometry(top, r, c.type === 'dowel' ? c.depth * 2 : c.depth, seg, 1, false, c.shape === 'square' ? Math.PI / 4 : 0);
           g.rotateX(-Math.PI / 2);
@@ -387,6 +399,13 @@ export function Viewport() {
         };
         for (const f of s.measureFeatures) {
           if (f.kind === 'edge') { addLine(f.a, f.b, new THREE.LineBasicMaterial({ color: '#1E88E5', depthTest: false })); continue; }
+          if (f.kind === 'circle') {
+            const ring = new THREE.Mesh(new THREE.RingGeometry(f.r - 0.15, f.r + 0.15, 64), new THREE.MeshBasicMaterial({ color: '#1E88E5', depthTest: false, side: THREE.DoubleSide }));
+            ring.position.set(...f.center); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...f.normal)); ring.renderOrder = 10;
+            const c = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), dotMat); c.position.set(...f.center); c.renderOrder = 10;
+            measureGroup.add(ring, c);
+            continue;
+          }
           const dot = new THREE.Mesh(new THREE.SphereGeometry(f.kind === 'plane' ? 0.5 : 0.8, 16, 12), dotMat);
           dot.position.set(...f.p); dot.renderOrder = 10;
           measureGroup.add(dot);
@@ -1096,7 +1115,12 @@ export function Viewport() {
         const region = fillTriangles(o.mesh, t, 1);
         let area = 0; for (const u of region) area += mc.areas[u];
         const sc = Math.abs(o.scale[0] * o.scale[1] * o.scale[2]) ** (2 / 3);
-        const f = pickFeature(id, s.measureMode, hit.point, tri, normal, sharp, area * sc > 4);
+        const vert = (vi: number) => new THREE.Vector3().fromArray(v, vi * 3).applyMatrix4(mw);
+        // circles: the boundary loop of the clicked flat face nearest the click, when it is round (holes, bosses)
+        const circle = s.measureMode === 'circle' || s.measureMode === 'auto' ? circleFeature(id, o.mesh, region, vert, hit.point) : null;
+        const nearRim = circle && Math.abs(hit.point.distanceTo(new THREE.Vector3(...circle.center)) - circle.r) < Math.max(1, circle.r * 0.15);
+        const f = circle && (s.measureMode === 'circle' || nearRim) ? circle : s.measureMode === 'circle' ? null : pickFeature(id, s.measureMode, hit.point, tri, normal, sharp, area * sc > 4);
+        if (!f) { s.set({ toast: { kind: 'info', text: 'No circular edge on that face. Click a flat face next to a hole or round boss.' } }); return; }
         s.set({ measureFeatures: s.measureFeatures.length >= 2 ? [f] : [...s.measureFeatures, f] });
         return;
       }
@@ -1456,7 +1480,7 @@ export function Viewport() {
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
-      if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); }
+      if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.cutMode !== prev.cutMode || s.cutGroove !== prev.cutGroove || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); }
     });
 
     let raf = 0;

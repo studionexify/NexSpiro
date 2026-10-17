@@ -30,6 +30,8 @@ export type ProgressFn = (stage: string, pct: number) => void;
 interface PathItem extends Polyline2 {
   feature: FeatureType; width: number; flow: number;
   spiral?: boolean; widths?: number[];
+  /** Approach the start from this far beyond it, along the line (monotonic line travel extend, mm). */
+  leadIn?: number;
   /** Depth below the layer top, as a fraction of the layer height (scarf seam ramp). */
   depth?: number[];
   /** Flow multipliers (scarf seam, fuzzy skin extrusion mode). */
@@ -373,6 +375,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             minBead: (nozzle * onum(oi, i, 'min_bead_width')) / 100 || nozzle * 0.85,
             minFeature: (nozzle * onum(oi, i, 'min_feature_size')) / 100 || nozzle * 0.25,
             margin: (nozzle * onum(oi, i, 'wall_transition_filter_deviation')) / 100,
+            transitionLength: (nozzle * onum(oi, i, 'wall_transition_length')) / 100,
+            transitionAngle: onum(oi, i, 'wall_transition_angle') || 10,
+            distributionCount: Math.max(1, Math.round(onum(oi, i, 'wall_distribution_count') || 1)),
+            precise: obool(oi, i, 'precise_outer_wall'),
             thinWalls: !arachne && obool(oi, i, 'detect_thin_wall'),
             gapFill: !arachne && !vase,
             topOneWall: topOne,
@@ -456,6 +462,18 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         const slopeBot = botLayers > 0 && evt === 'enabled' ? difference(inner, covered(i - 1, i - 1 - botLayers)) : [];
         solid = projTop.length || projBot.length ? intersection(inner, union([...projTop, ...projBot])) : [];
         solid = clean(difference(union(solid), union([...top, ...bottom, ...bridge])));
+        if (bool('interface_shells')) {
+          // interface shells: solid where a different material lies directly above or below, both between
+          // painted filament regions of this object and against other objects
+          const touch: Paths[] = [];
+          for (const j of [i - 1, i + 1]) {
+            if (j < 0 || j >= N) continue;
+            for (const [f, reg] of filInner[i][o]) for (const [g, regJ] of filInner[j][o]) if (g !== f && reg.length && regJ.length) touch.push(intersection(reg, regJ));
+            for (let o2 = 0; o2 < meshes.length; o2++) if (o2 !== o && layerInner[j][o2].length) touch.push(intersection(inner, layerInner[j][o2]));
+          }
+          const iface = touch.length ? clean(difference(union(touch.flat()), union([...top, ...bottom, ...bridge]))) : [];
+          if (iface.length) solid = union(solid, iface);
+        }
         if (slopeTop.length || slopeBot.length) vshell = clean(difference(union([...slopeTop, ...slopeBot]), union([...top, ...bottom, ...bridge, ...solid])));
       }
       let sparse = vase ? [] : difference(inner, union([...top, ...bottom, ...bridge, ...solid, ...vshell]));
@@ -946,7 +964,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const layerChange = firstTravel && i > 0 && tbool('retract_when_changing_layer');
       const needRetract = retractLen > 0 && (d > minTravel || layerChange) && !skipRetract;
       if (needRetract && !retracted) retract();
-      const ta = (i === 0 ? num('initial_layer_travel_acceleration') : num('travel_acceleration'));
+      // short hops (shorter than the retraction minimum travel) use the gentler short-travel acceleration
+      const ta = i === 0 ? num('initial_layer_travel_acceleration') : d < minTravel && num('travel_short_distance_acceleration') > 0 ? num('travel_short_distance_acceleration') : num('travel_acceleration');
       if (ta && Math.min(ta, capH.a) !== accelSet) { accelSet = Math.min(ta, capH.a); ops.push({ k: 'accel', a: accelSet }); }
       if (jerkOn && num('travel_jerk') !== jerkSet) { jerkSet = num('travel_jerk'); ops.push({ k: 'jerk', j: jerkSet }); }
       const via = layerTravel ? layerTravel.route(px, py, x, y) : [];
@@ -1016,6 +1035,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const filArea = Math.PI * (fl.diameter / 2) ** 2;
       const hItem = it.height ?? h;
       const startZ = it.spiral ? zTop - h : zTop - (it.depth ? it.depth[0] * h : 0);
+      if (it.leadIn && !it.closed && pts.length >= 4) {
+        const dx = pts[0] - pts[2], dy = pts[1] - pts[3], L = Math.hypot(dx, dy) || 1;
+        travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
+      }
       travel(pts[0], pts[1], it.feature, startZ);
       if (retracted) { ops.push({ k: 'retract', len: -(retractLen + restartExtra), speed: deretractSpeed }); retracted = false; }
       const a = Math.min(accelFor(it.feature, i), capH.a);
@@ -1131,7 +1154,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           const reg = clipTo(r, w);
           if (!reg.length) return;
           const s = spacingOf(w, h) / Math.max(0.01, Math.min(1, density));
-          add(surfaceFill(reg, pattern, s, solidAngle, solidDir), feature, w, 1, { fil: solidFil, ...extra });
+          // monotonic line travel extend: each line is approached from inside the wall
+          const ext = (pattern === 'monotonic' || pattern === 'monotonicline') ? (onum(o, i, 'monotonic_travel_into_wall') / 100) * w : 0;
+          add(surfaceFill(reg, pattern, s, solidAngle, solidDir), feature, w, 1, { fil: solidFil, ...(ext > 0 ? { leadIn: ext } : {}), ...extra });
         };
         /** Internal solid: narrow areas get concentric loops instead of short zig-zags. */
         const solidFill = (r: Paths, pattern: string, w: number, extra: Partial<PathItem> = {}) => {
@@ -1505,7 +1530,21 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const items: PathItem[] = [];
       const base = support.base[i], iface = union(support.iface[i], support.bottomIface?.[i] ?? []);
       const bodyFil = supportFil >= 0 ? supportFil : -1;
-      if (base.length) {
+      // independent support layer height: the base is printed every second layer at double height where both
+      // layers have it (interfaces keep the object layers so the Z gap stays exact)
+      const indep = bool('independent_support_layer_height') && !tree;
+      const pairs = (j: number) => indep && j > raftN && (j - raftN) % 2 === 1 && j < N && hs[j - 1] + hs[j] <= (num('max_layer_height') || nozzle * 0.75) + 1e-6
+        && !support!.iface[j].length && !support!.iface[j - 1].length;
+      const parts: { reg: Paths; height?: number }[] = [];
+      if (pairs(i)) {
+        const both = intersection(base, support!.base[i - 1]);
+        parts.push({ reg: both, height: hs[i - 1] + hs[i] }, { reg: difference(base, support.base[i - 1]) });
+      } else if (pairs(i + 1)) parts.push({ reg: difference(base, support!.base[i + 1]) });
+      else parts.push({ reg: base });
+      for (const part of parts) {
+        const base = opening(part.reg, sw * 0.25);
+        if (!base.length) continue;
+        const n0 = items.length;
         const wc = Math.round(num('tree_support_wall_count'));
         const walls = wc >= 0 ? wc : tree ? (treeStyle(supportStyle).trunk > 1.2 ? 2 : 1) : 1;
         let inner = base;
@@ -1525,6 +1564,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           else lines = linesFill(inner, spacing, ang);
         }
         for (const p of lines) items.push({ ...p, feature: 'support', width: sw, flow: 1, fil: bodyFil });
+        if (part.height) for (let k = n0; k < items.length; k++) items[k].height = part.height;
       }
       if (iface.length) {
         const ip = str('support_interface_pattern') || 'auto';

@@ -1,7 +1,7 @@
 // Floating panels for the Cut, Mesh Boolean, Text and Measure tools.
 import { edgeLength, measure } from '../state/measure';
 import { embossVolume, objectFromWorld, svgMesh, textMesh, type EmbossKind } from '../state/tools';
-import type { ConnectorSettings, ConnectorShape, ConnectorStyle, ConnectorType } from '../state/cutConnectors';
+import { DEFAULT_GROOVE, type ConnectorSettings, type ConnectorShape, type ConnectorStyle, type ConnectorType, type GrooveSettings } from '../state/cutConnectors';
 import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
@@ -28,7 +28,8 @@ function Seg({ label, value, options, onChange }: { label: string; value: string
 }
 
 export function CutPanel() {
-  const { tool, objects, selected, cutPlane, cutConnectors, cutConnector: cc, cutConnectorMode, set } = useStore();
+  const { tool, objects, selected, cutPlane, cutConnectors, cutConnector: cc, cutConnectorMode, cutMode, cutGroove: gv, set } = useStore();
+  const setG = (p: Partial<GrooveSettings>) => set({ cutGroove: { ...gv, ...p } });
   const o = objects.find((x) => x.id === selected[0]);
   const setC = (p: Partial<ConnectorSettings>) => set({ cutConnector: { ...cc, ...p } });
   const [keepAbove, setAbove] = useState(true);
@@ -46,6 +47,20 @@ export function CutPanel() {
         <Slider label="Height" value={cutPlane.height} min={b.min[2]} max={b.max[2]} step={0.1} unit="mm" onChange={(v) => set({ cutPlane: { ...cutPlane, height: v } })} />
         <Slider label="Tilt X" value={cutPlane.tiltX} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltX: v } })} />
         <Slider label="Tilt Y" value={cutPlane.tiltY} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltY: v } })} />
+        <Seg label="Cut mode" value={cutMode} options={[['planar', 'Planar'], ['dovetail', 'Dovetail']]} onChange={(v) => {
+          // Bambu sizes the default dovetail from the object
+          const size = Math.min(b.max[0] - b.min[0], b.max[1] - b.min[1]);
+          set(v === 'dovetail' && gv === DEFAULT_GROOVE ? { cutMode: 'dovetail', cutGroove: { ...gv, depth: +Math.max(1, size * 0.08).toFixed(1), width: +(4 * Math.max(1, size * 0.08)).toFixed(1) }, cutConnectorMode: false } : { cutMode: v as 'planar' | 'dovetail' });
+        }} />
+        {cutMode === 'dovetail' && <>
+          <Slider label="Depth" value={gv.depth} min={0.5} max={30} step={0.1} unit="mm" onChange={(v) => setG({ depth: v })} />
+          <Slider label="Width" value={gv.width} min={1} max={100} step={0.5} unit="mm" onChange={(v) => setG({ width: v })} />
+          <Slider label="Flap angle" value={gv.flapsAngle} min={30} max={90} step={1} unit="°" onChange={(v) => setG({ flapsAngle: v })} />
+          <Slider label="Groove angle" value={gv.angle} min={-180} max={180} step={1} unit="°" onChange={(v) => setG({ angle: v })} />
+          <Slider label="Depth tolerance" value={gv.depthTol} min={0} max={2} step={0.05} unit="mm" onChange={(v) => setG({ depthTol: v })} />
+          <Slider label="Width tolerance" value={gv.widthTol} min={0} max={2} step={0.05} unit="mm" onChange={(v) => setG({ widthTol: v })} />
+        </>}
+        {cutMode === 'planar' && <>
         <div className="group-title" style={{ marginTop: 6 }}>Connectors</div>
         <div className="row">
           <button className={`btn-small ${cutConnectorMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => set({ cutConnectorMode: !cutConnectorMode })}
@@ -67,12 +82,13 @@ export function CutPanel() {
             <Slider label="Space" value={cc.space * 100} min={10} max={60} step={1} unit="%" onChange={(v) => setC({ space: v / 100 })} />
           </>}
         </>}
+        </>}
         <label className="row"><input type="checkbox" checked={keepAbove} onChange={(e) => setAbove(e.target.checked)} />Keep upper part</label>
         <label className="row" style={{ marginLeft: 20 }}><input type="checkbox" checked={flip} disabled={!keepAbove} onChange={(e) => setFlip(e.target.checked)} />Place on cut face</label>
         <label className="row"><input type="checkbox" checked={keepBelow} onChange={(e) => setBelow(e.target.checked)} />Keep lower part</label>
         <div className="row" style={{ marginTop: 10 }}>
           <button className="btn-secondary btn-small" onClick={() => set({ cutPlane: { height: +((b.min[2] + b.max[2]) / 2).toFixed(2), tiltX: 0, tiltY: 0 } })}>Reset</button>
-          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip, connectors: cutConnectors, connector: cc })}><Icon name="cut" size={14} />Perform cut</button>
+          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip, ...(cutMode === 'dovetail' ? { groove: gv } : { connectors: cutConnectors, connector: cc }) })}><Icon name="cut" size={14} />Perform cut</button>
         </div>
       </>}
     </div>
@@ -166,7 +182,7 @@ export function TextPanel() {
   );
 }
 
-const FEATURE_LABEL = { point: 'Point', edge: 'Edge', plane: 'Plane' } as const;
+const FEATURE_LABEL = { point: 'Point', edge: 'Edge', plane: 'Plane', circle: 'Circle' } as const;
 
 export function MeasurePanel() {
   const { tool, measureFeatures: fs, measureMode, objects, set } = useStore();
@@ -190,10 +206,10 @@ export function MeasurePanel() {
     <div className="float panel" style={{ width: 270 }}>
       <h4>Measure</h4>
       <div className="seg" style={{ marginBottom: 8 }}>
-        {(['auto', 'point', 'edge', 'face'] as const).map((m) => <button key={m} className={measureMode === m ? 'on' : ''} onClick={() => set({ measureMode: m, measureFeatures: [] })}>{m === 'auto' ? 'Auto' : FEATURE_LABEL[m === 'face' ? 'plane' : m]}</button>)}
+        {(['auto', 'point', 'edge', 'face', 'circle'] as const).map((m) => <button key={m} className={measureMode === m ? 'on' : ''} onClick={() => set({ measureMode: m, measureFeatures: [] })}>{m === 'auto' ? 'Auto' : FEATURE_LABEL[m === 'face' ? 'plane' : m]}</button>)}
       </div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click two features. Auto picks an edge near a sharp crease, a plane on flat surfaces, otherwise a point.</p>
-      {fs.map((f, i) => <div key={i} className="row" style={{ fontSize: 12 }}><span className="badge">{i + 1}</span>{FEATURE_LABEL[f.kind]}{f.kind === 'edge' && <span className="muted mono">{edgeLength(f)!.toFixed(2)} mm</span>}</div>)}
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click two features. Auto picks a circle near a round hole or boss edge, an edge near a sharp crease, a plane on flat surfaces, otherwise a point. Circles are measured from their centre.</p>
+      {fs.map((f, i) => <div key={i} className="row" style={{ fontSize: 12 }}><span className="badge">{i + 1}</span>{FEATURE_LABEL[f.kind]}{f.kind === 'edge' && <span className="muted mono">{edgeLength(f)!.toFixed(2)} mm</span>}{f.kind === 'circle' && <span className="muted mono">⌀ {(f.r * 2).toFixed(2)} mm</span>}</div>)}
       {r && (
         <div className="summary">
           {r.distance !== null && <><span className="k">Distance</span><span className="v">{r.distance.toFixed(3)} mm</span></>}

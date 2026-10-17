@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 import { cutAtZ0 } from '../engine/meshops';
-import { connectorMeshes, type ConnectorSettings } from './cutConnectors';
+import { connectorMeshes, grooveMesh, type ConnectorSettings, type GrooveSettings } from './cutConnectors';
 import { openEdgeCount, repairTJunctions, transformVertices, weld, type IndexedMesh } from '../engine/mesh';
 import { centreMesh } from '../io/load';
 import { dropToBed, newId, objectMatrix, useStore, worldBounds, type SceneObject, type ScenePart, type Vec3 } from './store';
@@ -34,6 +34,8 @@ export interface CutOptions {
   /** Connector positions in cut-plane coordinates (relative to the plane centre). */
   connectors?: { x: number; y: number }[];
   connector?: ConnectorSettings;
+  /** Tongue and groove (dovetail) cut instead of a flat cut. */
+  groove?: GrooveSettings;
 }
 
 /** Cut the object with a plane through world height `height` (tilted by tiltX/tiltY degrees). */
@@ -51,6 +53,16 @@ export function cutObject(id: string, o: CutOptions) {
   const r = cutAtZ0({ vertices: local, indices: obj.mesh.indices });
   if (!r.below || !r.above) { s.set({ toast: { kind: 'warn', text: 'The cut plane does not cross the object.' } }); return; }
   let loose: IndexedMesh[] = [];
+  if (o.groove) {
+    try {
+      const L = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 2 + 10;
+      // the tongue is the part of the lower half inside the key; the lower half keeps a slightly larger groove
+      const tongue = booleanMeshes(r.below, grooveMesh(o.groove, L), 'intersection');
+      if (!tongue.indices.length) throw new Error('the groove does not cross the object');
+      r.above = booleanMeshes(r.above, tongue, 'union');
+      r.below = booleanMeshes(r.below, grooveMesh(o.groove, L, o.groove.widthTol, o.groove.depthTol), 'difference');
+    } catch (e: any) { s.set({ toast: { kind: 'error', text: `Dovetail cut failed: ${e?.message ?? e}` } }); return; }
+  }
   if (o.connectors?.length && o.connector) {
     try {
       const cm = connectorMeshes(o.connectors, o.connector);

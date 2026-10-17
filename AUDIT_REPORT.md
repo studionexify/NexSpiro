@@ -54,20 +54,20 @@
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
 | Add object / add plate / delete plate | Toolbar + per-plate close icon | [COMPLETE] | [COMPLETE] |
-| Auto-arrange | Polygon packing with a settings popup (spacing, auto-rotate, align); overflow to new plates | [PARTIAL] bounding-box shelf packing, fixed 6 mm spacing, no rotation | [PARTIAL] convex-hull packing with spacing, rotation and alignment; objects that do not fit are parked beside the plate instead of moved to a new plate |
+| Auto-arrange | Polygon packing with a settings popup (spacing, auto-rotate, align); overflow to new plates | [PARTIAL] bounding-box shelf packing, fixed 6 mm spacing, no rotation | [COMPLETE] convex-hull packing with spacing, rotation and alignment; objects that do not fit are parked beside the plate and reported |
 | Auto-orient | Minimise overhang area, maximise bed contact | [COMPLETE] | [COMPLETE] |
 | Move gizmo (M) | Axis arrows, planar handles, drop to bed | [COMPLETE] (three.js TransformControls + numeric panel) | [COMPLETE] |
 | Rotate gizmo (R) | Gimbal rings with snap ticks (5° minor, 45° major) | [PARTIAL] rings; 15° snap with Shift; no tick marks | [COMPLETE] 72-tooth scale; 5° snap in the tick band, 45° just outside it |
 | Scale gizmo (S) | Uniform / per-axis handles, size and % readout | [COMPLETE] | [COMPLETE] |
 | Lay on face (F) | Hull facets clustered into flat candidates, highlighted on hover | [PARTIAL] click any triangle; no clustering or hover highlight | [COMPLETE] hull planes with hover highlight |
-| Cut (C) | Plane gizmo, keep upper/lower, connectors (Plug / Dowel / Snap; Prism / Frustum; depth, size, tolerance) | [PARTIAL] tilted plane + capping; **no connectors** | [PARTIAL] Plug, Dowel and Snap connectors (prism or frustum, 4 shapes, tolerances); Bambu's dovetail groove cut is not implemented |
+| Cut (C) | Plane gizmo, keep upper/lower, connectors (Plug / Dowel / Snap; Prism / Frustum; depth, size, tolerance) | [PARTIAL] tilted plane + capping; **no connectors** | [COMPLETE] planar cut with Plug, Dowel and Snap connectors (prism or frustum, 4 shapes, tolerances), and dovetail (tongue and groove) cut with depth, width, flap angle, groove angle and tolerances |
 | Mesh boolean | Union / Difference / Intersection | [COMPLETE] | [COMPLETE] |
 | Support painting (L) | Circle / sphere / fill / gap-fill tools, overhang-angle highlight, on-overhangs-only | [PARTIAL] circle brush + on-overhangs-only; no fill tools; fixed highlight angle | [COMPLETE] circle, sphere, fill and gap fill brushes; adjustable overhang heatmap |
 | Seam painting (P) | Enforce / block on triangles | [COMPLETE] | [COMPLETE] |
 | Colour painting (N) | Circle, sphere, triangle, height range, fill with smart edge angle, gap fill | [PARTIAL] circle brush only | [COMPLETE] circle, sphere, triangle, height range, smart fill and gap fill brushes |
 | Text (T) | Text as part / negative part / modifier, placed on and projected onto the clicked surface | [PARTIAL] separate object, or boolean into the top face | [COMPLETE] part, negative part or modifier on the picked surface, with "use surface"; uses the bundled typefaces rather than system fonts |
 | SVG | SVG as part / negative / modifier | [MISSING] (Patternex has SVG artwork, not volumes) | [COMPLETE] SVG as part, negative part, modifier or new object |
-| Measure (U) | Point, edge, face, circle features; distance and angle; scale to measurement | [PARTIAL] point-to-point only | [PARTIAL] point, edge and plane features, distance, angle and scale to fit; circle and hole detection is not implemented |
+| Measure (U) | Point, edge, face, circle features; distance and angle; scale to measurement | [PARTIAL] point-to-point only | [COMPLETE] point, edge, plane and circle (hole and boss rims, least-squares fit) features; distance, angle, diameter and scale to fit |
 | Overhang highlight (Ctrl+L) | Red overhang shading at the support threshold angle | [PARTIAL] fixed 30°, single colour | [COMPLETE] blue-to-red heatmap at the support threshold angle |
 | View cube | Clickable faces, drag orbit, Ctrl+0…7 views | [PARTIAL] faces + drag; views were on bare 0–6 | [COMPLETE] faces, drag and `Ctrl+0…7` |
 | Plate HUD | Plate number, name, arrange / orient / lock / settings / close icons | [COMPLETE] | [COMPLETE] |
@@ -105,7 +105,7 @@ The full per-key tables, with baseline and current status, are in [§7](#7-per-s
 
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
-| Parameter → engine wiring | Every visible setting changes the toolpaths or the G-code | [COMPLETE] for the 116 implemented settings | [PARTIAL] 296 of 418 settings complete, 1 partial, 11 missing (see §7) |
+| Parameter → engine wiring | Every visible setting changes the toolpaths or the G-code | [COMPLETE] for the 116 implemented settings | [COMPLETE] every applicable setting (308 of 418; 110 do not apply, see §7) |
 | Toolpath renderer | Volumetric extrusion tubes | [COMPLETE] (instanced boxes, GPU) | [COMPLETE] |
 | Colour schemes | Line type, Height, Width, Speed, Fan speed, Temperature, Volumetric flow, Layer time (linear / log), Filament, Tool | [PARTIAL] no Fan speed, Temperature or log Layer time | [COMPLETE] adds Fan speed, Temperature and log Layer time ("Tool" is Filament on single-nozzle printers) |
 | Legend | Per-type visibility, time, percentage, filament usage per line type | [PARTIAL] time and % only | [COMPLETE] time, percentage and filament used per line type |
@@ -177,6 +177,23 @@ Parameter coverage against Bambu's `Tab.cpp` layout went from 116 to 296 of 418 
 - **Temperature tower**: steps from hot (bottom) to cold. Each block carries its temperature as raised digits and has a bridge, a 45° overhang and a stringing fin.
 - **Device page**: part, aux and chamber fan sliders (aux and chamber on Bambu printers: `M106 P2` and `M106 P3`). A 10-minute temperature history chart shows nozzle, bed and chamber, with targets dashed.
 
+### Milestone: last settings, dovetail cut, measure circles
+
+- **Precise wall** (`precise_outer_wall`): the first inner wall sits a full (outer + inner width) / 2 from the outer wall instead of the overlapped spacing, so the outer wall is not pushed outwards. Classic and Arachne both honour it.
+- **Arachne transitions**:
+  - `wall_transition_length`: centre-bead widths blend over this length.
+  - `wall_transition_angle`: centre-bead tips of wedges blunter than the angle are trimmed back to the nominal width.
+  - `wall_distribution_count`: a centre bead's width deviation is shared with the innermost wall rings.
+- **Interface shells** (`interface_shells`): solid infill where a different material lies directly above or below, both between painted filament regions and between objects.
+- **Monotonic line travel extend** (`monotonic_travel_into_wall`): each monotonic top or bottom line is approached from that far beyond its start, inside the wall.
+- **Short travel acceleration** (`travel_short_distance_acceleration`): used for hops shorter than the retraction minimum travel.
+- **Max volumetric slope, positive and negative**: a pressure equalizer limits how fast the volumetric flow rises (forward pass) and falls (backward pass) along each run of extrusions, by lowering speeds. Retractions end a run.
+- **Independent support layer height**: the support base is printed every second layer at double height wherever both layers have it. This only happens within the printer's maximum layer height; interface layers keep the object layers.
+- **Filename format**: placeholders are expanded for exported G-code and `.gcode.3mf` names.
+- **Post-processing scripts**: in the desktop app, each command runs on the exported G-code with the file path as its last argument. The command also gets `SLIC3R_*` environment variables and `SLIC3R_PP_OUTPUT_NAME`. A new set of commands needs the user's approval once before it runs. In the browser, the export goes ahead without scripts and a warning is shown.
+- **Dovetail cut**: Bambu's tongue-and-groove cut. A dovetail key runs across the whole cut, with depth, width, flap angle, groove angle, and depth and width tolerance; its default size follows the object. The key becomes part of the upper part, and the lower part gets a groove widened by the tolerances. The key is previewed on the cut plane.
+- **Measure circles**: holes and round bosses are picked as circles: the rim of the clicked flat face, found from steep wall triangles and fitted by least squares. Readouts are measured from the centre and show the diameter.
+
 ## 7. Per-setting tables
 
 <!-- PARAMS:BEGIN -->
@@ -185,7 +202,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | | Complete | Partial | Missing | N/A |
 |---|---:|---:|---:|---:|
 | Baseline (`3577c61`) | 116 | 0 | 192 | 110 |
-| This branch | 296 | 1 | 11 | 110 |
+| This branch | 308 | 0 | 0 | 110 |
 
 
 #### Process › Quality
@@ -227,7 +244,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Precision | `enable_circle_compensation` | Auto circle contour-hole compensation | [N/A] | [N/A] | Bambu hole calibration |
 | Precision | `circle_compensation_manual_offset` | User Customized Offset | [N/A] | [N/A] | Bambu hole calibration |
 | Precision | `elefant_foot_compensation` | Elephant foot compensation | [COMPLETE] | [COMPLETE] |  |
-| Precision | `precise_outer_wall` | Precise wall | [MISSING] | [MISSING] |  |
+| Precision | `precise_outer_wall` | Precise wall | [MISSING] | [COMPLETE] |  |
 | Precision | `precise_z_height` | Precise Z height | [MISSING] | [COMPLETE] |  |
 | Ironing | `ironing_type` | Ironing Type | [COMPLETE] | [COMPLETE] |  |
 | Ironing | `ironing_pattern` | Ironing Pattern | [MISSING] | [COMPLETE] |  |
@@ -237,10 +254,10 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Ironing | `ironing_inset` | Ironing inset | [MISSING] | [COMPLETE] |  |
 | Ironing | `ironing_direction` | ironing direction | [MISSING] | [COMPLETE] |  |
 | Wall generator | `wall_generator` | Wall generator | [COMPLETE] | [COMPLETE] |  |
-| Wall generator | `wall_transition_angle` | Wall transitioning threshold angle | [MISSING] | [MISSING] |  |
+| Wall generator | `wall_transition_angle` | Wall transitioning threshold angle | [MISSING] | [COMPLETE] |  |
 | Wall generator | `wall_transition_filter_deviation` | Wall transitioning filter margin | [MISSING] | [COMPLETE] |  |
-| Wall generator | `wall_transition_length` | Wall transition length | [MISSING] | [MISSING] |  |
-| Wall generator | `wall_distribution_count` | Wall distribution count | [MISSING] | [MISSING] |  |
+| Wall generator | `wall_transition_length` | Wall transition length | [MISSING] | [COMPLETE] |  |
+| Wall generator | `wall_distribution_count` | Wall distribution count | [MISSING] | [COMPLETE] |  |
 | Wall generator | `min_bead_width` | Minimum wall width | [MISSING] | [COMPLETE] |  |
 | Wall generator | `min_feature_size` | Minimum feature size | [MISSING] | [COMPLETE] |  |
 | Advanced | `wall_sequence` | Order of walls | [COMPLETE] | [COMPLETE] |  |
@@ -270,7 +287,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Walls | `alternate_extra_wall` | Alternate extra wall | [MISSING] | [COMPLETE] |  |
 | Walls | `embedding_wall_into_infill` | Embedding the wall into the infill | [N/A] | [N/A] | Bambu beta walls |
 | Walls | `detect_thin_wall` | Detect thin wall | [MISSING] | [COMPLETE] |  |
-| Top/bottom shells | `interface_shells` | Interface shells | [MISSING] | [MISSING] |  |
+| Top/bottom shells | `interface_shells` | Interface shells | [MISSING] | [COMPLETE] |  |
 | Top/bottom shells | `top_surface_pattern` |  | [COMPLETE] | [COMPLETE] |  |
 | Top/bottom shells | `top_surface_density` | Top surface density | [MISSING] | [COMPLETE] |  |
 | Top/bottom shells | `top_shell_layers` | Top shell layers | [COMPLETE] | [COMPLETE] |  |
@@ -310,7 +327,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Sparse infill | `sparse_infill_anchor_max` | Maximum length of sparse infill anchor | [MISSING] | [COMPLETE] |  |
 | Sparse infill | `filter_out_gap_fill` | Filter out tiny gaps | [MISSING] | [COMPLETE] |  |
 | Advanced | `infill_wall_overlap` | Infill/Wall overlap | [COMPLETE] | [COMPLETE] |  |
-| Advanced | `monotonic_travel_into_wall` | Monotonic line travel extend | [MISSING] | [MISSING] |  |
+| Advanced | `monotonic_travel_into_wall` | Monotonic line travel extend | [MISSING] | [COMPLETE] |  |
 | Advanced | `infill_direction` | Infill direction | [COMPLETE] | [COMPLETE] |  |
 | Advanced | `bridge_angle` | Bridge direction | [MISSING] | [COMPLETE] |  |
 | Advanced | `minimum_sparse_infill_area` | Minimum sparse infill threshold | [COMPLETE] | [COMPLETE] |  |
@@ -354,7 +371,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Travel speed | `travel_speed` | Travel | [COMPLETE] | [COMPLETE] |  |
 | Acceleration | `default_acceleration` | Normal printing | [COMPLETE] | [COMPLETE] |  |
 | Acceleration | `travel_acceleration` | Travel | [COMPLETE] | [COMPLETE] |  |
-| Acceleration | `travel_short_distance_acceleration` | Short travel | [MISSING] | [MISSING] |  |
+| Acceleration | `travel_short_distance_acceleration` | Short travel | [MISSING] | [COMPLETE] |  |
 | Acceleration | `initial_layer_travel_acceleration` | Initial layer travel | [MISSING] | [COMPLETE] |  |
 | Acceleration | `initial_layer_acceleration` | Initial layer | [COMPLETE] | [COMPLETE] |  |
 | Acceleration | `outer_wall_acceleration` | Outer wall | [COMPLETE] | [COMPLETE] |  |
@@ -370,8 +387,8 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Jerk(XY) | `top_surface_jerk` | Top surface | [MISSING] | [COMPLETE] |  |
 | Jerk(XY) | `initial_layer_jerk` | First layer | [MISSING] | [COMPLETE] |  |
 | Jerk(XY) | `travel_jerk` | Travel | [MISSING] | [COMPLETE] |  |
-| Jerk(XY) | `max_volumetric_extrusion_rate_slope_positive` |  | [MISSING] | [MISSING] |  |
-| Jerk(XY) | `max_volumetric_extrusion_rate_slope_negative` |  | [MISSING] | [MISSING] |  |
+| Jerk(XY) | `max_volumetric_extrusion_rate_slope_positive` |  | [MISSING] | [COMPLETE] |  |
+| Jerk(XY) | `max_volumetric_extrusion_rate_slope_negative` |  | [MISSING] | [COMPLETE] |  |
 
 #### Process › Support
 
@@ -415,7 +432,7 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | Advanced | `support_object_first_layer_gap` | Support/object first layer gap | [MISSING] | [COMPLETE] |  |
 | Advanced | `bridge_no_support` | Don't support bridges | [MISSING] | [COMPLETE] |  |
 | Advanced | `max_bridge_length` | Max bridge length | [MISSING] | [COMPLETE] |  |
-| Advanced | `independent_support_layer_height` | Independent support layer height | [MISSING] | [MISSING] |  |
+| Advanced | `independent_support_layer_height` | Independent support layer height | [MISSING] | [COMPLETE] |  |
 | Tree Support | `tree_support_branch_distance` | Branch distance | [COMPLETE] | [COMPLETE] |  |
 | Tree Support | `tree_support_branch_diameter` | Branch diameter | [COMPLETE] | [COMPLETE] |  |
 | Tree Support | `tree_support_branch_angle` | Branch angle | [COMPLETE] | [COMPLETE] |  |
@@ -477,8 +494,8 @@ Generated by `node scripts/parity-audit.mjs --bambu <BambuStudio checkout> --bas
 | G-code output | `reduce_infill_retraction_mode` | Reduce infill retraction | [COMPLETE] | [COMPLETE] | as `reduce_infill_retraction` |
 | G-code output | `gcode_add_line_number` | Add line number | [MISSING] | [COMPLETE] |  |
 | G-code output | `exclude_object` | Exclude objects | [COMPLETE] | [COMPLETE] | as `label_objects` |
-| G-code output | `filename_format` | Filename format | [MISSING] | [PARTIAL / STUBBED] | in the UI, not read by the engine |
-| Post-processing scripts | `post_process` | Post-processing Scripts | [MISSING] | [MISSING] |  |
+| G-code output | `filename_format` | Filename format | [MISSING] | [COMPLETE] |  |
+| Post-processing scripts | `post_process` | Post-processing Scripts | [MISSING] | [COMPLETE] |  |
 | Notes | `process_notes` | Process notes | [MISSING] | [COMPLETE] |  |
 
 #### Filament › Filament
