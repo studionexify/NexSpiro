@@ -6,7 +6,7 @@ import type { PrintProfiles } from "./core/profiles";
 import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
-import { wallMatches, type MotionApplication, type MotionBrush } from "./model";
+import { DEFAULT_TIP, type CurveKey, wallMatches, type MotionApplication, type MotionBrush, type TipControl } from "./model";
 import { offsetInnerWalls } from "./core/follow";
 
 export interface ModifierOptions {
@@ -84,12 +84,25 @@ function sampleAt(b: MotionBrush, s: number, L: number, phaseDeg: number, fixedP
   const ph = (((phaseDeg % 360) + 360) % 360 / 360) * period;
   if (b.repeat_mode === "once" && s + ph > period) return null;
   const u = (((s + ph) / period) % 1 + 1) % 1;
-  let lat = evalCurve(b.curves.lateral_offset, u);
+  const r = Math.min(b.round_mm ?? 0, period / 2);
+  // Rounding: the shape is averaged under a triangle window of half-width r (two box filters in a
+  // row), which turns every step into a smooth S whose slope changes gradually, and leaves the
+  // shape untouched wherever it is straight for longer than r.
+  const ev = (c: CurveKey) => {
+    if (r <= 1e-6) return evalCurve(b.curves[c], u);
+    let sum = 0, wsum = 0;
+    for (let k = -ROUND_TAPS; k <= ROUND_TAPS; k++) {
+      const w = ROUND_TAPS + 1 - Math.abs(k), uk = (((u + (k / ROUND_TAPS) * (r / period)) % 1) + 1) % 1;
+      sum += w * evalCurve(b.curves[c], uk); wsum += w;
+    }
+    return sum / wsum;
+  };
+  let lat = ev("lateral_offset");
   if (b.noise?.enabled) lat += noise1d((s + ph) / (period * b.noise.scale), b.noise.seed, b.noise.octaves, b.noise.persistence);
   return {
     lat: lat * b.amplitude,
-    along: evalCurve(b.curves.along_offset, u) * b.amplitude,
-    z: evalCurve(b.curves.z_offset, u) * (b.z_amplitude ?? 0),
+    along: ev("along_offset") * b.amplitude,
+    z: ev("z_offset") * (b.z_amplitude ?? 0),
     flow: evalCurve(b.curves.extrusion_mult, u),
     speed: evalCurve(b.curves.speed_mult, u),
   };
@@ -112,6 +125,16 @@ export function eventPositions(b: MotionBrush, L: number, layer: number, fixedPe
   return out.sort((a, b) => a.s - b.s || a.i - b.i);
 }
 
+const ROUND_TAPS = 8;
+
+/** The motion as one placement uses it: its size slider and corner rounding applied. */
+export function placedBrush(app: MotionApplication, found: MotionBrush): MotionBrush {
+  const k = app.scale ?? 1;
+  const round = app.round_mm ?? found.round_mm ?? 0;
+  if (k === 1 && round === (found.round_mm ?? 0)) return found;
+  return { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k, round_mm: round * k };
+}
+
 export type Weight = (x: number, y: number, z: number, slope: number) => number;
 /** Returns the repeat count to use for a loop centred at (x, y); the first answer for a loop sticks for the whole print. */
 export type RepeatLock = (cx: number, cy: number, suggested: number) => number;
@@ -123,6 +146,8 @@ export interface PathLayer {
   /** add: displacement adds to earlier motions · override: cross-fades from earlier motions to this one. */
   blend: "add" | "override";
   repeats?: RepeatLock;
+  /** Behaviour on loops too small for this motion. */
+  tip?: TipControl;
 }
 
 /**
@@ -169,27 +194,36 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
   const { machine, process, filament } = p;
   const maxXY = Math.min(machine.maxSpeed.x, machine.maxSpeed.y);
   const filArea = Math.PI * (filament.diameter / 2) ** 2;
-  // Tangent and outward normal of the slicer's path (walls are CCW, so outward is the right-hand normal).
-  const tx = new Float64Array(N), ty = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    // for closed paths wrap around so the seam has no kink
-    const prev = samples[i > 0 ? i - 1 : path.closed ? N - 2 : 0];
-    const next = samples[i < N - 1 ? i + 1 : path.closed ? 1 : N - 1];
-    const dx = next.x - prev.x, dy = next.y - prev.y, l = Math.hypot(dx, dy) || 1;
-    tx[i] = dx / l; ty[i] = dy / l;
-  }
   const lat = new Float64Array(N), along = new Float64Array(N), dz = new Float64Array(N);
   const flow = new Float64Array(N).fill(1), speed = new Float64Array(N).fill(1), total = new Float64Array(N);
   const lo = new Float64Array(N).fill(-Infinity), hi = new Float64Array(N).fill(Infinity);
   const post: (ToolpathPoint["post"] | undefined)[] = new Array(N);
   const travel = new Uint8Array(N);
   let flowClamps = 0, canLoop = false;
-  for (const { brush: b, weight, blend, repeats } of layers) {
+  // Inner radius of a closed loop (2·area / perimeter): how much room a motion has before the line folds over itself.
+  let inradius = Infinity;
+  if (path.closed) {
+    let a2 = 0;
+    for (let i = 1; i < N; i++) a2 += samples[i - 1].x * samples[i].y - samples[i].x * samples[i - 1].y;
+    inradius = Math.abs(a2) / L;
+  }
+  for (const { brush: b, weight, blend, repeats, tip = DEFAULT_TIP } of layers) {
     const w = new Float64Array(N);
     let any = false;
     for (let i = 0; i < N; i++) { const c = samples[i]; w[i] = clamp(weight(c.x, c.y, c.z, c.slope), 0, 1); if (w[i] > 0) any = true; }
     if (!any) continue;
     const prm = pathParam(samples, path.closed, b, repeats);
+    // Small loops (the tip of a cone or pyramid): shrink the motion to fit, or drop it on this loop.
+    let fit = 1;
+    if (tip.mode !== "full" && Number.isFinite(inradius)) {
+      let peak = 0;
+      for (let i = 0; i < N; i++) if (w[i] > 0) {
+        const m = brushAt(b, prm.at(i), prm.L, layer, prm.period);
+        if (m) peak = Math.max(peak, (Math.abs(m.lat) + Math.abs(m.along)) * w[i]);
+      }
+      const cap = clamp(tip.share, 0.05, 1) * inradius;
+      if (peak > cap) { if (tip.mode === "off") continue; fit = cap / peak; }
+    }
     if (b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0) canLoop = true;
     // Events: positions are found in the same measure as the motion, then mapped back onto the path.
     const evs = eventPositions(b, prm.L, layer, prm.period).map((e) => ({ s: prm.toS(e.s), i: e.i })).sort((a, c) => a.s - c.s || a.i - c.i);
@@ -197,7 +231,7 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     for (let i = 0; i < N; i++) {
       const c = samples[i], wi = w[i];
       const m = wi > 0 ? brushAt(b, prm.at(i), prm.L, layer, prm.period) : null;
-      const mLat = m ? m.lat : 0, mAlong = m ? m.along : 0, mZ = m ? m.z : 0;
+      const mLat = m ? m.lat * fit : 0, mAlong = m ? m.along * fit : 0, mZ = m ? m.z : 0;
       const mFlow = m ? m.flow * flowState : 1, mSpeed = m ? m.speed : 1;
       if (blend === "override") {
         lat[i] = lat[i] * (1 - wi) + mLat * wi; along[i] = along[i] * (1 - wi) + mAlong * wi; dz[i] = dz[i] * (1 - wi) + mZ * wi;
@@ -237,6 +271,31 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     }
     if (pendingUnretract > 0) post[N - 1] = { ...post[N - 1], unretract_mm: pendingUnretract };
   }
+  let maxLat = 0;
+  for (let i = 0; i < N; i++) maxLat = Math.max(maxLat, Math.abs(lat[i]) + Math.abs(along[i]));
+  // Direction of the offset. A sample's own tangent jumps at every corner of the slicer's path, so an
+  // inward offset would cross itself there and an outward one would leave a gap. Instead the tangent is
+  // the chord over ±R of arc length: identical on straight runs, turning gradually through a corner.
+  // With R ≥ A·θ/2 the offset line can't fold back (|A·dn/ds| < 1), so corners come out as clean arcs.
+  const R = Math.min(Math.max(opt.resampleStep, 1.6 * maxLat), L / 4);
+  const ss = samples.map((c) => c.s);
+  const posAt = (s: number): [number, number] => {
+    if (path.closed) s = ((s % L) + L) % L; else s = clamp(s, 0, L);
+    let lo2 = 0, hi2 = N - 1;
+    while (hi2 - lo2 > 1) { const m = (lo2 + hi2) >> 1; if (ss[m] <= s) lo2 = m; else hi2 = m; }
+    const a = samples[lo2], b = samples[hi2], d = ss[hi2] - ss[lo2], u = d > 0 ? (s - ss[lo2]) / d : 0;
+    return [a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u];
+  };
+  const tx = new Float64Array(N), ty = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const [ax, ay] = posAt(ss[i] - R), [bx, by] = posAt(ss[i] + R);
+    let dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy);
+    if (l < 1e-9) { // hairpin: fall back to the neighbours
+      const prev = samples[i > 0 ? i - 1 : path.closed ? N - 2 : 0], next = samples[i < N - 1 ? i + 1 : path.closed ? 1 : N - 1];
+      dx = next.x - prev.x; dy = next.y - prev.y; l = Math.hypot(dx, dy) || 1;
+    }
+    tx[i] = dx / l; ty[i] = dy / l;
+  }
   const out: ToolpathPoint[] = [];
   for (let i = 0; i < N; i++) {
     const c = samples[i];
@@ -273,24 +332,49 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     if (q.f > maxXY) { q.f = maxXY; speedClamps++; }
     const len3 = Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z), ddz = Math.abs(q.z - a.z);
     if (ddz > 1e-6 && len3 > 0 && (q.f * ddz) / len3 > machine.maxSpeed.z) { q.f = (machine.maxSpeed.z * len3) / ddz; zClamps++; }
-    if (i > 1) {
-      const z0 = out[i - 2];
-      const v1x = a.x - z0.x, v1y = a.y - z0.y, v2x = q.x - a.x, v2y = q.y - a.y;
-      const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
-      if (l1 > 1e-6 && l2 > 1e-6) {
-        const turn = Math.acos(clamp((v1x * v2x + v1y * v2y) / (l1 * l2), -1, 1));
-        if ((q.f * q.f * turn) / ((l1 + l2) / 2) > machine.maxAccel.x) accel++;
-      }
-    }
   }
+  accel = limitCornerSpeeds(out, machine.maxAccel.x);
   check.speedHits += speedClamps; check.zSpeedHits += zClamps; check.accelHits += accel; check.loopSlowed += loops;
   const name = layers.length === 1 ? layers[0].brush.name : "Motions";
   if (flowClamps) warn({ code: "motionex_flow_limit", message: `${flowClamps} spots hit this motion's plastic limit` });
   if (speedClamps) warn({ code: "motionex_speed_limit", message: `Some spots were slowed to your printer's top speed (${maxXY} mm/s)` });
   if (loops) warn({ code: "motionex_loops", message: `${name}: loops lay plastic over itself, so those parts print slower (${Math.round(loopSpeed)} mm/s)` });
   if (zClamps) warn({ code: "motionex_z_speed", message: `Up-and-down moves slowed to your printer's top up/down speed (${machine.maxSpeed.z} mm/s)` });
-  if (accel) warn({ code: "motionex_accel", message: "Some tight turns are sharper than your printer can follow at full speed; it will round them off slightly" });
+  if (accel) warn({ code: "motionex_accel", message: "Tight turns in the motion print slower so the line stays clean" });
   return { ...path, points: out, modifiedBy: "motionex", base: path.base ?? path.points };
+}
+
+/** Junction deviation (mm) used to work out how fast the nozzle may take a turn. */
+const JUNCTION_DEV = 0.02;
+/** Never slow below this (mm/s): slower lines over-melt more than a slightly rounded corner hurts. */
+const MIN_CORNER_SPEED = 8;
+
+/**
+ * Plan speeds the way the firmware will: each turn gets the junction-deviation speed limit, then a
+ * backward and a forward pass keep every speed change within the printer's acceleration. The nozzle
+ * then reaches each turn already at the speed it can hold, instead of the firmware braking hard (and
+ * the line bulging) on every tooth. Returns how many points were slowed.
+ */
+export function limitCornerSpeeds(pts: ToolpathPoint[], accel: number): number {
+  const n = pts.length;
+  if (n < 3 || !(accel > 0)) return 0;
+  const v = pts.map((q) => q.f), len = new Float64Array(n);
+  for (let i = 1; i < n; i++) len[i] = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z);
+  for (let i = 1; i < n - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+    if (b.travel || c.travel || len[i] < 1e-6 || len[i + 1] < 1e-6) continue;
+    const cos = ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) + (b.z - a.z) * (c.z - b.z)) / (len[i] * len[i + 1]);
+    const half = Math.sqrt(Math.max(0, (1 + clamp(cos, -1, 1)) / 2)); // cos(turn/2)
+    if (half > 0.9999) continue;
+    const vj = Math.max(MIN_CORNER_SPEED, Math.sqrt((accel * JUNCTION_DEV * half) / (1 - half)));
+    if (vj < v[i]) v[i] = vj;
+  }
+  // a move's speed is its end speed: brake before slow turns, speed up smoothly after them
+  for (let i = n - 2; i >= 1; i--) if (!pts[i + 1].travel) v[i] = Math.min(v[i], Math.max(MIN_CORNER_SPEED, Math.sqrt(v[i + 1] ** 2 + 2 * accel * len[i + 1])));
+  for (let i = 2; i < n; i++) if (!pts[i].travel && !pts[i - 1].travel) v[i] = Math.min(v[i], Math.max(MIN_CORNER_SPEED, Math.sqrt(v[i - 1] ** 2 + 2 * accel * len[i])));
+  let slowed = 0;
+  for (let i = 1; i < n; i++) if (!pts[i].travel && v[i] < pts[i].f - 1e-6) { if (v[i] < pts[i].f * 0.8) slowed++; pts[i].f = Math.round(v[i] * 100) / 100; }
+  return slowed;
 }
 
 /** Smooth 0..1 step over the soft band around a slope limit (degrees). */
@@ -307,8 +391,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
   const prepared: Prepared[] = [];
   for (const app of sorted) {
     const found = app.brush ?? brushes(app.brush_id);
-    const k = app.scale ?? 1;
-    const brush = found && k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
+    const brush = found && placedBrush(app, found);
     if (!brush) { warn({ code: "motionex_missing_brush", message: `Motion ${app.brush_id} was not found` }); continue; }
     const faces = app.target.type === "faces" ? (app.target.faces ?? []).map((id) => regions?.get(id)).filter((r): r is PatternexRegion => !!r) : [];
     if (app.target.type === "faces" && !faces.length) { warn({ code: "motionex_faces_missing", message: "A motion is set to picked surfaces but none are picked, so it was skipped" }); continue; }
@@ -356,7 +439,7 @@ export function applyMotion(layers: Layer[], apps: MotionApplication[], brushes:
         // Leave paths the mask never reaches untouched (keeps G-code small and exact there).
         if ((a.faces.length || a.app.mask.angle_min !== undefined || a.app.mask.angle_max !== undefined)
           && !resample(path.points, 1).some((q) => weights[k](q.x, q.y, layer.z, q.slope) > 0)) return;
-        parts.push({ brush: a.brush, weight: weights[k], blend: a.app.blend, repeats: a.lockFor(path.feature) });
+        parts.push({ brush: a.brush, weight: weights[k], blend: a.app.blend, repeats: a.lockFor(path.feature), tip: a.app.tip });
       });
       return parts.length ? composePath(path, parts, p, opt, warn, layer.index, check) : path;
     });

@@ -61,11 +61,21 @@ export interface MotionBrush {
   limits: { min_flow_mult: number; max_flow_mult: number };
   layers?: LayerEffect | null;
   tags?: string[];
+  /** Rounds sharp corners of the shape (square teeth, steps) over this many mm along the wall; 0 = crisp. */
+  round_mm?: number;
   /** Library group shown in the picker, e.g. "Waves". */
   category?: string;
   /** One plain-language line shown under the name. */
   description?: string;
 }
+
+/**
+ * What a motion does on loops too small for it (the tip of a cone or pyramid).
+ * fade: shrink it to fit · off: leave those loops plain · full: always full size (may fold over itself).
+ * share: how much of the loop's inner radius the motion may use (0.05–1).
+ */
+export interface TipControl { mode: "fade" | "off" | "full"; share: number }
+export const DEFAULT_TIP: TipControl = { mode: "fade", share: 0.3 };
 
 /** "body": the whole model; "faces": only the surfaces picked in the 3D view (face sets). */
 export type TargetType = "body" | "faces";
@@ -95,6 +105,10 @@ export interface MotionApplication {
   enabled: boolean;
   /** Size slider: scales wave height and wave length together (1 = as designed). */
   scale?: number;
+  /** Behaviour on small loops; omitted = DEFAULT_TIP. */
+  tip?: TipControl;
+  /** Round the motion's sharp corners over this many mm (overrides the motion's own setting). */
+  round_mm?: number;
   /** Optional name shown in the list. */
   label?: string;
   /** Surface set (1..n) this motion's picked faces are stored in; the panel keeps one per motion. */

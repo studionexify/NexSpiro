@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { applyBrushToPath, brushAt, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
+import { applyBrushToPath, brushAt, composePath, resample, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
 import { PRESETS } from "../../src/plugins/motionex/presets";
 import type { Toolpath } from "../../src/plugins/motionex/core/types";
 import { profiles } from "./helpers";
@@ -78,4 +78,52 @@ test("size slider scales wave height and length together", () => {
   assert.ok(Math.abs(maxY(big) - 2 * maxY(normal)) < 0.02);
   // Twice the wave length: the first peak moves from 1 mm to 2 mm along the line.
   assert.ok(Math.abs(Math.abs(big.find((q) => Math.abs(q.x - 2) < 1e-9)!.y) - 1.2) < 0.02);
+});
+
+const square = (h: number): Toolpath => ({ feature: "outer_wall", closed: true, points: [
+  [0, 0], [h, 0], [h, h], [0, h], [0, 0]].map(([x, y]) => ({ x, y, z: 1, f: 60, flow: 1, e: 0 })) });
+
+test("small loops scale the motion down instead of folding over (pyramid tip)", () => {
+  const out = applyBrushToPath(square(2), { ...sine, amplitude: 1, period_mm: 1 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const base = resample(square(2).points, DEFAULT_OPTIONS.resampleStep);
+  const worst = Math.max(...out.points.map((p, i) => Math.hypot(p.x - base[i].x, p.y - base[i].y)));
+  assert.ok(worst <= 0.3 * 1 + 1e-6, `offset ${worst} exceeds 30% of the 1 mm inradius`);
+});
+
+test("offsets turn smoothly through sharp corners: no segment runs backwards", () => {
+  const out = applyBrushToPath(square(40), { ...sine, amplitude: 0.6, period_mm: 2 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const base = resample(square(40).points, DEFAULT_OPTIONS.resampleStep);
+  for (let i = 1; i < out.points.length; i++) {
+    const a = out.points[i - 1], b = out.points[i], bx = base[i].x - base[i - 1].x, by = base[i].y - base[i - 1].y;
+    if (Math.hypot(bx, by) < 1e-9) continue;
+    assert.ok((b.x - a.x) * bx + (b.y - a.y) * by > -1e-9, `backwards move at ${i}`);
+  }
+});
+
+test("teeth slow into their corners and speed up within the printer's acceleration", () => {
+  const teeth = structuredClone(PRESETS.find((b) => /square/i.test(b.name)) ?? sine);
+  const out = applyBrushToPath(line(20), { ...teeth, amplitude: 0.5, period_mm: 2 }, profiles(), DEFAULT_OPTIONS, () => 1, () => {});
+  const acc = profiles().machine.maxAccel.x;
+  for (let i = 2; i < out.points.length; i++) {
+    const a = out.points[i - 1], b = out.points[i], l = Math.hypot(b.x - a.x, b.y - a.y);
+    assert.ok(b.f ** 2 <= a.f ** 2 + 2 * acc * l + 1, `speed jump at ${i}`);
+  }
+});
+
+test("tip control: switch off leaves small loops plain, keep full size leaves them alone", () => {
+  const b = { ...sine, amplitude: 1, period_mm: 1 };
+  const base = resample(square(2).points, DEFAULT_OPTIONS.resampleStep);
+  const dev = (t: Toolpath) => Math.max(...t.points.map((p, i) => Math.hypot(p.x - base[i].x, p.y - base[i].y)));
+  const run = (mode: "off" | "full") => composePath(square(2), [{ brush: b, weight: () => 1, blend: "add", tip: { mode, share: 0.3 } }], profiles(), DEFAULT_OPTIONS, () => {});
+  assert.equal(dev(run("off")), 0);
+  assert.ok(dev(run("full")) > 0.9);
+});
+
+test("corner rounding softens a square tooth's corners", () => {
+  const teeth = structuredClone(PRESETS.find((b) => /square/i.test(b.name))!);
+  // sharpest bend: largest change of slope between neighbouring 0.02 mm steps
+  const bend = (b: typeof teeth) => { const h = 0.02; let m = 0; for (let s = h; s < 4; s += h) { const f = (x: number) => brushAt(b, x, 100)!.lat; m = Math.max(m, Math.abs(f(s + h) - 2 * f(s) + f(s - h)) / (h * h)); } return m; };
+  const crisp = bend({ ...teeth, period_mm: 4, amplitude: 0.5 }), round = bend({ ...teeth, period_mm: 4, amplitude: 0.5, round_mm: 0.3 });
+  // a kink of slope change Δ filtered by a triangle of half-width r bends at most Δ/r
+  assert.ok(round < crisp * 0.6, `${round} vs ${crisp}`);
 });

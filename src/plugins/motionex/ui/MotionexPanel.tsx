@@ -12,8 +12,8 @@ import { buildPreview, type PreviewApp, type PreviewLines } from '../preview';
 import { allTris, assignMotion, clearMotionSet, motionCounts, SURFACE_COLORS } from '../../../state/motionPaint';
 import { createMotionexState, defaultApplication, saveMotionexState, toConfig, type MotionexState } from '../index';
 import { profilesFromConfig, type MotionexConfig, type MotionexReport } from '../engine';
-import { brushAt } from '../modifier';
-import type { MotionApplication, MotionBrush, WallChoice } from '../model';
+import { brushAt, placedBrush } from '../modifier';
+import { DEFAULT_TIP, type MotionApplication, type MotionBrush, type WallChoice } from '../model';
 import type { CollisionMode } from '../core/toolhead';
 import { patternexMotionApps, px } from '../../patternex/ui/PatternexPanel';
 import { regionColor, regionList, regionTriangles } from '../../patternex/ui/preview';
@@ -48,8 +48,7 @@ export function motionexPreview(): PreviewLines | null {
     if (!a.enabled) continue;
     const found = brushOf(a);
     if (!found) continue;
-    const k = a.scale ?? 1;
-    const brush = k !== 1 ? { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k } : found;
+    const brush = placedBrush(a, found);
     const region = pxOn && a.target.type === 'faces' ? a.target.faces?.find((f) => f.includes(':')) : undefined;
     if (region) {
       const ink = regionColor(px, region) ?? [0.6, 0.6, 0.6];
@@ -434,9 +433,14 @@ function PlacementFor({ a }: { a: MotionApplication }) {
       <label className="mx-field">Size ×{(a.scale ?? 1).toFixed(2)}
         <input type="range" min={0.25} max={3} step={0.05} value={a.scale ?? 1} onChange={(e) => { a.scale = +e.target.value; changed(); }} />
       </label>
+      <label className="mx-field">Round sharp corners: {(a.round_mm ?? 0) > 0 ? `${(a.round_mm ?? 0).toFixed(2)} mm` : 'off (crisp)'}
+        <input type="range" min={0} max={1} step={0.05} value={a.round_mm ?? 0} onChange={(e) => { a.round_mm = +e.target.value; changed(); }} />
+      </label>
     </section>
   );
 }
+
+const TIP_MODES: ['fade' | 'off' | 'full', string][] = [['fade', 'Shrink to fit'], ['off', 'Switch off'], ['full', 'Keep full size']];
 
 function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
   const upd = (f: () => void) => { f(); changed(); };
@@ -459,6 +463,16 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
       <label className="mx-field">Soft edge where the motion stops: {(a.mask.blend_mm ?? 1.5).toFixed(1)} mm
         <input type="range" min={0} max={10} step={0.5} value={a.mask.blend_mm ?? 1.5} onChange={(e) => upd(() => { a.mask.blend_mm = +e.target.value; })} />
       </label>
+      <div className="mx-label">Near the tip (loops too small for the motion)</div>
+      <div className="seg mx-seg">
+        {TIP_MODES.map(([m, l]) => <button key={m} className={(a.tip?.mode ?? DEFAULT_TIP.mode) === m ? 'on' : ''} onClick={() => upd(() => { a.tip = { ...(a.tip ?? DEFAULT_TIP), mode: m }; })}>{l}</button>)}
+      </div>
+      {(a.tip?.mode ?? DEFAULT_TIP.mode) !== 'full' && (
+        <label className="mx-field">{(a.tip?.mode ?? DEFAULT_TIP.mode) === 'off' ? 'Switch off' : 'Start shrinking'} when the motion needs more than {Math.round((a.tip?.share ?? DEFAULT_TIP.share) * 100)}% of the loop's inner radius
+          <input type="range" min={0.05} max={1} step={0.05} value={a.tip?.share ?? DEFAULT_TIP.share} onChange={(e) => upd(() => { a.tip = { ...(a.tip ?? DEFAULT_TIP), share: +e.target.value }; })} />
+        </label>
+      )}
+      {(a.tip?.mode ?? DEFAULT_TIP.mode) === 'full' && <div className="mx-muted" style={{ margin: 0 }}>Full size on every loop: near a tip the line can fold over itself.</div>}
       {!first && (
         <>
           <div className="mx-label">Where it overlaps the motions above</div>
