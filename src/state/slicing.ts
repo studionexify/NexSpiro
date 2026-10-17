@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { transformVertices } from '../engine/mesh';
 import type { MeshInput, SliceOutput } from '../engine/types';
-import { filamentSlots, resolveConfig, tuningConfig } from '../profiles/resolve';
+import { filamentSlots, resolveConfig, slotOverrides } from '../profiles/resolve';
 import { effectiveFlush } from '../profiles/flush';
 import { faceSetsOf, pluginConfigs } from '../plugins/registry';
 import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } from './store';
@@ -17,7 +17,8 @@ export function currentConfig(plateIndex = useStore.getState().activePlate) {
   const s = useStore.getState();
   const pl = s.plates[plateIndex];
   const overrides = pl?.spiralVase === undefined ? s.overrides : { ...s.overrides, spiral_mode: pl.spiralVase };
-  return { ...resolveConfig({ printerId: s.printerId, plate: pl?.bedType ?? s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides, machineOverrides: s.machineOverrides }), ...tuningConfig(s.filaments[0].tuning) };
+  const plateOv = { ...(pl?.printSequence ? { print_sequence: pl.printSequence } : {}) };
+  return resolveConfig({ printerId: s.printerId, plate: pl?.bedType ?? s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides: { ...overrides, ...plateOv }, machineOverrides: s.machineOverrides, filamentOverrides: slotOverrides(s.filaments[0]) });
 }
 
 export const plateObjects = (plate = useStore.getState().activePlate) => {
@@ -28,8 +29,9 @@ export const plateObjects = (plate = useStore.getState().activePlate) => {
 export function sliceNow(): Promise<SliceOutput | null> {
   const s = useStore.getState();
   const plate = s.activePlate;
-  const objs = plateObjects(plate).filter((o) => o.printable !== false);
-  if (!objs.length) {
+  const program = s.plates[plate]?.program;
+  const objs = program ? [] : plateObjects(plate).filter((o) => o.printable !== false);
+  if (!objs.length && !program) {
     s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
     return Promise.resolve(null);
   }
@@ -48,6 +50,11 @@ export function sliceNow(): Promise<SliceOutput | null> {
     paint: o.paint,
     faceSets: faceSetsOf(o.paint?.motion),
     layerHeights: o.layerHeights,
+    heightRanges: o.heightRanges,
+    brimEars: o.brimEars?.map(([x, y, z]) => {
+      const p = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(toPlate.clone().multiply(objectMatrix(o)));
+      return [p.x, p.y] as [number, number];
+    }),
     parts: (o.parts ?? []).map((p) => ({
       type: p.type, overrides: p.overrides, indices: p.mesh.indices,
       vertices: transformVertices(p.mesh.vertices, toPlate.clone().multiply(partWorldMatrix(o, p)).elements),
@@ -77,7 +84,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     };
     worker!.postMessage({
       id, meshes, cfg: currentConfig(plate),
-      opts: { filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+      opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));
   });
 }

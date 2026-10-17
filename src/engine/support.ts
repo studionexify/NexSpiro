@@ -1,5 +1,5 @@
-// Stage 6: support synthesis — overhang detection, normal (grid) projection and tree supports.
-import { difference, intersection, offset, opening, SCALE, union, bounds } from './clipper';
+// Stage 6: support synthesis — overhang detection, normal (grid / snug) projection and tree supports.
+import { difference, intersection, offset, opening, SCALE, union, bounds, toExPolygons, exToPaths, area } from './clipper';
 import ClipperLib from 'clipper-lib';
 import type { Path, Paths } from './types';
 
@@ -7,12 +7,24 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export interface SupportParams {
   topZDistance: number; // mm
+  /** Gap between the model and support standing on it (mm). */
+  bottomZDistance?: number;
   xyDistance: number; // mm
+  /** XY gap on the first layer (mm); defaults to xyDistance. */
+  firstLayerGap?: number;
   interfaceLayers: number;
+  /** Dense layers where support stands on the model (−1 = same as top). */
+  bottomInterfaceLayers?: number;
   buildPlateOnly: boolean;
   lineWidth: number;
   /** Regions where support is forbidden at each layer (blockers). */
   blocked?: Paths[];
+  /** Normal support: grow (or shrink) the support area horizontally (mm). */
+  expansion?: number;
+  /** Normal support style: 'grid' snaps the support to a grid of blocks, 'snug' follows the overhang. */
+  style?: string;
+  /** Under the overhang itself the XY distance may be ignored (the top Z gap keeps it removable). */
+  topOverridesXY?: boolean;
 }
 
 export interface TreeParams extends SupportParams {
@@ -20,9 +32,11 @@ export interface TreeParams extends SupportParams {
   tipDiameter: number;
   branchDiameter: number; // maximum trunk diameter
   branchDistance: number; // tip spacing (mm)
+  /** Branches thicken going down at this angle (degrees). */
+  diameterAngle?: number;
 }
 
-export interface SupportLayers { base: Paths[]; iface: Paths[] }
+export interface SupportLayers { base: Paths[]; iface: Paths[]; bottomIface?: Paths[] }
 
 /** Areas of each layer not supported by the layer below (+ allowed step-out at the threshold angle). */
 export function computeOverhangs(slices: Paths[], heights: number[], thresholdAngle: number, removeSmall: boolean, lineWidth: number): Paths[] {
@@ -36,12 +50,46 @@ export function computeOverhangs(slices: Paths[], heights: number[], thresholdAn
   return over;
 }
 
+/**
+ * Keeps only the overhangs that must be supported:
+ * - criticalOnly: regions starting in mid-air (no contact with the layer below) and the parts of other
+ *   overhangs further than `reach` from it (cantilever tips).
+ * - noBridges: overhangs anchored on two or more sides whose span is at most `maxBridge` are bridged instead.
+ */
+export function filterOverhangs(over: Paths[], slices: Paths[], lineWidth: number, opts: { criticalOnly: boolean; noBridges: boolean; maxBridge: number; reach: number }): Paths[] {
+  if (!opts.criticalOnly && !opts.noBridges) return over;
+  return over.map((o, i) => {
+    if (!o.length || i === 0) return o;
+    const below = slices[i - 1];
+    const keep: Paths = [];
+    for (const ex of toExPolygons(o)) {
+      const paths = exToPaths(ex);
+      const contact = below.length ? intersection(offset(paths, lineWidth), below) : [];
+      const anchors = toExPolygons(contact).filter((c) => Math.abs(area(c.contour)) > lineWidth * lineWidth);
+      if (opts.noBridges && anchors.length >= 2) {
+        // bridgeable when every point is within half the max bridge length of an anchor
+        const reachable = offset(contact, opts.maxBridge / 2);
+        if (!difference(paths, reachable).length) continue;
+      }
+      if (opts.criticalOnly) {
+        if (!anchors.length) { keep.push(...paths); continue; } // floating island
+        const tip = difference(paths, offset(below, opts.reach));
+        if (tip.length) keep.push(...tip);
+        continue;
+      }
+      keep.push(...paths);
+    }
+    return keep.length ? union(keep) : [];
+  });
+}
+
 const gapLayers = (heights: number[], z: number) => Math.max(0, Math.round(z / heights[Math.min(1, heights.length - 1)]));
 
-function splitInterface(S: Paths[], over: Paths[], gap: number, n: number): SupportLayers {
+function splitInterface(S: Paths[], over: Paths[], slices: Paths[], gap: number, bottomGap: number, n: number, nb: number): SupportLayers {
   const N = S.length;
   const base: Paths[] = Array.from({ length: N }, () => []);
   const iface: Paths[] = Array.from({ length: N }, () => []);
+  const bottomIface: Paths[] = Array.from({ length: N }, () => []);
   for (let i = 0; i < N; i++) {
     if (!S[i].length) continue;
     let ov: Paths = [];
@@ -50,10 +98,40 @@ function splitInterface(S: Paths[], over: Paths[], gap: number, n: number): Supp
       if (j < N && over[j].length) ov = ov.concat(over[j]);
     }
     const iz = ov.length ? intersection(S[i], union(ov)) : [];
+    let rest = iz.length ? difference(S[i], iz) : S[i];
+    // bottom interface: support resting on the model
+    let bz: Paths = [];
+    if (nb > 0 && rest.length) {
+      let model: Paths = [];
+      for (let k = 1; k <= nb; k++) {
+        const j = i - k - bottomGap;
+        if (j >= 0 && slices[j].length) model = model.concat(slices[j]);
+      }
+      bz = model.length ? intersection(rest, union(model)) : [];
+      if (bz.length) rest = difference(rest, bz);
+    }
     iface[i] = iz;
-    base[i] = iz.length ? difference(S[i], iz) : S[i];
+    bottomIface[i] = bz;
+    base[i] = rest;
   }
-  return { base, iface };
+  return { base, iface, bottomIface };
+}
+
+/** Snap a region outward to a square grid (Grid style: blocky, stable support). */
+function snapToGrid(region: Paths, cell: number): Paths {
+  const b = bounds(region);
+  if (!isFinite(b.minX)) return [];
+  const x0 = Math.floor(b.minX / SCALE / cell) * cell, y0 = Math.floor(b.minY / SCALE / cell) * cell;
+  const cells: Paths = [];
+  const probe = (x: number, y: number) => inside(x, y, region);
+  for (let y = y0; y < b.maxY / SCALE; y += cell) for (let x = x0; x < b.maxX / SCALE; x += cell) {
+    // a cell is taken when its centre or a corner lies in the region
+    if (probe(x + cell / 2, y + cell / 2) || probe(x, y) || probe(x + cell, y) || probe(x, y + cell) || probe(x + cell, y + cell)) {
+      cells.push([{ X: Math.round(x * SCALE), Y: Math.round(y * SCALE) }, { X: Math.round((x + cell) * SCALE), Y: Math.round(y * SCALE) },
+        { X: Math.round((x + cell) * SCALE), Y: Math.round((y + cell) * SCALE) }, { X: Math.round(x * SCALE), Y: Math.round((y + cell) * SCALE) }]);
+    }
+  }
+  return cells.length ? union(cells) : [];
 }
 
 /** Normal supports: project overhangs straight down, keeping clear of the model. */
@@ -61,22 +139,35 @@ export function generateSupport(slices: Paths[], heights: number[], over: Paths[
   const N = slices.length;
   if (N < 2) return { base: Array.from({ length: N }, () => []), iface: Array.from({ length: N }, () => []) };
   const gap = gapLayers(heights, p.topZDistance);
+  const bottomGap = gapLayers(heights, p.bottomZDistance ?? p.topZDistance);
+  const grid = p.style !== 'snug';
   let cur: Paths = [];
+  let shadow: Paths = []; // projection of the overhangs above, for "Z overrides X/Y"
   const S: Paths[] = Array.from({ length: N }, () => []);
   for (let i = N - 2; i >= 0; i--) {
     const src = i + 1 + gap < N ? over[i + 1 + gap] : [];
-    if (src.length) cur = union(cur, src);
+    if (src.length) {
+      let add = src;
+      if (p.expansion) add = offset(add, p.expansion);
+      if (grid) add = snapToGrid(add, Math.max(2, p.lineWidth * 6));
+      cur = union(cur, add);
+      if (p.topOverridesXY) shadow = union(shadow, src);
+    }
     if (!cur.length) continue;
-    cur = difference(cur, offset(slices[i], p.xyDistance));
+    const xy = i === 0 ? (p.firstLayerGap ?? p.xyDistance) : p.xyDistance;
+    let keepOut = offset(slices[i], xy);
+    if (p.topOverridesXY && shadow.length) keepOut = union(difference(keepOut, shadow), slices[i]);
+    cur = difference(cur, keepOut);
     if (p.blocked?.[i]?.length) cur = difference(cur, p.blocked[i]);
     let blocked: Paths = [];
-    for (let k = 1; k <= gap && i - k >= 0; k++) blocked = blocked.concat(slices[i - k]);
+    for (let k = 1; k <= bottomGap && i - k >= 0; k++) blocked = blocked.concat(slices[i - k]);
     S[i] = opening(blocked.length ? difference(cur, union(blocked)) : cur, p.lineWidth * 0.5);
   }
   if (p.buildPlateOnly) {
     for (let i = 1; i < N; i++) S[i] = S[i].length && S[i - 1].length ? intersection(S[i], offset(S[i - 1], 0.01)) : [];
   }
-  return splitInterface(S, over, gap, p.interfaceLayers);
+  const nb = p.bottomInterfaceLayers === undefined ? 0 : p.bottomInterfaceLayers < 0 ? p.interfaceLayers : p.bottomInterfaceLayers;
+  return splitInterface(S, over, slices, gap, bottomGap, p.interfaceLayers, nb);
 }
 
 // ---------------------------------------------------------------- tree supports
@@ -127,18 +218,40 @@ function sampleTips(region: Paths, spacing: number): [number, number][] {
   return out;
 }
 
+/** Tree style → tip / trunk scale, merge reach and smoothing. */
+export function treeStyle(style: string): { tip: number; trunk: number; attract: number; organic: boolean; hybrid: boolean } {
+  switch (style) {
+    case 'tree_slim': return { tip: 0.8, trunk: 0.7, attract: 3, organic: false, hybrid: false };
+    case 'tree_strong': return { tip: 1.25, trunk: 1.4, attract: 3, organic: false, hybrid: false };
+    case 'tree_hybrid': return { tip: 1, trunk: 1, attract: 3, organic: false, hybrid: true };
+    case 'tree_organic': return { tip: 1, trunk: 1.1, attract: 5, organic: true, hybrid: false };
+    default: return { tip: 1, trunk: 1, attract: 3, organic: false, hybrid: false };
+  }
+}
+
 /**
  * Tree supports: tips seeded under overhangs grow downward, steering around the model
  * (at most `branchAngle` per layer), attracting each other and merging into thicker trunks.
+ * Hybrid style supports large flat overhangs with normal support columns instead of tips.
  */
 export function generateTreeSupport(slices: Paths[], heights: number[], over: Paths[], p: TreeParams): SupportLayers {
   const N = slices.length;
   const S: Paths[] = Array.from({ length: N }, () => []);
   if (N < 2) return { base: S, iface: S.map(() => []) };
+  const st = treeStyle(p.style ?? 'default');
   const gap = gapLayers(heights, p.topZDistance);
+  const bottomGap = gapLayers(heights, p.bottomZDistance ?? p.topZDistance);
   const tan = Math.tan((Math.max(5, Math.min(80, p.branchAngle)) * Math.PI) / 180);
-  const rTip = p.tipDiameter / 2, rMax = p.branchDiameter / 2;
+  const grow = Math.tan((Math.max(0, Math.min(15, p.diameterAngle ?? 5)) * Math.PI) / 180);
+  const rTip = (p.tipDiameter / 2) * st.tip, rMax = (p.branchDiameter / 2) * st.trunk;
   let nodes: Node[] = [];
+  // hybrid: large flat overhangs get normal columns
+  let flatOver: Paths[] | null = null;
+  if (st.hybrid) {
+    const big = (o: Paths) => toExPolygons(o).filter((e) => Math.abs(area(e.contour)) > (p.branchDistance * 3) ** 2).flatMap(exToPaths);
+    flatOver = over.map(big);
+    over = over.map((o, i) => (flatOver![i].length ? difference(o, flatOver![i]) : o));
+  }
 
   for (let i = N - 2; i >= 0; i--) {
     const h = heights[i + 1];
@@ -155,15 +268,15 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
         const d = (m.x - n.x) ** 2 + (m.y - n.y) ** 2;
         if (d < bd) { bd = d; best = m; }
       }
-      if (best && Math.sqrt(bd) < p.branchDistance * 3) {
-        const d = Math.sqrt(bd), mv = Math.min(step * 0.5, d / 2);
+      if (best && Math.sqrt(bd) < p.branchDistance * st.attract) {
+        const d = Math.sqrt(bd), mv = Math.min(step * (st.organic ? 0.8 : 0.5), d / 2);
         if (d > 0) { n.x += ((best.x - n.x) / d) * mv; n.y += ((best.y - n.y) / d) * mv; }
       }
     }
     // merge overlapping nodes
     const merged: Node[] = [];
     for (const n of nodes) {
-      const m = merged.find((q) => Math.hypot(q.x - n.x, q.y - n.y) < Math.max(q.r, n.r) * 0.6);
+      const m = merged.find((q) => Math.hypot(q.x - n.x, q.y - n.y) < Math.max(q.r, n.r) * (st.organic ? 0.9 : 0.6));
       if (m) {
         const w = m.r * m.r + n.r * n.r;
         m.x = (m.x * m.r * m.r + n.x * n.r * n.r) / w; m.y = (m.y * m.r * m.r + n.y * n.r * n.r) / w;
@@ -173,10 +286,12 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
     nodes = merged;
 
     // avoidance: keep each branch clear of the model at this layer
-    const keepOut = slices[i].length ? offset(slices[i], p.xyDistance) : [];
+    const xy = i === 0 ? (p.firstLayerGap ?? p.xyDistance) : p.xyDistance;
+    const keepOut = slices[i].length ? offset(slices[i], xy) : [];
+    const below = bottomGap > 0 ? union(Array.from({ length: bottomGap }, (_, k) => slices[i - k - 1] ?? []).flat()) : [];
     const alive: Node[] = [];
     for (const n of nodes) {
-      n.r = Math.min(rMax, n.r + h * 0.04); // trunks thicken toward the bed
+      n.r = Math.min(rMax, n.r + h * grow); // trunks thicken toward the bed
       const avoid = keepOut.length ? offset(keepOut, n.r) : [];
       if (avoid.length && inside(n.x, n.y, avoid)) {
         const [qx, qy] = nearestBoundary(n.x, n.y, avoid);
@@ -185,8 +300,8 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
           const ux = d ? (qx - n.x) / d : 0, uy = d ? (qy - n.y) / d : 0;
           n.x = qx + ux * 0.05; n.y = qy + uy * 0.05;
         } else continue; // branch rests on the model surface here
-
       }
+      if (below.length && inside(n.x, n.y, below)) continue; // keep the bottom Z gap above the model
       if (p.blocked?.[i]?.length && inside(n.x, n.y, p.blocked[i])) continue;
       alive.push(n);
     }
@@ -199,5 +314,15 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
     // keep only branches that reach the bed: each layer must sit on the one below (branches lean ≤ step)
     for (let i = 1; i < N; i++) S[i] = S[i].length && S[i - 1].length ? intersection(S[i], offset(S[i - 1], heights[i] * tan + rTip)) : [];
   }
-  return splitInterface(S, over, gap, p.interfaceLayers);
+  if (flatOver && flatOver.some((o) => o.length)) {
+    const normal = generateSupport(slices, heights, flatOver, { ...p, style: 'snug' });
+    for (let i = 0; i < N; i++) {
+      const col = union(normal.base[i], normal.iface[i]);
+      if (col.length) S[i] = union(S[i], col);
+    }
+    // the interface split below sees both the tree tips' and the columns' overhangs
+    over = over.map((o, i) => (flatOver![i].length ? union(o, flatOver![i]) : o));
+  }
+  const nb = p.bottomInterfaceLayers === undefined ? 0 : p.bottomInterfaceLayers < 0 ? p.interfaceLayers : p.bottomInterfaceLayers;
+  return splitInterface(S, over, slices, gap, bottomGap, p.interfaceLayers, nb);
 }

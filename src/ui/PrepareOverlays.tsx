@@ -1,3 +1,4 @@
+import { BRUSHES, BRUSH_LABELS, type BrushType } from '../engine/brush';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
@@ -16,13 +17,18 @@ export function Toolbar() {
       onClick={() => set({ tool: tool === t ? 'select' : t })}><Icon name={icon} /></button>
   );
   const locked = !!plates[activePlate]?.locked;
+  const [arrOpen, setArrOpen] = useState(false);
   return (
     <div className="float toolbar" role="toolbar">
       <button className="icon-btn" title="Add (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="add" /></button>
       <button className="icon-btn" title="Add plate" aria-label="Add plate" onClick={addPlate}><Icon name="addPlate" /></button>
       <button className="icon-btn" title={has ? 'Auto orient selected (O)' : 'Auto orient all objects on the plate (O)'} aria-label="Auto orient"
         disabled={!objects.length || (!has && locked)} onClick={() => (has ? autoOrient() : orientPlate())}><Icon name="orient" /></button>
-      <button className="icon-btn" title="Arrange all objects (A) · Shift+A: arrange selected" aria-label="Arrange" disabled={!objects.length} onClick={(e) => (e.shiftKey ? arrangeSelected() : arrangeAll())}><Icon name="arrange" /></button>
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <button className="icon-btn" title="Arrange all objects (A) · Shift+A: arrange selected · right click: arrange settings" aria-label="Arrange" disabled={!objects.length}
+          onClick={(e) => (e.shiftKey ? arrangeSelected() : arrangeAll())} onContextMenu={(e) => { e.preventDefault(); setArrOpen(!arrOpen); }}><Icon name="arrange" /></button>
+        {arrOpen && <ArrangeSettings onClose={() => setArrOpen(false)} />}
+      </span>
       <button className="icon-btn" title="Split to objects" aria-label="Split to objects" disabled={!one} onClick={() => splitObject(selected[0])}><Icon name="split" /></button>
       {T('vlh', 'vlh', 'Variable layer height', 'H', !objects.length)}
       <span className="sep" />
@@ -37,6 +43,7 @@ export function Toolbar() {
       {T('text', 'text', 'Text shape', 'T')}
       {T('paint_color', 'brushColor', 'Color painting', 'N')}
       {T('measure', 'measure', 'Measure', 'U')}
+      {T('brim_ears', 'ears', 'Brim ears', 'E')}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
     </div>
@@ -213,11 +220,21 @@ function NumField({ value, onSet }: { value: number; onSet: (v: number) => void 
 }
 
 /** Painting panel: brush size, modes and colour palette. */
+const BRUSH_TIPS: Record<BrushType, string> = {
+  circle: 'Paints the surface facing you inside the circle',
+  sphere: 'Paints every triangle inside the sphere, including hidden ones',
+  triangle: 'Paints the triangle under the cursor',
+  height_range: 'Paints a horizontal band of the model (pen size = band height)',
+  fill: 'Click: fills the surface up to edges sharper than the smart fill angle',
+  gap_fill: 'Click: fills small unpainted gaps between painted areas',
+};
+
 export function PaintPanel() {
   const s = useStore();
   if (!['paint_support', 'paint_seam', 'paint_color'].includes(s.tool)) return null;
   const sel = s.objects.find((o) => o.id === s.selected[0]);
   const layer = s.tool === 'paint_support' ? 'support' : s.tool === 'paint_seam' ? 'seam' : 'color';
+  const brush = BRUSHES[layer].includes(s.brushType) ? s.brushType : 'circle';
   const title = { paint_support: 'Support painting', paint_seam: 'Seam painting', paint_color: 'Colour painting' }[s.tool as 'paint_support'];
   const clear = () => {
     const ids = sel ? [sel.id] : s.objects.map((o) => o.id);
@@ -226,8 +243,25 @@ export function PaintPanel() {
   return (
     <div className="float panel">
       <h4>{title}</h4>
-      <div className="row"><span style={{ flex: 1 }}>Pen size</span><span className="mono">{s.brushSize.toFixed(1)} mm</span></div>
-      <input type="range" min={0.4} max={20} step={0.2} value={s.brushSize} onChange={(e) => s.set({ brushSize: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      <div className="seg brush-seg" role="radiogroup" aria-label="Brush">
+        {BRUSHES[layer].map((b) => <button key={b} className={brush === b ? 'on' : ''} onClick={() => s.set({ brushType: b })} title={BRUSH_TIPS[b]}>{BRUSH_LABELS[b]}</button>)}
+      </div>
+      {(brush === 'circle' || brush === 'sphere' || brush === 'height_range') && <>
+        <div className="row"><span style={{ flex: 1 }}>{brush === 'height_range' ? 'Height range' : 'Pen size'}</span><span className="mono">{s.brushSize.toFixed(1)} mm</span></div>
+        <input type="range" min={0.4} max={20} step={0.2} value={s.brushSize} onChange={(e) => s.set({ brushSize: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      </>}
+      {brush === 'fill' && <>
+        <div className="row"><span style={{ flex: 1 }}>Smart fill angle</span><span className="mono">{s.smartFillAngle}°</span></div>
+        <input type="range" min={0} max={90} step={1} value={s.smartFillAngle} onChange={(e) => s.set({ smartFillAngle: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      </>}
+      {brush === 'gap_fill' && <>
+        <div className="row"><span style={{ flex: 1 }}>Gap area</span><span className="mono">{s.gapArea.toFixed(1)} mm²</span></div>
+        <input type="range" min={0.1} max={20} step={0.1} value={s.gapArea} onChange={(e) => s.set({ gapArea: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      </>}
+      {s.tool === 'paint_support' && <>
+        <div className="row"><span style={{ flex: 1 }}>Highlight overhangs below</span><span className="mono">{s.paintOverhangAngle}°</span></div>
+        <input type="range" min={0} max={90} step={1} value={s.paintOverhangAngle} onChange={(e) => s.set({ paintOverhangAngle: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      </>}
       {s.tool === 'paint_support' && (
         <label className="row"><span style={{ flex: 1 }}>On overhangs only</span><button className={`toggle ${s.overhangOnly ? 'on' : ''}`} onClick={() => s.set({ overhangOnly: !s.overhangOnly })} aria-label="On overhangs only" /></label>
       )}
@@ -310,3 +344,46 @@ export function VlhPanel() {
 }
 
 export { slotColor };
+
+/** Bambu's arrange settings popup (right click on the arrange button). */
+function ArrangeSettings({ onClose }: { onClose: () => void }) {
+  const { arrangeSettings: a, set } = useStore();
+  const up = (p: Partial<typeof a>) => set({ arrangeSettings: { ...a, ...p } });
+  return (
+    <div className="menu-pop arrange-pop" style={{ top: 40, left: 0, padding: 12, width: 240 }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="row"><b style={{ flex: 1 }}>Arrange settings</b><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={14} /></button></div>
+      <div className="row"><span style={{ flex: 1 }}>Spacing</span><span className="mono">{a.spacing.toFixed(1)} mm</span></div>
+      <input type="range" min={0} max={30} step={0.5} value={a.spacing} onChange={(e) => up({ spacing: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+      <label className="row"><input type="checkbox" checked={a.rotate} onChange={(e) => up({ rotate: e.target.checked })} />Auto rotate for arrangement</label>
+      <div className="row"><span style={{ flex: 1 }}>Align</span>
+        <div className="seg">{([['center', 'Centre'], ['x', 'X axis'], ['y', 'Y axis']] as const).map(([v, l]) => <button key={v} className={a.align === v ? 'on' : ''} onClick={() => up({ align: v })}>{l}</button>)}</div>
+      </div>
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="btn-secondary btn-small" onClick={() => up({ spacing: 6, rotate: false, align: 'center' })}>Reset</button>
+        <span className="spacer" />
+        <button className="btn-primary btn-small" onClick={() => { arrangeAll(); onClose(); }}>Arrange</button>
+      </div>
+    </div>
+  );
+}
+
+/** Brim ears tool panel (Bambu's GLGizmoBrimEars). */
+export function BrimEarsPanel() {
+  const s = useStore();
+  if (s.tool !== 'brim_ears') return null;
+  const o = s.objects.find((x) => x.id === s.selected[0]);
+  const n = s.objects.reduce((a, x) => a + (x.brimEars?.length ?? 0), 0);
+  const painted = s.overrides.brim_type === 'brim_ears';
+  return (
+    <div className="float panel" style={{ width: 270 }}>
+      <h4>Brim ears</h4>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click a model near the bed to add an ear; click an ear to remove it. Ears use the brim width ({Number(s.overrides.brim_width ?? 5)} mm).</p>
+      <div className="row" style={{ fontSize: 12 }}>{n} ear{n === 1 ? '' : 's'} placed{!painted && n > 0 && <span className="badge" style={{ marginLeft: 6 }}>brim type is not Painted</span>}</div>
+      <div className="row" style={{ marginTop: 8 }}>
+        {!painted && <button className="btn-secondary btn-small" onClick={() => { s.setOverride('brim_type', 'brim_ears'); s.markDirty(); }}>Use painted brim</button>}
+        <span className="spacer" />
+        <button className="btn-secondary btn-small" disabled={!n} onClick={() => { s.updateObjects((x) => ({ ...x, brimEars: undefined }), o ? [o.id] : s.objects.map((x) => x.id)); s.markDirty(); }}>{o ? 'Clear on selected' : 'Clear all'}</button>
+      </div>
+    </div>
+  );
+}

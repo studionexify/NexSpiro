@@ -19,13 +19,16 @@ const SCHEMES: { id: ColorScheme; label: string }[] = [
   { id: 'speed', label: 'Speed' },
   { id: 'height', label: 'Layer height' },
   { id: 'width', label: 'Line width' },
-  { id: 'flow', label: 'Flow' },
+  { id: 'flow', label: 'Volumetric flow rate' },
+  { id: 'fan', label: 'Fan speed' },
+  { id: 'temperature', label: 'Temperature' },
   { id: 'layer_time', label: 'Layer time' },
+  { id: 'layer_time_log', label: 'Layer time (log)' },
 ];
 
 export function Legend() {
   const { slice, colorScheme, hiddenFeatures, showTravel, set, filaments } = useStore();
-  const [range, setRange] = useState<{ min: number; max: number; unit: string } | null>(null);
+  const [range, setRange] = useState<{ min: number; max: number; unit: string; log?: boolean } | null>(null);
   useEffect(() => {
     const f = () => setRange((window as any).__nxLegend ?? null);
     window.addEventListener('nx-legend', f);
@@ -50,13 +53,13 @@ export function Legend() {
           <div className="ramp" style={{ background: RAMP_CSS }} />
           <div className="row" style={{ justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span>{range.min.toFixed(range.max < 10 ? 2 : 0)} {range.unit}</span>
-            <span>{((range.min + range.max) / 2).toFixed(range.max < 10 ? 2 : 0)}</span>
+            <span>{(range.log ? Math.sqrt(range.min * range.max) : (range.min + range.max) / 2).toFixed(range.max < 10 ? 2 : 0)}</span>
             <span>{range.max.toFixed(range.max < 10 ? 2 : 0)} {range.unit}</span>
           </div>
         </>
       )}
       <div style={{ marginTop: 8 }}>
-        <div className="lrow" style={{ color: 'var(--text-muted)', fontSize: 11 }}><span /><span /><span>Line type</span><span className="num">Time</span><span className="num">%</span></div>
+        <div className="lrow" style={{ color: 'var(--text-muted)', fontSize: 11 }}><span /><span /><span>Line type</span><span className="num">Time</span><span className="num">%</span><span className="num">Used</span></div>
         {feats.map((f) => {
           const off = hiddenFeatures.includes(f);
           const b = st.byFeature[f]!;
@@ -67,6 +70,7 @@ export function Legend() {
               <span>{FEATURE_LABELS[f]}</span>
               <span className="num">{fmtTime(b.time)}</span>
               <span className="num">{((b.time / st.timeSeconds) * 100).toFixed(1)}%</span>
+              <span className="num" title={`${(b.filamentMm / 1000).toFixed(2)} m`}>{b.grams !== undefined ? `${b.grams.toFixed(1)} g` : `${(b.filamentMm / 1000).toFixed(2)} m`}</span>
             </div>
           );
         })}
@@ -76,6 +80,7 @@ export function Legend() {
           <span>Travel</span>
           <span className="num">{fmtTime(st.byFeature.travel?.time ?? 0)}</span>
           <span className="num">{(((st.byFeature.travel?.time ?? 0) / st.timeSeconds) * 100).toFixed(1)}%</span>
+          <span />
         </div>
       </div>
       {st.perFilament.length > 1 && (
@@ -88,6 +93,7 @@ export function Legend() {
           ))}
           <span className="k">Filament changes</span><span className="v">{st.toolChanges}</span>
           {st.towerGrams > 0 && <><span className="k">Prime tower</span><span className="v">{st.towerGrams.toFixed(2)} g</span></>}
+          {(st.flushGrams ?? 0) > 0 && <><span className="k">Flushed</span><span className="v">{st.flushGrams!.toFixed(2)} g</span></>}
         </div>
       )}
       <div className="summary">
@@ -119,9 +125,26 @@ export function LayerSlider() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!n || (e.target as HTMLElement).tagName === 'INPUT') return;
-      const [lo, hi] = useStore.getState().layerRange;
-      if (e.key === 'ArrowUp') { set({ layerRange: [lo, Math.min(n - 1, hi + 1)], moveCursor: -1 }); e.preventDefault(); }
-      if (e.key === 'ArrowDown') { set({ layerRange: [lo, Math.max(lo, hi - 1)], moveCursor: -1 }); e.preventDefault(); }
+      const st = useStore.getState();
+      if (st.workspace !== 'preview') return;
+      const [lo, hi] = st.layerRange;
+      const one = st.oneLayer;
+      if (e.key === 'ArrowUp') { const h = Math.min(n - 1, hi + 1); set({ layerRange: [one ? h : lo, h], moveCursor: -1 }); e.preventDefault(); }
+      if (e.key === 'ArrowDown') { const h = Math.max(one ? 0 : lo, hi - 1); set({ layerRange: [one ? h : lo, h], moveCursor: -1 }); e.preventDefault(); }
+      if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
+        // Bambu: L shows only the current top layer; again restores the range
+        set(one ? { oneLayer: false, layerRange: [st.savedLow ?? 0, hi] } : { oneLayer: true, savedLow: lo, layerRange: [hi, hi] });
+        e.preventDefault();
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const r = st.slice.result;
+        if (!r) return;
+        const L = r.layers[hi], count = L.moveEnd - L.moveStart;
+        const cur = st.moveCursor < 0 ? count - 1 : st.moveCursor;
+        const nx = Math.max(0, Math.min(count - 1, cur + (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 10 : 1)));
+        set({ moveCursor: nx >= count - 1 ? -1 : nx });
+        e.preventDefault();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -140,8 +163,8 @@ export function LayerSlider() {
       const r = el.getBoundingClientRect();
       const t = 1 - Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
       const i = Math.round(t * (n - 1));
-      const [a, b] = useStore.getState().layerRange;
-      set({ layerRange: which === 1 ? [a, Math.max(a, i)] : [Math.min(i, b), b], moveCursor: -1 });
+      const { layerRange: [a, b], oneLayer } = useStore.getState();
+      set({ layerRange: oneLayer ? [i, i] : which === 1 ? [a, Math.max(a, i)] : [Math.min(i, b), b], moveCursor: -1 });
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);
@@ -160,13 +183,17 @@ export function LayerSlider() {
         ))}
       </div>
       <LayerActionMenu z={layers[hi].z} layer={hi} plate={plateIdx} />
+      <button className={`icon-btn ${useStore.getState().oneLayer ? 'active' : ''}`} title="Show one layer only (L)" aria-label="One layer"
+        onClick={() => { const st = useStore.getState(); set(st.oneLayer ? { oneLayer: false, layerRange: [st.savedLow ?? 0, hi] } : { oneLayer: true, savedLow: lo, layerRange: [hi, hi] }); }}>
+        <Icon name="layers" size={15} />
+      </button>
       <div className="lbl">{lo + 1}<small>{layers[lo].z.toFixed(2)}</small></div>
     </div>
   );
 }
 
 export function MoveSlider() {
-  const { slice, layerRange, moveCursor, set } = useStore();
+  const { slice, layerRange, moveCursor, showGcode, set } = useStore();
   const r = slice.result;
   if (!r || !r.layers.length) return null;
   const L = r.layers[layerRange[1]];
@@ -178,6 +205,26 @@ export function MoveSlider() {
       <input type="range" min={0} max={Math.max(0, count - 1)} value={v} aria-label="Move slider"
         onChange={(e) => { const x = +e.target.value; set({ moveCursor: x >= count - 1 ? -1 : x }); }} />
       <span className="mono" style={{ minWidth: 90, textAlign: 'right', color: 'var(--text-muted)' }}>{v + 1} / {count}</span>
+      <button className={`icon-btn ${showGcode ? 'active' : ''}`} title="Show G-code next to the move slider" aria-label="G-code" onClick={() => set({ showGcode: !showGcode })}><Icon name="file" size={15} /></button>
+      {showGcode && r.moveLines && <GcodeLines gcode={r.gcode} line={r.moveLines[L.moveStart + v]} move={L.moveStart + v} />}
+    </div>
+  );
+}
+
+const lineCache = new WeakMap<object, string[]>();
+/** The G-code around the current move (Bambu shows it beside the horizontal slider), current line highlighted. */
+function GcodeLines({ gcode, line, move }: { gcode: string; line: number; move: number }) {
+  const r = useStore.getState().slice.result!;
+  let lines = lineCache.get(r);
+  if (!lines) { lines = gcode.split('\n'); lineCache.set(r, lines); }
+  const from = Math.max(0, line - 6), to = Math.min(lines.length, line + 7);
+  const aux = r.moveAux;
+  return (
+    <div className="gcode-view mono" aria-label="G-code">
+      {lines.slice(from, to).map((t, k) => (
+        <div key={from + k} className={from + k === line ? 'cur' : ''}><span className="ln">{from + k + 1}</span>{t || ' '}</div>
+      ))}
+      {aux && <div className="aux">Fan {Math.round(aux[move * 2])}% · {Math.round(aux[move * 2 + 1])} °C</div>}
     </div>
   );
 }

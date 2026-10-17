@@ -3,12 +3,13 @@ import { FILAMENTS, filamentById } from '../profiles/filaments';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess } from '../profiles/resolve';
-import { MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ParamDef, type ProcessTab } from '../profiles/settings';
+import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
-import { updatePart } from '../state/ops';
+import { updateHeightRange, updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
+import { ParamRow } from './ParamRow';
 import { useAdvanced } from '../state/advanced';
 import { AdvancedPanel } from './advanced/AdvancedPanel';
 
@@ -127,6 +128,7 @@ function FilamentCard() {
               <select className="select" value={f.presetId} aria-label={`Filament ${k + 1}`} onChange={(e) => update(k, { presetId: e.target.value })}>
                 {FILAMENTS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
+              <span className="badge mat" title={f.overrides ? 'Filament type · settings changed on this slot' : 'Filament type'}>{String(f.overrides?.filament_type ?? fil.type)}{f.overrides ? '*' : ''}</span>
               {!bed && <span title="Not recommended on this build plate" style={{ color: 'var(--warning)', display: 'flex' }}><Icon name="warn" size={14} /></span>}
               <button className="icon-btn" title="Filament details" onClick={() => setEdit(k)}><Icon name="edit" size={16} /></button>
               {filaments.length > 1 && <button className="icon-btn" title="Remove filament" onClick={() => remove(k)}><Icon name="close" size={14} /></button>}
@@ -149,8 +151,9 @@ function ProcessCard() {
   const objMode = s.processMode === 'objects';
   const selObjs = s.objects.filter((o) => s.selected.includes(o.id));
   const part = s.selectedPart ? selObjs[0]?.parts?.find((p) => p.id === s.selectedPart) : undefined;
-  // Objects mode edits only what can differ per object (or per modifier); everything else stays global
-  const allowed = objMode ? new Set(part ? (part.type === 'modifier' ? MODIFIER_KEYS : []) : OBJECT_KEYS) : null;
+  const range = !part && s.selectedRange && selObjs.length === 1 ? selObjs[0].heightRanges?.find((r) => r.id === s.selectedRange) : undefined;
+  // Objects mode edits only what can differ per object (or per modifier / height range); everything else stays global
+  const allowed = objMode ? new Set(part ? (part.type === 'modifier' ? MODIFIER_KEYS : []) : range ? HEIGHT_RANGE_KEYS : OBJECT_KEYS) : null;
   const visible = PROCESS_PARAMS.filter((p) => (s.showAdvanced || !p.advanced || allowed) && (!allowed || allowed.has(p.key)));
   const tabs = PROCESS_TABS.filter((t) => visible.some((p) => p.tab === t));
   const tab = tabs.includes(s.processTab) ? s.processTab : tabs[0];
@@ -164,6 +167,7 @@ function ProcessCard() {
   // per-object values: the object's override, else the global value
   const ov = (k: string): { value: Config[string]; modified: boolean } => {
     if (part) return { value: part.overrides[k] ?? global[k], modified: k in part.overrides };
+    if (range) { const own = selObjs[0].overrides ?? {}; return { value: range.overrides[k] ?? own[k] ?? global[k], modified: k in range.overrides }; }
     const own = selObjs.find((o) => o.overrides && k in o.overrides);
     return { value: own ? own.overrides![k] : global[k], modified: !!own };
   };
@@ -172,14 +176,22 @@ function ProcessCard() {
       updatePart(selObjs[0].id, part.id, (p) => { const o = { ...p.overrides }; if (v === undefined) delete o[k]; else o[k] = v; return { ...p, overrides: o }; });
       return;
     }
+    if (range) {
+      const o = { ...range.overrides };
+      if (v === undefined) delete o[k]; else o[k] = v;
+      updateHeightRange(selObjs[0].id, range.id, { overrides: o });
+      return;
+    }
     s.updateObjects((o) => {
       const o2 = { ...(o.overrides ?? {}) };
       if (v === undefined || v === global[k]) delete o2[k]; else o2[k] = v;
       return { ...o, overrides: Object.keys(o2).length ? o2 : undefined };
     }, selObjs.map((o) => o.id));
   };
-  const objOverrideCount = part ? Object.keys(part.overrides).length : new Set(selObjs.flatMap((o) => Object.keys(o.overrides ?? {}))).size;
-  const target = part ? part.name : selObjs.length === 1 ? selObjs[0].name : `${selObjs.length} objects`;
+  const changed = (k: string) => (objMode ? (part ? k in part.overrides : range ? k in range.overrides : selObjs.some((o) => o.overrides && k in o.overrides)) : k in s.overrides);
+  const tabCount = (t: string) => visible.filter((p) => p.tab === t && changed(p.key)).length;
+  const objOverrideCount = part ? Object.keys(part.overrides).length : range ? Object.keys(range.overrides).length : new Set(selObjs.flatMap((o) => Object.keys(o.overrides ?? {}))).size;
+  const target = part ? part.name : range ? `${selObjs[0].name} · ${range.z0}–${range.z1} mm` : selObjs.length === 1 ? selObjs[0].name : `${selObjs.length} objects`;
 
   return (
     <section className="card process">
@@ -195,7 +207,7 @@ function ProcessCard() {
       {!objMode && (
         <div className="row">
           <select className="select" value={s.presetId} aria-label="Process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-            {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name} @{printerById(s.printerId).model}{modifiedCount && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+            {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{modifiedCount && p.id === s.presetId ? '* ' : ''}{p.name} @{printerById(s.printerId).model}{modifiedCount && p.id === s.presetId ? ' (modified)' : ''}</option>)}
           </select>
           <button className="icon-btn" title="Reset all modified values" disabled={!modifiedCount} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" /></button>
         </div>
@@ -206,7 +218,7 @@ function ProcessCard() {
           <span className="name">{target}</span>
           <span className="muted">{objOverrideCount ? `${objOverrideCount} own setting${objOverrideCount > 1 ? 's' : ''}` : 'uses global'}</span>
           <button className="icon-btn" title="Reset to the global settings" disabled={!objOverrideCount}
-            onClick={() => part ? updatePart(selObjs[0].id, part.id, (p) => ({ ...p, overrides: {} })) : s.updateObjects((o) => ({ ...o, overrides: undefined }), selObjs.map((o) => o.id))}>
+            onClick={() => part ? updatePart(selObjs[0].id, part.id, (p) => ({ ...p, overrides: {} })) : range ? updateHeightRange(selObjs[0].id, range.id, { overrides: {} }) : s.updateObjects((o) => ({ ...o, overrides: undefined }), selObjs.map((o) => o.id))}>
             <Icon name="reset" size={15} />
           </button>
         </div>
@@ -214,7 +226,7 @@ function ProcessCard() {
       <div className="row">
         {searchOpen
           ? <input id="param-search" className="input" style={{ flex: 1 }} autoFocus placeholder="Search parameters…" value={s.search} onChange={(e) => s.set({ search: e.target.value })} />
-          : <span style={{ color: 'var(--text-muted)', flex: 1 }}>{objMode ? (part ? 'Modifier settings' : 'Per-object settings') : modifiedCount ? `${modifiedCount} modified value${modifiedCount > 1 ? 's' : ''}` : 'System preset values'}</span>}
+          : <span style={{ color: 'var(--text-muted)', flex: 1 }}>{objMode ? (part ? 'Modifier settings' : range ? 'Height range settings' : 'Per-object settings') : modifiedCount ? `${modifiedCount} modified value${modifiedCount > 1 ? 's' : ''}` : 'System preset values'}</span>}
         {!objMode && <><span style={{ color: 'var(--text-muted)' }}>Advanced</span>
           <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show advanced" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} /></>}
       </div>
@@ -227,7 +239,8 @@ function ProcessCard() {
           <div className="ptabs">
             {tabs.map((t) => (
               <button key={t} className={`ptab ${tab === t ? 'active' : ''}`} onClick={() => s.set({ processTab: t })}>
-                <Icon name={TAB_ICONS[t]} size={15} />{t}
+                <Icon name={TAB_ICONS[t as ProcessTab]} size={15} />{t}
+                {tabCount(t) > 0 && <span className="tab-count" title={`${tabCount(t)} changed value${tabCount(t) > 1 ? 's' : ''}`}>{tabCount(t)}</span>}
               </button>
             ))}
           </div>
@@ -239,7 +252,8 @@ function ProcessCard() {
                 <Icon name="chevronDown" size={14} />{g}
               </div>
               {!closed[g] && list.filter((p) => (q ? `${p.tab} › ${p.group}` : p.group) === g).map((p) => {
-                if (!objMode) return <ParamRow key={p.key} def={p} value={global[p.key]} baseValue={base[p.key]} cfg={global} modified={p.key in s.overrides} />;
+                if (!objMode) return <ParamRow key={p.key} def={p} value={global[p.key]} baseValue={base[p.key]} cfg={global} modified={p.key in s.overrides}
+                  onCommit={(x) => s.setOverride(p.key, x === base[p.key] ? undefined : x)} onReset={() => s.setOverride(p.key, undefined)} />;
                 const v = ov(p.key);
                 return <ParamRow key={p.key} def={p} value={v.value} baseValue={global[p.key]} cfg={{ ...global, [p.key]: v.value }} modified={v.modified}
                   onCommit={(x) => setObj(p.key, x)} onReset={() => setObj(p.key, undefined)} resetLabel="Use the global value" />;
@@ -250,73 +264,6 @@ function ProcessCard() {
         </div>
       </>}
     </section>
-  );
-}
-
-function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onReset, resetLabel }: {
-  def: ParamDef; value: Config[string]; baseValue: Config[string]; cfg: Config; modified: boolean;
-  onCommit?: (v: Config[string]) => void; onReset?: () => void; resetLabel?: string;
-}) {
-  const setOverride = useStore((s) => s.setOverride);
-  const disabled = def.disabledWhen?.(cfg) ?? false;
-  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
-  const commit = onCommit ?? ((v: Config[string]) => setOverride(def.key, v === baseValue ? undefined : v));
-  const reset = onReset ?? (() => setOverride(def.key, undefined));
-
-  let control;
-  if (def.type === 'bool') {
-    control = <div className="pinput"><button className={`toggle ${value ? 'on' : ''}`} disabled={disabled} aria-label={def.label} onClick={() => commit(!value)} /></div>;
-  } else if (def.type === 'enum') {
-    control = (
-      <div className="pinput">
-        <select className="select" disabled={disabled} value={String(value)} aria-label={def.label} onChange={(e) => commit(e.target.value)}>
-          {def.options!.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-    );
-  } else {
-    control = (
-      <div className="pinput">
-        <NumberInput value={Number(value)} def={def} disabled={disabled} onCommit={commit} />
-        {def.unit && <span className="unit">{def.unit}</span>}
-      </div>
-    );
-  }
-  return (
-    <div className={`prow ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''}`}>
-      <span className="plabel"
-        onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); setTip({ x: r.right + 8, y: r.top }); }}
-        onMouseLeave={() => setTip(null)}>
-        {def.label}
-      </span>
-      {modified ? <button className="reset" title={resetLabel ? `${resetLabel} (${String(baseValue)})` : `Reset to ${String(baseValue)}`} onClick={reset}><Icon name="reset" size={14} /></button> : <span />}
-      {control}
-      {tip && (
-        <div className="tooltip" style={{ left: Math.min(tip.x, window.innerWidth - 350), top: Math.min(tip.y, window.innerHeight - 160) }}>
-          <b>{def.label}</b>{def.tip}
-          <div className="key">Default: {String(baseValue)}{def.unit ? ` ${def.unit}` : ''} · Internal key: <span className="mono">{def.key}</span></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NumberInput({ value, def, disabled, onCommit }: { value: number; def: ParamDef; disabled: boolean; onCommit: (v: number) => void }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const apply = () => {
-    if (draft === null) return;
-    let v = parseFloat(draft);
-    setDraft(null);
-    if (!isFinite(v)) return;
-    if (def.min !== undefined) v = Math.max(def.min, v);
-    if (def.max !== undefined) v = Math.min(def.max, v);
-    if (def.type === 'int' || def.type === 'percent') v = Math.round(v);
-    onCommit(+v.toFixed(4));
-  };
-  return (
-    <input className="input" disabled={disabled} aria-label={def.label} value={draft ?? String(value)}
-      onChange={(e) => setDraft(e.target.value)} onBlur={apply}
-      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDraft(null); }} />
   );
 }
 
@@ -333,7 +280,7 @@ function ObjectsCard() {
   };
   const pick = (e: React.MouseEvent, id: string, pi: number) => {
     const toggle = e.ctrlKey || e.metaKey;
-    s.set({ selected: toggle ? (s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id]) : [id], selectedPart: null, activePlate: pi });
+    s.set({ selected: toggle ? (s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id]) : [id], selectedPart: null, selectedRange: null, activePlate: pi });
   };
   return (
     <section className="card objects-card">
@@ -356,8 +303,12 @@ function ObjectsCard() {
                       className={`objrow ${s.selected.includes(o.id) && !s.selectedPart ? 'sel' : ''} ${o.printable === false ? 'off' : ''}`}
                       onClick={(e) => pick(e, o.id, pi)} onContextMenu={(e) => menuAt(e, 'object', o.id)}
                       onDoubleClick={() => renameObject(o.id)}>
-                      <Icon name="cube" size={14} />
+                      <button className={`obj-eye ${o.hidden ? 'off' : ''}`} title={o.hidden ? 'Show in the 3D view' : 'Hide in the 3D view'} aria-label={o.hidden ? 'Show' : 'Hide'}
+                        onClick={(e) => { e.stopPropagation(); s.updateObjects((x) => ({ ...x, hidden: !x.hidden || undefined }), [o.id]); }}>
+                        <Icon name={o.hidden ? 'eyeOff' : 'eye'} size={13} />
+                      </button>
                       <span className="name" title={o.name}>{o.name}</span>
+                      {paintBadges(o).map(([k, t]) => <span key={k} className="badge paint" title={t}>{k}</span>)}
                       {o.layerHeights && <span className="badge" title="Variable layer height">VLH</span>}
                       {o.openEdges > 0 && <span className="warn" title={`${o.openEdges} open edges — mesh is not watertight`}><Icon name="warn" size={14} /></span>}
                       {isOutOfBounds(o, s.printerId, plates) && <span className="warn" title="Outside the printable area" style={{ color: 'var(--error)' }}><Icon name="warn" size={14} /></span>}
@@ -376,6 +327,17 @@ function ObjectsCard() {
                         <Icon name="gear" size={12} /><span className="name">{Object.keys(o.overrides!).map((k) => PARAM_BY_KEY[k]?.label ?? k).join(', ')}</span>
                       </div>
                     )}
+                    {(o.heightRanges ?? []).map((r) => (
+                      <div key={r.id} className={`objrow part ${s.selectedRange === r.id && !s.selectedPart ? 'sel' : ''}`}
+                        onClick={() => s.set({ selected: [o.id], selectedPart: null, selectedRange: r.id, processMode: 'objects', activePlate: pi })}>
+                        <Icon name="layers" size={12} />
+                        <span className="name">Layers</span>
+                        <RangeInput value={r.z0} onCommit={(v) => updateHeightRange(o.id, r.id, { z0: Math.min(v, r.z1 - 0.01) })} />–
+                        <RangeInput value={r.z1} onCommit={(v) => updateHeightRange(o.id, r.id, { z1: Math.max(v, r.z0 + 0.01) })} />mm
+                        {Object.keys(r.overrides).length > 0 && <Icon name="gear" size={12} />}
+                        <button className="icon-btn" title="Delete height range" onClick={(e) => { e.stopPropagation(); updateHeightRange(o.id, r.id, null); }}><Icon name="close" size={12} /></button>
+                      </div>
+                    ))}
                     {(o.parts ?? []).map((p) => (
                       <div key={p.id} className={`objrow part ${s.selectedPart === p.id ? 'sel' : ''}`}
                         onClick={() => s.set({ selected: [o.id], selectedPart: p.id, activePlate: pi })} onContextMenu={(e) => menuAt(e, 'part', o.id, p.id)}>
@@ -396,8 +358,26 @@ function ObjectsCard() {
   );
 }
 
-const PART_DOT: Record<string, string> = { negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
+function paintBadges(o: { paint?: { support?: ArrayLike<number>; seam?: ArrayLike<number>; color?: ArrayLike<number> }; brimEars?: unknown[] }): [string, string][] {
+  const any = (a?: ArrayLike<number>) => !!a && Array.prototype.some.call(a, (v: number) => v !== 0);
+  const out: [string, string][] = [];
+  if (any(o.paint?.support)) out.push(['S', 'Support painted']);
+  if (any(o.paint?.seam)) out.push(['Z', 'Seam painted']);
+  if (any(o.paint?.color)) out.push(['C', 'Colour painted']);
+  if (o.brimEars?.length) out.push(['B', 'Brim ears']);
+  return out;
+}
+
+function RangeInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+  const [d, setD] = useState<string | null>(null);
+  return <input className="input range-z mono" value={d ?? String(value)} onClick={(e) => e.stopPropagation()} onChange={(e) => setD(e.target.value)}
+    onBlur={() => { if (d !== null) { const v = parseFloat(d); if (isFinite(v) && v >= 0) onCommit(+v.toFixed(2)); setD(null); } }}
+    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />;
+}
+
+const PART_DOT: Record<string, string> = { part: '#00AE42',  negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
 const PART_HELP: Record<string, string> = {
+  part: 'An extra solid volume printed as part of the object.',
   negative: 'Material inside this volume is removed (holes, cut-outs).',
   modifier: 'Changes infill settings inside this volume.',
   support_enforcer: 'Support is generated under any overhang inside this volume.',

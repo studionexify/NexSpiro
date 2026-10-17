@@ -6,6 +6,22 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { disconnectAll, registerDeviceIpc } from './devices';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+
+// Post-processing scripts (Bambu's post_process): each command runs with the G-code file path as its last
+// argument and may rewrite the file. Commands come from settings, which projects can carry, so each new set of
+// commands is shown to the user once for approval before it runs.
+const approvedScripts = new Set<string>();
+function runScript(cmd: string, file: string, env: Record<string, string>) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(`${cmd} "${file.replace(/"/g, '\\"')}"`, { shell: true, env: { ...process.env, ...env } });
+    let err = '';
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`"${cmd}" exited with code ${code}${err ? `: ${err.trim().slice(0, 400)}` : ''}`))));
+  });
+}
 
 const ROOT = path.join(__dirname, '..', '..');
 const DEV_URL = process.env.NEXSPIRO_DEV_URL;
@@ -68,6 +84,29 @@ app.whenReady().then(() => {
     if (r.canceled || !r.filePath) return null;
     await fs.writeFile(r.filePath, typeof data === 'string' ? data : Buffer.from(data));
     return r.filePath;
+  });
+
+  ipcMain.handle('nx:postProcess', async (ev, { gcode, scripts, env, outputName }: { gcode: string; scripts: string[]; env: Record<string, string>; outputName: string }) => {
+    const key = scripts.join('\n');
+    if (!approvedScripts.has(key)) {
+      const win = BrowserWindow.fromWebContents(ev.sender)!;
+      const r = await dialog.showMessageBox(win, {
+        type: 'warning', buttons: ['Run scripts', 'Skip'], defaultId: 1, cancelId: 1,
+        message: 'Run post-processing scripts on the exported G-code?',
+        detail: `These commands from the process settings will run on this computer:\n\n${scripts.join('\n')}`,
+      });
+      if (r.response !== 0) return { gcode, skipped: true };
+      approvedScripts.add(key);
+    }
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexspiro-pp-'));
+    const file = path.join(dir, outputName.replace(/[\\/]/g, '_') || 'plate.gcode');
+    try {
+      await fs.writeFile(file, gcode);
+      for (const cmd of scripts) await runScript(cmd, file, { ...env, SLIC3R_PP_OUTPUT_NAME: outputName });
+      return { gcode: await fs.readFile(file, 'utf8') };
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   ipcMain.handle('nx:openFiles', async (ev, { filters }) => {

@@ -82,3 +82,6 @@ export interface SlicedPlate {
   warnings: SliceWarning[];
   check: PrintCheck;
 }
+
+/** Wall loops end up to one nozzle short of their start (seam gap): endpoints this close still close the loop (mm). */
+export const SEAM_TOL = 0.5;
