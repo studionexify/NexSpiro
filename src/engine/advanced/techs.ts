@@ -307,7 +307,7 @@ export const TECHS: TechDef[] = [
     summary: 'Layers start flat on the bed and morph into shells parallel to curved tops, within the head\'s clearance.',
     intents: ['aesthetic', 'optical'], reads: ['sdf', 'harmonic'],
     params: [
-      { key: 'band', label: 'Morph band', type: 'number', def: 6, min: 1, max: 60, step: 0.5, unit: 'mm', tip: 'Height over which layers morph from flat to conformal.' },
+      { key: 'band', label: 'Morph band', type: 'number', def: 0, min: 0, max: 200, step: 0.5, unit: 'mm', tip: 'Height over which layers morph from flat to conformal. 0 = automatic (dome height + 2 mm).' },
       { key: 'minRatio', label: 'Thinnest layer (× h)', type: 'number', def: 0.5, min: 0.2, max: 1, step: 0.05 },
       { key: 'maxRatio', label: 'Thickest layer (× h)', type: 'number', def: 1.5, min: 1, max: 2.5, step: 0.05 },
     ],
