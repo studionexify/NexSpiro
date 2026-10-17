@@ -95,10 +95,10 @@ export const slotsOf = (p: Pick<PartBuild, 'filament' | 'paint'>) =>
   [...new Set([p.filament, ...(p.paint ? [...new Set(p.paint)].filter((c) => c > 0).map((c) => c - 1) : [])])].sort((a, b) => a - b);
 
 /**
- * Build every part at full quality and put them on plates. Parts share a plate when they print with the
- * same filament materials (AMS printers mix colours on one plate) or, without AMS, the same filament slots
- * (one plate per colour set, so no plate needs a manual swap it would not need anyway). Each plate is
- * auto-arranged; parts that do not fit spill onto new plates. Replaces the previous transfer unless `asNew`.
+ * Build every part at full quality and put them on plates. Parts share a plate only when they print with
+ * exactly the same filament slots, so different colours and different materials go to different plates.
+ * Each plate is auto-arranged; parts that do not fit spill onto new plates. Replaces the previous transfer
+ * unless `asNew`.
  */
 export function transferToPlate(asNew = false): string[] {
   const spec = pt.spec;
@@ -106,11 +106,13 @@ export function transferToPlate(asNew = false): string[] {
   const warnings = parts.flatMap((p) => p.result.warnings);
   let s = useStore.getState();
   const ams = !!printerById(s.printerId).machine.has_ams;
+  if (!ams && parts.some((p) => slotsOf(p).length > 1)) warnings.push('This printer has no AMS: multi-colour parts pause for a manual filament swap at each colour change.');
   let nSlots = s.filaments.length;
   const need = Math.max(...parts.flatMap(slotsOf));
   if (need >= nSlots) { ensureSlot(need); s = useStore.getState(); nSlots = s.filaments.length; }
   const typeOf = (k: number) => filamentById(s.filaments[Math.min(k, nSlots - 1)]?.presetId ?? '')?.type ?? 'PLA';
-  const keyOf = (p: PartBuild) => (ams ? [...new Set(slotsOf(p).map(typeOf))].sort().join(' + ') : slotsOf(p).map((k) => `filament ${k + 1}`).join(' + '));
+  // one plate per filament set: different colours and different materials never share a plate
+  const keyOf = (p: PartBuild) => slotsOf(p).map((k) => `filament ${k + 1} (${typeOf(k)} ${s.filaments[k]?.color ?? ''})`).join(' + ');
 
   s.checkpoint();
   if (!asNew && pt.placed.length) {
