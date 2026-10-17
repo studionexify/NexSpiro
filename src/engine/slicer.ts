@@ -12,7 +12,7 @@ import type { IndexedMesh } from './mesh';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh, type SlicingMode } from './slice';
-import { preparePlugins, runPlugins } from '../plugins/engine';
+import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
 import { computeOverhangs, filterOverhangs, generateSupport, generateTreeSupport, treeStyle } from './support';
 import { anchorInfill, archimedeanFill, cubicFill, honeycombFill } from './patterns';
@@ -1747,7 +1747,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }));
     pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn }, sessions);
   }
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header });
+  const bodyTransform = programBodyPlugins(opts.plugins, { cfg, layerZ: zs, faceRegions: [], warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header, bodyTransform });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());

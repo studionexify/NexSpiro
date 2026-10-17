@@ -92,6 +92,8 @@ export interface EmitInput {
   objectLabels: { name: string; cx: number; cy: number; polygon: [number, number][] }[];
   /** Extra comment lines for the header (from plugins). */
   headerLines?: string[];
+  /** Rewrites the lines between the start and end G-code (plugins that repeat the print). */
+  bodyTransform?: (body: string[]) => string[];
 }
 
 export interface EmitOutput {
@@ -133,7 +135,7 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
 }
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
-export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }: EmitInput): EmitOutput {
+export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], bodyTransform }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const flavor = String(cfg.gcode_flavor);
   const relE = cfg.use_relative_e_distances !== false;
@@ -233,6 +235,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
   const chamber = num('chamber_temperature');
   if (chamber > 0) push(`M141 S${Math.round(chamber)} ; chamber temperature`);
   push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  const bodyStart = out.length;
   if (chamber > 0 && flavor !== 'klipper') push(`M191 S${Math.round(chamber)} ; wait for chamber`);
   if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '' && cfg.enable_pressure_advance !== false) push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
   push('G90 ; absolute XYZ');
@@ -403,6 +406,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     layerRes.push({ index: li, z: L.z, height: L.h, moveStart, moveEnd: feats.length, time: layerTimes[li] });
   });
 
+  if (bodyTransform) {
+    // large programs (repeated prints): no spread — it overflows the call stack
+    const body = bodyTransform(out.splice(bodyStart));
+    for (const l of body) out.push(l);
+  }
   push('M73 P100 R0');
   setFan(0);
   push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));

@@ -9,6 +9,7 @@ import { toConfig } from './motionex';
 import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patternex/ui/PatternexPanel';
 import { patternexPreview } from './patternex/ui/preview';
 import { hanexConfig, HanexPanel } from './hanex/ui/HanexPanel';
+import { bulnexConfig, BulnexPanel } from './bulnex/ui/BulnexPanel';
 
 export interface UiPlugin {
   id: string;
@@ -56,6 +57,12 @@ export const PLUGINS: UiPlugin[] = [
     description: 'Flat and rising overhangs printed in mid-air with wave toolpaths, no supports.',
     Panel: HanexPanel,
     sliceConfig: () => hanexConfig(useStore.getState().printerId),
+  },
+  {
+    id: 'bulnex', name: 'Bulnex', badge: 'B',
+    description: 'Bulk production: print one part (or a row of copies) again and again, pushing the parts off the plate between prints. Camera monitor with phone alerts.',
+    Panel: BulnexPanel,
+    sliceConfig: () => bulnexConfig(),
   },
 ];
 
