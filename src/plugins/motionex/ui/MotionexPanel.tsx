@@ -74,6 +74,25 @@ export function motionexConfig(printerId: string): MotionexConfig | undefined {
 }
 
 const MAX_SURFACES = SURFACE_COLORS.length;
+
+/** Patterns and settings stored in the project file. Pattern designs travel with them. */
+export function motionexProject() {
+  const used = new Set(mx.applications.map((a) => a.brush_id));
+  return {
+    applications: structuredClone(mx.applications), options: { ...mx.options }, collisionMode: mx.collisionMode,
+    brushes: [...used].map((id) => mx.library.get(id)).filter((b) => !!b).map((b) => structuredClone(b)),
+  };
+}
+
+export function loadMotionexProject(data: unknown) {
+  const d = data as Partial<ReturnType<typeof motionexProject>> | null;
+  if (!d) return;
+  for (const b of d.brushes ?? []) if (b && !mx.library.get(b.id)) mx.library.save(b);
+  mx.applications = d.applications ?? [];
+  if (d.options) mx.options = { ...mx.options, ...d.options };
+  if (d.collisionMode) mx.collisionMode = d.collisionMode;
+  changed();
+}
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
 const COLLIDE: [CollisionMode, string][] = [['clamp', 'Lower the movement there'], ['skip', 'Skip the movement there'], ['fail', 'Stop and show me']];
 
