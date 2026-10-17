@@ -10,14 +10,35 @@ import { eulerianSpiral } from './eulerianSpiral';
 import { tangentEntry, scarfSplice } from './seams';
 import { conformalIroning, perimeterFeathering, subvoxelAA } from './surfacePasses';
 import { knotBraiding, zWeave } from './weave';
+import { feaStress, spinorFields } from './fea';
+import { quasicrystal } from './quasicrystal';
+import { turingInfill } from './turing';
+import { bandGap } from './bandGap';
+import { homogenization, metamaterial } from './cells';
+import { foamControl } from './foam';
+import { inverseWarp } from './inverseWarp';
+import { spatialLattice } from './lattice';
+import { dovetail } from './dovetail';
+import { coMolding } from './coMolding';
+import { metricMorph } from './metricMorph';
+import { mongeAmpere } from './mongeAmpere';
 
 export const MODULES: TechModule[] = [
+  // cross-sections and material regions: cast cavities, carved lenses, interface fingers
+  coMolding, mongeAmpere, dovetail,
   // layer plan (curved layers): dome field first, SGD refines it
   harmonicDome, sgdSlicing,
   // walls, then wall post-edits
   eikonalOffsets, knotBraiding,
-  // infill: helical bands claim their regions first
-  thickVase, eulerianSpiral,
+  // fields shared by later stages
+  spinorFields,
+  // infill: helical bands claim their regions first, then the zone router hands each sub-region to the
+  // technology made for it (stress paths where loaded, …)
+  thickVase, eulerianSpiral, feaStress, quasicrystal, bandGap, turingInfill, metamaterial, homogenization,
   // toolpath passes, in order: surfaces, helix, interlocking, seams, final burnishing
   conformalLayers, subvoxelAA, perimeterFeathering, zWeave, tangentEntry, scarfSplice, conformalIroning,
+  // passes that replace the part (truss, flat morph sheet), then the shrinkage pre-distortion of everything
+  spatialLattice, metricMorph, inverseWarp,
+  // rheology on the final move list
+  foamControl,
 ];

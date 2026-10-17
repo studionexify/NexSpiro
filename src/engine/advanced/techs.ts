@@ -59,7 +59,7 @@ export const TECHS: TechDef[] = [
     summary: 'Solves the part under its load case and lays infill along the principal stress directions.',
     intents: ['structural'], reads: ['sdf', 'stress'],
     params: [
-      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 6000, min: 500, max: 40000, step: 500, tip: 'Hexahedral elements in the voxel FEA model.' },
+      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 4000, min: 500, max: 40000, step: 500, tip: 'Hexahedral elements in the voxel FEA model.' },
       { key: 'loadN', label: 'Load', type: 'number', def: 50, min: 1, max: 5000, step: 1, unit: 'N', tip: 'Total force of the inferred or painted load case.' },
       { key: 'family', label: 'Path family', type: 'enum', def: 'both', options: [{ value: 'max', label: 'Tension (σ₁)' }, { value: 'min', label: 'Compression (σ₃)' }, { value: 'both', label: 'Both, alternating layers' }] },
       { key: 'threshold', label: 'Stress percentile', type: 'number', def: 0.4, min: 0, max: 1, step: 0.05, tip: 'Infill below this von Mises percentile keeps the regular pattern.' },
@@ -147,7 +147,7 @@ export const TECHS: TechDef[] = [
       { key: 'F', label: 'Feed F', type: 'number', def: 0.037, min: 0.01, max: 0.08, step: 0.001 },
       { key: 'k', label: 'Kill k', type: 'number', def: 0.06, min: 0.03, max: 0.07, step: 0.001 },
       { key: 'aniso', label: 'Anisotropy β', type: 'number', def: 0.6, min: 0, max: 0.95, step: 0.05, tip: 'D = D₀(I + β d⊗d) along the stress or boundary direction.' },
-      { key: 'scale', label: 'Pattern scale', type: 'number', def: 1.6, min: 0.6, max: 4, step: 0.1, unit: 'mm/cell' },
+      { key: 'scale', label: 'Pattern scale', type: 'number', def: 1, min: 0.4, max: 3, step: 0.05, tip: '1 = rib spacing matched to the sparse infill density.' },
     ],
     mould: () => ok,
   },
@@ -227,7 +227,7 @@ export const TECHS: TechDef[] = [
     params: [
       { key: 'gain', label: 'Compensation', type: 'number', def: 1, min: 0, max: 2, step: 0.05 },
       { key: 'kerfs', label: 'Relief kerfs', type: 'bool', def: true },
-      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 5000, min: 500, max: 40000, step: 500 },
+      { key: 'elements', label: 'FEA elements (max)', type: 'number', def: 3000, min: 500, max: 40000, step: 500 },
     ],
     mould: (c) => (HIGH_SHRINK.test(c.filamentType) ? (c.caps.heatedChamber ? ok : { status: 'adapted', reason: `No heated chamber: ${c.filamentType} cools from Tg to ${c.caps.chamberTemp} °C, so the predicted warp is larger.` })
       : { status: 'adapted', reason: `${c.filamentType} shrinks little; compensation is small.` }),
@@ -348,7 +348,7 @@ export const TECHS: TechDef[] = [
     summary: 'Aperiodic icosahedral infill with Fibonacci-spaced plane families: no cleavage planes, near-isotropic stiffness.',
     intents: ['structural'], reads: ['core'],
     params: [
-      { key: 'spacing', label: 'Mean spacing', type: 'number', def: 5, min: 1.5, max: 20, step: 0.1, unit: 'mm' },
+      { key: 'spacing', label: 'Mean plane spacing', type: 'number', def: 0, min: 0, max: 20, step: 0.1, unit: 'mm', tip: '0 = from the sparse infill density.' },
       { key: 'maxTilt', label: 'Max plane tilt', type: 'number', def: 45, min: 20, max: 60, step: 1, unit: '°' },
     ],
     mould: () => ok,
@@ -369,7 +369,7 @@ export const TECHS: TechDef[] = [
     intents: ['optical'], reads: ['caustic_image'],
     params: [
       { key: 'ior', label: 'Refractive index', type: 'number', def: 1.57, min: 1.3, max: 1.8, step: 0.01 },
-      { key: 'iters', label: 'Transport iterations', type: 'number', def: 60, min: 5, max: 400, step: 5 },
+      { key: 'iters', label: 'Transport iterations', type: 'number', def: 120, min: 20, max: 1000, step: 10 },
     ],
     mould: (c) => (c.hasCaustic ? ok : { status: 'unavailable', reason: 'Load a target image in the Optical intent card.' }),
   },

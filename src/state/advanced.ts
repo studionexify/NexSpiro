@@ -119,7 +119,7 @@ export function runAnalysis() {
   const lw = (k: string) => num(k, num('line_width', 0.42));
   const objects = objs.map((o) => ({
     id: o.id, name: o.name, vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices,
-    color: o.paint?.color, meshRef: o.mesh,
+    color: o.paint?.color, advPaint: o.paint?.adv, meshRef: o.mesh,
   }));
   const refs = new Map(objects.map((o) => [o.id, o.meshRef]));
   a.set({ analysing: true, analysisError: null });
@@ -137,6 +137,8 @@ export function runAnalysis() {
       cells: RESOLUTION_CELLS[a.resolution],
       shell: lw('outer_wall_line_width') + Math.max(0, Math.round(num('wall_loops', 2)) - 1) * lw('inner_wall_line_width'),
       lineWidth: lw('line_width'), layerHeight: num('layer_height', 0.2), overhangDeg: num('support_threshold_angle', 30),
+      // the stress field of the inspector uses the same load case as the slice
+      load: a.load,
     },
   });
 }
@@ -147,5 +149,5 @@ useStore.subscribe((s, prev) => {
   if (s.objects !== prev.objects || s.printerId !== prev.printerId) scheduleAnalysis();
 });
 useAdvanced.subscribe((s, prev) => {
-  if (s.engineMode === 'advanced' && (prev.engineMode !== 'advanced' || s.resolution !== prev.resolution)) scheduleAnalysis(50);
+  if (s.engineMode === 'advanced' && (prev.engineMode !== 'advanced' || s.resolution !== prev.resolution || s.load !== prev.load)) scheduleAnalysis(50);
 });
