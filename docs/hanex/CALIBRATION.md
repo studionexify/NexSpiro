@@ -18,7 +18,7 @@ Optional settings, given as environment variables:
 **Before you print:**
 
 - Check the start G-code. The generic one homes, heats and draws a prime line at X = 5.
-- On a Bambu printer, or any printer that needs its own start sequence, pass `startGcode`.
+- On an A1/P1/X1/H2 printer, or any printer that needs its own start sequence, pass `startGcode`.
 - Each file's header lists the specimens from left to right and how to judge them.
 
 ## 2. Print order and what each print sets
@@ -68,7 +68,7 @@ const mine = applyCalibration(preset('hanex-pla'), { overlap: 0.5, waveSpeed: 3,
 | Nozzle | Flat land |
 | --- | --- |
 | E3D V6 0.4 | ≈ 1.0 mm |
-| Bambu hardened 0.4 | ≈ 0.9 mm |
+| A1/P1/X1 hardened 0.4 | ≈ 0.9 mm |
 | Revo 0.4 | ≈ 1.1 mm |
 
 This value sets the minimum overlap (`minOverlapForTip`).
