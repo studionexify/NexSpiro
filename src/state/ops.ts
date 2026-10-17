@@ -6,47 +6,75 @@ import { weld, type IndexedMesh } from '../engine/mesh';
 import { adaptiveProfile, applyHeightRange, smoothProfile, uniformProfile } from '../engine/layers';
 import type { PartType } from '../engine/types';
 import type { Config } from '../profiles/settings';
+import { arrangeItems, convexHull, type Pt } from '../engine/arrange';
 import { currentConfig } from './slicing';
 
 const DEG = 180 / Math.PI;
 
 /** Shelf bin-packing of bounding boxes centred on the bed (spacing in mm). */
-export function arrange(spacing = 6, plate = useStore.getState().activePlate, only?: string[]) {
+/** Silhouette of an object on the bed: convex hull of its world vertices (sampled on big meshes). */
+export function silhouette(o: SceneObject): Pt[] {
+  const m = objectMatrix(o).elements, v = o.mesh.vertices, n = v.length / 3;
+  const stride = Math.max(1, Math.floor(n / 6000));
+  const pts: Pt[] = [];
+  for (let i = 0; i < n; i += stride) {
+    const x = v[i * 3], y = v[i * 3 + 1], z = v[i * 3 + 2];
+    pts.push([m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13]]);
+  }
+  return convexHull(pts);
+}
+
+/**
+ * Arrange the objects on a plate (Bambu's arrange): pack their silhouettes with the arrange settings' spacing,
+ * trying rotations when auto-rotate is on, then centre the group (or align it to an axis).
+ * Objects that do not fit are placed past the plate's right edge and reported.
+ */
+export function arrange(spacing?: number, plate = useStore.getState().activePlate, only?: string[]) {
   const s = useStore.getState();
   if (s.plates[plate]?.locked) return;
   const objs = s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate && (!only || only.includes(o.id)));
   if (!objs.length) return;
   const p = printerById(s.printerId);
   const [ox, oy] = plateOrigin(plate, s.printerId);
-  const items = objs.map((o) => ({ o, b: worldBounds(o) }))
-    .map(({ o, b }) => ({ o, w: b.max[0] - b.min[0], d: b.max[1] - b.min[1], b }))
-    .sort((a, b) => b.d - a.d);
-  const rows: { items: typeof items; w: number; d: number }[] = [];
-  let row = { items: [] as typeof items, w: 0, d: 0 };
-  for (const it of items) {
-    if (row.items.length && row.w + spacing + it.w > p.bed.x) { rows.push(row); row = { items: [], w: 0, d: 0 }; }
-    row.w += (row.items.length ? spacing : 0) + it.w;
-    row.d = Math.max(row.d, it.d);
-    row.items.push(it);
-  }
-  rows.push(row);
-  const totalD = rows.reduce((a, r) => a + r.d, 0) + spacing * (rows.length - 1);
-  let y = oy + (p.bed.y + totalD) / 2;
-  const placed = new Map<string, [number, number]>();
-  for (const r of rows) {
-    let x = ox + (p.bed.x - r.w) / 2;
-    for (const it of r.items) {
-      const cx = x + it.w / 2, cy = y - r.d / 2;
-      const ocx = (it.b.min[0] + it.b.max[0]) / 2, ocy = (it.b.min[1] + it.b.max[1]) / 2;
-      placed.set(it.o.id, [it.o.position[0] + cx - ocx, it.o.position[1] + cy - ocy]);
-      x += it.w + spacing;
-    }
-    y -= r.d + spacing;
-  }
+  const st = s.arrangeSettings;
+  const gap = spacing ?? st.spacing;
+  const hulls = new Map(objs.map((o) => [o.id, silhouette(o)]));
+  // objects not being arranged stay where they are: arrange the rest around nothing (Bambu re-packs the whole plate)
+  const res = arrangeItems(objs.map((o) => ({ id: o.id, hull: hulls.get(o.id)!.map(([x, y]) => [x - ox, y - oy] as Pt) })), { x: p.bed.x, y: p.bed.y },
+    { spacing: gap, rotations: st.rotate ? [0, 45, 90, 135, 180, 225, 270, 315] : [0], align: st.align, edge: 2 });
+  let over = 0;
   s.updateObjects((o) => {
-    const xy = placed.get(o.id)!;
-    return dropToBed({ ...o, position: [xy[0], xy[1], o.position[2]] });
+    const r = res.get(o.id);
+    if (!r) {
+      // no room: park it to the right of the plate
+      const b = worldBounds(o);
+      const nx = ox + p.bed.x + 10 + (b.max[0] - b.min[0]) / 2 + over * 5;
+      over++;
+      return dropToBed({ ...o, position: [o.position[0] + nx - (b.min[0] + b.max[0]) / 2, o.position[1] + oy + p.bed.y / 2 - (b.min[1] + b.max[1]) / 2, o.position[2]] });
+    }
+    // rotate about world Z, then move so the silhouette's centroid lands where the arranger put it
+    let rot = o.rotation;
+    if (r.rotation) {
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), r.rotation / DEG);
+      const cur = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rotation[0] / DEG, o.rotation[1] / DEG, o.rotation[2] / DEG, 'XYZ'));
+      const e = new THREE.Euler().setFromQuaternion(q.multiply(cur), 'XYZ');
+      rot = [e.x * DEG, e.y * DEG, e.z * DEG].map((v) => +v.toFixed(4)) as [number, number, number];
+    }
+    const turned = { ...o, rotation: rot };
+    const hc = hullCentroid(silhouette(turned));
+    return dropToBed({ ...turned, position: [o.position[0] + ox + r.x - hc[0], o.position[1] + oy + r.y - hc[1], o.position[2]] });
   }, objs.map((o) => o.id));
+  if (over) s.set({ toast: { kind: 'warn', text: `${over} object${over > 1 ? 's do' : ' does'} not fit on the plate and ${over > 1 ? 'were' : 'was'} placed beside it.` } });
+}
+
+function hullCentroid(h: Pt[]): Pt {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < h.length; i++) {
+    const [x0, y0] = h[i], [x1, y1] = h[(i + 1) % h.length];
+    const c = x0 * y1 - x1 * y0;
+    a += c; cx += (x0 + x1) * c; cy += (y0 + y1) * c;
+  }
+  return Math.abs(a) < 1e-9 ? h[0] ?? [0, 0] : [cx / (3 * a), cy / (3 * a)];
 }
 
 /** Rotation (euler degrees) that turns `normal` (world) to face straight down, composed with current rotation. */
@@ -125,13 +153,13 @@ export function centreOnBed(o: SceneObject, printerId: string, plate = useStore.
 
 // ---------------------------------------------------------------- plates
 /** Arrange every unlocked plate, like Bambu Studio's toolbar Arrange. */
-export function arrangeAll(spacing = 6) {
+export function arrangeAll(spacing?: number) {
   const s = useStore.getState();
   s.plates.forEach((p, i) => { if (!p.locked) arrange(spacing, i); });
 }
 
 /** Arrange only the selected objects, each group on its own plate. */
-export function arrangeSelected(spacing = 6) {
+export function arrangeSelected(spacing?: number) {
   const s = useStore.getState();
   const plates = new Set(s.objects.filter((o) => s.selected.includes(o.id)).map((o) => objectPlate(o, s.printerId, s.plates.length)));
   for (const p of plates) arrange(spacing, p, s.selected);

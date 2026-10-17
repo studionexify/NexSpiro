@@ -1,4 +1,7 @@
 // Application state (zustand). Scene objects are immutable records; meshes are shared by reference.
+import type { MeasureFeature, MeasureMode } from './measure';
+import type { BrushType } from '../engine/brush';
+import { DEFAULT_CONNECTOR, type ConnectorSettings } from './cutConnectors';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { IndexedMesh } from '../engine/mesh';
@@ -10,7 +13,7 @@ import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'brim_ears';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time';
 
@@ -50,7 +53,8 @@ export interface SceneObject {
   /** Height range modifiers: their own settings for a band of layers (object-relative mm). */
   heightRanges?: HeightRange[];
   /** Brim ear points painted with the brim ears tool (object-local XY, mm). */
-  brimEars?: [number, number][];
+  /** Painted brim ears, object-local points (z kept so tilted objects map correctly). */
+  brimEars?: [number, number, number?][];
   /** Hidden in the 3D view (object list eye); still sliced unless not printable. */
   hidden?: boolean;
 }
@@ -116,6 +120,13 @@ interface State {
   showOverhangs: boolean;
 
   brushSize: number; // mm
+  brushType: BrushType;
+  /** Smart fill: largest angle between neighbouring triangles the fill crosses (°). */
+  smartFillAngle: number;
+  /** Gap fill: largest unpainted area filled (mm²). */
+  gapArea: number;
+  /** Overhang highlight angle in support painting (°). */
+  paintOverhangAngle: number;
   paintColor: number; // 1-based slot for colour painting
   /** Surface set being picked/painted for plugins (1-based). */
   motionSet: number;
@@ -141,8 +152,17 @@ interface State {
   flushMultiplier: number;
   /** Cut tool plane: world height and tilt (degrees). */
   cutPlane: { height: number; tiltX: number; tiltY: number };
+  /** Cut connectors placed on the cut plane (plane coordinates), the connector settings and the placing mode. */
+  cutConnectors: { x: number; y: number }[];
+  cutConnector: ConnectorSettings;
+  cutConnectorMode: boolean;
   /** Measure tool: picked world points (up to 2). */
-  measurePoints: Vec3[];
+  measureFeatures: MeasureFeature[];
+  measureMode: MeasureMode;
+  /** Bambu's arrange settings: spacing between objects, try rotations, where the group goes. */
+  arrangeSettings: { spacing: number; rotate: boolean; align: 'center' | 'x' | 'y' };
+  /** Surface point picked for Text / SVG volumes. */
+  surfacePick: { objId: string; point: Vec3; normal: Vec3 } | null;
   contextMenu: ContextMenuState | null;
   /** Draw the plugins' quick motion preview on the model in Prepare (no slicing). */
   liveToolpaths: boolean;
@@ -193,7 +213,13 @@ export const useStore = create<State>((set, get) => ({
   flushMatrix: null,
   flushMultiplier: 1,
   cutPlane: { height: 10, tiltX: 0, tiltY: 0 },
-  measurePoints: [],
+  cutConnectors: [],
+  cutConnector: DEFAULT_CONNECTOR,
+  cutConnectorMode: false,
+  measureFeatures: [],
+  measureMode: 'auto',
+  arrangeSettings: { spacing: 6, rotate: false, align: 'center' },
+  surfacePick: null,
   contextMenu: null,
   liveToolpaths: !!prefs.liveToolpaths,
 
@@ -210,6 +236,10 @@ export const useStore = create<State>((set, get) => ({
   showOverhangs: false,
 
   brushSize: 4,
+  brushType: 'circle',
+  smartFillAngle: 30,
+  gapArea: 2,
+  paintOverhangAngle: 30,
   paintColor: 2,
   motionSet: 1,
   motionGrowAngle: 15,

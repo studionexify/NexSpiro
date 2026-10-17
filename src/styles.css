@@ -642,3 +642,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .shortcut-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 20px; }
 .shortcut-row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; line-height: 24px; font-size: 12px; }
 .shortcut-row kbd { font-family: var(--mono, monospace); color: var(--accent); }
+.brush-seg { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+.brush-seg button { flex: 1 0 auto; font-size: 11px; padding: 3px 6px; }

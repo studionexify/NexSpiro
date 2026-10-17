@@ -1,6 +1,9 @@
 // Floating panels for the Cut, Mesh Boolean, Text and Measure tools.
+import { edgeLength, measure } from '../state/measure';
+import { embossVolume, objectFromWorld, svgMesh, textMesh, type EmbossKind } from '../state/tools';
+import type { ConnectorSettings, ConnectorShape, ConnectorStyle, ConnectorType } from '../state/cutConnectors';
 import { useEffect, useState } from 'react';
-import { useStore, worldBounds } from '../state/store';
+import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
 
@@ -15,9 +18,19 @@ function Slider({ label, value, min, max, step, unit, onChange }: { label: strin
   );
 }
 
+function Seg({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
+  return (
+    <div className="row" style={{ marginBottom: 4 }}>
+      <span className="muted" style={{ width: 92, fontSize: 12 }}>{label}</span>
+      <div className="seg">{options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}</div>
+    </div>
+  );
+}
+
 export function CutPanel() {
-  const { tool, objects, selected, cutPlane, set } = useStore();
+  const { tool, objects, selected, cutPlane, cutConnectors, cutConnector: cc, cutConnectorMode, set } = useStore();
   const o = objects.find((x) => x.id === selected[0]);
+  const setC = (p: Partial<ConnectorSettings>) => set({ cutConnector: { ...cc, ...p } });
   const [keepAbove, setAbove] = useState(true);
   const [keepBelow, setBelow] = useState(true);
   const [flip, setFlip] = useState(true);
@@ -33,12 +46,33 @@ export function CutPanel() {
         <Slider label="Height" value={cutPlane.height} min={b.min[2]} max={b.max[2]} step={0.1} unit="mm" onChange={(v) => set({ cutPlane: { ...cutPlane, height: v } })} />
         <Slider label="Tilt X" value={cutPlane.tiltX} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltX: v } })} />
         <Slider label="Tilt Y" value={cutPlane.tiltY} min={-90} max={90} step={1} unit="°" onChange={(v) => set({ cutPlane: { ...cutPlane, tiltY: v } })} />
+        <div className="group-title" style={{ marginTop: 6 }}>Connectors</div>
+        <div className="row">
+          <button className={`btn-small ${cutConnectorMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => set({ cutConnectorMode: !cutConnectorMode })}
+            title="Click the cut plane to add a connector; click a connector to remove it">{cutConnectorMode ? 'Done placing' : 'Add connectors'}</button>
+          <span className="muted" style={{ fontSize: 12 }}>{cutConnectors.length} placed</span>
+          <span className="spacer" />
+          {cutConnectors.length > 0 && <button className="btn-secondary btn-small" onClick={() => set({ cutConnectors: [] })}>Remove all</button>}
+        </div>
+        {(cutConnectorMode || cutConnectors.length > 0) && <>
+          <Seg label="Type" value={cc.type} options={[['plug', 'Plug'], ['dowel', 'Dowel'], ['snap', 'Snap']]} onChange={(v) => setC({ type: v as ConnectorType })} />
+          {cc.type !== 'dowel' && <Seg label="Style" value={cc.style} options={[['prism', 'Prism'], ['frustum', 'Frustum']]} onChange={(v) => setC({ style: v as ConnectorStyle })} />}
+          <Seg label="Shape" value={cc.shape} options={[['triangle', '▲'], ['square', '■'], ['hexagon', '⬢'], ['circle', '●']]} onChange={(v) => setC({ shape: v as ConnectorShape })} />
+          <Slider label="Depth" value={cc.depth} min={1} max={30} step={0.5} unit="mm" onChange={(v) => setC({ depth: v })} />
+          <Slider label="Size" value={cc.size} min={1} max={30} step={0.5} unit="mm" onChange={(v) => setC({ size: v })} />
+          <Slider label="Depth tolerance" value={cc.tolDepth} min={0} max={20} step={1} unit="%" onChange={(v) => setC({ tolDepth: v })} />
+          <Slider label="Size tolerance" value={cc.tolSize} min={0} max={20} step={1} unit="%" onChange={(v) => setC({ tolSize: v })} />
+          {cc.type === 'snap' && <>
+            <Slider label="Bulge" value={cc.bulge * 100} min={5} max={40} step={1} unit="%" onChange={(v) => setC({ bulge: v / 100 })} />
+            <Slider label="Space" value={cc.space * 100} min={10} max={60} step={1} unit="%" onChange={(v) => setC({ space: v / 100 })} />
+          </>}
+        </>}
         <label className="row"><input type="checkbox" checked={keepAbove} onChange={(e) => setAbove(e.target.checked)} />Keep upper part</label>
         <label className="row" style={{ marginLeft: 20 }}><input type="checkbox" checked={flip} disabled={!keepAbove} onChange={(e) => setFlip(e.target.checked)} />Place on cut face</label>
         <label className="row"><input type="checkbox" checked={keepBelow} onChange={(e) => setBelow(e.target.checked)} />Keep lower part</label>
         <div className="row" style={{ marginTop: 10 }}>
           <button className="btn-secondary btn-small" onClick={() => set({ cutPlane: { height: +((b.min[2] + b.max[2]) / 2).toFixed(2), tiltX: 0, tiltY: 0 } })}>Reset</button>
-          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip })}><Icon name="cut" size={14} />Perform cut</button>
+          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip, connectors: cutConnectors, connector: cc })}><Icon name="cut" size={14} />Perform cut</button>
         </div>
       </>}
     </div>
@@ -63,53 +97,122 @@ export function BooleanPanel() {
   );
 }
 
+type TextMode = 'object' | EmbossKind | 'emboss' | 'engrave';
+const TEXT_MODES: [TextMode, string][] = [['part', 'Part'], ['negative', 'Negative part'], ['modifier', 'Modifier'], ['object', 'New object'], ['emboss', 'Bake raised'], ['engrave', 'Bake cut']];
+
 export function TextPanel() {
-  const { tool, selected } = useStore();
-  const [o, setO] = useState<TextOptions>({ text: 'NexSpiro', font: 'helvetiker_bold', size: 10, depth: 2, mode: 'object' });
+  const { tool, selected, surfacePick } = useStore();
+  const [src, setSrc] = useState<'text' | 'svg'>('text');
+  const [o, setO] = useState<Omit<TextOptions, 'mode'> & { mode: TextMode }>({ text: 'NexSpiro', font: 'helvetiker_bold', size: 10, depth: 2, mode: 'part' });
+  const [svg, setSvg] = useState<{ name: string; text: string } | null>(null);
+  const [useSurface, setUseSurface] = useState(true);
   const [busy, setBusy] = useState(false);
   if (tool !== 'text') return null;
+  const volume = o.mode === 'part' || o.mode === 'negative' || o.mode === 'modifier';
+  const ready = src === 'text' ? !!o.text.trim() : !!svg;
+  const run = async () => {
+    const st = useStore.getState();
+    try {
+      if (volume) {
+        if (!surfacePick) return;
+        const shape = src === 'text' ? await textMesh(o.text, o.font, o.size, o.depth) : await svgMesh(svg!.text, o.size, o.depth);
+        embossVolume(shape, o.mode as EmbossKind, surfacePick, o.depth, src === 'text' ? `Text "${o.text}"` : `SVG ${svg!.name}`, useSurface);
+        st.set({ surfacePick: null });
+      } else if (src === 'text') await addText(o as TextOptions);
+      else {
+        const { centreOnBed } = await import('../state/ops');
+        st.addObjects([centreOnBed(objectFromWorld(`SVG ${svg!.name}`, await svgMesh(svg!.text, o.size, o.depth)), st.printerId)]);
+      }
+    } catch (e: any) { st.set({ toast: { kind: 'error', text: `${src === 'text' ? 'Text' : 'SVG'} failed: ${e?.message ?? e}` } }); }
+  };
   return (
-    <div className="float panel" style={{ width: 290 }}>
-      <h4>Text</h4>
-      <input className="input" style={{ width: '100%', marginBottom: 8 }} value={o.text} onChange={(e) => setO({ ...o, text: e.target.value })} placeholder="Text" />
-      <div className="row" style={{ marginBottom: 6 }}>
-        <span style={{ width: 62 }}>Font</span>
-        <select className="select" value={o.font} onChange={(e) => setO({ ...o, font: e.target.value })}>
-          {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
-        </select>
+    <div className="float panel" style={{ width: 300 }}>
+      <h4>{src === 'text' ? 'Text' : 'SVG'}</h4>
+      <div className="seg" style={{ marginBottom: 8 }}>
+        <button className={src === 'text' ? 'on' : ''} onClick={() => setSrc('text')}>Text</button>
+        <button className={src === 'svg' ? 'on' : ''} onClick={() => setSrc('svg')}>SVG</button>
       </div>
-      <Slider label="Height" value={o.size} min={2} max={80} step={0.5} unit="mm" onChange={(v) => setO({ ...o, size: v })} />
+      {src === 'text' ? <>
+        <input className="input" style={{ width: '100%', marginBottom: 8 }} value={o.text} onChange={(e) => setO({ ...o, text: e.target.value })} placeholder="Text" />
+        <div className="row" style={{ marginBottom: 6 }}>
+          <span style={{ width: 62 }}>Font</span>
+          <select className="select" value={o.font} onChange={(e) => setO({ ...o, font: e.target.value })}>
+            {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+          </select>
+        </div>
+      </> : (
+        <label className="row" style={{ marginBottom: 8 }}>
+          <span className="btn-secondary btn-small">Choose SVG…</span>
+          <span className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{svg?.name ?? 'No file'}</span>
+          <input type="file" accept=".svg,image/svg+xml" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) setSvg({ name: f.name, text: await f.text() }); }} />
+        </label>
+      )}
+      <Slider label={src === 'text' ? 'Height' : 'Width'} value={o.size} min={2} max={src === 'text' ? 80 : 200} step={0.5} unit="mm" onChange={(v) => setO({ ...o, size: v })} />
       <Slider label="Depth" value={o.depth} min={0.2} max={20} step={0.1} unit="mm" onChange={(v) => setO({ ...o, depth: v })} />
-      <div className="seg" style={{ margin: '4px 0 10px' }}>
-        {([['object', 'New object'], ['emboss', 'Emboss'], ['engrave', 'Engrave']] as const).map(([m, label]) => (
+      <div className="seg" style={{ margin: '4px 0 8px', flexWrap: 'wrap' }}>
+        {TEXT_MODES.filter(([m]) => src === 'text' || (m !== 'emboss' && m !== 'engrave')).map(([m, label]) => (
           <button key={m} className={o.mode === m ? 'on' : ''} disabled={m !== 'object' && !selected.length} onClick={() => setO({ ...o, mode: m })}>{label}</button>
         ))}
       </div>
-      {o.mode !== 'object' && <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{o.mode === 'emboss' ? 'Raised' : 'Cut'} into the top face of the selected object.</p>}
-      <button className="btn-primary btn-small" disabled={busy || !o.text.trim()} onClick={async () => { setBusy(true); try { await addText(o); } finally { setBusy(false); } }}><Icon name="text" size={14} />{busy ? 'Working…' : 'Add text'}</button>
+      {volume && <>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{surfacePick ? 'Placed on the picked surface point (green).' : 'Click the model where the shape should go.'} A {o.mode === 'negative' ? 'negative part is cut out of' : o.mode === 'modifier' ? 'modifier changes settings inside' : 'part is added to'} the object.</p>
+        <label className="row" style={{ marginBottom: 8 }}><input type="checkbox" checked={useSurface} onChange={(e) => setUseSurface(e.target.checked)} />Use surface (bend onto curved faces)</label>
+      </>}
+      {(o.mode === 'emboss' || o.mode === 'engrave') && <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{o.mode === 'emboss' ? 'Raised' : 'Cut'} into the top face of the selected object and merged into its mesh.</p>}
+      <button className="btn-primary btn-small" disabled={busy || !ready || (volume && !surfacePick)} onClick={async () => { setBusy(true); try { await run(); } finally { setBusy(false); } }}>
+        <Icon name="text" size={14} />{busy ? 'Working…' : volume ? `Add ${o.mode === 'part' ? 'part' : o.mode === 'negative' ? 'negative part' : 'modifier'}` : 'Add'}
+      </button>
     </div>
   );
 }
 
+const FEATURE_LABEL = { point: 'Point', edge: 'Edge', plane: 'Plane' } as const;
+
 export function MeasurePanel() {
-  const { tool, measurePoints, set } = useStore();
+  const { tool, measureFeatures: fs, measureMode, objects, set } = useStore();
+  const [target, setTarget] = useState('');
   if (tool !== 'measure') return null;
-  const [a, b] = measurePoints;
-  const d = a && b ? [b[0] - a[0], b[1] - a[1], b[2] - a[2]] : null;
+  const r = fs.length === 2 ? measure(fs[0], fs[1]) : null;
+  const len = fs.length === 1 ? edgeLength(fs[0]) : null;
+  const current = r?.distance ?? len;
+  const scaleTo = () => {
+    const want = parseFloat(target);
+    if (!current || !(want > 0)) return;
+    const k = want / current;
+    const ids = [...new Set(fs.map((f) => f.objId))].filter((id) => objects.some((o) => o.id === id));
+    const st = useStore.getState();
+    st.checkpoint();
+    st.updateObjects((o) => dropToBed({ ...o, scale: [o.scale[0] * k, o.scale[1] * k, o.scale[2] * k] }), ids);
+    st.markDirty();
+    set({ measureFeatures: [] });
+  };
   return (
-    <div className="float panel" style={{ width: 250 }}>
+    <div className="float panel" style={{ width: 270 }}>
       <h4>Measure</h4>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click two points on the models.</p>
-      {measurePoints.map((p, i) => <div key={i} className="row mono" style={{ fontSize: 12 }}><span className="badge">{i + 1}</span>{p.map((x) => x.toFixed(2)).join(', ')}</div>)}
-      {d && (
+      <div className="seg" style={{ marginBottom: 8 }}>
+        {(['auto', 'point', 'edge', 'face'] as const).map((m) => <button key={m} className={measureMode === m ? 'on' : ''} onClick={() => set({ measureMode: m, measureFeatures: [] })}>{m === 'auto' ? 'Auto' : FEATURE_LABEL[m === 'face' ? 'plane' : m]}</button>)}
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click two features. Auto picks an edge near a sharp crease, a plane on flat surfaces, otherwise a point.</p>
+      {fs.map((f, i) => <div key={i} className="row" style={{ fontSize: 12 }}><span className="badge">{i + 1}</span>{FEATURE_LABEL[f.kind]}{f.kind === 'edge' && <span className="muted mono">{edgeLength(f)!.toFixed(2)} mm</span>}</div>)}
+      {r && (
         <div className="summary">
-          <span className="k">Distance</span><span className="v">{Math.hypot(d[0], d[1], d[2]).toFixed(3)} mm</span>
-          <span className="k">ΔX</span><span className="v">{Math.abs(d[0]).toFixed(3)} mm</span>
-          <span className="k">ΔY</span><span className="v">{Math.abs(d[1]).toFixed(3)} mm</span>
-          <span className="k">ΔZ</span><span className="v">{Math.abs(d[2]).toFixed(3)} mm</span>
+          {r.distance !== null && <><span className="k">Distance</span><span className="v">{r.distance.toFixed(3)} mm</span></>}
+          {r.angle !== null && <><span className="k">Angle</span><span className="v">{r.angle.toFixed(2)}°</span></>}
+          {r.delta && <>
+            <span className="k">ΔX</span><span className="v">{r.delta[0].toFixed(3)} mm</span>
+            <span className="k">ΔY</span><span className="v">{r.delta[1].toFixed(3)} mm</span>
+            <span className="k">ΔZ</span><span className="v">{r.delta[2].toFixed(3)} mm</span>
+          </>}
         </div>
       )}
-      {measurePoints.length > 0 && <button className="btn-secondary btn-small" style={{ marginTop: 8 }} onClick={() => set({ measurePoints: [] })}>Clear</button>}
+      {current ? (
+        <div className="row" style={{ marginTop: 8 }} title="Scale the object(s) uniformly so this measurement becomes the value entered">
+          <span style={{ fontSize: 12 }}>Scale to</span>
+          <input className="input mono" style={{ width: 80 }} placeholder={current.toFixed(2)} value={target} onChange={(e) => setTarget(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && scaleTo()} />mm
+          <button className="btn-primary btn-small" disabled={!(parseFloat(target) > 0)} onClick={scaleTo}>Apply</button>
+        </div>
+      ) : null}
+      {fs.length > 0 && <button className="btn-secondary btn-small" style={{ marginTop: 8 }} onClick={() => set({ measureFeatures: [] })}>Clear</button>}
     </div>
   );
 }

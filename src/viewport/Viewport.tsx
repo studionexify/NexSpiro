@@ -3,13 +3,18 @@ import { useEffect, useRef } from 'react';
 import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { flatFaces } from './flatFaces';
+import { BRUSHES, fillTriangles, gapFill, heightRangeTriangles, meshCache } from '../engine/brush';
+import { measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
   dropToBed, isOutOfBounds, newId, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
-import { layOnFace } from '../state/ops';
+import { layOnFace, silhouette } from '../state/ops';
+import { convexHull, type Pt } from '../engine/arrange';
+import { machineConfig } from '../profiles/resolve';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
 import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
@@ -57,6 +62,25 @@ function backgroundTexture(theme: 'dark' | 'light') {
   return tex;
 }
 
+/** Brush in use for a paint layer: the chosen one if that gizmo offers it, else the circle (sphere for motion). */
+function brushFor(s: { brushType: string }, layer: string) {
+  const list = BRUSHES[layer as 'support'];
+  return list?.includes(s.brushType as never) ? (s.brushType as (typeof list)[number]) : layer === 'motion' ? 'sphere' : 'circle';
+}
+
+/** Separating-axis test for two convex polygons. */
+function convexOverlap(a: Pt[], b: Pt[]) {
+  for (const poly of [a, b]) for (let i = 0; i < poly.length; i++) {
+    const [x0, y0] = poly[i], [x1, y1] = poly[(i + 1) % poly.length];
+    const nx = y0 - y1, ny = x1 - x0;
+    let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+    for (const [x, y] of a) { const d = x * nx + y * ny; amin = Math.min(amin, d); amax = Math.max(amax, d); }
+    for (const [x, y] of b) { const d = x * nx + y * ny; bmin = Math.min(bmin, d); bmax = Math.max(bmax, d); }
+    if (amax < bmin || bmax < amin) return false;
+  }
+  return true;
+}
+
 function overhangMaterial(): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.55, metalness: 0.05 });
   const uniforms = { uOverhang: { value: 0 }, uCos: { value: Math.cos((30 * Math.PI) / 180) }, uOOB: { value: 0 } };
@@ -69,7 +93,8 @@ function overhangMaterial(): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWN;\nvarying vec3 vWP;\nuniform float uOverhang;\nuniform float uCos;\nuniform float uOOB;')
       .replace('#include <color_fragment>', `#include <color_fragment>
-        if (uOverhang > 0.5 && normalize(vWN).z < -uCos && vWP.z > 0.05) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.09, 0.27), 0.6);
+        // overhang heatmap (Bambu's slope view): blue just past the support threshold angle, red facing straight down
+        if (uOverhang > 0.5 && vWP.z > 0.05) { float nz = -normalize(vWN).z; if (nz > uCos) { float t = clamp((nz - uCos) / max(1.0 - uCos, 1e-3), 0.0, 1.0); diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.15, 0.45, 1.0), vec3(1.0, 0.09, 0.15), t), 0.7); } }
         if (uOOB > 0.5) { float s = step(0.5, fract((vWP.x + vWP.y + vWP.z) * 0.25)); diffuseColor.rgb = mix(vec3(1.0, 0.23, 0.19), vec3(0.45, 0.08, 0.08), s); }`);
   };
   return mat;
@@ -246,6 +271,49 @@ export function Viewport() {
     scene.add(cutPlaneMesh);
     const measureGroup = new THREE.Group();
     scene.add(measureGroup);
+    // cut connectors on the plane (plane frame without the plane's display scale)
+    const connGroup = new THREE.Group();
+    scene.add(connGroup);
+    const connMat = new THREE.MeshBasicMaterial({ color: '#1E88E5', transparent: true, opacity: 0.85, depthTest: false });
+    // lay-on-face candidates of the selected objects (hull planes), highlighted under the cursor
+    const faceGroup = new THREE.Group();
+    scene.add(faceGroup);
+    const faceMat = new THREE.MeshBasicMaterial({ color: '#9aa4ad', transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const faceHot = new THREE.MeshBasicMaterial({ color: '#00AE42', transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    let faceKey = '';
+    const syncFaces = () => {
+      const s = useStore.getState();
+      const objs = s.workspace === 'prepare' && s.tool === 'face' ? s.objects.filter((o) => s.selected.includes(o.id)) : [];
+      const key = objs.map((o) => `${o.id}:${o.position}:${o.rotation}:${o.scale}:${o.mesh.vertices.length}`).join('|');
+      if (key === faceKey) return;
+      faceKey = key;
+      for (const c of faceGroup.children) (c as THREE.Mesh).geometry.dispose();
+      faceGroup.clear();
+      for (const o of objs) for (const f of flatFaces(o.mesh.vertices, objectMatrix(o))) {
+        const g = new THREE.BufferGeometry();
+        const off = f.normal.clone().multiplyScalar(0.05);
+        const v = f.tris.map((x, i) => x + off.getComponent(i % 3));
+        g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+        const m = new THREE.Mesh(g, faceMat);
+        m.userData = { id: o.id, normal: f.normal };
+        m.renderOrder = 8;
+        faceGroup.add(m);
+      }
+      invalidate();
+    };
+    let faceHover: THREE.Mesh | null = null;
+    const hoverFace = (ev: PointerEvent) => {
+      let h: THREE.Mesh | null = null;
+      if (faceGroup.children.length) {
+        ray.setFromCamera(ndc(ev), camera);
+        h = (ray.intersectObjects(faceGroup.children, false)[0]?.object as THREE.Mesh | undefined) ?? null;
+      }
+      if (h === faceHover) return;
+      if (faceHover) faceHover.material = faceMat;
+      faceHover = h;
+      if (h) h.material = faceHot;
+      invalidate();
+    };
     const syncTools = () => {
       const s = useStore.getState();
       const o = s.objects.find((x) => x.id === s.selected[0]);
@@ -258,18 +326,79 @@ export function Viewport() {
         cutPlaneMesh.rotation.set(s.cutPlane.tiltX * d, s.cutPlane.tiltY * d, 0, 'XYZ');
         cutPlaneMesh.scale.set(size, size, 1);
       }
-      measureGroup.clear();
-      if (s.workspace === 'prepare' && s.tool === 'measure') {
-        const pts = s.measurePoints.map((p) => new THREE.Vector3(...p));
-        for (const p of pts) {
-          const dot = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 12), new THREE.MeshBasicMaterial({ color: '#FF5C8D', depthTest: false }));
-          dot.position.copy(p); dot.renderOrder = 10;
-          measureGroup.add(dot);
+      connGroup.visible = cutPlaneMesh.visible;
+      if (connGroup.visible) {
+        connGroup.position.copy(cutPlaneMesh.position);
+        connGroup.rotation.copy(cutPlaneMesh.rotation);
+        for (const c of connGroup.children) (c as THREE.Mesh).geometry.dispose();
+        connGroup.clear();
+        const c = s.cutConnector;
+        const seg = { triangle: 3, square: 4, hexagon: 6, circle: 32 }[c.shape];
+        for (const p of s.cutConnectors) {
+          const r = c.size / 2, top = c.style === 'frustum' && c.type !== 'dowel' ? r * 0.6 : r;
+          const g = new THREE.CylinderGeometry(top, r, c.type === 'dowel' ? c.depth * 2 : c.depth, seg, 1, false, c.shape === 'square' ? Math.PI / 4 : 0);
+          g.rotateX(-Math.PI / 2);
+          g.translate(p.x, p.y, c.type === 'dowel' ? 0 : -c.depth / 2);
+          const m = new THREE.Mesh(g, connMat);
+          m.renderOrder = 12;
+          connGroup.add(m);
         }
-        if (pts.length === 2) {
-          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#FF5C8D', depthTest: false }));
-          line.renderOrder = 10;
+      }
+      measureGroup.clear();
+      if (s.workspace === 'prepare' && (s.tool === 'brim_ears' || s.overrides.brim_type === 'brim_ears')) {
+        const bw = Number(s.overrides.brim_width ?? 5);
+        for (const o of s.objects) for (const [x, y, z] of o.brimEars ?? []) {
+          const w = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(objectMatrix(o));
+          const ear = new THREE.Mesh(new THREE.CircleGeometry(bw, 40), new THREE.MeshBasicMaterial({ color: '#00AE42', transparent: true, opacity: s.tool === 'brim_ears' ? 0.55 : 0.3, depthWrite: false }));
+          ear.position.set(w.x, w.y, 0.06); ear.renderOrder = 6;
+          measureGroup.add(ear);
+        }
+      }
+      // print by object: each object's extruder clearance outline (half the clearance radius around it), red where two meet
+      const byObject = (s.plates[s.activePlate]?.printSequence ?? s.overrides.print_sequence) === 'by_object';
+      if (s.workspace === 'prepare' && byObject && s.objects.length) {
+        const r = Number(machineConfig(s.printerId, s.machineOverrides).extruder_clearance_max_radius ?? 0) / 2;
+        const zones = s.objects.filter((o) => o.printable !== false).map((o) => {
+          const pts: Pt[] = [];
+          for (const [x, y] of silhouette(o)) for (let k = 0; k < 16; k++) pts.push([x + r * Math.cos((k * Math.PI) / 8), y + r * Math.sin((k * Math.PI) / 8)]);
+          return convexHull(pts);
+        });
+        zones.forEach((z, i) => {
+          const hit = zones.some((w, j) => j !== i && convexOverlap(z, w));
+          const g = new THREE.BufferGeometry().setFromPoints(z.map(([x, y]) => new THREE.Vector3(x, y, 0.08)));
+          const line = new THREE.LineLoop(g, new THREE.LineDashedMaterial({ color: hit ? '#E53935' : '#8BC34A', dashSize: 2, gapSize: 1.2, depthTest: false }));
+          line.computeLineDistances(); line.renderOrder = 7;
           measureGroup.add(line);
+        });
+      }
+      if (s.workspace === 'prepare' && s.tool === 'text' && s.surfacePick) {
+        const sp = s.surfacePick;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.8, 32), new THREE.MeshBasicMaterial({ color: '#00AE42', depthTest: false, side: THREE.DoubleSide }));
+        ring.position.set(...sp.point); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...sp.normal)); ring.renderOrder = 11;
+        const arrow = new THREE.ArrowHelper(new THREE.Vector3(...sp.normal), new THREE.Vector3(...sp.point), 6, 0x00ae42, 1.5, 1);
+        measureGroup.add(ring, arrow);
+      }
+      if (s.workspace === 'prepare' && s.tool === 'measure') {
+        const dotMat = new THREE.MeshBasicMaterial({ color: '#FF5C8D', depthTest: false });
+        const lineMat = new THREE.LineBasicMaterial({ color: '#FF5C8D', depthTest: false });
+        const addLine = (a: Vec3, b: Vec3, mat = lineMat) => {
+          const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
+          l.renderOrder = 10; measureGroup.add(l);
+        };
+        for (const f of s.measureFeatures) {
+          if (f.kind === 'edge') { addLine(f.a, f.b, new THREE.LineBasicMaterial({ color: '#1E88E5', depthTest: false })); continue; }
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(f.kind === 'plane' ? 0.5 : 0.8, 16, 12), dotMat);
+          dot.position.set(...f.p); dot.renderOrder = 10;
+          measureGroup.add(dot);
+          if (f.kind === 'plane') {
+            const disc = new THREE.Mesh(new THREE.CircleGeometry(4, 32), new THREE.MeshBasicMaterial({ color: '#1E88E5', transparent: true, opacity: 0.35, depthTest: false, side: THREE.DoubleSide }));
+            disc.position.set(...f.p); disc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...f.n)); disc.renderOrder = 10;
+            measureGroup.add(disc);
+          }
+        }
+        if (s.measureFeatures.length === 2) {
+          const r = measure(s.measureFeatures[0], s.measureFeatures[1]);
+          if (r.from && r.to) addLine(r.from, r.to);
         }
       }
       invalidate();
@@ -401,7 +530,7 @@ export function Viewport() {
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
-        u.uCos.value = Math.cos(((Number(s.overrides.support_threshold_angle ?? 30)) * Math.PI) / 180);
+        u.uCos.value = Math.cos(((s.tool === 'paint_support' ? s.paintOverhangAngle : Number(s.overrides.support_threshold_angle ?? 30)) * Math.PI) / 180);
         u.uOOB.value = isOutOfBounds(o, s.printerId, s.plates.length) ? 1 : 0;
         const om = objectMatrix(o);
         if (!dragging || !s.selected.includes(o.id)) {
@@ -480,12 +609,13 @@ export function Viewport() {
       if (gizmo.object !== proxy) gizmo.attach(proxy);
     };
 
-    // Shift while dragging a handle snaps (1 mm, 15°, 5 %); Alt on a scale handle scales uniformly
+    // Shift while dragging a handle snaps (1 mm, 5°, 5 %); Alt on a scale handle scales uniformly
     let altDown = false;
     let scaleStart = new THREE.Vector3(1, 1, 1);
     const setSnap = (on: boolean) => {
       gizmo.setTranslationSnap(on ? 1 : null);
-      gizmo.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null);
+      shiftSnap = on;
+      gizmo.setRotationSnap(on ? THREE.MathUtils.degToRad(5) : null);
       gizmo.setScaleSnap(on ? 0.05 : null);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -547,6 +677,47 @@ export function Viewport() {
     });
     gizmo.addEventListener('change', invalidate);
 
+    // Rotate gizmo scale (Bambu GLGizmoRotate): 72 ticks (5°), a long tooth every 10°. While dragging, the pointer
+    // inside the tick band snaps to 5° and in the band just outside it to 45° (8 snap regions); Shift snaps to 5° anywhere.
+    const tickGeo = (() => {
+      const v: number[] = [];
+      for (let i = 0; i < 72; i++) {
+        const a = (i * Math.PI) / 36, c = Math.cos(a), sn = Math.sin(a);
+        const r1 = i % 2 ? 1.08 : 1.14;
+        v.push(c, sn, 0, c * r1, sn * r1, 0);
+      }
+      for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; v.push(Math.cos(a) * 1.16, Math.sin(a) * 1.16, 0, Math.cos(a) * 1.3, Math.sin(a) * 1.3, 0); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); return g;
+    })();
+    const ticks = new THREE.LineSegments(tickGeo, new THREE.LineBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true, opacity: 0.9 }));
+    ticks.renderOrder = 20; ticks.visible = false;
+    scene.add(ticks);
+    let shiftSnap = false;
+    const ringRadius = () => {
+      // TransformControls sizes its gizmo by camera distance; the rotate ring has radius 0.5 in gizmo units
+      const cam = camera as THREE.PerspectiveCamera;
+      const d = cam.position.distanceTo(proxy.position);
+      const factor = (d * Math.min((1.9 * Math.tan((Math.PI * cam.fov) / 360)) / cam.zoom, 7)) / 7;
+      return 0.5 * gizmo.size * factor;
+    };
+    const rotateSnapAt = (ev: PointerEvent) => {
+      if (!dragging || gizmo.mode !== 'rotate' || !gizmo.axis || !'XYZ'.includes(gizmo.axis)) { ticks.visible = false; return; }
+      const R = ringRadius();
+      const axis = new THREE.Vector3(gizmo.axis === 'X' ? 1 : 0, gizmo.axis === 'Y' ? 1 : 0, gizmo.axis === 'Z' ? 1 : 0);
+      ticks.position.copy(proxy.position);
+      ticks.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+      ticks.scale.setScalar(R);
+      ticks.visible = true;
+      // distance of the pointer from the ring centre, in the ring's plane
+      ray.setFromCamera(ndc(ev), camera);
+      const hit = new THREE.Vector3();
+      const len = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(axis, proxy.position), hit) ? hit.distanceTo(proxy.position) / R : 0;
+      const step = len >= 1.15 && len <= 1.45 ? 45 : (len >= 0.92 && len < 1.15) || shiftSnap ? 5 : 0;
+      gizmo.setRotationSnap(step ? THREE.MathUtils.degToRad(step) : null);
+    };
+    renderer.domElement.addEventListener('pointermove', rotateSnapAt, { capture: true });
+    gizmo.addEventListener('dragging-changed', (e: any) => { if (!e.value) { ticks.visible = false; gizmo.setRotationSnap(shiftSnap ? THREE.MathUtils.degToRad(5) : null); } });
+
     // ---------------- picking & painting
     const ray = new THREE.Raycaster();
     const ndc = (ev: PointerEvent) => {
@@ -555,7 +726,7 @@ export function Viewport() {
     };
     const objectMeshes = () => [...meshes.values()].map((m) => m.mesh);
     let downAt: [number, number] | null = null;
-    let painting: { id: string; value: number; layer: keyof ObjectPaint } | null = null;
+    let painting: { id: string; value: number; layer: keyof ObjectPaint; first?: boolean } | null = null;
     let drawing: { pts: [number, number][]; value: number; box: boolean } | null = null;
     let band: { id: string; z0: number; z1: number; value: number; anchor: THREE.Vector3 } | null = null;
     const showOutline = () => {
@@ -627,22 +798,50 @@ export function Viewport() {
       const o = s.objects.find((x) => x.id === id);
       const arr = o?.paint?.[painting.layer];
       if (!o || !arr) return;
-      const local = hit.point.clone().applyMatrix4(objectMatrix(o).invert());
+      const om = objectMatrix(o);
+      const local = hit.point.clone().applyMatrix4(om.clone().invert());
       const scale = (Math.abs(o.scale[0]) + Math.abs(o.scale[1]) + Math.abs(o.scale[2])) / 3;
       const rad = s.brushSize / 2 / scale;
       const r2 = rad * rad;
-      const c = spheres(o.mesh);
       const thr = Math.cos(((Number(s.overrides.support_threshold_angle ?? 30)) * Math.PI) / 180);
-      const nm = new THREE.Matrix3().getNormalMatrix(objectMatrix(o));
+      const nm = new THREE.Matrix3().getNormalMatrix(om);
       const v = o.mesh.vertices, ix = o.mesh.indices;
       const A = new THREE.Vector3(), B = new THREE.Vector3(), Cc = new THREE.Vector3();
+      const type = brushFor(s, painting.layer);
+      // one-shot brushes act on press only
+      if ((type === 'fill' || type === 'gap_fill') && !painting.first) return;
+      painting.first = false;
+      const cands: number[] = [];
+      if (type === 'triangle') { if (hit.faceIndex != null) cands.push(hit.faceIndex); }
+      else if (type === 'fill') { if (hit.faceIndex != null) cands.push(...fillTriangles(o.mesh, hit.faceIndex, s.smartFillAngle)); }
+      else if (type === 'height_range') {
+        const e = om.elements;
+        const wz = (vi: number) => e[2] * v[vi * 3] + e[6] * v[vi * 3 + 1] + e[10] * v[vi * 3 + 2] + e[14];
+        cands.push(...heightRangeTriangles(o.mesh, wz, hit.point.z - s.brushSize / 2, hit.point.z + s.brushSize / 2));
+      } else if (type === 'gap_fill') {
+        let changedGap = false;
+        for (const g of gapFill(o.mesh, arr, s.gapArea / (scale * scale))) for (const t of g.tris) { arr[t] = g.value; changedGap = true; }
+        if (changedGap) { paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color)); invalidate(); }
+        return;
+      } else {
+        // circle: the part of the sphere facing the camera (Bambu projects the circle along the view); sphere: everything inside
+        const c = spheres(o.mesh);
+        const eye = camera.position.clone().applyMatrix4(om.clone().invert());
+        for (let t = 0; t < arr.length; t++) {
+          const dx = c[t * 4] - local.x, dy = c[t * 4 + 1] - local.y, dz = c[t * 4 + 2] - local.z;
+          const reach = rad + c[t * 4 + 3];
+          if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
+          tri.set(A.fromArray(v, ix[t * 3] * 3), B.fromArray(v, ix[t * 3 + 1] * 3), Cc.fromArray(v, ix[t * 3 + 2] * 3));
+          if (tri.closestPointToPoint(local, closest).distanceToSquared(local) > r2) continue;
+          if (type === 'circle') {
+            const nn = B.clone().sub(A).cross(Cc.clone().sub(A));
+            if (nn.dot(eye.clone().sub(A)) <= 0) continue;
+          }
+          cands.push(t);
+        }
+      }
       let changed = false;
-      for (let t = 0; t < arr.length; t++) {
-        const dx = c[t * 4] - local.x, dy = c[t * 4 + 1] - local.y, dz = c[t * 4 + 2] - local.z;
-        const reach = rad + c[t * 4 + 3];
-        if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
-        tri.set(A.fromArray(v, ix[t * 3] * 3), B.fromArray(v, ix[t * 3 + 1] * 3), Cc.fromArray(v, ix[t * 3 + 2] * 3));
-        if (tri.closestPointToPoint(local, closest).distanceToSquared(local) > r2) continue;
+      for (const t of cands) {
         if (s.overhangOnly && painting.layer === 'support' && painting.value === 1) {
           A.fromArray(v, ix[t * 3] * 3); B.fromArray(v, ix[t * 3 + 1] * 3); Cc.fromArray(v, ix[t * 3 + 2] * 3);
           const nn = B.sub(A).cross(Cc.sub(A)).applyMatrix3(nm).normalize();
@@ -710,7 +909,7 @@ export function Viewport() {
         const prev = o.paint?.[layer];
         return { ...o, paint: { ...(o.paint ?? {}), [layer]: prev ? prev.slice() : new Uint8Array(tris) } };
       }, [id]);
-      painting = { id, value, layer };
+      painting = { id, value, layer, first: true };
       if (s.tool === 'pick_motion' && hit.faceIndex != null) {
         // click a surface: take it and every smoothly joined neighbour (a flat side, or a whole curved wall)
         const o = useStore.getState().objects.find((x) => x.id === id)!;
@@ -740,6 +939,7 @@ export function Viewport() {
             h = (ray.intersectObjects(objectMeshes(), false)[0]?.object.userData.id as string | undefined) ?? null;
           }
           if (h !== hoverId) { hoverId = h; applyHover(); }
+          if (st.tool === 'face') hoverFace(ev);
         }
       }
       const s = useStore.getState();
@@ -830,6 +1030,21 @@ export function Viewport() {
       const s = useStore.getState();
       if (s.workspace !== 'prepare' || isPaintTool(s.tool)) return;
       ray.setFromCamera(ndc(ev), camera);
+      if (s.tool === 'cut' && s.cutConnectorMode && cutPlaneMesh.visible) {
+        const ch = ray.intersectObject(cutPlaneMesh, false)[0];
+        if (ch) {
+          const q = cutPlaneMesh.quaternion.clone().invert();
+          const v = ch.point.clone().sub(cutPlaneMesh.position).applyQuaternion(q);
+          // clicking an existing connector removes it
+          const near = s.cutConnectors.findIndex((c) => Math.hypot(c.x - v.x, c.y - v.y) < s.cutConnector.size / 2);
+          s.set({ cutConnectors: near >= 0 ? s.cutConnectors.filter((_, k) => k !== near) : [...s.cutConnectors, { x: +v.x.toFixed(2), y: +v.y.toFixed(2) }] });
+          return;
+        }
+      }
+      if (s.tool === 'face' && faceGroup.children.length) {
+        const fh = ray.intersectObjects(faceGroup.children, false)[0];
+        if (fh) { layOnFace(fh.object.userData.id, (fh.object.userData.normal as THREE.Vector3).clone()); faceKey = ''; return; }
+      }
       const parts = [...partMeshes.values()].map((p) => p.mesh);
       const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
       if (!hit) {
@@ -842,9 +1057,47 @@ export function Viewport() {
       }
       const id = hit.object.userData.id as string;
       const partId = hit.object.userData.partId as string | undefined;
-      if (s.tool === 'measure') {
-        const p: Vec3 = [hit.point.x, hit.point.y, hit.point.z];
-        s.set({ measurePoints: s.measurePoints.length >= 2 ? [p] : [...s.measurePoints, p] });
+      if (s.tool === 'brim_ears' && !partId) {
+        // click near an ear removes it, elsewhere adds one (ears sit on the first layer, so only XY matters)
+        const o = s.objects.find((x) => x.id === id)!;
+        const om = objectMatrix(o);
+        const bw = Number(s.overrides.brim_width ?? 5);
+        const ears = o.brimEars ?? [];
+        const k = ears.findIndex(([x, y, z]) => { const w = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(om); return Math.hypot(w.x - hit.point.x, w.y - hit.point.y) < Math.max(2, bw / 2); });
+        const local = hit.point.clone().setZ(worldBounds(o).min[2]).applyMatrix4(om.clone().invert());
+        const next = k >= 0 ? ears.filter((_, i) => i !== k) : [...ears, [+local.x.toFixed(3), +local.y.toFixed(3), +local.z.toFixed(3)] as [number, number, number]];
+        s.updateObjects((x) => ({ ...x, brimEars: next.length ? next : undefined }), [id]);
+        if (k < 0 && s.overrides.brim_type !== 'brim_ears') {
+          s.setOverride('brim_type', 'brim_ears');
+          s.set({ toast: { kind: 'info', text: 'Brim type set to Painted so the brim ears are used.' } });
+        }
+        s.markDirty();
+        return;
+      }
+      if (s.tool === 'text' && hit.face && !partId) {
+        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+        s.set({ selected: [id], selectedPart: null, surfacePick: { objId: id, point: [hit.point.x, hit.point.y, hit.point.z], normal: [n.x, n.y, n.z] } });
+        return;
+      }
+      if (s.tool === 'measure' && hit.face && hit.faceIndex != null && !partId) {
+        const o = s.objects.find((x) => x.id === id)!;
+        const mw = hit.object.matrixWorld, ix = o.mesh.indices, v = o.mesh.vertices, t = hit.faceIndex;
+        const corner = (k: number) => new THREE.Vector3().fromArray(v, ix[t * 3 + k] * 3).applyMatrix4(mw);
+        const tri: [THREE.Vector3, THREE.Vector3, THREE.Vector3] = [corner(0), corner(1), corner(2)];
+        const normal = hit.face.normal.clone().transformDirection(mw);
+        const mc = meshCache(o.mesh);
+        // an edge is sharp when the neighbour across it turns by more than 30°
+        const sharp = (k: number) => {
+          const a = ix[t * 3 + k], b = ix[t * 3 + ((k + 1) % 3)];
+          const nb = Array.from(mc.adj[t]).find((u) => { const s3 = [ix[u * 3], ix[u * 3 + 1], ix[u * 3 + 2]]; return s3.includes(a) && s3.includes(b); });
+          if (nb === undefined) return true;
+          return mc.normals[t * 3] * mc.normals[nb * 3] + mc.normals[t * 3 + 1] * mc.normals[nb * 3 + 1] + mc.normals[t * 3 + 2] * mc.normals[nb * 3 + 2] < Math.cos(Math.PI / 6);
+        };
+        const region = fillTriangles(o.mesh, t, 1);
+        let area = 0; for (const u of region) area += mc.areas[u];
+        const sc = Math.abs(o.scale[0] * o.scale[1] * o.scale[2]) ** (2 / 3);
+        const f = pickFeature(id, s.measureMode, hit.point, tri, normal, sharp, area * sc > 4);
+        s.set({ measureFeatures: s.measureFeatures.length >= 2 ? [f] : [...s.measureFeatures, f] });
         return;
       }
       if (s.tool === 'face' && hit.face && !partId) {
@@ -1056,7 +1309,7 @@ export function Viewport() {
       switch (pi.action) {
         case 'remove': deletePlate(pi.plate); break;
         case 'orient': orientPlate(pi.plate); break;
-        case 'arrange': arrange(6, pi.plate); break;
+        case 'arrange': arrange(undefined, pi.plate); break;
         case 'lock': updatePlate(pi.plate, { locked: !s.plates[pi.plate]?.locked }); break;
         case 'settings': case 'name': openPlateSettings(pi.plate); break;
         case 'number': selectPlate(pi.plate); break;
@@ -1195,7 +1448,7 @@ export function Viewport() {
         rebuildPlates();
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
-      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs
+      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.paintOverhangAngle !== prev.paintOverhangAngle
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
@@ -1203,7 +1456,7 @@ export function Viewport() {
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
-      if (s.cutPlane !== prev.cutPlane || s.measurePoints !== prev.measurePoints || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) syncTools();
+      if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); }
     });
 
     let raf = 0;

@@ -11,7 +11,7 @@ import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
-import { LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
+import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
 import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
@@ -175,9 +175,14 @@ function useShortcuts() {
       const s = useStore.getState();
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
-      if (mod && e.key === 'Tab') { s.set({ workspace: s.workspace === 'preview' ? 'prepare' : 'preview' }); e.preventDefault(); return; }
+      if (mod && e.key === 'Tab') {
+        // Bambu: Ctrl+Tab steps through the tab pages
+        const tabs: Workspace[] = ['home', 'prepare', 'preview', 'device', 'project', 'calibration'];
+        const i = tabs.indexOf(s.workspace);
+        s.set({ workspace: tabs[(i + (e.shiftKey ? tabs.length - 1 : 1)) % tabs.length] }); e.preventDefault(); return;
+      }
+      if (mod && k >= '0' && k <= '7') { viewApi.current?.setView((['iso', 'top', 'bottom', 'front', 'back', 'left', 'right', 'iso'] as const)[+k]); e.preventDefault(); return; }
       if (e.key === '?' && !mod) { s.set({ shortcutsOpen: !s.shortcutsOpen }); e.preventDefault(); return; }
-      if (mod && k >= '1' && k <= '5') { s.set({ workspace: (['prepare', 'preview', 'device', 'project', 'calibration'] as Workspace[])[+k - 1] }); e.preventDefault(); return; }
       if (mod && k === 'z') { e.shiftKey ? s.redo() : s.undo(); e.preventDefault(); return; }
       if (mod && k === 'y') { s.redo(); e.preventDefault(); return; }
       if (mod && k === 'i') { importDialog(); e.preventDefault(); return; }
@@ -207,8 +212,9 @@ function useShortcuts() {
       else if (k === 'h') s.set({ tool: s.tool === 'vlh' ? 'select' : 'vlh' });
       else if (k === 'c') s.set({ tool: s.tool === 'cut' ? 'select' : 'cut' });
       else if (k === 't') s.set({ tool: s.tool === 'text' ? 'select' : 'text' });
-      else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measurePoints: [] });
+      else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measureFeatures: [] });
       else if (k === 'b') s.set({ tool: s.tool === 'boolean' ? 'select' : 'boolean' });
+      else if (k === 'e') s.set({ tool: s.tool === 'brim_ears' ? 'select' : 'brim_ears' });
       else if (s.tool === 'paint_color' && k >= '1' && k <= '9' && +k <= s.filaments.length) s.set({ paintColor: +k });
       else if (k === 'm') s.set({ tool: s.tool === 'move' ? 'select' : 'move' });
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
@@ -250,7 +256,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -277,12 +283,11 @@ export default function App() {
 /** Bambu Studio's keyboard shortcuts list (opened with ?). */
 const SHORTCUTS: [string, [string, string][]][] = [
   ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
-    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Switch Prepare / Preview'],
-    ['Ctrl+1…5', 'Prepare, Preview, Device, Project, Calibration'], ['?', 'Show this list']]],
-  ['Camera', [['0', 'Iso view'], ['1', 'Top view'], ['2', 'Bottom view'], ['3', 'Front view'], ['4', 'Rear view'], ['5', 'Left view'], ['6', 'Right view'], ['Z', 'Zoom to selection / plate']]],
+    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],
+  ['Camera', [['Ctrl+0', 'Default view'], ['Ctrl+1', 'Top view'], ['Ctrl+2', 'Bottom view'], ['Ctrl+3', 'Front view'], ['Ctrl+4', 'Rear view'], ['Ctrl+5', 'Left view'], ['Ctrl+6', 'Right view'], ['Ctrl+7', 'Isometric view'], ['Z', 'Fit to scene or selection']]],
   ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Esc', 'Clear selection / leave tool'],
     ['A / Shift+A', 'Arrange all / selection'], ['O', 'Auto orient'], ['M', 'Move'], ['R', 'Rotate'], ['S', 'Scale'], ['F', 'Lay on face'], ['C', 'Cut'], ['B', 'Boolean'],
-    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'],
+    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'], ['E', 'Brim ears'],
     ['Shift (rotate)', 'Snap to 5° ticks; outer ring snaps to 45°']]],
   ['Preview', [['↑ / ↓', 'Layer up / down'], ['← / →', 'Move slider back / forward'], ['L', 'Show one layer only']]],
 ];

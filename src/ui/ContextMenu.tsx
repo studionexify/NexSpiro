@@ -39,7 +39,7 @@ function plateItems(m: ContextMenuState): MenuItem[] {
     { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
     { sep: true },
     { label: 'Select all on plate', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
-    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(6, m.plate) },
+    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(undefined, m.plate) },
     { label: 'Arrange all plates', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
     { label: 'Auto orient plate', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
     { label: 'Delete all on plate', disabled: !count, onClick: () => clearPlate(m.plate) },

@@ -152,6 +152,19 @@ Parameter coverage against Bambu's `Tab.cpp` layout went from 116 to 296 of 418 
 - **Plates**: plate settings add a print sequence (same as global, by layer, or by object).
 - **Shortcuts**: Ctrl+Tab switches between Prepare and Preview. `?` opens Bambu's grouped shortcut list.
 
+### Milestone: viewport gizmos, painting and mesh tools
+
+- **Rotate**: as in Bambu's GLGizmoRotate, a 72-tooth scale appears around the active ring while dragging, with a long tooth every 10°. The pointer inside the tick band snaps to 5° and in the band just outside it to 45°; Shift snaps to 5° anywhere.
+- **Lay on face (F)**: hull facets are merged into flat planes (up to 64, biggest first) and drawn over the selected objects. The plane under the cursor turns green; clicking it lays the object on it.
+- **Overhang highlight**: a heatmap shades overhangs from blue (just past the threshold) to red (facing straight down). It uses the support threshold angle, or its own angle slider while painting support.
+- **Cut (C) connectors**: Plug, Dowel and Snap; Prism or Frustum; triangle, square, hexagon or circle. Depth, size, depth and size tolerance, and snap bulge and space are adjustable. Connectors are placed by clicking the cut plane. A plug becomes a pin on the upper part and a socket in the lower. A dowel cuts sockets in both parts and adds a loose dowel. A snap is a split pin with a bulge.
+- **Painting brushes**: circle (the surface facing the camera), sphere, triangle, height range, smart fill (with its angle) and gap fill (with an area threshold). Each paint gizmo offers the same set as Bambu: support and colour get fill and gap fill, seam gets circle and sphere.
+- **Text and SVG (T)**: either can be added as a part, negative part or modifier, standing on the clicked surface point and kept upright. "Use surface" bends the shape onto curved faces. SVG files are extruded and scaled to a given width. Raised or cut text can still be baked into the top face.
+- **Measure (U)**: picks points, edges and planes (Auto snaps to sharp creases and flat faces). Readouts cover point, edge and plane distances, angles between edges and planes, the distance between parallel planes, and edge length. "Scale to" resizes the objects so the measurement becomes the value entered.
+- **Arrange**: convex-hull silhouettes are packed on a grid, biggest first, with the spacing kept and rotations in 45° steps when auto-rotate is on. The group is centred or aligned to an axis, and objects that do not fit are reported. Right-click the arrange button for its settings.
+- **Brim ears (E)**: click near the bed to add an ear, click an ear to remove it. Adding an ear switches the brim type to Painted.
+- **By-object printing**: each object gets its extruder clearance outline on the bed, red where two outlines overlap.
+
 ## 7. Per-setting tables
 
 <!-- PARAMS:BEGIN -->

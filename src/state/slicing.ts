@@ -49,8 +49,8 @@ export function sliceNow(): Promise<SliceOutput | null> {
     faceSets: faceSetsOf(o.paint?.motion),
     layerHeights: o.layerHeights,
     heightRanges: o.heightRanges,
-    brimEars: o.brimEars?.map(([x, y]) => {
-      const p = new THREE.Vector3(x, y, 0).applyMatrix4(toPlate.clone().multiply(objectMatrix(o)));
+    brimEars: o.brimEars?.map(([x, y, z]) => {
+      const p = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(toPlate.clone().multiply(objectMatrix(o)));
       return [p.x, p.y] as [number, number];
     }),
     parts: (o.parts ?? []).map((p) => ({
