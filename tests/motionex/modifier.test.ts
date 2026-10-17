@@ -142,3 +142,24 @@ test("repeat count re-picks as a pyramid shrinks, so the tip keeps the motion's 
   // 32 mm perimeter at 4 mm: about 8 repeats (16 peaks), not the 40 locked in at the base.
   assert.ok(peaks(8) <= 24, `got ${peaks(8)}`);
 });
+
+test("narrow spots in a roomy loop (a slot) shrink the motion there and nowhere else", () => {
+  const slot: Toolpath = { feature: "outer_wall", closed: true, points: [
+    [0, 0], [40, 0], [40, 40], [20.5, 40], [20.5, 20], [19.5, 20], [19.5, 40], [0, 40], [0, 0]].map(([x, y]) => ({ x, y, z: 1, f: 60, flow: 1, e: 0 })) };
+  const b = { ...sine, amplitude: 1, period_mm: 2 };
+  const base = resample(slot.points, DEFAULT_OPTIONS.resampleStep);
+  const run = (mode: "fade" | "off") => {
+    const out = composePath(slot, [{ brush: b, weight: () => 1, blend: "add", tip: { mode, share: 0.3 } }], profiles(), DEFAULT_OPTIONS, () => {});
+    let inSlot = 0, outside = 0;
+    out.points.forEach((p, i) => {
+      const d = Math.hypot(p.x - base[i].x, p.y - base[i].y), c = base[i];
+      if (c.x > 19 && c.x < 21 && c.y > 26) inSlot = Math.max(inSlot, d);
+      if (c.y < 10) outside = Math.max(outside, d);
+    });
+    return { inSlot, outside };
+  };
+  const fade = run("fade"), off = run("off");
+  assert.ok(fade.inSlot <= 0.16, `slot ${fade.inSlot}`);
+  assert.ok(fade.outside > 0.9, `outside ${fade.outside}`);
+  assert.ok(off.inSlot < 1e-6 && off.outside > 0.9);
+});

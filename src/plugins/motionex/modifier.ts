@@ -192,6 +192,59 @@ function pathParam(samples: Sample[], closed: boolean, b: MotionBrush, repeats?:
   return { L, period, at: (i: number) => (i === samples.length - 1 ? wrap(-s0) : wrap(samples[i].s - s0)), toS: (p: number) => wrap(p + s0) };
 }
 
+/**
+ * Gap from each point of a loop to the wall facing it, looked for out to `reach` (Infinity beyond).
+ * Points further along the loop than 1.6× their straight distance count as "facing": that excludes the
+ * same stretch of wall and the far side of an ordinary corner, and keeps slots, fins and the far side
+ * of a small loop. A grid keeps it near linear.
+ */
+export function wallClearance(pts: { x: number; y: number; s: number }[], closed: boolean, reach: number): Float64Array {
+  const N = pts.length, L = pts[N - 1].s, out = new Float64Array(N).fill(Infinity);
+  if (!(reach > 0) || !Number.isFinite(reach)) return out;
+  const cell = reach, grid = new Map<string, number[]>();
+  const key = (x: number, y: number) => `${Math.floor(x / cell)}|${Math.floor(y / cell)}`;
+  for (let j = 0; j < N; j++) { const k = key(pts[j].x, pts[j].y); let g = grid.get(k); if (!g) grid.set(k, (g = [])); g.push(j); }
+  for (let i = 0; i < N; i++) {
+    const a = pts[i], gx = Math.floor(a.x / cell), gy = Math.floor(a.y / cell);
+    let best = Infinity;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      for (const j of grid.get(`${gx + dx}|${gy + dy}`) ?? []) {
+        const d = Math.hypot(pts[j].x - a.x, pts[j].y - a.y);
+        if (d >= best || d > reach) continue;
+        let arc = Math.abs(pts[j].s - a.s);
+        if (closed) arc = Math.min(arc, L - arc);
+        if (arc > 1.6 * d + 1e-6) best = d;
+      }
+    }
+    out[i] = best;
+  }
+  return out;
+}
+
+/**
+ * Per-point scale (0..1) that keeps a motion of size `peak` within `share` of half the local gap, or
+ * null when nothing needs it. Held at its lowest over a repeat, then eased, so a tooth is never cut in
+ * half and the size changes smoothly along the wall.
+ */
+function localFit(pts: { s: number }[], room: Float64Array, peak: number, share: number, off: boolean, period: number, closed: boolean): Float64Array | null {
+  const N = pts.length;
+  if (peak <= 0) return null;
+  const raw = new Float64Array(N);
+  let any = false;
+  for (let i = 0; i < N; i++) {
+    const g = Math.min(1, (share * room[i]) / 2 / peak);
+    raw[i] = off ? (g < 1 ? 0 : 1) : g;
+    if (raw[i] < 1) any = true;
+  }
+  if (!any) return null;
+  const step = N > 1 ? pts[N - 1].s / (N - 1) : 1, h = Math.max(1, Math.round(period / step));
+  const at = (a: Float64Array, k: number) => a[closed ? ((k % (N - 1)) + (N - 1)) % (N - 1) : clamp(k, 0, N - 1)];
+  const lowest = new Float64Array(N), out = new Float64Array(N);
+  for (let i = 0; i < N; i++) { let m = 1; for (let k = -h; k <= h; k++) m = Math.min(m, at(raw, i + k)); lowest[i] = m; }
+  for (let i = 0; i < N; i++) { let t = 0; for (let k = -h; k <= h; k++) t += at(lowest, i + k); out[i] = t / (2 * h + 1); }
+  return out;
+}
+
 /** Apply one brush to one path, returning a new path. */
 export function applyBrushToPath(path: Toolpath, b: MotionBrush, p: PrintProfiles, opt: ModifierOptions, weight: Weight, warn: (w: SliceWarning) => void, layer = 0, check: PrintCheck = emptyCheck(), source?: ToolpathPoint[], repeats?: RepeatLock): Toolpath {
   return composePath(path, [{ brush: b, weight, blend: "add", repeats }], p, opt, warn, layer, check, source);
@@ -223,6 +276,7 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
     for (let i = 1; i < N; i++) a2 += samples[i - 1].x * samples[i].y - samples[i].x * samples[i - 1].y;
     inradius = Math.abs(a2) / L;
   }
+  let clearance: Float64Array | undefined;
   for (const { brush: b, weight, blend, repeats, tip = DEFAULT_TIP } of layers) {
     const w = new Float64Array(N);
     let any = false;
@@ -239,6 +293,11 @@ export function composePath(path: Toolpath, layers: PathLayer[], p: PrintProfile
       }
       const cap = clamp(tip.share, 0.05, 1) * inradius;
       if (peak > cap) { if (tip.mode === "off") continue; fit = cap / peak; }
+      // Narrow spots inside a roomy loop (a fin, a slot, two walls close together): the same limit,
+      // worked out per spot from the gap to the facing wall, then eased in over a repeat or two.
+      const room = clearance ??= wallClearance(samples, path.closed, (2 * peak * fit) / clamp(tip.share, 0.05, 1));
+      const local = localFit(samples, room, peak * fit, clamp(tip.share, 0.05, 1), tip.mode === "off", prm.period ?? b.period_mm, path.closed);
+      if (local) for (let i = 0; i < N; i++) w[i] *= local[i];
     }
     if (b.curves.along_offset.points.some((q) => Math.abs(q.v) > 1e-9) && b.amplitude > 0) canLoop = true;
     // Events: positions are found in the same measure as the motion, then mapped back onto the path.
