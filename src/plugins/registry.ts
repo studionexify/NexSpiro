@@ -10,6 +10,8 @@ import { patternexConfig, patternexMotionApps, PatternexPanel, px } from './patt
 import { patternexPreview } from './patternex/ui/preview';
 import { hanexConfig, HanexPanel } from './hanex/ui/HanexPanel';
 import { bulnexConfig, BulnexPanel } from './bulnex/ui/BulnexPanel';
+import { PlantexPanel } from './plantex/ui/PlantexPanel';
+import { loadPlantexProject, plantexProject } from './plantex/ui/state';
 import { LumonexPanel } from './lumonex/ui/LumonexPanel';
 import { loadProject as loadLumonexProject, projectData as lumonexProject } from './lumonex/ui/state';
 
@@ -70,6 +72,15 @@ export const PLUGINS: UiPlugin[] = [
     description: 'Bulk production: print one part (or a row of copies) again and again, pushing the parts off the plate between prints. Camera monitor with phone alerts.',
     Panel: BulnexPanel,
     sliceConfig: () => bulnexConfig(),
+  },
+  {
+    id: 'plantex', name: 'Plantex', badge: 'Pt',
+    description: 'Design vases and planters: profiles, cross-sections, twist, textures (emboss, deboss, cut through) with reference planes, drain holes and saucers.',
+    Panel: PlantexPanel,
+    // Plantex builds meshes on the plate; nothing to do while slicing
+    sliceConfig: () => undefined,
+    projectData: () => plantexProject(),
+    loadProjectData: (d) => loadPlantexProject(d),
   },
   {
     id: 'lumonex', name: 'Lumonex', badge: 'L',
