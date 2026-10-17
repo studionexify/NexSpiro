@@ -39,37 +39,37 @@
 
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
-| Top navigation | Home · Prepare · Preview · Device · Project · Calibration; active tab underline; `Ctrl+Tab` cycles tabs | [PARTIAL] tabs exist; `Ctrl+1…5` was bound to tabs, which collides with Bambu's camera views | see §6 |
-| Keyboard shortcuts dialog | `?` / `Shift+?` opens the shortcut list | [MISSING] (static list on Home only) | see §6 |
-| Printer preset | Printer + nozzle, plate type selector, editable machine settings | [PARTIAL] machine dialog edits 6 numbers + G-code; no extruder clearance, Z-hop type, wipe, layer-height limits | see §6 |
-| Plate-type bed temperatures | Each filament carries Cool / Engineering / Smooth PEI / Textured PEI temps (initial and other layers) | [PARTIAL] one temp per plate type; initial layer = other layers; read-only | see §6 |
-| Filament rack / AMS | Slots with colour swatch, material badge, edit, flushing-volume matrix | [PARTIAL] slots, swatches and flush matrix exist; no material-type badge; filament settings read-only | see §6 |
+| Top navigation | Home · Prepare · Preview · Device · Project · Calibration; active tab underline; `Ctrl+Tab` cycles tabs | [PARTIAL] tabs exist; `Ctrl+1…5` was bound to tabs, which collides with Bambu's camera views | [COMPLETE] `Ctrl+Tab` steps through the tab pages; `Ctrl+0…7` are camera views |
+| Keyboard shortcuts dialog | `?` / `Shift+?` opens the shortcut list | [MISSING] (static list on Home only) | [COMPLETE] `Shift+?` opens Bambu's grouped shortcut list |
+| Printer preset | Printer + nozzle, plate type selector, editable machine settings | [PARTIAL] machine dialog edits 6 numbers + G-code; no extruder clearance, Z-hop type, wipe, layer-height limits | [COMPLETE] editable on Bambu's five printer pages (clearance, Z-hop types, wipe, layer limits, G-code) |
+| Plate-type bed temperatures | Each filament carries Cool / Engineering / Smooth PEI / Textured PEI temps (initial and other layers) | [PARTIAL] one temp per plate type; initial layer = other layers; read-only | [COMPLETE] initial-layer and other-layer temperatures per plate type, editable |
+| Filament rack / AMS | Slots with colour swatch, material badge, edit, flushing-volume matrix | [PARTIAL] slots, swatches and flush matrix exist; no material-type badge; filament settings read-only | [COMPLETE] material badge on each slot; filament settings editable per slot |
 | Flushing volumes modal | From/To matrix, auto-calc from colours, multiplier | [COMPLETE] | [COMPLETE] |
-| Process preset | Global / Objects switch, Advanced toggle, search, modified values in orange with revert arrow | [PARTIAL] all present except per-tab modified badges, system-value lock icon and "*" on the dirty preset | see §6 |
+| Process preset | Global / Objects switch, Advanced toggle, search, modified values in orange with revert arrow | [PARTIAL] all present except per-tab modified badges, system-value lock icon and "*" on the dirty preset | [COMPLETE] per-tab changed-value counts, lock and revert markers, `*` on the modified preset |
 | Parameter search | Search box with results grouped by page › group | [COMPLETE] (inline filter) | [COMPLETE] |
-| Object list | Plate › object › part tree; per-row printable eye, filament badge, settings gear, paint indicators; height-range modifiers | [PARTIAL] no eye column, no paint badges, no height-range modifiers, no positive "part" volumes | see §6 |
+| Object list | Plate › object › part tree; per-row printable eye, filament badge, settings gear, paint indicators; height-range modifiers | [PARTIAL] no eye column, no paint badges, no height-range modifiers, no positive "part" volumes | [COMPLETE] eye, paint badges, height range modifier rows, "Part" volumes |
 
 ## 2. Top toolbar & 3D viewport gizmos (Prepare)
 
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
 | Add object / add plate / delete plate | Toolbar + per-plate close icon | [COMPLETE] | [COMPLETE] |
-| Auto-arrange | Polygon packing with a settings popup (spacing, auto-rotate, align); overflow to new plates | [PARTIAL] bounding-box shelf packing, fixed 6 mm spacing, no rotation | see §6 |
+| Auto-arrange | Polygon packing with a settings popup (spacing, auto-rotate, align); overflow to new plates | [PARTIAL] bounding-box shelf packing, fixed 6 mm spacing, no rotation | [PARTIAL] convex-hull packing with spacing, rotation and alignment; objects that do not fit are parked beside the plate instead of moved to a new plate |
 | Auto-orient | Minimise overhang area, maximise bed contact | [COMPLETE] | [COMPLETE] |
 | Move gizmo (M) | Axis arrows, planar handles, drop to bed | [COMPLETE] (three.js TransformControls + numeric panel) | [COMPLETE] |
-| Rotate gizmo (R) | Gimbal rings with snap ticks (5° minor, 45° major) | [PARTIAL] rings; 15° snap with Shift; no tick marks | see §6 |
+| Rotate gizmo (R) | Gimbal rings with snap ticks (5° minor, 45° major) | [PARTIAL] rings; 15° snap with Shift; no tick marks | [COMPLETE] 72-tooth scale; 5° snap in the tick band, 45° just outside it |
 | Scale gizmo (S) | Uniform / per-axis handles, size and % readout | [COMPLETE] | [COMPLETE] |
-| Lay on face (F) | Hull facets clustered into flat candidates, highlighted on hover | [PARTIAL] click any triangle; no clustering or hover highlight | see §6 |
-| Cut (C) | Plane gizmo, keep upper/lower, connectors (Plug / Dowel / Snap; Prism / Frustum; depth, size, tolerance) | [PARTIAL] tilted plane + capping; **no connectors** | see §6 |
+| Lay on face (F) | Hull facets clustered into flat candidates, highlighted on hover | [PARTIAL] click any triangle; no clustering or hover highlight | [COMPLETE] hull planes with hover highlight |
+| Cut (C) | Plane gizmo, keep upper/lower, connectors (Plug / Dowel / Snap; Prism / Frustum; depth, size, tolerance) | [PARTIAL] tilted plane + capping; **no connectors** | [PARTIAL] Plug, Dowel and Snap connectors (prism or frustum, 4 shapes, tolerances); Bambu's dovetail groove cut is not implemented |
 | Mesh boolean | Union / Difference / Intersection | [COMPLETE] | [COMPLETE] |
-| Support painting (L) | Circle / sphere / fill / gap-fill tools, overhang-angle highlight, on-overhangs-only | [PARTIAL] circle brush + on-overhangs-only; no fill tools; fixed highlight angle | see §6 |
+| Support painting (L) | Circle / sphere / fill / gap-fill tools, overhang-angle highlight, on-overhangs-only | [PARTIAL] circle brush + on-overhangs-only; no fill tools; fixed highlight angle | [COMPLETE] circle, sphere, fill and gap fill brushes; adjustable overhang heatmap |
 | Seam painting (P) | Enforce / block on triangles | [COMPLETE] | [COMPLETE] |
-| Colour painting (N) | Circle, sphere, triangle, height range, fill with smart edge angle, gap fill | [PARTIAL] circle brush only | see §6 |
-| Text (T) | Text as part / negative part / modifier, placed on and projected onto the clicked surface | [PARTIAL] separate object, or boolean into the top face | see §6 |
-| SVG | SVG as part / negative / modifier | [MISSING] (Patternex has SVG artwork, not volumes) | see §6 |
-| Measure (U) | Point, edge, face, circle features; distance and angle; scale to measurement | [PARTIAL] point-to-point only | see §6 |
-| Overhang highlight (Ctrl+L) | Red overhang shading at the support threshold angle | [PARTIAL] fixed 30°, single colour | see §6 |
-| View cube | Clickable faces, drag orbit, Ctrl+0…7 views | [PARTIAL] faces + drag; views were on bare 0–6 | see §6 |
+| Colour painting (N) | Circle, sphere, triangle, height range, fill with smart edge angle, gap fill | [PARTIAL] circle brush only | [COMPLETE] circle, sphere, triangle, height range, smart fill and gap fill brushes |
+| Text (T) | Text as part / negative part / modifier, placed on and projected onto the clicked surface | [PARTIAL] separate object, or boolean into the top face | [COMPLETE] part, negative part or modifier on the picked surface, with "use surface"; uses the bundled typefaces rather than system fonts |
+| SVG | SVG as part / negative / modifier | [MISSING] (Patternex has SVG artwork, not volumes) | [COMPLETE] SVG as part, negative part, modifier or new object |
+| Measure (U) | Point, edge, face, circle features; distance and angle; scale to measurement | [PARTIAL] point-to-point only | [PARTIAL] point, edge and plane features, distance, angle and scale to fit; circle and hole detection is not implemented |
+| Overhang highlight (Ctrl+L) | Red overhang shading at the support threshold angle | [PARTIAL] fixed 30°, single colour | [COMPLETE] blue-to-red heatmap at the support threshold angle |
+| View cube | Clickable faces, drag orbit, Ctrl+0…7 views | [PARTIAL] faces + drag; views were on bare 0–6 | [COMPLETE] faces, drag and `Ctrl+0…7` |
 | Plate HUD | Plate number, name, arrange / orient / lock / settings / close icons | [COMPLETE] | [COMPLETE] |
 
 ## 3. Slicing parameters (Quality · Strength · Speed · Support · Others · Filament · Printer)
@@ -105,25 +105,25 @@ The full per-key tables, with baseline and current status, are in [§7](#7-per-s
 
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
-| Parameter → engine wiring | Every visible setting changes the toolpaths or the G-code | [COMPLETE] for the 116 implemented settings | see §6 |
+| Parameter → engine wiring | Every visible setting changes the toolpaths or the G-code | [COMPLETE] for the 116 implemented settings | [PARTIAL] 296 of 418 settings complete, 1 partial, 11 missing (see §7) |
 | Toolpath renderer | Volumetric extrusion tubes | [COMPLETE] (instanced boxes, GPU) | [COMPLETE] |
-| Colour schemes | Line type, Height, Width, Speed, Fan speed, Temperature, Volumetric flow, Layer time (linear / log), Filament, Tool | [PARTIAL] no Fan speed, Temperature or log Layer time | see §6 |
-| Legend | Per-type visibility, time, percentage, filament usage per line type | [PARTIAL] time and % only | see §6 |
-| Layer slider | Dual thumbs, layer number + Z, `+` to add pause / filament change / custom G-code, one-layer mode (`L`) | [PARTIAL] no one-layer mode | see §6 |
-| Move slider | Scrubs moves; G-code lines shown next to it; tool position marker | [PARTIAL] scrubbing only | see §6 |
-| Cost / time estimator | Time + filament per line type, per filament, tool changes, prime tower | [PARTIAL] time per type; filament per slot | see §6 |
+| Colour schemes | Line type, Height, Width, Speed, Fan speed, Temperature, Volumetric flow, Layer time (linear / log), Filament, Tool | [PARTIAL] no Fan speed, Temperature or log Layer time | [COMPLETE] adds Fan speed, Temperature and log Layer time ("Tool" is Filament on single-nozzle printers) |
+| Legend | Per-type visibility, time, percentage, filament usage per line type | [PARTIAL] time and % only | [COMPLETE] time, percentage and filament used per line type |
+| Layer slider | Dual thumbs, layer number + Z, `+` to add pause / filament change / custom G-code, one-layer mode (`L`) | [PARTIAL] no one-layer mode | [COMPLETE] one-layer mode (`L`) |
+| Move slider | Scrubs moves; G-code lines shown next to it; tool position marker | [PARTIAL] scrubbing only | [COMPLETE] ←/→ stepping, G-code lines with the current move highlighted, toolhead marker |
+| Cost / time estimator | Time + filament per line type, per filament, tool changes, prime tower | [PARTIAL] time per type; filament per slot | [COMPLETE] per line type, per filament, flushed and prime tower |
 
 ## 5. Calibration & Device
 
 | Component | Bambu Studio behaviour | Baseline | This branch |
 |---|---|---|---|
-| Flow Dynamics (PA) | Manual **PA Line** and **PA Pattern** G-code tests; PA tower | [PARTIAL] tower only | see §6 |
-| Flow rate | Pass 1 (3×3 blocks, ±20 %) and Pass 2 (10 blocks, 0 to −9 %), numbered tabs | [PARTIAL] coarse / fine patches without number tabs | see §6 |
-| Temperature tower | Temperature blocks with overhang + bridge, labelled | [PARTIAL] plain blocks, ascending temperatures | see §6 |
+| Flow Dynamics (PA) | Manual **PA Line** and **PA Pattern** G-code tests; PA tower | [PARTIAL] tower only | [COMPLETE] PA Line and PA Pattern (Calib.cpp geometry) plus the PA tower |
+| Flow rate | Pass 1 (3×3 blocks, ±20 %) and Pass 2 (10 blocks, 0 to −9 %), numbered tabs | [PARTIAL] coarse / fine patches without number tabs | [COMPLETE] numbered Pass 1 and Pass 2 blocks |
+| Temperature tower | Temperature blocks with overhang + bridge, labelled | [PARTIAL] plain blocks, ascending temperatures | [COMPLETE] labelled hot-to-cold blocks with bridge, 45° overhang and fin |
 | Max volumetric speed | Vase with rising speed | [COMPLETE] | [COMPLETE] |
 | Retraction tower | Two towers, retraction rising per step | [COMPLETE] | [COMPLETE] |
 | Device connections | Bambu LAN (MQTT / FTPS), Moonraker, OctoPrint / PrusaLink, serial | [COMPLETE] | [COMPLETE] |
-| Device controls | Jog, temperatures, fan, console, camera, files, AMS | [PARTIAL] no temperature history graph | see §6 |
+| Device controls | Jog, temperatures, fan, console, camera, files, AMS | [PARTIAL] no temperature history graph | [COMPLETE] part, aux and chamber fans; temperature history chart |
 
 ---
 
