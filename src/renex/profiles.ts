@@ -101,7 +101,7 @@ export function defaultSetup(source: RenexSource): RenderSetup {
 }
 
 /** Batch export: every combination of the chosen sizes, shots and (lamps) light states. */
-export interface BatchSpec { aspects: string[]; shots: ShotId[]; light: 'current' | 'both' }
+export interface BatchSpec { aspects: string[]; shots: ShotId[]; light: 'current' | 'both'; /** Live-view raster (instant) or path traced at the setup's quality. */ mode?: 'realtime' | 'final' }
 
 export function batchJobs(base: RenderSetup, b: BatchSpec, shots: { id: ShotId; az: number; el: number; focal: number; fNumber: number }[], isLamp: boolean): { label: string; setup: RenderSetup }[] {
   const out: { label: string; setup: RenderSetup }[] = [];

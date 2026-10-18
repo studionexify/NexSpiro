@@ -52,3 +52,8 @@
 .rx-toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--surface-secondary, #222); color: var(--text, #fff); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); max-width: 80%; }
 .rx-batch { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 10px; } .rx-batch b { margin-top: 6px; font-size: 12px; }
 .rx-tabs { flex: none; height: auto; border-bottom: 1px solid var(--border); }
+.rx-layer { position: absolute; inset: 0; }
+.rx-layer canvas { width: 100% !important; height: 100% !important; display: block; }
+.rx-file { position: relative; overflow: hidden; cursor: pointer; display: inline-flex; align-items: center; }
+.rx-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.rx-viewseg { display: inline-flex; flex: none; width: auto; margin-right: 6px; } .rx-viewseg button { flex: none; padding: 4px 12px; }

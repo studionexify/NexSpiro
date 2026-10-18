@@ -188,6 +188,8 @@ export class RenexRenderer {
   private start = 0;
   private target = 0;
   private stopped = true;
+  private contextLost = false;
+  private onLostHandlers: ((reason: string) => void)[] = [];
   private useDenoise = true;
   private meter: { comp: number } | null = null;
   onProgress: (p: RenderProgress) => void = () => {};
@@ -202,6 +204,16 @@ export class RenexRenderer {
     this.tracer.renderDelay = 0;
     this.tracer.fadeDuration = 0;
     this.tracer.tiles.set(2, 2);
+    // the browser resets WebGL when a GPU command runs too long or VRAM runs out: report it instead of
+    // leaving an empty canvas
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.stop();
+      const why = 'The graphics driver reset the GPU during path tracing (too much work per pass or out of video memory).';
+      for (const h of this.onLostHandlers.splice(0)) h(why);
+      this.onProgress({ samples: 0, target: 0, elapsed: 0, eta: 0, done: false, stage: 'GPU reset' });
+    }, false);
     this.tracer.renderToCanvasCallback = (target, renderer, quad) => {
       const prev = quad.material;
       if (this.useDenoise && this.tracer.samples > 8) { this.denoise.map = target.texture; quad.material = this.denoise; }
@@ -222,7 +234,14 @@ export class RenexRenderer {
     this.onProgress({ samples: 0, target: 0, elapsed: 0, eta: 0, done: false, stage: 'Building scene…' });
     await new Promise((r) => setTimeout(r, 10));
     const q = QUALITY[setup.quality];
-    const w = Math.max(64, Math.round(setup.width)), h = Math.max(64, Math.round(setup.height));
+    if (this.contextLost || this.renderer.getContext().isContextLost()) throw new Error('The GPU context was lost; close and reopen Renex to path trace again.');
+    const caps = this.renderer.capabilities, gl = this.renderer.getContext();
+    const maxDim = Math.min(caps.maxTextureSize, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number, 8192);
+    const fit = Math.min(1, maxDim / Math.max(setup.width, setup.height));
+    const w = Math.max(64, Math.round(setup.width * fit)), h = Math.max(64, Math.round(setup.height * fit));
+    // one tile ≤ 256k pixels per draw: keeps every GPU submission short (driver watchdogs fire at ~2 s)
+    const tiles = Math.max(2, Math.ceil(Math.sqrt((w * h) / (512 * 512))));
+    this.tracer.tiles.set(tiles, tiles);
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(w, h, false);
     this.renderer.toneMapping = TONE[setup.toneMap];
@@ -298,8 +317,11 @@ export class RenexRenderer {
   }
 
   /** Render and resolve once the quality preset's samples are reached (used by batch export). */
+  get lost() { return this.contextLost; }
+
   renderToCompletion(src: RenexSceneSource, setup: RenderSetup, onProgress?: (p: RenderProgress) => void): Promise<BuiltScene> {
     return new Promise((resolve, reject) => {
+      this.onLostHandlers.push((why) => reject(new Error(why)));
       let built: BuiltScene | null = null, done = false;
       this.onProgress = (p) => { onProgress?.(p); if (p.done && !done) { done = true; if (built) resolve(built); } };
       this.render(src, setup).then((b) => { built = b; if (done) resolve(b); }, reject);
@@ -312,21 +334,8 @@ export class RenexRenderer {
   /** Continue sampling past the preset (refine). */
   more(extra: number) { if (!this.built) return; this.target += extra; if (this.stopped) { this.stopped = false; const loop = () => { if (this.stopped) return; this.tracer.renderSample(); const s = Math.floor(this.tracer.samples); const el = (performance.now() - this.start) / 1000; const done = s >= this.target; this.onProgress({ samples: s, target: this.target, elapsed: el, eta: s ? (el / s) * Math.max(0, this.target - s) : 0, done, stage: done ? 'Done' : 'Path tracing' }); if (done) { this.stopped = true; return; } this.raf = requestAnimationFrame(loop); }; this.raf = requestAnimationFrame(loop); } }
 
-  /** Encode the current image (with optional watermark) and write the render disclosure into its metadata. */
-  async exportImage(setup: RenderSetup, info: DisclosureInfo): Promise<{ blob: Blob; bytes: Uint8Array; name: string }> {
-    const src = this.canvas;
-    const out = document.createElement('canvas');
-    out.width = src.width; out.height = src.height;
-    const ctx = out.getContext('2d')!;
-    if (setup.format === 'jpeg' && setup.transparent) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height); }
-    ctx.drawImage(src, 0, 0);
-    if (setup.watermark.enabled && setup.watermark.text.trim()) drawWatermark(ctx, out.width, out.height, setup.watermark);
-    const type = setup.format === 'jpeg' ? 'image/jpeg' : 'image/png';
-    const raw = await new Promise<Blob>((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode the image'))), type, setup.jpegQuality));
-    const bytes = tagImage(new Uint8Array(await raw.arrayBuffer()), info);
-    const safe = (info.title || 'render').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase();
-    return { blob: new Blob([bytes], { type }), bytes, name: `${safe}-renex.${setup.format === 'jpeg' ? 'jpg' : 'png'}` };
-  }
+  /** Encode the current path-traced image (with optional watermark) with the render disclosure in its metadata. */
+  exportImage(setup: RenderSetup, info: DisclosureInfo) { return encodeCanvas(this.canvas, setup, info); }
 
   private disposeScene() {
     if (!this.built) return;
@@ -343,7 +352,23 @@ export class RenexRenderer {
     this.built = null;
   }
 
-  dispose() { this.stop(); this.disposeScene(); this.tracer.dispose(); this.denoise.dispose(); this.renderer.dispose(); }
+  /** Free every GPU resource and the WebGL context itself (browsers cap live contexts at ~16). */
+  dispose() { this.stop(); this.disposeScene(); this.tracer.dispose(); this.denoise.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); }
+}
+
+/** Encode any canvas (path-traced or live view) as PNG/JPEG, optional watermark, disclosure metadata. */
+export async function encodeCanvas(src: HTMLCanvasElement, setup: RenderSetup, info: DisclosureInfo): Promise<{ blob: Blob; bytes: Uint8Array; name: string }> {
+  const out = document.createElement('canvas');
+  out.width = src.width; out.height = src.height;
+  const ctx = out.getContext('2d')!;
+  if (setup.format === 'jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height); }
+  ctx.drawImage(src, 0, 0);
+  if (setup.watermark.enabled && setup.watermark.text.trim()) drawWatermark(ctx, out.width, out.height, setup.watermark);
+  const type = setup.format === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const raw = await new Promise<Blob>((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode the image'))), type, setup.jpegQuality));
+  const bytes = tagImage(new Uint8Array(await raw.arrayBuffer()), info);
+  const safe = (info.title || 'render').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase();
+  return { blob: new Blob([bytes], { type }), bytes, name: `${safe}-renex.${setup.format === 'jpeg' ? 'jpg' : 'png'}` };
 }
 
 export function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: number, wm: RenderSetup['watermark']) {
