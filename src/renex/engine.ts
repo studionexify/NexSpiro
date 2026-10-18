@@ -8,7 +8,7 @@ import { buildBulb, buildCord, buildFeltPads, buildHolder, buildPuck, buildSoil,
 import { plantById, buildPlant } from './plants';
 import { preparePrinted, type PrintSettings } from './printSurface';
 import { QUALITY, type RenderSetup } from './profiles';
-import { buildBackdrop, buildEnvironment, ENVIRONMENTS, environmentLights, exposureFor, frameCamera, SHOTS } from './scenes';
+import { buildBackdrop, buildEnvironment, surfaceTextureCached, ENVIRONMENTS, environmentLights, exposureFor, frameCamera, SHOTS } from './scenes';
 import type { RenexSceneSource, SourcePart } from './source';
 import { tagImage, type DisclosureInfo } from './metadata';
 
@@ -123,7 +123,9 @@ export function buildScene(src: RenexSceneSource, setup: RenderSetup, aspect: nu
   for (const c of product.children) if (c.userData.printed || c.name === 'Felt pads') printedBox.union(new THREE.Box3().setFromObject(c));
   const box = printedBox.isEmpty() ? new THREE.Box3().setFromObject(product) : printedBox;
   const hanging = lamp && (lamp.cordEnd === 'ceiling');
-  const floorZ = hanging ? box.min.z - 450 : box.min.z;
+  // wall lamps are screwed to a wall: the backplate sits on it, the floor is well below
+  const wallMounted = !!lamp && lamp.cordEnd === 'wall' && assembledView;
+  const floorZ = hanging ? box.min.z - 450 : wallMounted ? box.min.z - 750 : box.min.z;
   if (!hanging) product.traverse((o) => {
     if (o.name !== 'Plug' && o.name !== 'Inline switch') return;
     const b = new THREE.Box3().setFromObject(o);
@@ -137,6 +139,16 @@ export function buildScene(src: RenexSceneSource, setup: RenderSetup, aspect: nu
   const backdrop = buildBackdrop({ id: transparent ? 'shadow-catcher' : setup.backdrop, colour: setup.backdropColour, radius, height: heightMm });
   backdrop.position.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, 0);
   root.add(backdrop);
+  if (wallMounted) {
+    // plaster wall flush with the backplate (the plate's back face is the product's +Y side)
+    const t = surfaceTextureCached('plaster');
+    const W = Math.max(1200, radius * 10), H = heightMm + 900;
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshPhysicalMaterial({ map: t.map, roughnessMap: t.rough, normalMap: t.normal, roughness: 1, color: setup.backdropColour }));
+    wall.rotation.x = Math.PI / 2;
+    wall.position.set((box.min.x + box.max.x) / 2, box.max.y + 0.2, H / 2 - 200);
+    wall.name = 'Mounting wall';
+    root.add(wall);
+  }
   if (hanging && lamp && lamp.cord.length) {
     // ceiling above: a plaster plane the cord disappears into
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(radius * 12, radius * 12), new THREE.MeshPhysicalMaterial({ color: '#f2efe9', roughness: 0.9, side: THREE.DoubleSide }));
@@ -261,6 +273,16 @@ export class RenexRenderer {
     const corners = [0, 1].flatMap((x) => [0, 1].flatMap((y) => [0, 1].map((z) => new THREE.Vector3(x ? b.productBox.max.x : b.productBox.min.x, y ? b.productBox.max.y : b.productBox.min.y, z ? b.productBox.max.z : b.productBox.min.z).project(b.camera))));
     const x0 = Math.max(0, Math.floor(((Math.min(...corners.map((c) => c.x)) + 1) / 2) * w)), x1 = Math.min(w, Math.ceil(((Math.max(...corners.map((c) => c.x)) + 1) / 2) * w));
     const y0 = Math.max(0, Math.floor(((Math.min(...corners.map((c) => c.y)) + 1) / 2) * h)), y1 = Math.min(h, Math.ceil(((Math.max(...corners.map((c) => c.y)) + 1) / 2) * h));
+    // highlights of the whole frame: the brightest 1 % lands on the tone curve's shoulder, not past it
+    const all: number[] = [];
+    const gstep = Math.max(1, Math.floor(Math.sqrt((w * h) / 20000)));
+    for (let y = 0; y < h; y += gstep) for (let x = 0; x < w; x += gstep) {
+      const i = (y * w + x) * 4, a = px[i + 3] || 1;
+      const L = (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / a;
+      if (Number.isFinite(L)) all.push(L);
+    }
+    all.sort((p, q) => p - q);
+    const p99 = all.length ? all[Math.floor(all.length * 0.99)] : 0;
     let sum = 0, n = 0;
     const step = Math.max(1, Math.floor(Math.sqrt(((x1 - x0) * (y1 - y0)) / 20000)));
     for (let y = y0; y < y1; y += step) for (let x = x0; x < x1; x += step) {
@@ -271,7 +293,17 @@ export class RenexRenderer {
     }
     if (!n) return;
     const avg = Math.exp(sum / n);
-    this.renderer.toneMappingExposure = (0.18 / Math.max(1e-4, avg)) * Math.pow(2, this.meter.comp);
+    const key = 0.18 / Math.max(1e-4, avg), cap = p99 > 0 ? 2 / p99 : Infinity;
+    this.renderer.toneMappingExposure = Math.min(key, cap) * Math.pow(2, this.meter.comp);
+  }
+
+  /** Render and resolve once the quality preset's samples are reached (used by batch export). */
+  renderToCompletion(src: RenexSceneSource, setup: RenderSetup, onProgress?: (p: RenderProgress) => void): Promise<BuiltScene> {
+    return new Promise((resolve, reject) => {
+      let built: BuiltScene | null = null, done = false;
+      this.onProgress = (p) => { onProgress?.(p); if (p.done && !done) { done = true; if (built) resolve(built); } };
+      this.render(src, setup).then((b) => { built = b; if (done) resolve(b); }, reject);
+    });
   }
 
   stop() { this.stopped = true; cancelAnimationFrame(this.raf); }

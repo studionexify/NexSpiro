@@ -195,3 +195,24 @@ describe('Renex scene assembly', () => {
     expect(h.scene.getObjectByName('Pot')).toBeFalsy();
   });
 });
+
+describe('Renex batch + lamps', () => {
+  it('expands sizes × shots × light states', async () => {
+    const { batchJobs } = await import('../../src/renex/profiles');
+    const { SHOTS } = await import('../../src/renex/scenes');
+    const base = defaultSetup('lumonex');
+    const jobs = batchJobs(base, { aspects: ['1:1', '9:16'], shots: ['hero', 'side'], light: 'both' }, SHOTS, true);
+    expect(jobs.length).toBe(8);
+    expect(new Set(jobs.map((j) => j.label)).size).toBe(8);
+    expect(jobs.find((j) => j.label === '9:16-side-off'.replace(/[^\w-]+/g, '_'))?.setup.height).toBe(2048);
+    expect(batchJobs(base, { aspects: [], shots: [], light: 'current' }, SHOTS, true).length).toBe(1);
+  });
+  it('every Lumonex lamp type has a light source, wall sconces included', async () => {
+    const { buildLamp } = await import('../../src/plugins/lumonex/build');
+    const { defaultDesign } = await import('../../src/plugins/lumonex/model');
+    for (const kind of ['table', 'wall', 'pendant', 'floor', 'ceiling', 'lantern', 'mount'] as const) {
+      const parts = buildLamp({ ...defaultDesign(kind), showBulb: true }, { x: 256, y: 256, z: 256 }).parts;
+      expect(parts.some((p) => p.key === 'ghost-bulb' && p.soup.length), kind).toBe(true);
+    }
+  });
+});

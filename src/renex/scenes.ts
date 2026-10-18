@@ -27,7 +27,7 @@ export const ENVIRONMENTS: EnvPreset[] = [
   { id: 'overcast', name: 'Outdoor overcast', ev: 12 },
   { id: 'golden-hour', name: 'Golden hour sun', ev: 11 },
   { id: 'noon-sun', name: 'Noon sun', ev: 14.5 },
-  { id: 'evening-interior', name: 'Evening interior (lamp-lit)', ev: 5, forLamps: true },
+  { id: 'evening-interior', name: 'Evening interior (lamp-lit)', ev: 6.5, forLamps: true },
   { id: 'night', name: 'Night (lamp only)', ev: 3.5, forLamps: true },
 ];
 
@@ -66,7 +66,8 @@ export function buildEnvironment(id: EnvId, rotation = 0, w = 1024, h = 512): TH
         case 'overcast': L = up >= 0 ? noon.clone().multiplyScalar(2500 + 2500 * up) : new THREE.Color(380, 360, 330); break;
         case 'golden-hour': L = up >= 0 ? new THREE.Color().lerpColors(gold.clone().multiplyScalar(2200), sky.clone().multiplyScalar(900), Math.pow(up, 0.5)) : new THREE.Color(220, 180, 140); break;
         case 'noon-sun': L = up >= 0 ? sky.clone().multiplyScalar(4000 + 4000 * (1 - up)) : new THREE.Color(2500, 2400, 2200); break;
-        case 'evening-interior': L = warm.clone().multiplyScalar(1.5 + 1.5 * Math.max(0, up)); break;
+        // a living room in the evening with other lamps on: ~20–40 nits of warm bounce light
+        case 'evening-interior': L = warm.clone().multiplyScalar(18 + 14 * Math.max(0, up)); break;
         case 'night': L.setRGB(0.05, 0.07, 0.12).multiplyScalar(1 + Math.max(0, up)); break;
       }
       // faint texture so reflections are not perfectly uniform (real rooms never are)
@@ -196,6 +197,7 @@ export function surfaceTexture(kind: 'oak' | 'walnut' | 'concrete' | 'marble' | 
 }
 
 const texCache = new Map<string, ReturnType<typeof surfaceTexture>>();
+export const surfaceTextureCached = (k: Parameters<typeof surfaceTexture>[0]) => tex(k);
 const tex = (k: Parameters<typeof surfaceTexture>[0]) => { let t = texCache.get(k); if (!t) { t = surfaceTexture(k); texCache.set(k, t); } return t; };
 
 function texturedMat(kind: Parameters<typeof surfaceTexture>[0], tileMm: number, sizeMm: number, extra: Partial<THREE.MeshPhysicalMaterialParameters> = {}) {

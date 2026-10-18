@@ -8,10 +8,12 @@ import { ALL_SWATCHES, FINISH_KINDS, SWATCH_BRANDS, type FinishKind } from '../m
 import { PLANT_CATEGORIES, PLANTS, type PlantCategory } from '../plants';
 import { TOP_DRESSINGS } from '../components';
 import { BACKDROPS, ENVIRONMENTS, SHOTS } from '../scenes';
-import { ASPECTS, QUALITY, addProfile, deleteProfile, lastSetup, profilesFor, rememberSetup, type Quality, type RenderSetup, type RenexSource } from '../profiles';
+import { ASPECTS, QUALITY, addProfile, batchJobs, type BatchSpec, deleteProfile, lastSetup, profilesFor, rememberSetup, type Quality, type RenderSetup, type RenexSource } from '../profiles';
 import { AI_PROVIDERS, aiEnhance, aiReady, loadAi, saveAi, type AiSettings } from '../ai';
 import { hasDisclosure, tagImage, type DisclosureInfo } from '../metadata';
 import type { RenexSceneSource } from '../source';
+import { useStore } from '../../state/store';
+import type { ShotId } from '../scenes';
 import './renex.css';
 
 const TABS = ['Scene', 'Camera', 'Product', 'Props', 'Output', 'Profiles', 'AI'] as const;
@@ -69,6 +71,40 @@ export function RenexStudio({ source, build, onClose }: Props) {
     ],
   });
 
+  /** Keep a render in the project file (.3mf photos, shown under Project). */
+  const saveToProject = async (blob: Blob, name: string) => {
+    const dataUrl = await new Promise<string>((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result as string); fr.onerror = rej; fr.readAsDataURL(blob); });
+    const { project } = useStore.getState();
+    useStore.setState({ project: { ...project, photos: [...project.photos.filter((p) => p.name !== name), { name, dataUrl }] } });
+  };
+
+  const [batch, setBatch] = useState<BatchSpec>({ aspects: [], shots: [], light: 'current' });
+  const [batchState, setBatchState] = useState<{ i: number; n: number; label: string } | null>(null);
+  const batchCancel = useRef(false);
+  const runBatch = async () => {
+    if (!scene || !eng.current) return;
+    const jobs = batchJobs(setup, batch, SHOTS, isLamp);
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    batchCancel.current = false;
+    const r = eng.current;
+    try {
+      for (let i = 0; i < jobs.length && !batchCancel.current; i++) {
+        setBatchState({ i: i + 1, n: jobs.length, label: jobs[i].label });
+        await r.renderToCompletion(scene, jobs[i].setup, setProg);
+        if (batchCancel.current) break;
+        const out = await r.exportImage(jobs[i].setup, info(false));
+        const name = out.name.replace(/-renex\./, `-${jobs[i].label}-renex.`);
+        zip.file(name, out.bytes);
+        if (setup.saveToProject) await saveToProject(out.blob, name);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      download(blob, `${(scene.title || 'renders').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase()}-renex-batch.zip`);
+      flash(`Batch done: ${Object.keys(zip.files).length} render(s) in one zip${setup.saveToProject ? ', also saved in the project' : ''}. Each carries the render disclosure.`);
+    } catch (e) { setErr(`Batch failed: ${(e as Error).message}`); }
+    finally { r.onProgress = setProg; setBatchState(null); }
+  };
+
   const download = (blob: Blob, name: string) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
   const exportNow = async () => {
@@ -76,7 +112,8 @@ export function RenexStudio({ source, build, onClose }: Props) {
     try {
       const out = await eng.current.exportImage(setup, info(false));
       download(out.blob, out.name);
-      flash(`Saved ${out.name} — metadata marks it as a computer-generated render${hasDisclosure(out.bytes) ? ' ✓' : ''}.`);
+      if (setup.saveToProject) await saveToProject(out.blob, out.name);
+      flash(`Saved ${out.name}${setup.saveToProject ? ' (also in the project)' : ''} — metadata marks it as a computer-generated render${hasDisclosure(out.bytes) ? ' ✓' : ''}.`);
     } catch (e) { setErr((e as Error).message); }
   };
 
@@ -116,6 +153,7 @@ export function RenexStudio({ source, build, onClose }: Props) {
               {tab === 'Product' && <ProductTab setup={setup} set={set} scene={scene} />}
               {tab === 'Props' && (isLamp ? <LampTab setup={setup} set={set} scene={scene} /> : <PlanterTab setup={setup} set={set} scene={scene} />)}
               {tab === 'Output' && <OutputTab setup={setup} set={set} />}
+              {tab === 'Output' && <BatchPanel batch={batch} setBatch={setBatch} setup={setup} isLamp={isLamp} running={batchState} disabled={!scene} onRun={runBatch} onCancel={() => { batchCancel.current = true; eng.current?.stop(); }} />}
               {tab === 'Profiles' && <ProfilesTab profiles={profiles} onLoad={(s) => { set(s); flash('Profile loaded'); }} onSave={(n) => { addProfile(n, source, setup); setProfiles(profilesFor(source)); flash(`Saved profile "${n}"`); }} onDelete={(id) => { deleteProfile(id); setProfiles(profilesFor(source)); }} />}
               {tab === 'AI' && <AiTab ai={ai} setAi={setAi} />}
             </div>
@@ -139,7 +177,7 @@ export function RenexStudio({ source, build, onClose }: Props) {
             </div>
             <div className="rx-progress"><i style={{ width: `${pct}%` }} /></div>
             <div className="rx-status">
-              {prog ? `${prog.stage} · ${prog.samples}/${prog.target} samples · ${prog.elapsed.toFixed(1)} s${prog.done ? '' : ` · ~${Math.ceil(prog.eta)} s left`} · ${setup.width}×${setup.height}` : QUALITY[setup.quality].note}
+              {batchState ? `Batch ${batchState.i}/${batchState.n} (${batchState.label}) · ` : ''}{prog ? `${prog.stage} · ${prog.samples}/${prog.target} samples · ${prog.elapsed.toFixed(1)} s${prog.done ? '' : ` · ~${Math.ceil(prog.eta)} s left`} · ${setup.width}×${setup.height}` : QUALITY[setup.quality].note}
               {scene?.warnings.length ? <span className="rx-warn"> · {scene.warnings[0]}</span> : null}
             </div>
             {err && <div className="rx-err">{err}</div>}
@@ -299,6 +337,7 @@ function OutputTab({ setup, set }: TabProps) {
     <h4>File</h4>
     <Row label="Type"><Sel v={setup.format} opts={[{ id: 'png', name: 'PNG (lossless)' }, { id: 'jpeg', name: 'JPEG' }]} on={(format) => set({ format })} /></Row>
     {setup.format === 'jpeg' && <Row label="JPEG quality"><Slider v={setup.jpegQuality} min={0.6} max={1} step={0.01} on={(jpegQuality) => set({ jpegQuality })} fmt={(n) => `${Math.round(n * 100)}`} /></Row>}
+    <Row label="Save into project"><input type="checkbox" checked={setup.saveToProject} onChange={(e) => set({ saveToProject: e.target.checked })} /><span className="rx-dim">stored with the .3mf (Project → Photos)</span></Row>
     <h4>Watermark (optional)</h4>
     <Row label="Show"><input type="checkbox" checked={setup.watermark.enabled} onChange={(e) => set({ watermark: { ...setup.watermark, enabled: e.target.checked } })} /></Row>
     {setup.watermark.enabled && <>
@@ -338,5 +377,25 @@ function AiTab({ ai, setAi }: { ai: AiSettings; setAi: (p: Partial<AiSettings>) 
     <Row label="Strength"><Slider v={ai.strength} min={0} max={1} step={0.05} on={(strength) => setAi({ strength })} fmt={(n) => (n < 0.3 ? `${n.toFixed(2)} subtle` : n.toFixed(2))} /></Row>
     <Row label="Prompt"><textarea className="input" rows={4} value={ai.prompt} onChange={(e) => setAi({ prompt: e.target.value })} /></Row>
     <p className="rx-hint">Keys stay on this device (local storage). They are never saved in projects or images.</p>
+  </>;
+}
+
+function BatchPanel({ batch, setBatch, setup, isLamp, running, disabled, onRun, onCancel }: { batch: BatchSpec; setBatch: (b: BatchSpec) => void; setup: RenderSetup; isLamp: boolean; running: { i: number; n: number } | null; disabled: boolean; onRun: () => void; onCancel: () => void }) {
+  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const n = Math.max(1, batch.aspects.length) * Math.max(1, batch.shots.length) * (isLamp && batch.light === 'both' ? 2 : 1);
+  return <>
+    <h4>Batch export</h4>
+    <p className="rx-hint">Renders every combination below at {QUALITY[setup.quality].name} quality with the current scene, and downloads one zip. Nothing ticked = the current size / shot.</p>
+    <div className="rx-batch">
+      <b>Sizes</b>
+      {ASPECTS.filter((a) => a.id !== 'custom').map((a) => <label key={a.id} className="rx-inline"><input type="checkbox" checked={batch.aspects.includes(a.id)} onChange={() => setBatch({ ...batch, aspects: toggle(batch.aspects, a.id) })} />{a.name}</label>)}
+      <b>Shots</b>
+      {SHOTS.map((s) => <label key={s.id} className="rx-inline"><input type="checkbox" checked={batch.shots.includes(s.id)} onChange={() => setBatch({ ...batch, shots: toggle<ShotId>(batch.shots, s.id) })} />{s.name}</label>)}
+      {isLamp && <><b>Light</b>
+        <label className="rx-inline"><input type="radio" checked={batch.light === 'current'} onChange={() => setBatch({ ...batch, light: 'current' })} />As set ({setup.lit ? 'on' : 'off'})</label>
+        <label className="rx-inline"><input type="radio" checked={batch.light === 'both'} onChange={() => setBatch({ ...batch, light: 'both' })} />Both on and off</label></>}
+    </div>
+    {running ? <button className="btn-secondary btn-small" onClick={onCancel}>Cancel batch ({running.i}/{running.n})</button>
+      : <button className="btn-primary btn-small" disabled={disabled} onClick={onRun}>Batch render {n} image{n > 1 ? 's' : ''}</button>}
   </>;
 }

@@ -65,6 +65,8 @@ export interface RenderSetup {
   transparent: boolean;
   watermark: Watermark;
   denoise: boolean;
+  /** Also store each exported render in the project (.3mf photos). */
+  saveToProject: boolean;
 }
 
 export const ASPECTS: { id: string; name: string; w: number; h: number }[] = [
@@ -94,7 +96,29 @@ export function defaultSetup(source: RenexSource): RenderSetup {
     format: 'png', jpegQuality: 0.92, transparent: false,
     watermark: { enabled: false, text: 'Rendered with NexSpiro Renex', corner: 'br', opacity: 0.6, size: 1 },
     denoise: true,
+    saveToProject: true,
   };
+}
+
+/** Batch export: every combination of the chosen sizes, shots and (lamps) light states. */
+export interface BatchSpec { aspects: string[]; shots: ShotId[]; light: 'current' | 'both' }
+
+export function batchJobs(base: RenderSetup, b: BatchSpec, shots: { id: ShotId; az: number; el: number; focal: number; fNumber: number }[], isLamp: boolean): { label: string; setup: RenderSetup }[] {
+  const out: { label: string; setup: RenderSetup }[] = [];
+  const aspects = b.aspects.length ? b.aspects : [base.aspect];
+  const shotIds = b.shots.length ? b.shots : [base.shot];
+  const lights = isLamp && b.light === 'both' ? [true, false] : [base.lit];
+  for (const a of aspects) {
+    const asp = ASPECTS.find((x) => x.id === a);
+    for (const sid of shotIds) {
+      const sh = shots.find((x) => x.id === sid);
+      for (const lit of lights) {
+        const setup: RenderSetup = { ...base, lit, ...(asp && asp.id !== 'custom' ? { aspect: asp.id, width: asp.w, height: asp.h } : {}), ...(sh && sid !== base.shot ? { shot: sid, az: sh.az, el: sh.el, focal: sh.focal, fNumber: sh.fNumber, dolly: 1 } : {}) };
+        out.push({ label: [a, sid, isLamp ? (lit ? 'on' : 'off') : ''].filter(Boolean).join('-').replace(/[^\w-]+/g, '_'), setup });
+      }
+    }
+  }
+  return out;
 }
 
 export interface RenderProfile { id: string; name: string; source: RenexSource | 'any'; setup: RenderSetup; createdAt: number }
