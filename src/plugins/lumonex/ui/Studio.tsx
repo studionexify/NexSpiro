@@ -11,6 +11,8 @@ import { printerById } from '../../../profiles/printers';
 import { assembled, buildLamp, rotateXYZ, type BuiltPart } from '../build';
 import { bounds, toMesh, translate, type Soup } from '../geom';
 import { EditorColumn, ReportColumn } from './LumonexPanel';
+import { RenexStudio } from '../../../renex/ui/RenexStudio';
+import { lumonexRenexSource } from '../renexSource';
 import { bedOf, changed, geometryVersion, groupByFilament, lx, openStudio, transferToPlate, useLx, type StudioView } from './state';
 
 export function LumonexStudioHost() {
@@ -228,11 +230,12 @@ function Studio() {
   useLx();
   const printer = printerById(useStore((s) => s.printerId));
   const [toast, setToast] = useState('');
+  const [renex, setRenex] = useState(false);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') openStudio(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !renex) openStudio(false); };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, []);
+  }, [renex]);
   const transfer = () => {
     const r = transferToPlate();
     setToast(`${r.objects} pieces placed on ${r.plates.length} plate(s): ${r.plates.map((p) => `${p.name} (${p.parts})`).join(', ')}`);
@@ -247,6 +250,7 @@ function Studio() {
             <div className="mx-title">Lumonex Studio · {lx.design.name}</div>
             <div className="mx-sub">{printer.vendor} {printer.model} · bed {printer.bed.x} × {printer.bed.y} × {printer.bed.z} mm</div>
           </div>
+          <button className="btn-secondary" title="Photorealistic render of the printed lamp (Renex)" onClick={() => setRenex(true)}>📷 Render</button>
           <button className="btn-primary" onClick={transfer}>Transfer to plate</button>
           <button className="btn-secondary" onClick={() => openStudio(false)} aria-label="Close">✕</button>
         </header>
@@ -256,6 +260,7 @@ function Studio() {
           <aside className="lx-col lx-right"><div className="mx-panel"><ReportColumn onTransfer={transfer} /></div></aside>
         </div>
         {toast && <div className="lx-toast">{toast}</div>}
+        {renex && <RenexStudio source="lumonex" build={lumonexRenexSource} onClose={() => setRenex(false)} />}
       </div>
     </div>
   );
