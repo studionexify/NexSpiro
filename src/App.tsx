@@ -1,4 +1,5 @@
 import { Modal } from './ui/Modals';
+import { TABLET } from './ui/useMedia';
 import { useEffect, useState } from 'react';
 import { PluginsButton, RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
@@ -54,7 +55,7 @@ function FileMenu() {
   return (
     <div className="menu">
       <button className={`icon-btn ${open ? 'active' : ''}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)} aria-haspopup="menu">
-        File<Icon name="chevronDown" size={14} />
+        <Icon name="folder" size={18} className="file-icon" /><span className="btn-label">File</span><Icon name="chevronDown" size={14} />
       </button>
       {open && (
         <div className="menu-pop" role="menu">
@@ -76,17 +77,26 @@ function FileMenu() {
 function TopBar() {
   const { workspace, set, theme, undo, redo, undoStack, redoStack, liveToolpaths } = useStore();
   const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
+  // the tab strip scrolls on tablets: keep the active tab in view when the workspace changes
+  useEffect(() => {
+    const tab = document.querySelector<HTMLElement>('.tabs .tab[aria-selected="true"]');
+    const box = tab?.closest<HTMLElement>('.tb-left');
+    if (!tab || !box) return;
+    const t = tab.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (t.left < b.left) box.scrollLeft -= b.left - t.left + 8;
+    else if (t.right > b.right) box.scrollLeft += t.right - b.right + 8;
+  }, [workspace, hasStudio]);
   return (
     <header className="topbar">
       <div className="tb-left">
         <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
         <FileMenu />
-        <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
-        <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
-        <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
+        <button className="icon-btn tb-import" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
+        <button className="icon-btn tb-undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
+        <button className="icon-btn tb-undo" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
         <nav className="tabs" role="tablist">
           {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
-            <button key={t.id} role="tab" aria-selected={workspace === t.id} title={t.label}
+            <button key={t.id} role="tab" aria-selected={workspace === t.id} title={t.label} aria-label={t.label}
               className={`tab ${workspace === t.id ? 'active' : ''} ${SECONDARY_TABS.has(t.id) ? 'secondary' : ''}`} onClick={() => set({ workspace: t.id })}>
               <Icon name={t.icon} size={15} className="tab-icon" /><span className="tab-label">{t.label}</span>
             </button>
@@ -141,12 +151,12 @@ function SliceControls() {
   return (
     <div className="slice-controls">
       <button className="btn-primary slice-btn" disabled={(!objects.length && !hasProgram) || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
-        <Icon name="slice" size={16} />{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : 'Slice plate'}
+        <Icon name="slice" size={16} /><span className="btn-label">{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : <>Slice<span className="btn-more"> plate</span></>}</span>
       </button>
       <div className="split-btn menu">
         <button className="btn-secondary slice-btn" disabled={!sliced} onClick={() => void main.run()}
           title={sliced ? main.label : 'Slice the plate first'}>
-          <Icon name={isBbl ? 'print' : 'download'} size={16} />{main.label}
+          <Icon name={isBbl ? 'print' : 'download'} size={16} /><span className="btn-label">{main.label}</span>
         </button>
         <button className="btn-secondary slice-btn caret" disabled={!sliced} aria-label="More print and export options" title={sliced ? 'More options' : 'Slice the plate first'}
           onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)}><Icon name="chevronDown" size={14} /></button>
@@ -249,10 +259,22 @@ export default function App() {
   const workspace = ws === 'motion' && !studio ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
+  // on tablets the plugin dock starts collapsed so the canvas keeps the space; it opens from its strip
+  useEffect(() => {
+    const st = useStore.getState();
+    if (window.matchMedia(TABLET).matches && st.dock.open) st.set({ dock: { ...st.dock, open: false } });
+  }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
   const hasDock = useStore((s) => s.plugins.length > 0);
+  const dockOpen = useStore((s) => s.dock.open);
+  const wsClass = `workspace ${is3d ? 'ws-3d' : Studio ? 'ws-studio' : 'ws-page'}${is3d && hasDock ? ' has-dock' : ''}${is3d && hasDock && dockOpen ? ' dock-open' : ''}`;
+  // panels opening, closing or re-docking changes the stage size: nudge anything that only listens to window resizes
+  useEffect(() => {
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    return () => cancelAnimationFrame(id);
+  }, [workspace, hasDock, dockOpen]);
 
   return (
     <div className="app"
@@ -264,7 +286,7 @@ export default function App() {
         if (files.length) importBuffers(files);
       }}>
       <TopBar />
-      <div className="workspace" style={is3d ? { gridTemplateColumns: hasDock ? 'var(--sidebar-w, 360px) 1fr auto' : undefined } : Studio ? { gridTemplateColumns: '1fr auto' } : { gridTemplateColumns: '1fr' }}>
+      <div className={wsClass}>
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useStore } from '../state/store';
 import { PLUGINS } from '../plugins/registry';
 import { Modal } from './Modals';
+import { Icon } from './icons';
 
 export function RightDock() {
   const { plugins, dock, set } = useStore();
@@ -16,7 +17,7 @@ export function RightDock() {
     return (
       <aside className="dock collapsed" aria-label="Plugins">
         {installed.map((p) => (
-          <button key={p.id} className="dock-strip-tab" title={`Open ${p.name}`} onClick={() => setDock({ open: true, tab: p.id })}>
+          <button key={p.id} className="dock-strip-tab" title={`Open ${p.name}`} aria-label={`Open ${p.name}`} onClick={() => setDock({ open: true, tab: p.id })}>
             <span className="mx-badge sm">{p.badge}</span><span className="dock-strip-label">{p.name}</span>
           </button>
         ))}
@@ -39,7 +40,7 @@ export function RightDock() {
           <button key={p.id} className={`dock-tab ${p.id === active.id ? 'on' : ''}`} onClick={() => setDock({ tab: p.id })}>{p.name}</button>
         ))}
         <span className="spacer" />
-        <button className="icon-btn" title="Collapse panel" aria-label="Collapse panel" onClick={() => setDock({ open: false })}>›</button>
+        <button className="icon-btn" title="Collapse panel" aria-label="Collapse panel" onClick={() => setDock({ open: false })}><span className="dock-collapse-glyph">›</span></button>
       </div>
       <div className="dock-body"><Panel /></div>
     </aside>
@@ -56,7 +57,7 @@ export function PluginsButton() {
   };
   return (
     <>
-      <button className="btn-secondary btn-small" title="Plugins" onClick={() => setOpen(true)}>Plugins{plugins.length ? ` (${plugins.length})` : ''}</button>
+      <button className="btn-secondary btn-small tb-plugins" title="Plugins" aria-label="Plugins" onClick={() => setOpen(true)}><Icon name="plug" size={16} /><span className="btn-label">Plugins{plugins.length ? ` (${plugins.length})` : ''}</span></button>
       {open && (
         <Modal title="Plugins" onClose={() => setOpen(false)}>
           <p style={{ marginTop: 0, color: 'var(--text-muted)' }}>Plugins add material regions and change the toolpaths while slicing. NexSpiro always writes the final G-code.</p>

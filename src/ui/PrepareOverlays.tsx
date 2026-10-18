@@ -9,7 +9,7 @@ import { Icon } from './icons';
 
 /** The Prepare toolbar: object commands, then the gizmos and tools. */
 export function Toolbar() {
-  const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates } = useStore();
+  const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates, undo, redo, undoStack, redoStack } = useStore();
   const has = selected.length > 0 || !!selectedPart;
   const one = selected.length === 1 && !selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string, disabled = false) => (
@@ -20,6 +20,9 @@ export function Toolbar() {
   const [arrOpen, setArrOpen] = useState(false);
   return (
     <div className="float toolbar" role="toolbar">
+      <button className="icon-btn rail-undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
+      <button className="icon-btn rail-undo" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
+      <span className="sep rail-undo" />
       <button className="icon-btn" title="Add (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="add" /></button>
       <button className="icon-btn" title="Add plate" aria-label="Add plate" onClick={addPlate}><Icon name="addPlate" /></button>
       <button className="icon-btn" title={has ? 'Auto orient selected (O)' : 'Auto orient all objects on the plate (O)'} aria-label="Auto orient"

@@ -74,6 +74,7 @@ export const ICON_PATHS: Record<string, string> = {
   morph: 'M3 17h18M5 17c2-6 5-9 7-9s5 3 7 9M8 21l4-4 4 4',
   graph: 'M5 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 6l7 12M19 6l-7 12M7 4h10',
   heat: 'M4 20V10M9 20V4M14 20v-8M19 20V7M3 20h18',
+  plug: 'M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4',
   brushAdv: 'M18 3l3 3-9 9-3-3zM9 12l-4 4a2.8 2.8 0 0 0 0 4 2.8 2.8 0 0 0 4 0l4-4M14 7l3 3',
 };
 

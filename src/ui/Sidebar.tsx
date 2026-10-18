@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { TABLET, useMedia } from './useMedia';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
@@ -161,7 +162,16 @@ function ProcessCard() {
     ? visible.filter((p) => `${p.label} ${p.group} ${p.key} ${p.tab}`.toLowerCase().includes(q))
     : visible.filter((p) => p.tab === tab);
   const groups = [...new Set(list.map((p) => (q ? `${p.tab} › ${p.group}` : p.group)))];
-  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  // On tablets the groups behave as a single-open accordion (the first group starts open); on desktop they toggle independently.
+  const tablet = useMedia(TABLET);
+  const accordion = tablet && !q;
+  const [closedState, setClosed] = useState<Record<string, boolean> | null>(null);
+  const closed: Record<string, boolean> = closedState ?? (accordion ? Object.fromEntries(groups.slice(1).map((g) => [g, true])) : {});
+  useEffect(() => setClosed(null), [tab, accordion]);
+  const toggleGroup = (g: string) => {
+    if (accordion && closed[g]) setClosed(Object.fromEntries(groups.filter((x) => x !== g).map((x) => [x, true])));
+    else setClosed({ ...closed, [g]: !closed[g] });
+  };
   const [searchOpen, setSearchOpen] = useState(false);
 
   // per-object values: the object's override, else the global value
@@ -248,7 +258,7 @@ function ProcessCard() {
         <div className="params">
           {groups.map((g) => (
             <div key={g}>
-              <div className={`group-title ${closed[g] ? 'closed' : ''}`} onClick={() => setClosed({ ...closed, [g]: !closed[g] })}>
+              <div className={`group-title ${closed[g] ? 'closed' : ''}`} onClick={() => toggleGroup(g)}>
                 <Icon name="chevronDown" size={14} />{g}
               </div>
               {!closed[g] && list.filter((p) => (q ? `${p.tab} › ${p.group}` : p.group) === g).map((p) => {
