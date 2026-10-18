@@ -283,7 +283,7 @@ export function buildLamp(d: LampDesign, bed: Bed): BuildResult {
   accessories(d, add, warn, notes, hardware, { holderRing: holder.ringHole, hc, bore, ringZ, stackTop, cableD: cable.d, hexOf });
 
   // ---------------------------------------------------------------- preview: holder + bulb
-  if (d.showBulb && d.kind !== 'wall') {
+  if (d.showBulb) {
     const hz = ringZ;
     if (holder.length > 0) add({ key: 'ghost-holder', name: `${holder.name} holder (preview)`, group: 'Preview', soup: holder.mount === 'pad' || holder.mount === 'strip' ? [] : lathe([[holder.body / 2, hz - holder.length], [holder.body / 2, hz + holder.above]], 32), material: 'Reference', color: 'Holder', hex: '#2b2b2b', ghost: true });
     const bz = holder.mount === 'pad' || holder.mount === 'strip' ? hz : hz + holder.above - (bulb.profile[1]?.[1] ?? 0);

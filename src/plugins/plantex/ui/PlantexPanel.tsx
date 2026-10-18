@@ -11,6 +11,8 @@ import { ProfileEditor } from './ProfileEditor';
 import { WallMap } from './WallMap';
 import { changed, deleteDesign, ensureSlot, loadSpec, openStudio, pt, saveDesign, transferToPlate, usePt } from './state';
 import { StudioViewer } from './StudioViewer';
+import { RenexStudio } from '../../../renex/ui/RenexStudio';
+import { plantexRenexSource } from '../renexSource';
 import { useStore } from '../../../state/store';
 import { FILAMENTS } from '../../../profiles/filaments';
 import { createPortal } from 'react-dom';
@@ -435,6 +437,7 @@ export function PlantexStudio() {
   usePt();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Shape');
   const [busy, setBusy] = useState(false);
+  const [renex, setRenex] = useState(false);
   const close = () => openStudio(false);
   const transfer = (asNew: boolean) => {
     setBusy(true);
@@ -448,6 +451,7 @@ export function PlantexStudio() {
           <div className="pxl-title">Plantex studio</div>
           <input className="input" style={{ maxWidth: 260 }} value={pt.spec.name} onChange={(e) => { pt.spec.name = e.target.value; changed(false); }} aria-label="Design name" />
           <span className="spacer" style={{ flex: 1 }} />
+          <button className="btn-secondary" title="Photorealistic render of the printed design (Renex)" onClick={() => setRenex(true)}>📷 Render</button>
           {pt.placed.length > 0 && <button className="btn-secondary" disabled={busy} onClick={() => transfer(true)}>Transfer as new copy</button>}
           <button className="btn-primary" disabled={busy} onClick={() => transfer(false)}>{busy ? 'Building parts…' : pt.placed.length ? 'Transfer to plate (replace)' : 'Transfer to plate'}</button>
           <button className="icon-btn" aria-label="Close" title="Close" onClick={close}>✕</button>
@@ -469,6 +473,7 @@ export function PlantexStudio() {
           </div>
         </div>
       </div>
+      {renex && <RenexStudio source="plantex" build={plantexRenexSource} onClose={() => setRenex(false)} />}
     </div>,
     document.body,
   );
