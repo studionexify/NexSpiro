@@ -216,3 +216,22 @@ describe('Renex batch + lamps', () => {
     }
   });
 });
+
+describe('Renex model import', () => {
+  it('groups CAD meshes by colour into a few parts that stand on the table', async () => {
+    const { partsFromMeshes } = await import('../../src/renex/cad/importModel');
+    const cube = (dx: number, color?: [number, number, number]) => {
+      const p = new Float32Array([0, 0, 0, 10, 0, 0, 10, 10, 0, 0, 10, 0, 0, 0, 10, 10, 0, 10, 10, 10, 10, 0, 10, 10]);
+      for (let i = 0; i < p.length; i += 3) { p[i] += dx; p[i + 2] += 50; }
+      return { name: `c${dx}`, color, positions: p, indices: new Uint32Array([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]) };
+    };
+    const meshes = [cube(0, [1, 0, 0]), cube(20, [1, 0, 0]), ...Array.from({ length: 30 }, (_, i) => cube(40 + i * 20, [0, i / 30, 1]))];
+    const parts = partsFromMeshes(meshes, 12);
+    expect(parts.length).toBe(12);
+    for (const p of parts) {
+      let minZ = Infinity; for (let i = 2; i < p.printSoup.length; i += 3) minZ = Math.min(minZ, p.printSoup[i]);
+      expect(minZ).toBeCloseTo(0, 5);
+    }
+    expect(parts.reduce((s, p) => s + p.printSoup.length / 9, 0)).toBe(meshes.length * 4);
+  });
+});

@@ -135,7 +135,7 @@ function noise2(x: number, y: number, seed: number) {
 function fbm(x: number, y: number, seed: number, oct = 5) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < oct; i++) { s += a * noise2(x * f, y * f, seed + i); a *= 0.5; f *= 2; } return s; }
 
 /** Albedo + roughness textures for a surface type, generated procedurally (no assets, deterministic). */
-export function surfaceTexture(kind: 'oak' | 'walnut' | 'concrete' | 'marble' | 'linen' | 'terrazzo' | 'plaster' | 'paper', n = 1024): { map: THREE.DataTexture; rough: THREE.DataTexture; normal: THREE.DataTexture } {
+export function surfaceTexture(kind: 'oak' | 'walnut' | 'concrete' | 'marble' | 'linen' | 'terrazzo' | 'plaster' | 'paper', n = 512): { map: THREE.DataTexture; rough: THREE.DataTexture; normal: THREE.DataTexture } {
   const col = new Uint8Array(n * n * 4), rough = new Uint8Array(n * n * 4), hgt = new Float32Array(n * n);
   const r = rng(kind.length * 17);
   const chips = kind === 'terrazzo' ? Array.from({ length: 900 }, () => ({ x: r() * n, y: r() * n, s: range(r, 3, 14), c: ['#c8b8a8', '#7a6a5a', '#e8e0d4', '#a85a3a', '#5a6a6a'][Math.floor(r() * 5)] })) : [];

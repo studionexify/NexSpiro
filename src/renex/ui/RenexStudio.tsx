@@ -3,7 +3,9 @@
 // disclosure into the image metadata.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RenexRenderer, type RenderProgress } from '../engine';
+import { RenexRenderer, encodeCanvas, type RenderProgress } from '../engine';
+import { RenexViewport } from '../viewport';
+import { IMPORT_EXT, importModel } from '../cad/importModel';
 import { ALL_SWATCHES, FINISH_KINDS, SWATCH_BRANDS, type FinishKind } from '../materials';
 import { PLANT_CATEGORIES, PLANTS, type PlantCategory } from '../plants';
 import { TOP_DRESSINGS } from '../components';
@@ -21,53 +23,107 @@ type Tab = (typeof TABS)[number];
 
 interface Props { source: RenexSource; build: () => RenexSceneSource; onClose: () => void }
 
+/** Setup fields that only move the camera (handled without rebuilding the scene). */
+const CAMERA_KEYS = ['az', 'el', 'dolly', 'focal', 'fNumber', 'focusZ', 'blades', 'shot'] as const;
+/** Setup fields that do not change the picture at all. */
+const OUTPUT_KEYS = ['quality', 'format', 'jpegQuality', 'watermark', 'saveToProject', 'denoise', 'aspect'] as const;
+const sceneKey = (s: RenderSetup) => JSON.stringify({ ...s, ...Object.fromEntries([...CAMERA_KEYS, ...OUTPUT_KEYS, 'width', 'height'].map((k) => [k, 0])) });
+const cameraKey = (s: RenderSetup) => JSON.stringify(CAMERA_KEYS.map((k) => s[k]));
+
 export function RenexStudio({ source, build, onClose }: Props) {
   const [setup, setSetupState] = useState<RenderSetup>(() => lastSetup(source));
   const [tab, setTab] = useState<Tab>('Scene');
   const [scene, setScene] = useState<RenexSceneSource | null>(null);
   const [err, setErr] = useState('');
   const [prog, setProg] = useState<RenderProgress | null>(null);
+  const [live, setLive] = useState('Preparing live view…');
+  const [view, setView] = useState<'live' | 'final'>('live');
   const [toast, setToast] = useState('');
   const [ai, setAiState] = useState<AiSettings>(loadAi);
   const [profiles, setProfiles] = useState(() => profilesFor(source));
-  const host = useRef<HTMLDivElement>(null);
+  const [imported, setImported] = useState<string | null>(null);
+  const liveHost = useRef<HTMLDivElement>(null);
+  const finalHost = useRef<HTMLDivElement>(null);
+  const vp = useRef<RenexViewport | null>(null);
   const eng = useRef<RenexRenderer | null>(null);
+  const fromOrbit = useRef(false);
   const supported = useMemo(() => RenexRenderer.supported(), []);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
   const set = (patch: Partial<RenderSetup>) => setSetupState((s) => { const n = { ...s, ...patch }; rememberSetup(source, n); return n; });
   const setAi = (patch: Partial<AiSettings>) => setAiState((s) => { const n = { ...s, ...patch }; saveAi(n); return n; });
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3500); };
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 4000); };
 
-  // read the design once on open (and on "Refresh design")
-  const refresh = () => { try { setScene(build()); setErr(''); } catch (e) { setErr(`Could not read the design: ${(e as Error).message}`); } };
-  useEffect(() => { setTimeout(refresh, 20); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // read the design once on open (and on "Refresh design"); geometry building yields to the UI first
+  const refresh = () => { setImported(null); setTimeout(() => { try { setScene(build()); setErr(''); } catch (e) { setErr(`Could not read the design: ${(e as Error).message}`); } }, 30); };
+  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
+  // live viewport: created once, rendered on demand
   useEffect(() => {
-    if (!supported) return;
-    const r = new RenexRenderer();
-    r.onProgress = setProg;
-    eng.current = r;
-    host.current!.appendChild(r.canvas);
+    if (!supported || !liveHost.current) return;
+    const v = new RenexViewport(liveHost.current, {
+      onStatus: setLive,
+      onLost: (l) => { if (l) setErr('The browser reset the graphics context; restoring the live view…'); else setErr(''); },
+      onCamera: (c) => { fromOrbit.current = true; set(c); },
+    });
+    vp.current = v;
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); } };
     window.addEventListener('keydown', k, true);
-    return () => { window.removeEventListener('keydown', k, true); r.dispose(); r.canvas.remove(); eng.current = null; };
+    return () => { window.removeEventListener('keydown', k, true); v.dispose(); vp.current = null; eng.current?.dispose(); eng.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported]);
 
-  const render = async (q?: Quality) => {
-    if (!scene || !eng.current) return;
-    const s = q ? { ...setup, quality: q } : setup;
-    if (q) set({ quality: q });
-    try { const b = await eng.current.render(scene, s); if (b.notes.length) flash(b.notes.join(' ')); } catch (e) { setErr(`Render failed: ${(e as Error).message}`); }
+  // rebuild the live scene when anything visual changes (debounced); camera-only edits just move the camera
+  const sKey = sceneKey(setup), cKey = cameraKey(setup);
+  useEffect(() => {
+    if (!scene || !vp.current) return;
+    const t = setTimeout(() => { vp.current?.setScene(scene, setup, false); }, 120);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene, sKey]);
+  useEffect(() => {
+    if (fromOrbit.current) { fromOrbit.current = false; return; }
+    vp.current?.applyCamera(setup);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cKey]);
+  // a new design or import reframes to the setup's shot
+  useEffect(() => { if (scene) setTimeout(() => vp.current?.applyCamera(setup), 200); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [scene]);
+
+  /** The path tracer lives only while a final render is wanted; its own GPU context is freed afterwards. */
+  const tracer = () => {
+    if (eng.current && !eng.current.lost) return eng.current;
+    eng.current?.dispose();
+    const r = new RenexRenderer();
+    r.onProgress = setProg;
+    r.canvas.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block';
+    finalHost.current?.replaceChildren(r.canvas);
+    eng.current = r;
+    return r;
   };
 
-  const info = (aiUsed = false): DisclosureInfo => ({
-    title: scene?.title ?? 'Render', source: source === 'plantex' ? 'Plantex' : 'Lumonex', aiAssisted: aiUsed, aiProvider: aiUsed ? AI_PROVIDERS.find((p) => p.id === ai.provider)?.name : undefined,
+  const render = async (q?: Quality) => {
+    if (!scene) return;
+    const s = q ? { ...setup, quality: q } : setup;
+    if (q) set({ quality: q });
+    setErr('');
+    setView('final');
+    try {
+      const b = await tracer().renderToCompletion(scene, s, setProg);
+      if (b.notes.length) flash(b.notes.join(' '));
+    } catch (e) {
+      setErr(`Final render failed: ${(e as Error).message} The live view is still available, and "Export" saves it at full resolution.`);
+      eng.current?.dispose(); eng.current = null;
+      setView('live'); setProg(null);
+    }
+  };
+
+  const info = (aiUsed = false, realtime = false): DisclosureInfo => ({
+    title: scene?.title ?? 'Render', source: imported ? 'Imported model' : source === 'plantex' ? 'Plantex' : 'Lumonex', aiAssisted: aiUsed, aiProvider: aiUsed ? AI_PROVIDERS.find((p) => p.id === ai.provider)?.name : undefined,
     details: [
       `Layer height ${scene?.print.layerHeight ?? 0.2} mm, line width ${scene?.print.lineWidth.toFixed(2) ?? '0.42'} mm`,
       ...(scene?.parts ?? []).map((p) => `${p.name}: ${setup.parts[p.key]?.finish ?? p.finish} ${setup.parts[p.key]?.hex ?? p.hex}`),
-      `Quality ${QUALITY[setup.quality].name}, ${prog?.samples ?? 0} samples per pixel`,
+      realtime ? 'Real-time raster render (image-based lighting)' : `Path traced, ${QUALITY[setup.quality].name}, ${prog?.samples ?? 0} samples per pixel`,
     ],
   });
 
@@ -78,50 +134,30 @@ export function RenexStudio({ source, build, onClose }: Props) {
     useStore.setState({ project: { ...project, photos: [...project.photos.filter((p) => p.name !== name), { name, dataUrl }] } });
   };
 
-  const [batch, setBatch] = useState<BatchSpec>({ aspects: [], shots: [], light: 'current' });
-  const [batchState, setBatchState] = useState<{ i: number; n: number; label: string } | null>(null);
-  const batchCancel = useRef(false);
-  const runBatch = async () => {
-    if (!scene || !eng.current) return;
-    const jobs = batchJobs(setup, batch, SHOTS, isLamp);
-    const JSZip = (await import('jszip')).default;
-    const zip = new JSZip();
-    batchCancel.current = false;
-    const r = eng.current;
-    try {
-      for (let i = 0; i < jobs.length && !batchCancel.current; i++) {
-        setBatchState({ i: i + 1, n: jobs.length, label: jobs[i].label });
-        await r.renderToCompletion(scene, jobs[i].setup, setProg);
-        if (batchCancel.current) break;
-        const out = await r.exportImage(jobs[i].setup, info(false));
-        const name = out.name.replace(/-renex\./, `-${jobs[i].label}-renex.`);
-        zip.file(name, out.bytes);
-        if (setup.saveToProject) await saveToProject(out.blob, name);
-      }
-      const blob = await zip.generateAsync({ type: 'blob' });
-      download(blob, `${(scene.title || 'renders').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase()}-renex-batch.zip`);
-      flash(`Batch done: ${Object.keys(zip.files).length} render(s) in one zip${setup.saveToProject ? ', also saved in the project' : ''}. Each carries the render disclosure.`);
-    } catch (e) { setErr(`Batch failed: ${(e as Error).message}`); }
-    finally { r.onProgress = setProg; setBatchState(null); }
-  };
-
   const download = (blob: Blob, name: string) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
+  const finalReady = view === 'final' && !!prog?.done && !!eng.current && !eng.current.lost;
+  /** The image to export: the finished path-traced render if one is on screen, else the live view at output size. */
+  const currentImage = async (s: RenderSetup) => {
+    if (finalReady) return { out: await eng.current!.exportImage(s, info(false)), realtime: false };
+    const snap = await vp.current!.snapshot(s.width, s.height);
+    return { out: await encodeCanvas(snap, s, info(false, true)), realtime: true };
+  };
+
   const exportNow = async () => {
-    if (!eng.current) return;
     try {
-      const out = await eng.current.exportImage(setup, info(false));
+      const { out, realtime } = await currentImage(setup);
       download(out.blob, out.name);
       if (setup.saveToProject) await saveToProject(out.blob, out.name);
-      flash(`Saved ${out.name}${setup.saveToProject ? ' (also in the project)' : ''} — metadata marks it as a computer-generated render${hasDisclosure(out.bytes) ? ' ✓' : ''}.`);
+      flash(`Saved ${out.name} (${realtime ? 'real-time' : 'path traced'})${setup.saveToProject ? ', also in the project' : ''} — marked as a computer-generated render${hasDisclosure(out.bytes) ? ' ✓' : ''}.`);
     } catch (e) { setErr((e as Error).message); }
   };
 
   const exportAi = async () => {
-    if (!eng.current || !aiReady(ai)) return;
+    if (!aiReady(ai)) return;
     try {
       flash('Sending the render to the AI pass…');
-      const out = await eng.current.exportImage({ ...setup, format: 'png', watermark: { ...setup.watermark, enabled: false } }, info(false));
+      const { out } = await currentImage({ ...setup, format: 'png', watermark: { ...setup.watermark, enabled: false } });
       const enhanced = await aiEnhance(out.blob, ai);
       const bytes = tagImage(new Uint8Array(await enhanced.arrayBuffer()), info(true));
       download(new Blob([bytes], { type: enhanced.type || 'image/png' }), out.name.replace('-renex', '-renex-ai'));
@@ -129,8 +165,62 @@ export function RenexStudio({ source, build, onClose }: Props) {
     } catch (e) { setErr((e as Error).message); }
   };
 
+  const [batch, setBatch] = useState<BatchSpec>({ aspects: [], shots: [], light: 'current', mode: 'realtime' });
+  const [batchState, setBatchState] = useState<{ i: number; n: number; label: string } | null>(null);
+  const batchCancel = useRef(false);
+  const runBatch = async () => {
+    if (!scene || !vp.current) return;
+    const jobs = batchJobs(setup, batch, SHOTS, isLamp);
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    batchCancel.current = false;
+    try {
+      for (let i = 0; i < jobs.length && !batchCancel.current; i++) {
+        const job = jobs[i];
+        setBatchState({ i: i + 1, n: jobs.length, label: job.label });
+        let out: { blob: Blob; bytes: Uint8Array; name: string };
+        if (batch.mode === 'final') {
+          const r = tracer();
+          setView('final');
+          await r.renderToCompletion(scene, job.setup, setProg);
+          if (batchCancel.current) break;
+          out = await r.exportImage(job.setup, info(false));
+        } else {
+          vp.current.setScene(scene, job.setup, true);
+          vp.current.applyCamera(job.setup);
+          await new Promise((r) => setTimeout(r, 30));
+          out = await encodeCanvas(await vp.current.snapshot(job.setup.width, job.setup.height), job.setup, info(false, true));
+        }
+        const name = out.name.replace(/-renex\./, `-${job.label}-renex.`);
+        zip.file(name, out.bytes);
+        if (setup.saveToProject) await saveToProject(out.blob, name);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      download(blob, `${(scene.title || 'renders').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase()}-renex-batch.zip`);
+      flash(`Batch done: ${Object.keys(zip.files).length} image(s) in one zip${setup.saveToProject ? ', also saved in the project' : ''}. Each carries the render disclosure.`);
+    } catch (e) { setErr(`Batch failed: ${(e as Error).message}`); }
+    finally {
+      setBatchState(null);
+      if (batch.mode !== 'final') { vp.current?.setScene(scene, setup, true); vp.current?.applyCamera(setup); }
+    }
+  };
+
+  const onImport = async (f: File | undefined) => {
+    if (!f) return;
+    setErr('');
+    setLive(`Importing ${f.name}…${/\.(step|stp|iges|igs|brep)$/i.test(f.name) ? ' (tessellating the CAD model in the background)' : ''}`);
+    try {
+      const src = await importModel(f);
+      setImported(f.name);
+      setView('live'); setProg(null);
+      setScene(src);
+      flash(`Imported ${f.name}: ${src.parts.length} part(s). Set materials in the Product tab.`);
+    } catch (e) { setErr(`Import failed: ${(e as Error).message}`); setLive(''); }
+  };
+
   const pct = prog && prog.target ? Math.min(100, (prog.samples / prog.target) * 100) : 0;
-  const isLamp = source === 'lumonex';
+  const isLamp = source === 'lumonex' && !imported;
+  const tracing = !!eng.current?.running;
 
   return createPortal(
     <div className="rx-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -139,9 +229,10 @@ export function RenexStudio({ source, build, onClose }: Props) {
           <span className="mx-badge">Rx</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="rx-title">Renex · {scene?.title ?? '…'}</div>
-            <div className="rx-sub">Physically based path tracer · {isLamp ? 'Lumonex' : 'Plantex'} · {scene ? `${scene.parts.length} printed part(s), ${scene.print.layerHeight} mm layers` : 'reading design…'}</div>
+            <div className="rx-sub">Real-time PBR view + path-traced final render · {imported ? `imported ${imported}` : isLamp ? 'Lumonex' : 'Plantex'} · {scene ? `${scene.parts.length} part(s), ${scene.print.layerHeight} mm layers` : 'reading design…'}</div>
           </div>
-          <button className="btn-secondary" onClick={refresh}>Refresh design</button>
+          <label className="btn-secondary rx-file" title={`Render any model: ${IMPORT_EXT.join(' ')}`}>Import model…<input type="file" accept={IMPORT_EXT.join(',')} onChange={(e) => { onImport(e.target.files?.[0]); e.target.value = ''; }} /></label>
+          <button className="btn-secondary" onClick={refresh}>{imported ? 'Back to design' : 'Refresh design'}</button>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>✕</button>
         </header>
         <div className="rx-body">
@@ -159,25 +250,33 @@ export function RenexStudio({ source, build, onClose }: Props) {
             </div>
           </aside>
           <main className="rx-centre">
-            <div className="rx-stage" ref={host} style={{ aspectRatio: `${setup.width} / ${setup.height}` }}>
-              {!supported && <div className="rx-msg">Renex needs WebGL 2 with float render targets. Update your graphics driver or browser.</div>}
-              {supported && !prog && <div className="rx-msg">Choose a quality and press Render.</div>}
+            <div className="rx-stage" style={{ aspectRatio: `${setup.width} / ${setup.height}` }}>
+              <div ref={liveHost} className="rx-layer" style={{ visibility: view === 'live' ? 'visible' : 'hidden' }} />
+              <div ref={finalHost} className="rx-layer" style={{ visibility: view === 'final' ? 'visible' : 'hidden' }} />
+              {!supported && <div className="rx-msg">Renex needs WebGL 2. Update your graphics driver or browser.</div>}
+              {supported && !scene && <div className="rx-msg">Reading the design…</div>}
             </div>
             <div className="rx-bar">
+              <div className="seg mx-seg rx-viewseg">
+                <button className={view === 'live' ? 'on' : ''} onClick={() => setView('live')}>Live</button>
+                <button className={view === 'final' ? 'on' : ''} disabled={!eng.current} onClick={() => setView('final')}>Final</button>
+              </div>
+              <span className="rx-dim">Final render:</span>
               {(Object.keys(QUALITY) as Quality[]).map((q) => (
-                <button key={q} className={`btn-small ${setup.quality === q ? 'btn-primary' : 'btn-secondary'}`} disabled={!scene} onClick={() => render(q)} title={QUALITY[q].note}>
+                <button key={q} className={`btn-small ${setup.quality === q && view === 'final' ? 'btn-primary' : 'btn-secondary'}`} disabled={!scene || tracing} onClick={() => render(q)} title={QUALITY[q].note}>
                   {QUALITY[q].name} <span className="rx-dim">· {QUALITY[q].samples} spp</span>
                 </button>
               ))}
               <span style={{ flex: 1 }} />
-              {eng.current?.running ? <button className="btn-secondary btn-small" onClick={() => { eng.current?.stop(); setProg((p) => p && { ...p, stage: 'Stopped' }); }}>Stop</button>
-                : prog && <button className="btn-secondary btn-small" onClick={() => eng.current?.more(QUALITY[setup.quality].samples)}>Refine +{QUALITY[setup.quality].samples}</button>}
-              <button className="btn-primary btn-small" disabled={!prog || prog.samples < 1} onClick={exportNow}>Export {setup.format.toUpperCase()}</button>
-              {aiReady(ai) && <button className="btn-secondary btn-small" disabled={!prog || prog.samples < 1} onClick={exportAi}>Export with AI pass</button>}
+              {tracing ? <button className="btn-secondary btn-small" onClick={() => { eng.current?.stop(); setProg((p) => p && { ...p, stage: 'Stopped' }); }}>Stop</button>
+                : view === 'final' && prog && <button className="btn-secondary btn-small" onClick={() => eng.current?.more(QUALITY[setup.quality].samples)}>Refine +{QUALITY[setup.quality].samples}</button>}
+              <button className="btn-primary btn-small" disabled={!scene || tracing} onClick={exportNow} title={finalReady ? 'Export the path-traced render' : 'Export the live view at full output resolution (instant)'}>Export {setup.format.toUpperCase()}{finalReady ? '' : ' (real-time)'}</button>
+              {aiReady(ai) && <button className="btn-secondary btn-small" disabled={!scene || tracing} onClick={exportAi}>Export with AI pass</button>}
             </div>
-            <div className="rx-progress"><i style={{ width: `${pct}%` }} /></div>
+            <div className="rx-progress"><i style={{ width: `${view === 'final' ? pct : 0}%` }} /></div>
             <div className="rx-status">
-              {batchState ? `Batch ${batchState.i}/${batchState.n} (${batchState.label}) · ` : ''}{prog ? `${prog.stage} · ${prog.samples}/${prog.target} samples · ${prog.elapsed.toFixed(1)} s${prog.done ? '' : ` · ~${Math.ceil(prog.eta)} s left`} · ${setup.width}×${setup.height}` : QUALITY[setup.quality].note}
+              {batchState ? `Batch ${batchState.i}/${batchState.n} (${batchState.label}) · ` : ''}
+              {view === 'final' && prog ? `${prog.stage} · ${prog.samples}/${prog.target} samples · ${prog.elapsed.toFixed(1)} s${prog.done ? '' : ` · ~${Math.ceil(prog.eta)} s left`} · ${setup.width}×${setup.height}` : `${live} · drag to orbit, scroll to zoom`}
               {scene?.warnings.length ? <span className="rx-warn"> · {scene.warnings[0]}</span> : null}
             </div>
             {err && <div className="rx-err">{err}</div>}
@@ -385,7 +484,11 @@ function BatchPanel({ batch, setBatch, setup, isLamp, running, disabled, onRun, 
   const n = Math.max(1, batch.aspects.length) * Math.max(1, batch.shots.length) * (isLamp && batch.light === 'both' ? 2 : 1);
   return <>
     <h4>Batch export</h4>
-    <p className="rx-hint">Renders every combination below at {QUALITY[setup.quality].name} quality with the current scene, and downloads one zip. Nothing ticked = the current size / shot.</p>
+    <p className="rx-hint">Renders every combination below with the current scene and downloads one zip. Nothing ticked = the current size / shot.</p>
+    <div className="rx-batch"><b>Quality</b>
+      <label className="rx-inline"><input type="radio" checked={batch.mode !== 'final'} onChange={() => setBatch({ ...batch, mode: 'realtime' })} />Real-time (instant, live-view quality)</label>
+      <label className="rx-inline"><input type="radio" checked={batch.mode === 'final'} onChange={() => setBatch({ ...batch, mode: 'final' })} />Path traced at {QUALITY[setup.quality].name}</label>
+    </div>
     <div className="rx-batch">
       <b>Sizes</b>
       {ASPECTS.filter((a) => a.id !== 'custom').map((a) => <label key={a.id} className="rx-inline"><input type="checkbox" checked={batch.aspects.includes(a.id)} onChange={() => setBatch({ ...batch, aspects: toggle(batch.aspects, a.id) })} />{a.name}</label>)}

@@ -158,6 +158,19 @@ export function fillMap(kind: (typeof FINISHES)[FinishKind]['fill']) {
   return dataTex(data, n, n, false);
 }
 
+const mapCache = new Map<string, unknown>();
+/**
+ * Memoised map generation (LRU-bounded). Disposing a cached texture only frees its GPU copy; three.js
+ * re-uploads it on next use, so scenes may dispose freely.
+ */
+function cached<T>(key: string, make: () => T): T {
+  if (mapCache.has(key)) { const v = mapCache.get(key) as T; mapCache.delete(key); mapCache.set(key, v); return v; }
+  const v = make();
+  mapCache.set(key, v);
+  if (mapCache.size > 48) mapCache.delete(mapCache.keys().next().value as string);
+  return v;
+}
+
 /** Groups: 0 walls · 1 top skin · 2 bed side · 3 support scars. */
 export const GROUP = { wall: 0, top: 1, bottom: 2, scar: 3 } as const;
 
@@ -269,9 +282,12 @@ export function preparePrinted(p: PrintedPartInput, s: PrintSettings, lineStreng
   const perimeter = 2 * Math.PI * meanR;
   const seamU = s.seam === 'back' ? 0.25 : 0.27; // back of the part (+Y), aligned seams tuck just off it
   const spec = FINISHES[p.finish];
-  const wm = wallMaps(s, perimeter, seamU, 1);
-  const tm = topMaps(s);
-  const maps: SurfaceMaps = { wall: wm.normal, wallRough: wm.rough, top: tm.normal, topRough: tm.rough, bottom: bottomMap(s), fill: fillMap(spec.fill) };
+  // procedural maps cost 50–300 ms of main-thread time each: share them between parts and renders
+  const per = Math.max(20, Math.round(perimeter / 20) * 20);
+  const key = `${s.layerHeight}|${s.lineWidth}|${s.seam}|${s.texturedBed}`;
+  const wm = cached(`wall|${key}|${per}|${seamU}`, () => wallMaps(s, per, seamU, 1));
+  const tm = cached(`top|${key}`, () => topMaps(s));
+  const maps: SurfaceMaps = { wall: wm.normal, wallRough: wm.rough, top: tm.normal, topRough: tm.rough, bottom: cached(`bottom|${key}`, () => bottomMap(s)), fill: spec.fill === 'none' ? undefined : cached(`fill|${spec.fill}`, () => fillMap(spec.fill)) };
   const [wall, top, bottom] = printedMaterials(p.hex, p.finish, maps, { lineStrength, secondHex: p.secondHex });
   const scar = wall.clone();
   scar.roughness = Math.min(1, wall.roughness + 0.35);
