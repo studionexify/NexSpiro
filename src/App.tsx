@@ -7,7 +7,7 @@ import { Icon } from './ui/icons';
 import { printerById } from './profiles/printers';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
 import { DevicePage } from './ui/DevicePage';
-import { BooleanPanel, CutPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
+import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
@@ -24,6 +24,7 @@ import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
 import { ClickexStudioHost } from './plugins/clickex/ui/Studio';
+import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
 import { ModeToggle } from './ui/advanced/ModeToggle';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
@@ -228,6 +229,7 @@ function useShortcuts() {
       else if (k === 'u') s.set({ tool: s.tool === 'measure' ? 'select' : 'measure', measureFeatures: [] });
       else if (k === 'b') s.set({ tool: s.tool === 'boolean' ? 'select' : 'boolean' });
       else if (k === 'e') s.set({ tool: s.tool === 'brim_ears' ? 'select' : 'brim_ears' });
+      else if (k === 'g') s.set({ tool: s.tool === 'edges' ? 'select' : 'edges', edgeSel: null });
       else if (s.tool === 'paint_color' && k >= '1' && k <= '9' && +k <= s.filaments.length) s.set({ paintColor: +k });
       else if (k === 'm') s.set({ tool: s.tool === 'move' ? 'select' : 'move' });
       else if (k === 'r') s.set({ tool: s.tool === 'rotate' ? 'select' : 'rotate' });
@@ -269,7 +271,7 @@ export default function App() {
         {is3d && <Sidebar />}
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
@@ -289,6 +291,7 @@ export default function App() {
       <FillBedHost />
       <LumonexStudioHost />
       <ClickexStudioHost />
+      <FlenexStudioHost />
       <InstantTooltips />
       <ShortcutsHost />
     </div>

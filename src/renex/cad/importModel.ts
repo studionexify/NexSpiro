@@ -8,7 +8,7 @@ import { soupOf, type RenexSceneSource, type SourcePart } from '../source';
 
 export const IMPORT_EXT = ['.step', '.stp', '.iges', '.igs', '.brep', '.stl', '.obj', '.3mf'];
 
-interface RawMesh { name: string; color?: [number, number, number]; positions: Float32Array; indices: Uint32Array }
+export interface RawMesh { name: string; color?: [number, number, number]; positions: Float32Array; indices: Uint32Array; /** B-rep face id per triangle (CAD imports). */ faces?: Uint32Array }
 
 let worker: Worker | null = null, seq = 0;
 const pending = new Map<number, { resolve: (m: RawMesh[]) => void; reject: (e: Error) => void }>();

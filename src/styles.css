@@ -949,3 +949,64 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cx-saved { display: flex; gap: 6px; margin-bottom: 6px; }
 @media (max-width: 1180px) { .cx-body { grid-template-columns: 340px minmax(0, 1fr) 300px; } }
 @media (max-width: 900px) { .cx-body { grid-template-columns: 1fr; grid-template-rows: 50vh auto auto; overflow-y: auto; } .cx-centre { order: -1; min-height: 50vh; } }
+
+/* ---------------------------------------------------------------- Flenex Studio (uses the lx-* window) */
+.fx-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.fx-pair { display: inline-flex; gap: 2px; }
+.fx-source { margin-bottom: 8px; }
+.fx-tabs { display: flex; gap: 2px; margin: 6px 0 8px; border-bottom: 1px solid var(--border); position: sticky; top: -10px; background: var(--surface-secondary); z-index: 2; padding-top: 4px; }
+.fx-tab { flex: 1; padding: 7px 4px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 12.5px; font-weight: 600; }
+.fx-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.fx-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; max-height: 280px; overflow-y: auto; padding-right: 2px; }
+.fx-preset { text-align: left; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-primary); color: var(--text); cursor: pointer; font-size: 12px; display: flex; flex-direction: column; gap: 1px; }
+.fx-preset small { color: var(--text-muted); font-size: 10.5px; }
+.fx-preset:hover { border-color: var(--accent); }
+.fx-preset.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-primary)); }
+.fx-addon { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--surface-primary); font-size: 12px; }
+.fx-addon summary { cursor: pointer; }
+.fx-addon-body { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.fx-cutlist { display: flex; flex-direction: column; gap: 3px; max-height: 200px; overflow-y: auto; }
+.fx-cut { display: flex; justify-content: space-between; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-primary); color: var(--text); cursor: pointer; font-size: 12px; }
+.fx-cut small { color: var(--text-muted); }
+.fx-cut.on { border-color: #ff5c8d; }
+.fx-cut.warn { border-left: 3px solid #e0a52e; }
+.fx-cut.bad { border-left: 3px solid #e5484d; }
+.fx-cutedit { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.fx-palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-sw { position: relative; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px #000a; }
+.fx-sw.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.fx-sw input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.fx-sw.add { background: var(--surface-primary); color: var(--text); text-shadow: none; font-size: 16px; }
+.fx-fit.ok { color: #2fa56b; font-weight: 600; font-size: 12.5px; }
+.fx-fit.bad { color: #e5484d; font-weight: 600; font-size: 12.5px; }
+.fx-stat { display: flex; justify-content: space-between; font-size: 12.5px; padding: 3px 0; }
+.fx-stat .ok { color: #2fa56b; } .fx-stat .bad { color: #e5484d; }
+.fx-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; border: 1px solid #0003; }
+.fx-warn { font-size: 11.5px; padding: 4px 6px; margin-bottom: 3px; border-radius: 6px; background: color-mix(in srgb, #e0a52e 14%, transparent); border-left: 3px solid #e0a52e; }
+.fx-hint { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); background: color-mix(in srgb, var(--surface-primary) 92%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: var(--text); }
+.fx-busy { position: absolute; left: 12px; top: 12px; background: var(--accent); color: #fff; padding: 3px 10px; border-radius: 8px; font-size: 12px; }
+.mx-two input.input { width: 54px !important; padding: 2px 4px; }
+/* Flenex cut-type picker */
+.fx-jp { position: relative; }
+.fx-jp-cur { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-primary); color: var(--text); cursor: pointer; }
+.fx-jp-cur img { width: 52px; height: 39px; border-radius: 6px; background: #20262e; object-fit: cover; }
+.fx-jp-cur span { display: flex; flex-direction: column; flex: 1; font-size: 12.5px; }
+.fx-jp-cur small, .fx-jp-cell small { color: var(--text-muted); font-size: 10.5px; line-height: 1.25; }
+.fx-jp-ph { display: block; width: 100%; height: 66px; border-radius: 6px; background: linear-gradient(90deg, #29303a, #333c48, #29303a); }
+.fx-jp-ph.sm { width: 52px; height: 39px; }
+.fx-jp-pop { position: absolute; z-index: 30; left: 0; right: 0; top: 100%; margin-top: 4px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-secondary); box-shadow: 0 12px 34px #0007; max-height: 70vh; overflow-y: auto; min-width: 330px; }
+.fx-jp-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 6px 2px; }
+.fx-jp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.fx-jp-cell { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-primary); color: var(--text); cursor: pointer; }
+.fx-jp-cell img { width: 100%; aspect-ratio: 4 / 3; border-radius: 6px; background: #20262e; object-fit: cover; }
+.fx-jp-cell b { font-size: 12px; }
+.fx-jp-cell:hover, .fx-jp-cell.on { border-color: var(--accent); }
+.fx-part { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; background: var(--surface-primary); }
+.fx-part.on { border-color: #ff5c8d; }
+.fx-count { display: flex; align-items: center; gap: 6px; }
+.fx-count b { min-width: 26px; text-align: center; font-size: 14px; }
+.fx-dirbar { display: flex; gap: 6px; align-items: center; }
+.fx-dirbar select { font-size: 12px; padding: 2px 6px; }
+.fx-hint { white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+.fx-jp-pop { min-width: 360px; }
+.mx-two input.input { width: 56px !important; padding: 2px 3px !important; font-size: 11.5px; text-align: right; }

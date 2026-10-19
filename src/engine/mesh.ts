@@ -1,14 +1,22 @@
 // Mesh utilities shared by the UI (import, transforms) and the engine (slicing).
 
-export interface IndexedMesh { vertices: Float32Array; indices: Uint32Array }
+export interface IndexedMesh {
+  vertices: Float32Array;
+  indices: Uint32Array;
+  /** Source face id per triangle (an OBJ quad or polygon, a CAD face). Triangles sharing an id came from one face. */
+  faceGroups?: Uint32Array;
+  /** 'cad': the groups are B-rep faces of a STEP / IGES import, so a group boundary is a true model edge even where it is smooth-ish. */
+  groupKind?: 'cad';
+}
 
-/** Weld a triangle soup (flat xyz per corner) into an indexed mesh. */
-export function weld(soup: Float32Array, tolerance = 1e-5): IndexedMesh {
+/** Weld a triangle soup (flat xyz per corner) into an indexed mesh. `groups` (one id per soup triangle) is carried to `faceGroups`. */
+export function weld(soup: Float32Array, tolerance = 1e-5, groups?: ArrayLike<number>): IndexedMesh {
   const inv = 1 / tolerance;
   const map = new Map<string, number>();
   const verts: number[] = [];
   const triCount = Math.floor(soup.length / 9);
   const idx = new Uint32Array(triCount * 3);
+  const grp = groups ? new Uint32Array(triCount) : undefined;
   let kept = 0;
   for (let t = 0; t < triCount; t++) {
     const tri: number[] = [];
@@ -23,9 +31,12 @@ export function weld(soup: Float32Array, tolerance = 1e-5): IndexedMesh {
     // drop degenerate (collapsed) triangles
     if (tri[0] === tri[1] || tri[1] === tri[2] || tri[0] === tri[2]) continue;
     idx[kept * 3] = tri[0]; idx[kept * 3 + 1] = tri[1]; idx[kept * 3 + 2] = tri[2];
+    if (grp) grp[kept] = groups![t];
     kept++;
   }
-  return { vertices: new Float32Array(verts), indices: idx.slice(0, kept * 3) };
+  const out: IndexedMesh = { vertices: new Float32Array(verts), indices: idx.slice(0, kept * 3) };
+  if (grp) out.faceGroups = grp.slice(0, kept);
+  return out;
 }
 
 export function meshBounds(v: Float32Array) {
