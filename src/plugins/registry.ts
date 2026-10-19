@@ -14,6 +14,8 @@ import { PlantexPanel } from './plantex/ui/PlantexPanel';
 import { loadPlantexProject, plantexProject } from './plantex/ui/state';
 import { LumonexPanel } from './lumonex/ui/LumonexPanel';
 import { loadProject as loadLumonexProject, projectData as lumonexProject } from './lumonex/ui/state';
+import { ClickexPanel } from './clickex/ui/ClickexPanel';
+import { clickexProject, loadClickexProject } from './clickex/ui/state';
 import { FlenexPanel } from './flenex/ui/FlenexPanel';
 import { loadProject as loadFlenexProject, projectData as flenexProject } from './flenex/ui/state';
 
@@ -92,6 +94,15 @@ export const PLUGINS: UiPlugin[] = [
     sliceConfig: () => undefined,
     projectData: () => lumonexProject(),
     loadProjectData: (d) => loadLumonexProject(d),
+  },
+  {
+    id: 'clickex', name: 'Clickex', badge: 'C',
+    description: 'Fidget clickers from any design: an image, SVG, icon, text, name blocks or a 3D model, built around a mechanical keyboard switch with a live preview.',
+    Panel: ClickexPanel,
+    // geometry is placed on the plate as ordinary objects, so the slicer needs nothing from Clickex
+    sliceConfig: () => undefined,
+    projectData: () => clickexProject(),
+    loadProjectData: (d) => loadClickexProject(d),
   },
   {
     id: 'flenex', name: 'Flenex', badge: 'F',
