@@ -44,6 +44,7 @@ export function Toolbar() {
       {T('paint_color', 'brushColor', 'Color painting', 'N')}
       {T('measure', 'measure', 'Measure', 'U')}
       {T('brim_ears', 'ears', 'Brim ears', 'E')}
+      {T('edges', 'edges', 'Edges: chamfer, fillet, smooth', 'G', !objects.length)}
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
     </div>

@@ -14,7 +14,7 @@ import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
@@ -125,6 +125,14 @@ interface State {
   showAdvanced: boolean;
   search: string;
   showOverhangs: boolean;
+  /** Draw feature edges (creases, open borders, colour and face boundaries) on the models. */
+  showEdges: boolean;
+  /** Smooth shading across faces that bend less than edgeAngle (looks like a rounded body; geometry is unchanged). */
+  shadeSmooth: boolean;
+  /** Dihedral angle (degrees) from which an edge counts as a crease. */
+  edgeAngle: number;
+  /** Edges picked with the Edges tool, by vertex pair of one object's mesh. */
+  edgeSel: { objectId: string; edges: [number, number][] } | null;
 
   brushSize: number; // mm
   brushType: BrushType;
@@ -247,6 +255,10 @@ export const useStore = create<State>((set, get) => ({
   showAdvanced: false,
   search: '',
   showOverhangs: false,
+  showEdges: false,
+  shadeSmooth: false,
+  edgeAngle: 30,
+  edgeSel: null,
 
   brushSize: 4,
   brushType: 'circle',

@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
+import { bevelSelectedEdges, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
+import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
   return (
@@ -229,6 +231,54 @@ export function MeasurePanel() {
         </div>
       ) : null}
       {fs.length > 0 && <button className="btn-secondary btn-small" style={{ marginTop: 8 }} onClick={() => set({ measureFeatures: [] })}>Clear</button>}
+    </div>
+  );
+}
+
+/** Edges tool: pick edges, chamfer / fillet them, and smooth the body. */
+export function EdgesPanel() {
+  const s = useStore();
+  const [size, setSize] = useState(2);
+  const [segments, setSegments] = useState(6);
+  const [levels, setLevels] = useState(1);
+  const [relax, setRelax] = useState(8);
+  const [msg, setMsg] = useState('');
+  if (s.tool !== 'edges') return null;
+  const o = s.objects.find((x) => x.id === (s.edgeSel?.objectId ?? s.selected[0]));
+  const n = s.edgeSel?.edges.length ?? 0;
+  const quads = !!o && hasPolygonFaces(o.mesh);
+  return (
+    <div className="float panel" style={{ width: 310 }}>
+      <h4>Edges</h4>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click an edge to pick its whole run. <kbd>Shift</kbd> adds or removes, <kbd>Alt</kbd> picks a single segment.</p>
+      <div className="row" style={{ marginBottom: 4 }}>
+        <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={s.shadeSmooth} onChange={(e) => s.set({ shadeSmooth: e.target.checked })} />Smooth shading</label>
+        <span className="spacer" />
+        <label className="row" style={{ gap: 4 }} title="Draw creases, open edges and the outline of painted colours"><input type="checkbox" checked={s.showEdges} onChange={(e) => s.set({ showEdges: e.target.checked })} />Show edges</label>
+      </div>
+      <Slider label="Crease" value={s.edgeAngle} min={5} max={90} step={1} unit="°" onChange={(v) => s.set({ edgeAngle: v })} />
+      <div className="row" style={{ marginBottom: 8 }}>
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && selectCreaseEdges(o.id)}>Select all creases</button>
+        <button className="btn-secondary btn-small" disabled={!n} onClick={() => s.set({ edgeSel: null })}>Clear</button>
+        <span className="spacer" />
+        <span className="muted" style={{ fontSize: 12 }}>{n} edge{n === 1 ? '' : 's'} picked</span>
+      </div>
+      <h4 style={{ marginTop: 6 }}>Chamfer / fillet</h4>
+      <Slider label="Size" value={size} min={0.1} max={20} step={0.1} unit="mm" onChange={setSize} />
+      <Slider label="Round" value={segments} min={2} max={16} step={1} unit="seg" onChange={setSegments} />
+      <div className="row" style={{ marginBottom: 8 }}>
+        <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, 1) ?? '')}>Chamfer</button>
+        <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, segments) ?? '')}>Fillet</button>
+      </div>
+      <h4 style={{ marginTop: 6 }}>Smooth body</h4>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>{quads ? 'This model has quad faces: they are subdivided into a smooth outer body (Catmull-Clark).' : 'Subdivides the triangles into a finer, rounder surface (Loop). Edges steeper than the crease angle stay sharp.'}</p>
+      <Slider label="Levels" value={levels} min={1} max={3} step={1} unit="×" onChange={setLevels} />
+      <Slider label="Relax" value={relax} min={1} max={50} step={1} unit="pass" onChange={setRelax} />
+      <div className="row">
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && subdivideObject(o.id, { levels, creaseDeg: s.edgeAngle })}>Subdivide</button>
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && smoothObject(o.id, { iterations: relax, creaseDeg: s.edgeAngle })}>Relax surface</button>
+      </div>
+      {msg && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{msg}</p>}
     </div>
   );
 }
