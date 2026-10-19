@@ -23,6 +23,7 @@ import { copyObjects, pasteObjects } from './state/objectOps';
 import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
+import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
 import { ModeToggle } from './ui/advanced/ModeToggle';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
@@ -287,6 +288,7 @@ export default function App() {
       <PlateSettingsHost />
       <FillBedHost />
       <LumonexStudioHost />
+      <FlenexStudioHost />
       <InstantTooltips />
       <ShortcutsHost />
     </div>

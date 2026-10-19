@@ -14,6 +14,8 @@ import { PlantexPanel } from './plantex/ui/PlantexPanel';
 import { loadPlantexProject, plantexProject } from './plantex/ui/state';
 import { LumonexPanel } from './lumonex/ui/LumonexPanel';
 import { loadProject as loadLumonexProject, projectData as lumonexProject } from './lumonex/ui/state';
+import { FlenexPanel } from './flenex/ui/FlenexPanel';
+import { loadProject as loadFlenexProject, projectData as flenexProject } from './flenex/ui/state';
 
 export interface UiPlugin {
   id: string;
@@ -90,6 +92,15 @@ export const PLUGINS: UiPlugin[] = [
     sliceConfig: () => undefined,
     projectData: () => lumonexProject(),
     loadProjectData: (d) => loadLumonexProject(d),
+  },
+  {
+    id: 'flenex', name: 'Flenex', badge: 'F',
+    description: 'Print-in-place flexi animals and characters: 47 designs with full body and add-on controls, or import a model and place ball, hinge and swivel cuts. Paint colours, export a coloured 3MF, sized and toleranced for your printer.',
+    Panel: FlenexPanel,
+    // the flexi is placed on the plate as an ordinary painted object, so the slicer needs nothing from Flenex
+    sliceConfig: () => undefined,
+    projectData: () => flenexProject(),
+    loadProjectData: (d) => loadFlenexProject(d),
   },
 ];
 
