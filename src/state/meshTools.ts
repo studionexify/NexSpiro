@@ -1,7 +1,7 @@
 // Surface edit actions on scene objects: chamfer / fillet of picked edges, smooth subdivision, smoothing.
 // Each is one undo step. Per-triangle paint is carried across the edit.
 import { openEdgeCount } from '../engine/mesh';
-import { bevelEdges, remapTriArray, smoothMesh, subdivide, type EditResult, type EdgePair, type SmoothOptions, type SubdivOptions } from '../engine/meshedit';
+import { bevelEdges, refineMesh, remapTriArray, smoothMesh, subdivide, type EditResult, type EdgePair, type SmoothOptions, type SubdivOptions } from '../engine/meshedit';
 import { buildTopology, edgeChain, EDGE_SHARP } from '../engine/topology';
 import { dropToBed, useStore, worldBounds, type ObjectPaint, type SceneObject } from './store';
 
@@ -63,10 +63,12 @@ export function subdivideObject(id: string, opts: SubdivOptions): void {
   commit(id, r, `Smoothed body: ${(r.mesh.indices.length / 3).toLocaleString()} triangles.`);
 }
 
-export function smoothObject(id: string, opts: SmoothOptions): void {
+export function smoothObject(id: string, opts: SmoothOptions & { paintedOnly?: boolean }): void {
   const o = useStore.getState().objects.find((x) => x.id === id);
   if (!o) return;
-  commit(id, smoothMesh(o.mesh, opts), 'Surface smoothed.');
+  const region = opts.paintedOnly ? paintedRegion(o) : undefined;
+  if (opts.paintedOnly && !region) { useStore.getState().set({ toast: { kind: 'warn', text: 'Nothing is painted on this object.' } }); return; }
+  commit(id, smoothMesh(o.mesh, { ...opts, region }), opts.paintedOnly ? 'Painted area smoothed.' : 'Surface smoothed.');
 }
 
 // ------------------------------------------------------------------ edge picking
@@ -109,4 +111,25 @@ export function pickEdge(objectId: string, tri: number, p: [number, number, numb
   const drop = new Set(run.map(key));
   const edges = allIn ? cur.filter((e) => !drop.has(key(e))) : [...cur, ...run.filter((e) => !have.has(key(e)))];
   s.set({ edgeSel: edges.length ? { objectId, edges } : null });
+}
+
+/** Split long edges so the triangles are of even size (the shape is unchanged). */
+export function refineObject(id: string, maxLen: number): void {
+  const o = useStore.getState().objects.find((x) => x.id === id);
+  if (!o) return;
+  const r = refineMesh(o.mesh, maxLen);
+  if (!r.splits) { useStore.getState().set({ toast: { kind: 'info', text: `No edge is longer than ${maxLen} mm.` } }); return; }
+  commit(id, r, `Refined: ${r.splits.toLocaleString()} edges split, ${(r.mesh.indices.length / 3).toLocaleString()} triangles.`);
+}
+
+/** Triangles carrying any paint (colour, support, seam) on an object, as a region flag array; undefined when nothing is painted. */
+export function paintedRegion(o: SceneObject): Uint8Array | undefined {
+  const tris = o.mesh.indices.length / 3;
+  const out = new Uint8Array(tris);
+  let any = false;
+  for (const k of ['color', 'support', 'seam'] as const) {
+    const a = o.paint?.[k];
+    if (a) for (let t = 0; t < tris && t < a.length; t++) if (a[t]) { out[t] = 1; any = true; }
+  }
+  return any ? out : undefined;
 }

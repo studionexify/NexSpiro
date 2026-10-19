@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
-import { bevelSelectedEdges, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
+import { bevelSelectedEdges, refineObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
 import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
@@ -242,13 +242,15 @@ export function EdgesPanel() {
   const [segments, setSegments] = useState(6);
   const [levels, setLevels] = useState(1);
   const [relax, setRelax] = useState(8);
+  const [paintedOnly, setPaintedOnly] = useState(false);
+  const [refineLen, setRefineLen] = useState(2);
   const [msg, setMsg] = useState('');
   if (s.tool !== 'edges') return null;
   const o = s.objects.find((x) => x.id === (s.edgeSel?.objectId ?? s.selected[0]));
   const n = s.edgeSel?.edges.length ?? 0;
   const quads = !!o && hasPolygonFaces(o.mesh);
   return (
-    <div className="float panel" style={{ width: 310 }}>
+    <div className="float panel" style={{ width: 310, maxHeight: 'calc(100% - 150px)', overflowY: 'auto' }}>
       <h4>Edges</h4>
       <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click an edge to pick its whole run. <kbd>Shift</kbd> adds or removes, <kbd>Alt</kbd> picks a single segment.</p>
       <div className="row" style={{ marginBottom: 4 }}>
@@ -274,10 +276,15 @@ export function EdgesPanel() {
       <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>{quads ? 'This model has quad faces: they are subdivided into a smooth outer body (Catmull-Clark).' : 'Subdivides the triangles into a finer, rounder surface (Loop). Edges steeper than the crease angle stay sharp.'}</p>
       <Slider label="Levels" value={levels} min={1} max={3} step={1} unit="×" onChange={setLevels} />
       <Slider label="Relax" value={relax} min={1} max={50} step={1} unit="pass" onChange={setRelax} />
-      <div className="row">
+      <div className="row" style={{ marginBottom: 6 }}>
         <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && subdivideObject(o.id, { levels, creaseDeg: s.edgeAngle })}>Subdivide</button>
-        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && smoothObject(o.id, { iterations: relax, creaseDeg: s.edgeAngle })}>Relax surface</button>
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && smoothObject(o.id, { iterations: relax, creaseDeg: s.edgeAngle, paintedOnly })}>Relax surface</button>
+        <label className="row" style={{ gap: 4, fontSize: 12 }} title="Only move vertices of triangles that carry colour, support or seam paint"><input type="checkbox" checked={paintedOnly} onChange={(e) => setPaintedOnly(e.target.checked)} />Painted area only</label>
       </div>
+      <h4 style={{ marginTop: 6 }}>Even triangles</h4>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>Splits long edges so smoothing and subdividing behave on coarse or uneven meshes. The shape does not change.</p>
+      <Slider label="Max edge" value={refineLen} min={0.2} max={20} step={0.1} unit="mm" onChange={setRefineLen} />
+      <div className="row"><button className="btn-secondary btn-small" disabled={!o} onClick={() => o && refineObject(o.id, refineLen)}>Refine</button></div>
       {msg && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{msg}</p>}
     </div>
   );

@@ -557,3 +557,81 @@ export function smoothMesh(mesh: IndexedMesh, opts: SmoothOptions = {}): EditRes
   if (mesh.faceGroups) mesh2.faceGroups = mesh.faceGroups;
   return { mesh: mesh2, triSource: new Uint32Array(topo.triCount).map((_, i) => i) };
 }
+
+// ------------------------------------------------------------------------------------------ refinement
+
+export interface RefineResult extends EditResult {
+  /** Triangles split into smaller ones. */
+  splits: number;
+  /** The requested edges, rewritten where an edge was split into two (so a picked edge stays picked). */
+  edges: EdgePair[];
+}
+
+/**
+ * Split every edge longer than `maxLen` at its midpoint until none is left (or `maxTris` is reached), so the
+ * triangles are of even size. Splits are shared by both neighbours so the mesh stays watertight. Shape does not change.
+ * `region` limits splitting to edges of those triangles (a per-triangle flag array).
+ */
+export function refineMesh(mesh: IndexedMesh, maxLen: number, opts: { region?: ArrayLike<number>; maxTris?: number; edges?: EdgePair[] } = {}): RefineResult {
+  const maxTris = opts.maxTris ?? 2_000_000;
+  let cur = mesh;
+  let source = new Uint32Array(mesh.indices.length / 3).map((_, i) => i);
+  let region = opts.region ? Uint8Array.from({ length: source.length }, (_, i) => (opts.region![i] ? 1 : 0)) : undefined;
+  let edges: EdgePair[] = (opts.edges ?? []).map(([a, b]) => [a, b]);
+  let splits = 0;
+  const max2 = maxLen * maxLen;
+  for (let pass = 0; pass < 12; pass++) {
+    const topo = buildTopology(cur);
+    const v = cur.vertices, ix = cur.indices;
+    const n = topo.vertexCount;
+    const mid = new Int32Array(topo.edgeCount).fill(-1);
+    const verts: number[] = Array.from(v);
+    let count = 0;
+    for (let e = 0; e < topo.edgeCount; e++) {
+      const a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+      const dx = v[a * 3] - v[b * 3], dy = v[a * 3 + 1] - v[b * 3 + 1], dz = v[a * 3 + 2] - v[b * 3 + 2];
+      if (dx * dx + dy * dy + dz * dz <= max2) continue;
+      if (region && !(region[topo.edgeTris[e * 2]] || (topo.edgeTris[e * 2 + 1] >= 0 && region[topo.edgeTris[e * 2 + 1]]))) continue;
+      mid[e] = verts.length / 3;
+      verts.push((v[a * 3] + v[b * 3]) / 2, (v[a * 3 + 1] + v[b * 3 + 1]) / 2, (v[a * 3 + 2] + v[b * 3 + 2]) / 2);
+      count++;
+    }
+    if (!count) break;
+    if (topo.triCount + count * 2 > maxTris) break;
+    const tris: number[] = [], src: number[] = [], reg: number[] = [];
+    const D = (a: number, b: number) => Math.hypot(verts[a * 3] - verts[b * 3], verts[a * 3 + 1] - verts[b * 3 + 1], verts[a * 3 + 2] - verts[b * 3 + 2]);
+    const out = (t: number, a: number, b: number, c: number) => { tris.push(a, b, c); src.push(t); reg.push(region ? region[t] : 0); };
+    for (let t = 0; t < topo.triCount; t++) {
+      const c = [ix[t * 3], ix[t * 3 + 1], ix[t * 3 + 2]];
+      const m = [mid[topo.triEdges[t * 3]], mid[topo.triEdges[t * 3 + 1]], mid[topo.triEdges[t * 3 + 2]]]; // edge k: c[k] -> c[k+1]
+      const marked = m.filter((x) => x >= 0).length;
+      if (marked === 0) out(t, c[0], c[1], c[2]);
+      else if (marked === 3) { out(t, c[0], m[0], m[2]); out(t, c[1], m[1], m[0]); out(t, c[2], m[2], m[1]); out(t, m[0], m[1], m[2]); }
+      else if (marked === 1) {
+        const k = m.findIndex((x) => x >= 0), p0 = c[k], p1 = c[(k + 1) % 3], p2 = c[(k + 2) % 3];
+        out(t, p0, m[k], p2); out(t, m[k], p1, p2);
+      } else {
+        const u = m.findIndex((x) => x < 0); // the unsplit edge
+        const p0 = c[(u + 1) % 3], p1 = c[(u + 2) % 3], p2 = c[u];
+        const m0 = m[(u + 1) % 3], m1 = m[(u + 2) % 3];
+        out(t, m0, p1, m1);
+        if (D(m0, p2) <= D(p0, m1)) { out(t, p0, m0, p2); out(t, m0, m1, p2); } else { out(t, p0, m0, m1); out(t, p0, m1, p2); }
+      }
+    }
+    // keep requested edges picked: an edge that was split becomes its two halves
+    const look = edgeLookup(topo);
+    const nextEdges: EdgePair[] = [];
+    for (const [a, b] of edges) {
+      const e = look.get(a < b ? a * n + b : b * n + a);
+      if (e !== undefined && mid[e] >= 0) nextEdges.push([a, mid[e]], [mid[e], b]); else nextEdges.push([a, b]);
+    }
+    edges = nextEdges;
+    splits += count;
+    const next: IndexedMesh = { vertices: new Float32Array(verts), indices: Uint32Array.from(tris) };
+    if (cur.faceGroups) next.faceGroups = remapTriArray(cur.faceGroups, Uint32Array.from(src));
+    source = Uint32Array.from(src, (s) => source[s]);
+    region = region ? Uint8Array.from(reg) : undefined;
+    cur = next;
+  }
+  return { mesh: cur, triSource: source, splits, edges };
+}

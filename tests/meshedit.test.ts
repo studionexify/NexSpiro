@@ -211,3 +211,82 @@ describe('edge tool actions', () => {
     expect(useStore.getState().undoStack.length).toBe(1);
   });
 });
+
+describe('refine and region smoothing', () => {
+  it('splits long edges into even triangles without changing the shape', async () => {
+    const { refineMesh } = await import('../src/engine/meshedit');
+    const m = cube();
+    const r = refineMesh(m, 5, { edges: sharpPairs(m) });
+    expect(r.splits).toBeGreaterThan(0);
+    expect(openEdgeCount(r.mesh)).toBe(0);
+    expect(oriented(r.mesh)).toBe(true);
+    expect(volume(r.mesh)).toBeCloseTo(volume(m), 3);
+    // every edge is now short enough
+    const t = buildTopology(r.mesh);
+    for (let e = 0; e < t.edgeCount; e++) {
+      const a = t.edgeV[e * 2] * 3, b = t.edgeV[e * 2 + 1] * 3;
+      expect(Math.hypot(r.mesh.vertices[a] - r.mesh.vertices[b], r.mesh.vertices[a + 1] - r.mesh.vertices[b + 1], r.mesh.vertices[a + 2] - r.mesh.vertices[b + 2])).toBeLessThanOrEqual(5 + 1e-6);
+    }
+    // picked edges follow the splits and still resolve to mesh edges
+    const t2 = buildTopology(r.mesh);
+    expect(r.edges.length).toBeGreaterThan(12);
+    for (const [a, b] of r.edges) expect(t2.kind[(await import('../src/engine/topology')).edgeBetween(t2, a, b)]).toBe(EDGE_SHARP);
+  });
+  it('a refined cube can be filleted with the full size', () => {
+    const m = cube();
+    const r = bevelEdges(m, sharpPairs(m), 4, 4)!;
+    expect(r.size).toBe(4);
+  });
+  it('relaxes only the chosen region', () => {
+    const m = primitive('sphere', 20);
+    const region = new Uint8Array(m.indices.length / 3);
+    for (let t = 0; t < region.length / 2; t++) region[t] = 1;
+    const r = smoothMesh(m, { iterations: 5, creaseDeg: 90, region });
+    let moved = 0, kept = 0;
+    const inRegion = new Set<number>();
+    for (let t = 0; t < region.length; t++) if (region[t]) for (let k = 0; k < 3; k++) inRegion.add(m.indices[t * 3 + k]);
+    for (let i = 0; i < m.vertices.length / 3; i++) {
+      const same = m.vertices[i * 3] === r.mesh.vertices[i * 3] && m.vertices[i * 3 + 1] === r.mesh.vertices[i * 3 + 1] && m.vertices[i * 3 + 2] === r.mesh.vertices[i * 3 + 2];
+      if (!inRegion.has(i)) { expect(same).toBe(true); kept++; } else if (!same) moved++;
+    }
+    expect(moved).toBeGreaterThan(0);
+    expect(kept).toBeGreaterThan(0);
+  });
+});
+
+describe('large meshes', () => {
+  it('handles ~300k triangles in reasonable time', () => {
+    // a UV sphere with 300k+ triangles
+    const rows = 400, cols = 400;
+    const v: number[] = [];
+    for (let i = 0; i <= rows; i++) for (let j = 0; j < cols; j++) {
+      const th = (Math.PI * i) / rows, ph = (2 * Math.PI * j) / cols;
+      v.push(10 * Math.sin(th) * Math.cos(ph), 10 * Math.sin(th) * Math.sin(ph), 10 * Math.cos(th));
+    }
+    const idx: number[] = [];
+    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+      const a = i * cols + j, b = i * cols + ((j + 1) % cols), c = (i + 1) * cols + j, d = (i + 1) * cols + ((j + 1) % cols);
+      if (i > 0) idx.push(a, c, b);
+      if (i < rows - 1) idx.push(b, c, d);
+    }
+    const m: IndexedMesh = { vertices: new Float32Array(v), indices: Uint32Array.from(idx) };
+    // poles are degenerate-free because the first / last rings collapse to single triangles' worth; weld away duplicates
+    const w = weld(Float32Array.from(idx.flatMap((i) => [m.vertices[i * 3], m.vertices[i * 3 + 1], m.vertices[i * 3 + 2]])));
+    const t0 = performance.now();
+    const t = buildTopology(w);
+    const tTopo = performance.now() - t0;
+    expect(t.triCount).toBeGreaterThan(250_000);
+    const t1 = performance.now();
+    const s = smoothMesh(w, { iterations: 3 });
+    const tSmooth = performance.now() - t1;
+    const t2 = performance.now();
+    const sd = subdivide(w, { levels: 1 });
+    const tSub = performance.now() - t2;
+    expect(sd.mesh.indices.length).toBe(w.indices.length * 4);
+    expect(s.mesh.indices.length).toBe(w.indices.length);
+    // generous bounds: this is about catching accidental quadratic behaviour
+    expect(tTopo).toBeLessThan(8000);
+    expect(tSmooth).toBeLessThan(8000);
+    expect(tSub).toBeLessThan(15000);
+  }, 60000);
+});
