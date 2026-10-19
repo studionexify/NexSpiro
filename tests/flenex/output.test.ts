@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { box, cylinder, initKernel, loft, pieces, sphere, type V3 } from '../../src/plugins/flenex/csg';
-import { buildFlexi, newCut } from '../../src/plugins/flenex/flexi';
+import { buildFlexi, modelBvh, newCut } from '../../src/plugins/flenex/flexi';
 import { fitFor } from '../../src/plugins/flenex/fit';
 import { applyPaint, SCHEMES } from '../../src/plugins/flenex/paint';
 import { build3mf, build3mfModel, paintCode } from '../../src/plugins/flenex/export3mf';
@@ -71,7 +71,7 @@ describe('placement', () => {
   });
   it('a click on the skin gives a cut that builds', () => {
     const m = cylinder(8, 8, -50, 50, 32);
-    const c = cutAt(m, '1', [8, 0, 10], [1, 0, 0], 'limb', 'ball');
+    const c = cutAt(m, modelBvh(m), '1', [8, 0, 10], [1, 0, 0], 'centreline', 'ball');
     const r = buildFlexi(m, [c], fitFor(0.4));
     expect(r.reports[0].ok).toBe(true);
     expect(r.pieces.length).toBe(2);

@@ -12,6 +12,8 @@ import type { Cut, CutReport } from '../flexi';
 import { newCache, runBuild, type BuildRequest, type BuildResult } from '../build';
 import type { FromWorker, ToWorker } from '../worker';
 import { newGroup, type CutEdit, type CutGroup } from '../groups';
+import { modelBvh } from '../flexi';
+import type { MeshBVH } from 'three-mesh-bvh';
 import { defaultCreature, type CreatureDesign } from '../design';
 import { designFromPreset, presetById } from '../presets';
 import { applyPaint, PALETTE_DEFAULT, SCHEMES, type PaintOp } from '../paint';
@@ -68,7 +70,7 @@ function load(): FlenexUiState {
   const design = designFromPreset(presetById('snake')!);
   const d: FlenexUiState = {
     source: 'creature', design, presetId: 'snake', cutsMode: 'auto', manualCuts: [], groups: [], selectedGroup: null, axisMode: 'centreline', importName: '', importRot: [0, 0, 0], importScale: 1,
-    palette: PALETTE_DEFAULT.slice(), paintOps: SCHEMES[0].ops(1), tab: 'design', view: 'colour', tool: 'orbit', selectedCut: null, orientation: 'limb', placeKind: 'ball',
+    palette: PALETTE_DEFAULT.slice(), paintOps: SCHEMES[0].ops(1), tab: 'design', view: 'colour', tool: 'orbit', selectedCut: null, orientation: 'centreline', placeKind: 'ball',
     slot: 1, brush: 6, bucketAngle: 30, clearance: 0, gap: 0, studioOpen: false, showCuts: true, showBed: true, placed: [],
   };
   try {
@@ -88,6 +90,17 @@ export const useFx = () => useSyncExternalStore(subscribe, () => version);
 let importedMesh: IndexedMesh | null = null;
 let importId = 0;
 export const hasImport = () => importedMesh !== null;
+
+/** BVH of the base model for the pointer tools (cached per build). */
+let bvhFor: IndexedMesh | null = null, bvhCache: MeshBVH | null = null;
+export function baseBvh(): MeshBVH | null {
+  if (!built) return null;
+  if (bvhFor !== built.base) { bvhCache = modelBvh(built.base); bvhFor = built.base; }
+  return bvhCache;
+}
+/** First click of "add a part": the start of the part's centre line. */
+export let traceStart: { p: V3; sn: V3 } | null = null;
+export const setTraceStart = (v: { p: V3; sn: V3 } | null): void => { traceStart = v; notify(); };
 export const importedBase = () => importedMesh;
 
 // ---------------------------------------------------------------- build result

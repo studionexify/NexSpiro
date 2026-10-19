@@ -547,10 +547,10 @@ export function chainCuts(design: CreatureDesign, chains: Chain[], first: number
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
     const total = cum[cum.length - 1];
     const rAt = (u: number) => { const x = clamp(u, 0, 1) * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(x)); return lerp(ch.radii[i], ch.radii[i + 1], x - i) * 0.95; };
-    let u = 0.12, k = 0;
-    while (u < 0.96) {
+    let k = 0;
+    const place = (u: number) => {
       const r = rAt(u);
-      if (r < minInr) break;
+      if (r < minInr) return false;
       const target = u * total; let j = 1; while (j < cum.length - 1 && cum[j] < target) j++;
       const f = (target - cum[j - 1]) / Math.max(1e-9, cum[j] - cum[j - 1]);
       const P = pts[j - 1].clone().lerp(pts[j], f), T = pts[j].clone().sub(pts[j - 1]).normalize();
@@ -558,7 +558,13 @@ export function chainCuts(design: CreatureDesign, chains: Chain[], first: number
       const c = newCut(String(id++), [P.x, P.y, P.z], [T.x, T.y, T.z], joint, seg.firstRoll + (seg.alternate && joint.kind === 'hinge' && k % 2 ? 90 : 0));
       c.name = `${ch.name} joint ${k + 1}`; c.radius = r * 1.5 + 2;
       out.push(c); k++;
-      u += Math.max(0.05, (seg.ratio * r * 1.0) / total);
+      return true;
+    };
+    if (seg.armCuts > 0) {
+      for (let i = 0; i < seg.armCuts; i++) place(0.12 + (0.84 * (i + 0.5)) / seg.armCuts);
+    } else {
+      let u = 0.12;
+      while (u < 0.96) { if (!place(u)) break; u += Math.max(0.05, (seg.ratio * rAt(u)) / total); }
     }
   }
   return out;

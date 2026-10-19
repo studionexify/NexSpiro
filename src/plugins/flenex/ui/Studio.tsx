@@ -7,11 +7,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useStore } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
 import { triNormal, type PaintOp } from '../paint';
-import { cutAt } from '../place';
-import { cutFrame } from '../flexi';
+import { smartPlane, traceCentreline, ORIENTATIONS, type CutOrientation } from '../place';
+import { pathLength } from '../groups';
+import type { V3 } from '../csg';
+import { defaultJoint } from '../joints';
+import { cutFrame, newCut, probeCut, type Cut } from '../flexi';
 import { EditorColumn, PrinterPicker } from './Editor';
 import {
-  addCut, addPaint, built, building, statusText, currentMachine, editCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, useFx,
+  addCut, addPart, addPaint, baseBvh, built, building, statusText, currentMachine, editAnyCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, setTraceStart, traceStart, useFx,
 } from './state';
 
 export function FlenexStudioHost() {
@@ -113,6 +116,12 @@ function Viewer() {
 
     const drawOverlay = () => {
       for (const c of [...overlay.children]) { overlay.remove(c); c.traverse((o) => { const x = o as THREE.Mesh; x.geometry?.dispose(); (x.material as THREE.Material | undefined)?.dispose?.(); }); }
+      if (fx.showCuts) for (const g of fx.groups) {
+        if (g.path.length < 2) continue;
+        const sel = fx.selectedGroup === g.id;
+        overlay.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(g.path.map((p) => new THREE.Vector3(...p))), new THREE.LineBasicMaterial({ color: sel ? 0xff5c8d : 0xb48cff })));
+      }
+      if (traceStart) { const m = new THREE.Mesh(new THREE.SphereGeometry(2.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd34d })); m.position.set(...traceStart.p); overlay.add(m); }
       if (!fx.showCuts || !built) return;
       const reports = new Map(built.flexi.reports.map((r) => [r.id, r]));
       for (const c of built.cuts) {
@@ -136,7 +145,28 @@ function Viewer() {
       const h = ray.intersectObject(mesh, false)[0];
       return h && h.faceIndex !== undefined ? h : null;
     };
+    // the plane that follows the cursor: square to the body, whatever its curve
+    const ghost = new THREE.Group();
+    const ghostDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false }));
+    const ghostRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 64 }, (_, i) => new THREE.Vector3(Math.cos((i / 64) * 6.2832), Math.sin((i / 64) * 6.2832), 0))), new THREE.LineBasicMaterial({ color: 0xffd34d }));
+    const ghostAxis = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1)]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+    ghost.add(ghostDisc, ghostRing, ghostAxis); ghost.visible = false; scene.add(ghost);
+    let plane: { origin: V3; normal: V3 } | null = null;
+    const showGhost = (origin: V3, normal: V3) => {
+      const bvh = baseBvh(); if (!bvh) return;
+      const pr = probeCut(bvh, origin, normal, 0).probe;
+      const rad = Math.max(4, Math.min(60, (pr.outr || 8) * 1.2));
+      const M = cutFrame(origin, normal, 0);
+      ghost.matrix.copy(M).scale(new THREE.Vector3(rad, rad, rad * 0.9)); ghost.matrixAutoUpdate = false; ghost.matrixWorldNeedsUpdate = true;
+      ghost.visible = true; plane = { origin, normal };
+    };
+    const planeAt = (h: THREE.Intersection, keep?: V3) => {
+      const bvh = baseBvh(); if (!bvh || !built) return null;
+      const n = h.face!.normal;
+      return smartPlane(built.base, bvh, [h.point.x, h.point.y, h.point.z], [n.x, n.y, n.z], fx.orientation, keep);
+    };
     let down: [number, number] | null = null, stroke: [number, number, number][] | null = null, painting = false;
+    let dragging: { cut?: Cut; place?: boolean } | null = null, lastNormal: V3 | undefined, raf2 = 0;
     const paintLive = (p: THREE.Vector3) => {
       if (!built || !cent || !mesh) return;
       const col = (mesh.geometry as THREE.BufferGeometry).getAttribute('color') as THREE.BufferAttribute, c = new THREE.Color(fx.palette[fx.slot - 1]), r2 = fx.brush * fx.brush;
@@ -148,34 +178,68 @@ function Viewer() {
       const free = fx.tool === 'orbit';
       controls.mouseButtons = { LEFT: free ? THREE.MOUSE.ROTATE : (null as never), MIDDLE: THREE.MOUSE.DOLLY, RIGHT: free ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE };
       renderer.domElement.style.cursor = fx.tool === 'orbit' ? 'grab' : 'crosshair';
+      if (fx.tool === 'orbit' || fx.tool === 'brush' || fx.tool === 'bucket' || fx.tool === 'piece') ghost.visible = false;
     };
     setControls();
+    const cutTools = () => fx.tool === 'place' || fx.tool === 'move' || fx.tool === 'trace';
     renderer.domElement.addEventListener('pointerdown', (e) => {
       down = [e.clientX, e.clientY];
       if (e.button !== 0) return;
-      if (fx.tool === 'brush') { const h = pick(e); if (h) { painting = true; stroke = [[h.point.x, h.point.y, h.point.z]]; paintLive(h.point); } }
+      if (fx.tool === 'brush') { const h = pick(e); if (h) { painting = true; stroke = [[h.point.x, h.point.y, h.point.z]]; paintLive(h.point); } return; }
+      if (fx.tool === 'place' || fx.tool === 'move') {
+        const h = pick(e); if (!h) return;
+        const all = built?.cuts ?? [];
+        const sel = all.find((c) => c.id === fx.selectedCut);
+        if (fx.tool === 'move' && !sel) return;
+        dragging = fx.tool === 'move' ? { cut: sel } : { place: true };
+        lastNormal = sel && fx.tool === 'move' ? sel.normal : undefined;
+        const pl = planeAt(h, lastNormal); if (pl) { showGhost(pl.origin, pl.normal); lastNormal = pl.normal; }
+        (renderer.domElement as HTMLElement).setPointerCapture?.(e.pointerId);
+      }
     });
     renderer.domElement.addEventListener('pointermove', (e) => {
       const brush = fx.tool === 'brush';
-      if (brush || fx.tool === 'place' || fx.tool === 'move' || fx.tool === 'bucket' || fx.tool === 'piece') {
+      if (brush) {
         const h = pick(e);
-        cursor.visible = !!h && brush; if (h && brush) { cursor.position.copy(h.point); cursor.scale.setScalar(fx.brush); (cursor.material as THREE.MeshBasicMaterial).color.set(fx.palette[fx.slot - 1] ?? '#fff'); }
+        cursor.visible = !!h; if (h) { cursor.position.copy(h.point); cursor.scale.setScalar(fx.brush); (cursor.material as THREE.MeshBasicMaterial).color.set(fx.palette[fx.slot - 1] ?? '#fff'); }
         if (painting && h) { stroke!.push([h.point.x, h.point.y, h.point.z]); paintLive(h.point); }
-      } else cursor.visible = false;
+        return;
+      }
+      cursor.visible = false;
+      if (!cutTools()) return;
+      cancelAnimationFrame(raf2);
+      raf2 = requestAnimationFrame(() => {
+        const h = pick(e);
+        if (!h) { if (!dragging) ghost.visible = false; return; }
+        if (fx.tool === 'trace') { ghost.visible = false; return; }
+        const pl = planeAt(h, lastNormal); if (pl) { showGhost(pl.origin, pl.normal); if (dragging) lastNormal = pl.normal; }
+      });
     });
     const finish = (e: PointerEvent) => {
       if (painting && stroke) { addPaint({ kind: 'stroke', pts: stroke, r: fx.brush, slot: fx.slot }); stroke = null; painting = false; down = null; return; }
+      if (dragging) {
+        const d = dragging; dragging = null; down = null;
+        if (plane) {
+          const pl = plane;
+          if (d.place) { const c = newCut(nextCutId(), pl.origin, pl.normal, { ...fx.design.segments.joint, ...defaultJoint(fx.placeKind), kind: fx.placeKind }); c.name = `Cut ${c.id}`; addCut(c); }
+          else if (d.cut) editAnyCut(d.cut, (x) => { x.origin = pl.origin; x.normal = pl.normal; });
+        }
+        lastNormal = undefined; ghost.visible = false;
+        return;
+      }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || e.button !== 0) { down = null; return; }
       down = null;
       const h = pick(e);
       if (!h || !built) return;
       const p: [number, number, number] = [h.point.x, h.point.y, h.point.z];
-      if (fx.tool === 'place') {
-        const n = h.face!.normal;
-        const c = cutAt(built.base, nextCutId(), p, [n.x, n.y, n.z], fx.orientation, fx.placeKind, Math.max(6, Math.min(30, built.fit.size[0] * 0.08)));
-        addCut(c);
-      } else if (fx.tool === 'move' && fx.selectedCut) {
-        editCut(fx.selectedCut, (c) => { c.origin = p; });
+      if (fx.tool === 'trace') {
+        const n = h.face!.normal, bvh = baseBvh();
+        if (!traceStart) { setTraceStart({ p, sn: [n.x, n.y, n.z] }); return; }
+        if (bvh) {
+          const path = traceCentreline(bvh, built.base, traceStart.p, p, traceStart.sn);
+          setTraceStart(null);
+          if (path.length >= 3) { const len = pathLength(path); addPart(path, undefined, Math.max(2, Math.round(len / 14))); fx.tool = 'orbit'; notify(); }
+        }
       } else if (fx.tool === 'bucket') addPaint({ kind: 'bucket', at: p, angle: fx.bucketAngle, slot: fx.slot });
       else if (fx.tool === 'piece') addPaint({ kind: 'piece', at: p, slot: fx.slot } as PaintOp);
       else if (fx.tool === 'orbit' && fx.showCuts) {
@@ -195,7 +259,7 @@ function Viewer() {
 
   useEffect(() => { api.current?.rebuild(); }, [meshVersion, printerId, fx.showBed]);
   useEffect(() => { api.current?.recolour(); }, [paintVersion, fx.view, fx.palette.join(',')]);
-  useEffect(() => { api.current?.overlay(); }, [fx.selectedCut, fx.showCuts, meshVersion]);
+  useEffect(() => { api.current?.overlay(); }, [fx.selectedCut, fx.showCuts, meshVersion, fx.selectedGroup, fx.groups, traceStart]);
   useEffect(() => { (api.current as { setControls?: () => void } | null)?.setControls?.(); }, [fx.tool]);
 
   return (
@@ -208,7 +272,15 @@ function Viewer() {
         <button className={`btn-small ${fx.showBed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { fx.showBed = !fx.showBed; notify(); }}>Bed</button>
         {fx.tool !== 'orbit' && <button className="btn-small btn-secondary" onClick={() => { fx.tool = 'orbit'; notify(); }}>Stop tool ({fx.tool})</button>}
       </div>
-      {fx.tool !== 'orbit' && <div className="fx-hint">{fx.tool === 'place' ? 'Click the model to place a cut · right-drag to orbit' : fx.tool === 'brush' ? 'Drag to paint · right-drag to orbit' : fx.tool === 'bucket' ? 'Click to fill a surface area' : fx.tool === 'piece' ? 'Click a segment to colour it' : 'Click to move the selected cut'}</div>}
+      {fx.tool !== 'orbit' && (
+        <div className="fx-hint">
+          {fx.tool === 'place' ? 'Press, slide, release' : fx.tool === 'move' ? 'Drag the selected cut along the body' : fx.tool === 'trace' ? (traceStart ? 'Now click the other end of the part' : 'Click one end of the part') : fx.tool === 'brush' ? 'Drag to paint' : fx.tool === 'bucket' ? 'Click to fill a surface area' : 'Click a segment to colour it'}
+          {(fx.tool === 'place' || fx.tool === 'move') && (
+            <span className="fx-dirbar"> · <select className="select" value={fx.orientation} onChange={(e) => { fx.orientation = e.target.value as CutOrientation; notify(); }}>{ORIENTATIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></span>
+          )}
+          <span> · right-drag orbits</span>
+        </div>
+      )}
       {building && <div className="fx-busy">{statusText || 'Building…'}</div>}
       <div className="lx-status">{lastError && !built ? lastError : status}</div>
     </div>

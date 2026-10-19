@@ -110,6 +110,8 @@ export interface SegmentSpec {
   /** Alternate the hinge direction between neighbouring cuts. */
   alternate: boolean;
   firstRoll: number;
+  /** Cuts on each arm / tentacle (0 = from the thickness). */
+  armCuts: number;
 }
 
 export interface CreatureDesign {
@@ -131,7 +133,7 @@ export const defaultBody = (): BodySpec => ({
 });
 
 export const defaultSegments = (): SegmentSpec => ({
-  mode: 'scaled', count: 14, length: 12, ratio: 2.5, from: 0.16, to: 0.97, joint: defaultJoint('ball'), alternate: true, firstRoll: 0,
+  mode: 'scaled', count: 14, length: 12, ratio: 2.5, from: 0.16, to: 0.97, joint: defaultJoint('ball'), alternate: true, firstRoll: 0, armCuts: 0,
 });
 
 export const defaultCreature = (): CreatureDesign => ({

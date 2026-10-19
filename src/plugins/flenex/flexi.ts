@@ -91,7 +91,7 @@ export function sectionReach(m: IndexedMesh, centre: V3, normal: V3, gate: numbe
 }
 
 /** Shoot rays from `origin` to learn the section: its centre, thinnest and widest reach, depth either side. */
-export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up: V3 = [0, 0, 1], rays = 24): { probe: Probe; centre: V3 } {
+export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up: V3 = [0, 0, 1], rays = 24, robust = false): { probe: Probe; centre: V3 } {
   const M = cutFrame(origin, normal, roll, up);
   const x = new THREE.Vector3(), y = new THREE.Vector3(), z = new THREE.Vector3();
   M.extractBasis(x, y, z);
@@ -113,14 +113,26 @@ export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up:
     return n >= 4;
   })();
   const dirs = Array.from({ length: rays }, (_, i) => { const a = (i / rays) * Math.PI * 2; return x.clone().multiplyScalar(Math.cos(a)).add(y.clone().multiplyScalar(Math.sin(a))); });
-  // re-centre on the section (mean of the wall hits), twice
+  // re-centre on the section, three times
   for (let it = 0; it < 3; it++) {
-    const sum = new THREE.Vector3(); let n = 0;
-    for (const d of dirs) { const t = hit(c, d); if (isFinite(t)) { sum.add(c.clone().addScaledVector(d, t)); n++; } }
-    if (n < rays * 0.6) break;
-    sum.multiplyScalar(1 / n);
+    const hits: (THREE.Vector3 | null)[] = dirs.map((d) => { const t = hit(c, d); return isFinite(t) ? c.clone().addScaledVector(d, t) : null; });
+    let target: THREE.Vector3;
+    if (robust) {
+      // midpoints of opposite rays, then their median: a leg or wing running off to one side moves a few midpoints, not the centre
+      const half = rays / 2, mids: THREE.Vector3[] = [];
+      for (let i = 0; i < half; i++) { const a = hits[i], b = hits[i + half]; if (a && b) mids.push(a.clone().add(b).multiplyScalar(0.5)); }
+      if (mids.length < half * 0.6) break;
+      const med = (k: 'x' | 'y' | 'z') => { const v = mids.map((m) => m[k]).sort((p, q) => p - q); return v[Math.floor(v.length / 2)]; };
+      target = new THREE.Vector3(med('x'), med('y'), med('z'));
+    } else {
+      const ok = hits.filter((h): h is THREE.Vector3 => !!h);
+      if (ok.length < rays * 0.6) break;
+      target = new THREE.Vector3();
+      for (const h of ok) target.add(h);
+      target.multiplyScalar(1 / ok.length);
+    }
     // keep the centre in the cut plane
-    const off = sum.clone().sub(c); off.addScaledVector(z, -off.dot(z));
+    const off = target.sub(c); off.addScaledVector(z, -off.dot(z));
     c.add(off);
   }
   let inr = Infinity, outr = 0;
