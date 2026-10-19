@@ -68,6 +68,24 @@ export function cutFrame(origin: V3, normalIn: V3, roll: number, up: V3 = [0, 0,
 /** BVH of the model for the probes. */
 export const modelBvh = (m: IndexedMesh) => new MeshBVH(toGeometry(m));
 
+/** Farthest point of the model's section with the cut plane from the centre (within `gate` mm): sets how far the kerf must reach. */
+export function sectionReach(m: IndexedMesh, centre: V3, normal: V3, gate: number): number {
+  const n = v3(normal).normalize(), c = v3(centre);
+  const V = m.vertices, I = m.indices, d = new Float32Array(V.length / 3);
+  for (let i = 0; i < d.length; i++) d[i] = (V[i * 3] - c.x) * n.x + (V[i * 3 + 1] - c.y) * n.y + (V[i * 3 + 2] - c.z) * n.z;
+  let best = 0;
+  const p = new THREE.Vector3();
+  const edge = (a: number, b: number) => {
+    if ((d[a] > 0) === (d[b] > 0)) return;
+    const t = d[a] / (d[a] - d[b]);
+    p.set(V[a * 3] + (V[b * 3] - V[a * 3]) * t - c.x, V[a * 3 + 1] + (V[b * 3 + 1] - V[a * 3 + 1]) * t - c.y, V[a * 3 + 2] + (V[b * 3 + 2] - V[a * 3 + 2]) * t - c.z);
+    const r = p.length();
+    if (r <= gate && r > best) best = r;
+  };
+  for (let t = 0; t < I.length; t += 3) { edge(I[t], I[t + 1]); edge(I[t + 1], I[t + 2]); edge(I[t + 2], I[t]); }
+  return best;
+}
+
 /** Shoot rays from `origin` to learn the section: its centre, thinnest and widest reach, depth either side. */
 export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up: V3 = [0, 0, 1], rays = 24): { probe: Probe; centre: V3 } {
   const M = cutFrame(origin, normal, roll, up);
@@ -130,7 +148,7 @@ export function buildFlexi(base: IndexedMesh, cuts: Cut[], fit: Fit, up: V3 = [0
     reports.push(rep);
     if (!probe.inside || probe.inr < fit.minPin * 2) { rep.warnings.push(probe.inside ? 'The section here is too thin for a joint.' : 'This cut is outside the model.'); continue; }
     const M = cutFrame(centre, cut.normal, cut.roll, up);
-    const radius = cut.radius > 0 ? cut.radius : probe.outr * 1.15 + fit.gap * 2;
+    const radius = cut.radius > 0 ? cut.radius : Math.max(probe.outr, sectionReach(base, centre, cut.normal, probe.outr * 6)) * 1.04 + fit.gap * 2;
     const parts = buildJoint(cut.joint, { probe, fit, apex: apexFor(M, up), radiusLimit: radius });
     rep.info = parts.info; rep.radius = radius; rep.warnings.push(...parts.info.warnings);
     const tf = (m: IndexedMesh) => solid(transform(m, M));
@@ -150,8 +168,8 @@ export function buildFlexi(base: IndexedMesh, cuts: Cut[], fit: Fit, up: V3 = [0
   if (res.meshes.length < 2 && reports.some((x) => x.ok)) warnings.push('The cuts did not separate the model into pieces: a cut may not pass through the whole section.');
   for (const r of reports) for (const o of reports) if (o !== r && o.ok && r.ok && o.id > r.id) {
     const d = v3(r.centre).distanceTo(v3(o.centre));
-    const reach = (r.info?.reachB ?? 0) + (o.info?.reachB ?? 0);
-    if (d < reach * 0.9) r.warnings.push(`Too close to ${o.name} (${d.toFixed(1)} mm apart, the joints need about ${reach.toFixed(1)} mm).`);
+    const need = Math.max((r.info?.reachB ?? 0) + (o.info?.reachA ?? 0), (o.info?.reachB ?? 0) + (r.info?.reachA ?? 0)) + fit.wall;
+    if (d < need * 0.95) r.warnings.push(`Too close to ${o.name} (${d.toFixed(1)} mm apart, the joints need about ${need.toFixed(1)} mm).`);
   }
   for (const r of reports) for (const w of r.warnings) warnings.push(`${r.name}: ${w}`);
   return { mesh: m, pieces: res.meshes, triPiece: res.triPiece, reports, warnings, closed: openEdgeCount(m) === 0 };

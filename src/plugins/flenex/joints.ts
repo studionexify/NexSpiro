@@ -33,7 +33,7 @@ export const JOINTS: { id: JointKind; name: string; blurb: string }[] = [
   { id: 'swivel', name: 'Swivel (mushroom)', blurb: 'Twists around the spine with a little tilt.' },
 ];
 
-export const defaultJoint = (kind: JointKind = 'ball'): JointSpec => ({ kind, scale: 1, rom: kind === 'hinge' ? 35 : 30, neck: 0.5, pin: 'round', clearance: 0 });
+export const defaultJoint = (kind: JointKind = 'ball'): JointSpec => ({ kind, scale: 1, rom: kind === 'hinge' ? 30 : 24, neck: 0.5, pin: 'round', clearance: 0 });
 
 /** What the model looks like at the cut: found by shooting rays from the joint centre. */
 export interface Probe {
@@ -151,16 +151,17 @@ export function buildJoint(spec: JointSpec, ctx: JointContext): JointParts {
   const { probe: P, fit } = ctx;
   const c = spec.clearance > 0 ? spec.clearance : fit.clearance;
   const g = fit.gap;
-  const t = Math.tan(Math.min(60, Math.max(0, spec.rom)) * D2R);
+  // each face tilts by half of the bend the joint should allow, so the gap opens by tan(rom) per unit of radius
+  const t = 0.5 * Math.tan(Math.min(60, Math.max(0, spec.rom)) * D2R);
   const R = ctx.radiusLimit;
   const w: string[] = [];
   const kerfProfile: [number, number][] = [[0, -g / 2], [R, -g / 2 - t * R], [R, g / 2 + t * R], [0, g / 2]];
 
   if (spec.kind === 'ball') {
-    const maxFit = Math.min(P.inr - c - fit.wall, (P.depthB - g / 2 - c - fit.wall) / 1.64);
+    const maxFit = Math.min(P.inr - c - fit.wall, (P.depthB - g / 2 - c - fit.wall) / 1.52);
     let rb = Math.min(0.62 * P.inr * spec.scale, maxFit);
     if (rb < 2 * fit.minPin) { w.push(`Section is too thin for a ball joint (radius ${rb.toFixed(1)} mm); make the body thicker or the cut elsewhere.`); rb = Math.max(rb, 1.6 * fit.minPin); }
-    const dz = 0.64 * rb, zc = g / 2 + dz;
+    const dz = 0.5 * rb, zc = g / 2 + dz;
     const rho = Math.sqrt((rb + c) ** 2 - dz ** 2);
     const rn0 = Math.min(spec.neck * rb, (rho - c - dz * t) * Math.cos(Math.atan(t)));
     const rn = Math.max(fit.minPin, rn0);
