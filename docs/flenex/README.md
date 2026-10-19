@@ -72,7 +72,7 @@ Every triangle carries its colour three ways so the file opens coloured in other
 * Imported meshes must be closed solids; open meshes are healed when possible and otherwise reported.
 * Painting resolution follows the model's triangles; coarse imported meshes paint in large facets.
 * Building runs in a Web Worker (a few hundred ms for a design, 1–2 s with many cuts); a newer edit cancels the running build.
-* The universal joint needs a thick part (a body of about Ø20 mm or more); thinner sections are reported instead of built.
+* The universal joint needs a thick part (a body of about Ø20 mm or more). On a thinner section, and for chain links too thin to print, the cut is built as a **ball & socket** instead; the cut list says "→ ball (too thin)" and the check panel explains why.
 
 ## Screenshots
 

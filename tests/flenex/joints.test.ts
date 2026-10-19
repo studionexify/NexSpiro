@@ -89,3 +89,25 @@ describe('more cut types', () => {
     });
   }
 });
+
+describe('thin sections fall back to a ball joint', () => {
+  for (const [kind, r] of [['universal', 6], ['chain', 3.9]] as [JointKind, number][]) {
+    it(`${kind} in a thin Ø${2 * r} rod becomes a working ball & socket`, () => {
+      const fit = fitFor(0.4);
+      const res = buildFlexi(cylinder(r, r, -40, 40, 36), [newCut('1', [0, 0, 0], [0, 0, 1], defaultJoint(kind))], fit);
+      const rep = res.reports[0];
+      expect(rep.ok).toBe(true);
+      expect(rep.info!.kind).toBe('ball');
+      expect(rep.info!.fellBack).toBe(kind);
+      expect(rep.warnings.join(' ')).toMatch(/ball & socket is used here instead/);
+      expect(openEdgeCount(res.mesh)).toBe(0);
+      expect(res.pieces.length).toBe(2);
+      expect(minDistance(res.pieces[0], res.pieces[1])).toBeGreaterThan(fit.clearance - 0.03);
+    });
+  }
+  it('a thick rod still gets the universal joint', () => {
+    const res = buildFlexi(cylinder(16, 16, -60, 60, 40), [newCut('1', [0, 0, 0], [0, 0, 1], defaultJoint('universal'))], fitFor(0.4));
+    expect(res.reports[0].info!.kind).toBe('universal');
+    expect(res.reports[0].info!.fellBack).toBeUndefined();
+  });
+});

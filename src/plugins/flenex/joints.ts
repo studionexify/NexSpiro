@@ -87,6 +87,8 @@ export interface JointInfo {
   axis2?: V3;
   /** Does it move after printing? */
   moves?: boolean;
+  /** Set when this joint is a ball & socket standing in for the cut type that did not fit (the type that was asked for). */
+  fellBack?: JointKind;
   warnings: string[];
 }
 

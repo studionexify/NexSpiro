@@ -360,7 +360,7 @@ function CutsTab() {
             const r = reports.find((x) => x.id === c.id);
             return (
               <button key={c.id} className={`fx-cut ${fx.selectedCut === c.id ? 'on' : ''} ${r && !r.ok ? 'bad' : r?.warnings.length ? 'warn' : ''}`} onClick={() => { fx.selectedCut = c.id; notify(); }}>
-                <span>{c.name}</span><small>{JOINTS.find((j) => j.id === c.joint.kind)?.name ?? c.joint.kind}{c.enabled ? '' : ' · off'}{r ? (r.ok ? (r.warnings.length ? ' · ⚠' : ' · ✓') : ' · ✕') : ''}</small>
+                <span>{c.name}</span><small>{JOINTS.find((j) => j.id === c.joint.kind)?.name ?? c.joint.kind}{c.enabled ? '' : ' · off'}{r?.info?.fellBack ? ' → ball (too thin)' : ''}{r ? (r.ok ? (r.warnings.length ? ' · ⚠' : ' · ✓') : ' · ✕') : ''}</small>
               </button>
             );
           })}

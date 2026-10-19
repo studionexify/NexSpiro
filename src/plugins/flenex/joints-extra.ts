@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { boolean, box, cylinder, fromGeometry, prism, sweptSlot, transform, volume, type V3 } from './csg';
 import type { IndexedMesh } from '../../engine/mesh';
-import { EMBED, axisPrism, hingeCore, hingeKerf, offsetPolyline, pinPoly, revolve, type JointContext, type JointInfo, type JointParts, type JointSpec } from './joints';
+import { EMBED, axisPrism, buildJoint, defaultJoint, hingeCore, hingeKerf, offsetPolyline, pinPoly, revolve, type JointContext, type JointInfo, type JointParts, type JointSpec } from './joints';
 
 const D2R = Math.PI / 180;
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
@@ -19,6 +19,15 @@ function slab(R: number, g: number, zTop: number, tl: number, tu = tl): IndexedM
 }
 
 const info = (o: Partial<JointInfo> & { kind: JointInfo['kind'] }): JointInfo => ({ head: 0, neck: 0, rom: 0, reachA: EMBED, reachB: EMBED, span: 0, pivot: [0, 0, 0], moves: false, warnings: [], ...o });
+
+/** A ball & socket in place of a joint that does not fit the section, with the reason recorded on the joint. */
+function ballInstead(spec: JointSpec, ctx: JointContext, why: string): JointParts {
+  const d = defaultJoint('ball');
+  const parts = buildJoint({ ...spec, kind: 'ball', rom: Math.min(spec.rom || d.rom, 30), neck: d.neck }, ctx);
+  parts.info.fellBack = spec.kind;
+  parts.info.warnings.unshift(`${why} A ball & socket is used here instead.`);
+  return parts;
+}
 
 export function buildExtraJoint(spec: JointSpec, ctx: JointContext): JointParts {
   const { probe: P, fit } = ctx;
@@ -78,7 +87,7 @@ export function buildExtraJoint(spec: JointSpec, ctx: JointContext): JointParts 
     case 'chain': {
       let rm = clamp(0.13 * P.inr * spec.scale, Math.max(1.2, fit.minPin * 1.2), 2.6), Rm = 2 * rm + c + 0.7;
       for (let i = 0; i < 10 && Rm + rm > P.inr - 0.8 && rm > 0.95; i++) { rm *= 0.92; Rm = 2 * rm + c + 0.7; }
-      if (Rm + rm > P.inr - 0.4) w.push('Section is too thin for chain links of a printable size.');
+      if (Rm + rm > P.inr - 0.4) return ballInstead(spec, ctx, 'The section is too thin for chain links of a printable size.');
       const p = Math.max(1.3, rm * 1.2);
       const z1 = -g / 2 + p + Rm, z2 = z1 + Rm, zB = z2 + Rm + p;
       const ring = (axis: 'y' | 'x', zc: number): IndexedMesh => {
@@ -110,7 +119,7 @@ export function buildExtraJoint(spec: JointSpec, ctx: JointContext): JointParts 
         if (rc <= rcLimit) break;
         mul *= 0.9;
       }
-      if (rc > rcLimit) w.push('Section is too small for a universal joint: use a ball joint or a thicker part.');
+      if (rc > rcLimit) return ballInstead(spec, ctx, 'The section is too small for a universal joint.');
       const rcut = Math.min(rc, rcLimit);
       const z0b = Zt + g / 2; // frame of the second hinge: its A face is the top of the block
       const M2 = new THREE.Matrix4().makeTranslation(0, 0, z0b).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2));
