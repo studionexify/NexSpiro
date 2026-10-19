@@ -109,7 +109,7 @@ function relief(b: BodySpec, phi: number, s: number, t: number): number {
   switch (r.kind) {
     case 'ribs': return 1 + d * 0.5 * Math.cos(12 * phi);
     case 'rings': return 1 + d * (0.5 + 0.5 * Math.cos((2 * Math.PI * s) / per));
-    case 'scales': { const u = Math.abs(Math.sin((phi * 7) / 1)) , v = Math.abs(Math.sin((Math.PI * s) / per + phi * 3.5)); return 1 + d * Math.pow(u * v, 0.7) * 0.8; }
+    case 'scales': { const rows = Math.floor(s / per), u = (((phi / (Math.PI * 2)) * 10 + (rows % 2) * 0.5) % 1 + 1) % 1, v = wrap(s / per); return 1 + d * 0.9 * Math.pow(Math.sin(Math.PI * u), 1.5) * Math.pow(Math.sin(Math.PI * v), 0.8); }
     case 'dorsal-ridge': { const da = Math.atan2(Math.sin(phi - Math.PI / 2), Math.cos(phi - Math.PI / 2)); return 1 + d * 1.6 * Math.exp(-(da * da) / 0.05); }
     case 'faceted': return 1 - d * 0.5 * Math.abs(Math.sin(3 * phi));
     case 'twist-ribs': return 1 + d * 0.5 * Math.cos(6 * phi + (2 * Math.PI * s) / (per * 4));
@@ -142,7 +142,7 @@ export function bodyStations(spec: BodySpec, step = 2): Station[] {
   return out;
 }
 
-const NRING = 36;
+const NRING = 40;
 function bodyMesh(spec: BodySpec, st: Station[]): IndexedMesh {
   const rings: V3[][] = st.map((f) => {
     const zb = f.h * (1 - spec.section.flat);
@@ -170,6 +170,7 @@ const W = (f: Station, a: number, s: number, z: number): V3 => {
   const p = f.P.clone().addScaledVector(f.T, a).addScaledVector(f.S, s); return [p.x, p.y, z];
 };
 const wv = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
+const f_ = (T: THREE.Vector3) => T.clone().setZ(0).normalize();
 
 // ---------------------------------------------------------------- add-ons
 interface Ctx { st: Station[]; spec: BodySpec; marks: Mark[]; chains: Chain[]; warn(m: string): void }
@@ -177,7 +178,11 @@ interface Ctx { st: Station[]; spec: BodySpec; marks: Mark[]; chains: Chain[]; w
 const sides = (side: AddOn['side'], both = true): number[] => (both ? [1, -1] : [1]);
 
 function build(a: AddOn, c: Ctx): IndexedMesh[] {
-  const f = stationAt(c.st, a.t), out: IndexedMesh[] = [];
+  // head parts sit at the very front, where the body is still rounding off: size them from just behind the tip
+  const f0 = stationAt(c.st, a.t), ref = stationAt(c.st, Math.max(a.t, 0.09));
+  const front = a.kind === 'snout' || a.kind === 'jaw' || a.kind === 'beak' || a.kind === 'nostrils' || a.kind === 'cheeks';
+  const f: Station = a.t < 0.09 ? (front ? ref : { ...f0, w: ref.w, h: ref.h, top: ref.top }) : f0;
+  const out: IndexedMesh[] = [];
   const r = (f.w + f.h) / 2, sz = a.size;
   const Hn = f.top;
   switch (a.kind) {
@@ -274,7 +279,9 @@ function build(a: AddOn, c: Ctx): IndexedMesh[] {
         const g = stationAt(c.st, a.t + (n > 1 ? a.spread * k / (n - 1) : 0));
         for (const sg of [1, -1]) {
           const L = 2.4 * (g.w + g.h) / 2 * a.size * a.length, Wd = 1.0 * (g.w + g.h) / 2 * a.size * a.width;
-          const pts: [number, number][] = [[-2, 0], [L * 0.25, -Wd * 0.45], [L * 0.8, -Wd * 0.18], [L, Wd * 0.1], [L * 0.7, Wd * 0.55], [L * 0.2, Wd * 0.5], [-2, Wd * 0.2]];
+          const top: [number, number][] = [], bot: [number, number][] = [];
+          for (let i = 0; i <= 12; i++) { const u = i / 12, hw = Wd * 0.5 * Math.pow(Math.sin(Math.PI * Math.min(1, u * 0.9 + 0.08)), 0.75) * (1 - 0.35 * u); top.push([-2 + (L + 2) * u, hw * 0.6]); bot.push([-2 + (L + 2) * u, -hw * 1.0]); }
+          const pts: [number, number][] = [...top, ...bot.reverse()];
           const sweep = (a.tilt * Math.PI) / 180;
           const ex = g.S.clone().multiplyScalar(sg).applyAxisAngle(Z, -sg * sweep), ey = new THREE.Vector3().crossVectors(Z, ex);
           out.push(blade(pts, Math.max(2, 0.1 * (g.w + g.h)), W(g, 0, sg * g.w * 0.75, 1.1 + 0 * a.curl), [ex.x, ex.y, ex.z], [ey.x, ey.y, ey.z]));
@@ -299,18 +306,29 @@ function build(a: AddOn, c: Ctx): IndexedMesh[] {
         const g = stationAt(c.st, a.t + (n > 1 ? a.spread * k / (n - 1) : 0));
         const rr = (g.w + g.h) / 2;
         for (const sg of [1, -1]) {
-          const sw = (a.tilt * Math.PI) / 180, reach = 1.7 * rr * a.size * a.length, rl = Math.max(2.2, 0.42 * rr * a.size);
-          const fwd = Math.sin(sw) * reach * 0.9 * (sg > 0 ? 1 : 1);
-          const hip = W(g, 0, sg * g.w * 0.5, g.top * 0.45);
-          const knee = W(g, fwd * 0.45, sg * (g.w + reach * 0.55 * a.width), rl * 1.4 + 0.15 * rr * a.size);
-          const foot = W(g, fwd, sg * (g.w + reach * 0.95 * a.width), rl * 0.9);
-          const dense: V3[] = [], rad: number[] = [];
-          for (let i = 0; i <= 10; i++) {
-            const u = i / 10, q = u < 0.5 ? wv(hip).lerp(wv(knee), u * 2) : wv(knee).lerp(wv(foot), (u - 0.5) * 2);
-            dense.push([q.x, q.y, Math.max(rl, q.z)]); rad.push(rl * (1.15 - 0.45 * u));
+          const sw = (a.tilt * Math.PI) / 180, reach = 1.9 * rr * a.size * a.length, rl = Math.max(2.4, 0.46 * rr * a.size);
+          // a sprawling leg seen from above: the thigh goes out and back, the shin turns forward, the foot is flat with toes
+          const hip = W(g, 0, sg * g.w * 0.4, g.top * 0.45);
+          const knee = W(g, Math.sin(sw) * reach * 0.6, sg * (g.w + reach * 0.5 * a.width), rl * 1.5 + 0.1 * rr * a.size);
+          const foot = W(g, -Math.sin(sw) * reach * 0.25, sg * (g.w + reach * 0.95 * a.width), rl * 0.85);
+          const seg = (p0: V3, p1: V3, r0: number, r1: number) => {
+            const dense: V3[] = [], rad: number[] = [];
+            for (let i = 0; i <= 8; i++) { const u = i / 8, q = wv(p0).lerp(wv(p1), u); dense.push([q.x, q.y, Math.max(Math.min(r0, r1), q.z)]); rad.push(r0 + (r1 - r0) * u); }
+            return tube(dense, rad, 14);
+          };
+          out.push(seg(hip, knee, rl * 1.55, rl * 1.15), seg(knee, foot, rl * 1.05, rl * 0.85), ellipsoid(knee, [rl * 1.2, rl * 1.2, rl * 1.2], 14));
+          // foot pad and toes fanning forward
+          const fdir = new THREE.Vector3().subVectors(wv(foot), wv(knee)).setZ(0);
+          const fa = Math.atan2(fdir.y, fdir.x) + (sg > 0 ? 0.0 : 0.0), fwd = new THREE.Vector3(f_(g.T).x * -1, f_(g.T).y * -1, 0);
+          void fa;
+          out.push(ellipsoid(foot, [rl * 1.7, rl * 1.45, rl * 0.85], 16));
+          const toes = a.width > 0 ? 4 : 3;
+          for (let i = 0; i < toes; i++) {
+            const ang = ((i - (toes - 1) / 2) * 0.42), dir = fwd.clone().applyAxisAngle(Z, ang + (sg > 0 ? 0.2 : -0.2) * 0);
+            const t0 = wv(foot).addScaledVector(dir, rl * 0.7), t1 = wv(foot).addScaledVector(dir, rl * 3.1);
+            out.push(tube([[t0.x, t0.y, rl * 0.7], [t1.x, t1.y, rl * 0.55]], [rl * 0.55, rl * 0.38], 8), ellipsoid([t1.x, t1.y, rl * 0.55], [rl * 0.42, rl * 0.42, rl * 0.4], 8));
           }
-          out.push(tube(dense, rad, 14), ellipsoid(knee, [rl * 1.1, rl * 1.1, rl * 1.1], 14), ellipsoid(foot, [rl * 1.9, rl * 1.5, rl * 0.9], 16));
-          c.marks.push({ kind: 'foot', at: foot, r: rl * 1.3 });
+          c.marks.push({ kind: 'foot', at: foot, r: rl * 1.5 });
         }
       }
       break;
@@ -515,8 +533,11 @@ export function keepOut(design: CreatureDesign, st: Station[]): [number, number]
         const n = Math.max(1, Math.round(a.count));
         for (let k = 0; k < n; k++) {
           const g = stationAt(st, a.t + (n > 1 ? (a.spread * k) / (n - 1) : 0)), rr = (g.w + g.h) / 2;
-          const reach = 1.7 * rr * a.size * a.length, rl = Math.max(1.8, 0.32 * rr * a.size), fa = Math.sin((a.tilt * Math.PI) / 180) * reach * 0.9;
-          out.push([g.s + Math.min(0, fa) - 1.6 * rl - berth(g.w + reach * a.width), g.s + Math.max(0, fa) + 1.6 * rl + berth(g.w + reach * a.width)]);
+          const reach = 1.9 * rr * a.size * a.length, rl = Math.max(2.4, 0.46 * rr * a.size), sw = Math.sin((a.tilt * Math.PI) / 180);
+          // along the body: the knee goes back by 0.6 reach × sin, the foot forward by 0.25, the toes another 3.1 rl
+          const lo = g.s - Math.max(0, 0.25 * reach * sw) - 3.2 * rl, hi = g.s + Math.max(0, 0.6 * reach * sw) + 1.6 * rl;
+          const ext = g.w + reach * a.width;
+          out.push([lo - berth(ext), hi + berth(ext)]);
         }
         break;
       }

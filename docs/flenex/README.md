@@ -15,6 +15,28 @@ the **Flenex** tab in the right dock and press **Open Flenex Studio**.
 | **Paint** | Palette of up to 16 colours. Brush, fill area, fill piece, fill everything, undo, and one-click schemes (back + sides + eyes, alternate pieces, rainbow along the body, fade head → tail, stripes). Paint is stored as operations and replayed, so it follows the model when the design changes. |
 | **Print** | *Export coloured 3MF* or *Send to the plate*: the flexi is placed on the active plate as one object, painted with filament slots (new slots are added for new colours), and Prepare opens. |
 
+## Placing cuts
+
+* **Square to the body.** Press on the model, slide, release: the cut plane follows the cursor and turns to stay perpendicular to the body, even on a wavy snake. Two ways to find the body's direction, switchable in the *Cut direction* menu: **follow the centre line** (default: the centre of the section is found around the cursor and a step either way, and the plane is turned square to the line between them) or **local direction** (the direction of the surface right around the cursor). *Straight into the surface* and *across X / Y / Z* are still there for fixed planes.
+* **Cuts per body part.** *Add a part* (click both ends of a limb, a tail, a tentacle) or *Whole model as one part* (walks the body's centre line from one end to the other, ignoring legs and wings), then set **how many cuts** the part gets with the + / − buttons. Spacing is even or follows the thickness; the start and end of the cut range can be moved. Single cuts can be moved, turned, deleted, given another cut type, duplicated or flipped; those edits are kept when the count changes, and *Re-space all* forgets them. Designs from the catalogue have the same: cuts on the body and cuts on each arm.
+* **Change a cut afterwards.** Select it in the list: change its type, size, range of motion, depth, hinge direction, clearance and disc radius; slide it along the body, tilt it, square it to the body again, flip A and B, drag it on the model with *Drag on the model*, disable it or delete it.
+
+## Cut types
+
+The picker shows a real cutaway of each cut (built on a small rod with the same code that builds your flexi), with every piece in its own colour.
+
+| Type | What it is | Moves? |
+| --- | --- | --- |
+| Ball & socket | ball on a neck in a socket | every direction |
+| Hinge | tongue on a pin in a swept slot; round, hex or teardrop pin | one axis |
+| Universal (double hinge) | two hinges at right angles with a floating block (three pieces) | every direction, firmer |
+| Swivel | bicone head in a matching cavity | twists |
+| Chain link | two interlocked rings on short posts; needs almost no length | every direction |
+| Dowel pin | round or hex pin in a close-fit hole | assembly |
+| Snap pin | barbed pin that clicks in | assembly |
+| Dovetail slide | tongue in a groove that runs through the piece | assembly |
+| Plain cut | a gap and nothing else (detachable head, wing) | separation |
+
 ## The joints
 
 Every joint is built from real geometry around a cut plane, with the **machine clearance** between the moving
@@ -49,8 +71,9 @@ Every triangle carries its colour three ways so the file opens coloured in other
 * Add-ons that are not cut with the body (legs, wings, fins) must sit on a single piece, so a design with many of them has fewer joints.
 * Imported meshes must be closed solids; open meshes are healed when possible and otherwise reported.
 * Painting resolution follows the model's triangles; coarse imported meshes paint in large facets.
-* Building runs on the main thread (a few hundred ms for a design, 1–2 s with many cuts).
+* Building runs in a Web Worker (a few hundred ms for a design, 1–2 s with many cuts); a newer edit cancels the running build.
+* The universal joint needs a thick part (a body of about Ø20 mm or more); thinner sections are reported instead of built.
 
 ## Screenshots
 
-See `screenshots/`: the design tab, painted colours, the pieces view, cuts edited by hand, machine awareness (a smaller bed, a printer without an AMS), an imported model with placed cuts.
+See `screenshots/`: the design tab, painted colours, the pieces view, cuts edited by hand, machine awareness (a smaller bed, a printer without an AMS), an imported model with placed cuts, universal joints, the cut-type picker, a cut following a wavy body, a part with its own cut count, and two contact sheets of the catalogue.

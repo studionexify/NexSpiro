@@ -355,11 +355,11 @@ export function setPrinter(id: string): void {
   schedule();
 }
 
-export const projectData = () => ({ design: fx.design, presetId: fx.presetId, cutsMode: fx.cutsMode, manualCuts: fx.manualCuts, palette: fx.palette, paintOps: fx.paintOps, source: fx.source === 'creature' ? 'creature' : 'creature', clearance: fx.clearance, gap: fx.gap });
+export const projectData = () => ({ design: fx.design, presetId: fx.presetId, cutsMode: fx.cutsMode, manualCuts: fx.manualCuts, groups: fx.groups, palette: fx.palette, paintOps: fx.paintOps, source: fx.source === 'creature' ? 'creature' : 'creature', clearance: fx.clearance, gap: fx.gap });
 export function loadProject(data: unknown): void {
   const d = data as Partial<FlenexUiState> | undefined;
   if (!d?.design || d.design.version !== 1) return;
-  Object.assign(fx, { design: d.design, presetId: d.presetId ?? fx.presetId, cutsMode: d.cutsMode ?? 'auto', manualCuts: d.manualCuts ?? [], palette: d.palette ?? fx.palette, paintOps: d.paintOps ?? fx.paintOps, clearance: d.clearance ?? 0, gap: d.gap ?? 0, source: 'creature' });
+  Object.assign(fx, { design: d.design, presetId: d.presetId ?? fx.presetId, cutsMode: d.cutsMode ?? 'auto', manualCuts: d.manualCuts ?? [], groups: d.groups ?? [], palette: d.palette ?? fx.palette, paintOps: d.paintOps ?? fx.paintOps, clearance: d.clearance ?? 0, gap: d.gap ?? 0, source: 'creature' });
   schedule();
 }
 
