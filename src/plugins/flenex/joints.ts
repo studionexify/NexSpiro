@@ -160,7 +160,9 @@ export function buildJoint(spec: JointSpec, ctx: JointContext): JointParts {
   if (spec.kind === 'ball') {
     const maxFit = Math.min(P.inr - c - fit.wall, (P.depthB - g / 2 - c - fit.wall) / 1.52);
     let rb = Math.min(0.62 * P.inr * spec.scale, maxFit);
-    if (rb < 2 * fit.minPin) { w.push(`Section is too thin for a ball joint (radius ${rb.toFixed(1)} mm); make the body thicker or the cut elsewhere.`); rb = Math.max(rb, 1.6 * fit.minPin); }
+    // below about 8.5 × the clearance the socket opening would be wider than the ball
+    const minBall = Math.max(2 * fit.minPin, 8.5 * c);
+    if (rb < minBall) { w.push(`Section is too thin for a ball joint (radius ${rb.toFixed(1)} mm, needs ${minBall.toFixed(1)}); make the body thicker or cut elsewhere.`); rb = minBall; }
     const dz = 0.5 * rb, zc = g / 2 + dz;
     const rho = Math.sqrt((rb + c) ** 2 - dz ** 2);
     const rn0 = Math.min(spec.neck * rb, (rho - c - dz * t) * Math.cos(Math.atan(t)));

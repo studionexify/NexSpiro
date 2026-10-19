@@ -98,11 +98,15 @@ export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up:
     return h ? h.distance : Infinity;
   };
   const c = v3(origin);
-  // inside test along the normal: an exit (back face) is hit first
+  // inside test: most of six rays leave through a back face
   const inside = (() => {
-    ray.origin.copy(c); ray.direction.copy(z);
-    const h = bvh.raycastFirst(ray, THREE.DoubleSide);
-    return !!h && h.face!.normal.dot(z) > 0;
+    let n = 0;
+    for (const d of [z, z.clone().negate(), x, x.clone().negate(), y, y.clone().negate()]) {
+      ray.origin.copy(c); ray.direction.copy(d);
+      const h = bvh.raycastFirst(ray, THREE.DoubleSide);
+      if (h && h.face!.normal.dot(d) > 0) n++;
+    }
+    return n >= 4;
   })();
   const dirs = Array.from({ length: rays }, (_, i) => { const a = (i / rays) * Math.PI * 2; return x.clone().multiplyScalar(Math.cos(a)).add(y.clone().multiplyScalar(Math.sin(a))); });
   // re-centre on the section (mean of the wall hits), twice
