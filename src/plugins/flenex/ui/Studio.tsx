@@ -225,6 +225,8 @@ function Viewer() {
           else if (d.cut) editAnyCut(d.cut, (x) => { x.origin = pl.origin; x.normal = pl.normal; });
         }
         lastNormal = undefined; ghost.visible = false;
+        // one cut per press: back to orbit so the next click does not add another by accident
+        fx.tool = 'orbit'; notify();
         return;
       }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || e.button !== 0) { down = null; return; }
