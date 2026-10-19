@@ -97,6 +97,8 @@ export const PROCESS_PARAMS: ParamDef[] = [
   { key: 'wipe_speed', label: 'Wipe speed', tab: 'Quality', group: 'Seam', type: 'percent', unit: '%', min: 1, max: 100, def: 80, advanced: true, tip: 'Speed of the wipe move as a percentage of the travel speed.' },
 
   { key: 'slice_closing_radius', label: 'Slice gap closing radius', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: 0, max: 2, step: 0.001, def: 0.049, advanced: true, tip: 'Cracks smaller than twice this radius are closed while slicing. Larger values can fill small intended gaps.' },
+  { key: 'outline_smoothing', label: 'Smooth outlines', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: 0, max: 2, step: 0.05, def: 0, advanced: true, tip: 'Averages each sliced outline over this length, which removes the facets of a coarse or low-poly model from the walls without changing the model. 0 is off. Keep it well below the smallest curve radius: convex curves shrink slightly.' },
+  { key: 'outline_smoothing_corner', label: 'Keep corners sharper than', tab: 'Quality', group: 'Precision', type: 'float', unit: '°', min: 5, max: 90, step: 1, def: 35, advanced: true, tip: 'Outline points that turn by more than this angle are real corners and are not smoothed.' },
   { key: 'resolution', label: 'Resolution', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: 0, max: 0.2, step: 0.001, def: 0.012, advanced: true, tip: 'Paths are simplified by removing points that deviate less than this distance. Reduces G-code size.' },
   { key: 'enable_arc_fitting', label: 'Arc fitting', tab: 'Quality', group: 'Precision', type: 'bool', def: false, advanced: true, tip: 'Replaces chains of short segments on curves with G2/G3 arc moves. Smaller G-code and smoother curves on firmware that supports arcs.' },
   { key: 'xy_hole_compensation', label: 'X-Y hole compensation', tab: 'Quality', group: 'Precision', type: 'float', unit: 'mm', min: -2, max: 2, step: 0.01, def: 0, advanced: true, tip: 'Grows (+) or shrinks (−) holes in the XY plane to correct for shrinkage.' },
@@ -362,7 +364,7 @@ export const PROCESS_PRESETS: { id: string; name: string; values: Config }[] = [
 /** Settings that only make sense for the whole plate; everything else may be overridden per object. */
 export const GLOBAL_ONLY_KEYS = new Set([
   'travel_short_distance_acceleration', 'max_volumetric_extrusion_rate_slope_positive', 'max_volumetric_extrusion_rate_slope_negative', 'post_process', 'interface_shells',
-  'layer_height', 'initial_layer_print_height', 'initial_layer_line_width', 'initial_layer_infill_line_width', 'support_line_width', 'precise_z_height', 'slice_closing_radius',
+  'layer_height', 'initial_layer_print_height', 'initial_layer_line_width', 'initial_layer_infill_line_width', 'support_line_width', 'precise_z_height', 'slice_closing_radius', 'outline_smoothing', 'outline_smoothing_corner',
   'reduce_crossing_wall', 'max_travel_detour_distance', 'travel_speed', 'travel_acceleration', 'initial_layer_travel_acceleration', 'accel_to_decel_enable', 'accel_to_decel_factor',
   'default_jerk', 'travel_jerk', 'initial_layer_jerk', 'enable_height_slowdown', 'slowdown_start_height', 'slowdown_start_speed', 'slowdown_start_acc', 'slowdown_end_height', 'slowdown_end_speed', 'slowdown_end_acc',
   ...PROCESS_PARAMS.filter((p) => p.tab === 'Support').map((p) => p.key),

@@ -23,7 +23,7 @@ export async function saveFile(defaultName: string, data: string | ArrayBuffer, 
   return defaultName;
 }
 
-export const openModelFiles = () => openFiles([{ name: '3D models', extensions: ['stl', 'obj', '3mf'] }]);
+export const openModelFiles = () => openFiles([{ name: '3D models', extensions: ['stl', 'obj', '3mf', 'step', 'stp', 'iges', 'igs', 'brep'] }]);
 
 export async function openFiles(filters: { name: string; extensions: string[] }[], multiple = true): Promise<{ name: string; data: ArrayBuffer }[]> {
   if (window.nexspiro) return window.nexspiro.openFiles({ filters });

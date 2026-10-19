@@ -95,18 +95,25 @@ export function bevelEdges(mesh: IndexedMesh, edges: EdgePair[], size: number, s
   if (!sel.size) return null;
 
   // limit the size so offsets stay within the adjoining triangles
-  let limit = size;
+  const edgeLimit = new Map<number, number>();
   for (const e of sel) {
     const a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
     const el = len(sub(pos(a), pos(b)));
+    let lim = Infinity;
     for (let k = 0; k < 2; k++) {
       const t = topo.edgeTris[e * 2 + k];
       const [p, q, r] = [pos(ix[t * 3]), pos(ix[t * 3 + 1]), pos(ix[t * 3 + 2])];
       const u = sub(q, p), w = sub(r, p);
       const area2 = len([u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]);
-      if (el > 1e-12) limit = Math.min(limit, 0.45 * (area2 / el));
+      if (el > 1e-12) lim = Math.min(lim, 0.45 * (area2 / el));
     }
+    edgeLimit.set(e, lim);
   }
+  // an edge squeezed by a tiny sliver would drag the size of every other edge down: leave such edges out instead
+  const tiny = [...sel].filter((e) => edgeLimit.get(e)! < size * 0.25);
+  if (tiny.length && tiny.length < sel.size) { for (const e of tiny) sel.delete(e); skipped += tiny.length; }
+  let limit = size;
+  for (const e of sel) limit = Math.min(limit, edgeLimit.get(e)!);
   const d = limit;
   if (!(d > 1e-9)) return null;
 
@@ -245,12 +252,12 @@ export function bevelEdges(mesh: IndexedMesh, edges: EdgePair[], size: number, s
     for (let i = 0; i < loop.length; i++) push(c, loop[i], loop[(i + 1) % loop.length], firstTri);
   }
 
-  const out = compact(new Float32Array(verts), Uint32Array.from(outTris), mesh.faceGroups, src);
+  const out = compact(new Float32Array(verts), Uint32Array.from(outTris), mesh.faceGroups, src, mesh.groupKind);
   return { ...out, applied: sel.size, skipped, size: d };
 }
 
 /** Drop unused vertices; carry face groups along the triangle source map. */
-function compact(vertices: Float32Array, indices: Uint32Array, groups: Uint32Array | undefined, src: number[] | Uint32Array): EditResult {
+function compact(vertices: Float32Array, indices: Uint32Array, groups: Uint32Array | undefined, src: number[] | Uint32Array, kind?: 'cad'): EditResult {
   const used = new Int32Array(vertices.length / 3).fill(-1);
   let count = 0;
   for (let i = 0; i < indices.length; i++) if (used[indices[i]] < 0) used[indices[i]] = count++;
@@ -260,7 +267,7 @@ function compact(vertices: Float32Array, indices: Uint32Array, groups: Uint32Arr
   for (let i = 0; i < indices.length; i++) ni[i] = used[indices[i]];
   const triSource = Uint32Array.from(src);
   const mesh: IndexedMesh = { vertices: nv, indices: ni };
-  if (groups) mesh.faceGroups = remapTriArray(groups, triSource);
+  if (groups) { mesh.faceGroups = remapTriArray(groups, triSource); if (kind) mesh.groupKind = kind; }
   return { mesh, triSource };
 }
 
@@ -281,7 +288,7 @@ const ekey = (a: number, b: number, n: number) => (a < b ? a * n + b : b * n + a
 /** True when the mesh carries quad / polygon faces (several triangles sharing a face id). */
 export function hasPolygonFaces(m: IndexedMesh): boolean {
   const g = m.faceGroups;
-  if (!g) return false;
+  if (!g || m.groupKind === 'cad') return false;
   for (let i = 1; i < g.length; i++) if (g[i] === g[i - 1]) return true;
   const seen = new Set<number>();
   for (let i = 0; i < g.length; i++) { if (seen.has(g[i])) return true; seen.add(g[i]); }
@@ -310,6 +317,7 @@ export function subdivide(mesh: IndexedMesh, opts: SubdivOptions = {}): EditResu
   }
   const out: IndexedMesh = { vertices: cur.vertices, indices: cur.indices };
   if (cur.faceGroups) out.faceGroups = cur.faceGroups;
+  if (cur.groupKind) out.groupKind = cur.groupKind;
   return { mesh: out, triSource: source };
 }
 
@@ -381,7 +389,7 @@ function loop(mesh: IndexedMesh, sharp: Set<number>): EditResult & { sharp: Set<
     nextSharp.add(ekey(a, n + e, n2)); nextSharp.add(ekey(b, n + e, n2));
   }
   const mesh2: IndexedMesh = { vertices: out, indices: tris };
-  if (mesh.faceGroups) mesh2.faceGroups = remapTriArray(mesh.faceGroups, src);
+  if (mesh.faceGroups) { mesh2.faceGroups = remapTriArray(mesh.faceGroups, src); if (mesh.groupKind) mesh2.groupKind = mesh.groupKind; }
   return { mesh: mesh2, triSource: src, sharp: nextSharp };
 }
 
@@ -554,7 +562,7 @@ export function smoothMesh(mesh: IndexedMesh, opts: SmoothOptions = {}): EditRes
   };
   for (let it = 0; it < iterations; it++) { pass(lambda); if (mu) pass(mu); }
   const mesh2: IndexedMesh = { vertices: cur, indices: mesh.indices };
-  if (mesh.faceGroups) mesh2.faceGroups = mesh.faceGroups;
+  if (mesh.faceGroups) { mesh2.faceGroups = mesh.faceGroups; if (mesh.groupKind) mesh2.groupKind = mesh.groupKind; }
   return { mesh: mesh2, triSource: new Uint32Array(topo.triCount).map((_, i) => i) };
 }
 
@@ -628,10 +636,198 @@ export function refineMesh(mesh: IndexedMesh, maxLen: number, opts: { region?: A
     edges = nextEdges;
     splits += count;
     const next: IndexedMesh = { vertices: new Float32Array(verts), indices: Uint32Array.from(tris) };
-    if (cur.faceGroups) next.faceGroups = remapTriArray(cur.faceGroups, Uint32Array.from(src));
+    if (cur.faceGroups) { next.faceGroups = remapTriArray(cur.faceGroups, Uint32Array.from(src)); if (cur.groupKind) next.groupKind = cur.groupKind; }
     source = Uint32Array.from(src, (s) => source[s]);
     region = region ? Uint8Array.from(reg) : undefined;
     cur = next;
   }
   return { mesh: cur, triSource: source, splits, edges };
+}
+
+// ------------------------------------------------------------------------------------------ even remeshing
+
+/** Collapse edges shorter than `minLen` (never creating one longer than `maxLen`). Vertices on creases / borders stay. */
+function collapseShort(mesh: IndexedMesh, minLen: number, maxLen: number, creaseDeg: number): EditResult & { collapsed: number } {
+  const topo = buildTopology(mesh, creaseDeg);
+  const v = mesh.vertices;
+  const n = topo.vertexCount;
+  const tris = Uint32Array.from(mesh.indices);
+  const alive = new Uint8Array(topo.triCount).fill(1);
+  const locked = new Uint8Array(n);
+  for (let e = 0; e < topo.edgeCount; e++) if (topo.kind[e] !== 0) { locked[topo.edgeV[e * 2]] = 1; locked[topo.edgeV[e * 2 + 1]] = 1; }
+  const groups = mesh.faceGroups;
+  if (groups) for (let e = 0; e < topo.edgeCount; e++) { // keep the boundary between source faces
+    const a = topo.edgeTris[e * 2], b = topo.edgeTris[e * 2 + 1];
+    if (a >= 0 && b >= 0 && groups[a] !== groups[b]) { locked[topo.edgeV[e * 2]] = 1; locked[topo.edgeV[e * 2 + 1]] = 1; }
+  }
+  const vt: Set<number>[] = Array.from({ length: n }, () => new Set());
+  for (let t = 0; t < topo.triCount; t++) for (let k = 0; k < 3; k++) vt[tris[t * 3 + k]].add(t);
+  const P = (i: number) => [v[i * 3], v[i * 3 + 1], v[i * 3 + 2]];
+  const normal = (a: number[], b: number[], c: number[]) => {
+    const u = sub(b, a), w = sub(c, a);
+    return [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+  };
+  const neighbours = (i: number) => { const s = new Set<number>(); for (const t of vt[i]) for (let k = 0; k < 3; k++) if (tris[t * 3 + k] !== i) s.add(tris[t * 3 + k]); return s; };
+  const order: number[] = [];
+  for (let e = 0; e < topo.edgeCount; e++) {
+    const a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+    if (len(sub(P(a), P(b))) < minLen && topo.edgeTris[e * 2 + 1] >= 0 && topo.kind[e] === 0) order.push(e);
+  }
+  order.sort((x, y) => len(sub(P(topo.edgeV[x * 2]), P(topo.edgeV[x * 2 + 1]))) - len(sub(P(topo.edgeV[y * 2]), P(topo.edgeV[y * 2 + 1]))));
+  const touched = new Uint8Array(n);
+  let collapsed = 0;
+  for (const e of order) {
+    let r = topo.edgeV[e * 2], k = topo.edgeV[e * 2 + 1];
+    if (locked[r]) { if (locked[k]) continue; [r, k] = [k, r]; }
+    if (touched[r] || touched[k]) continue;
+    const shared = [...vt[r]].filter((t) => vt[k].has(t));
+    if (shared.length !== 2) continue;
+    const opp = shared.map((t) => { for (let q = 0; q < 3; q++) { const c = tris[t * 3 + q]; if (c !== r && c !== k) return c; } return -1; });
+    const nr = neighbours(r), nk = neighbours(k);
+    const common = [...nr].filter((x) => nk.has(x));
+    if (common.length !== 2 || !opp.every((o) => common.includes(o)) || nr.size <= 3) continue;
+    // moving r onto k must not fold or stretch the surrounding triangles
+    const pk = P(k);
+    let ok = true;
+    for (const t of vt[r]) {
+      if (shared.includes(t)) continue;
+      const c = [0, 1, 2].map((q) => tris[t * 3 + q]);
+      const before = normal(P(c[0]), P(c[1]), P(c[2]));
+      const after = normal(...(c.map((x) => (x === r ? pk : P(x))) as [number[], number[], number[]]));
+      const lb = len(before), la = len(after);
+      if (la < 1e-12 || dot(before, after) / (lb * la) < 0.4) { ok = false; break; }
+      for (const x of c) if (x !== r && x !== k && len(sub(P(x), pk)) > maxLen) { ok = false; break; }
+      if (!ok) break;
+    }
+    if (!ok) continue;
+    for (const t of shared) { alive[t] = 0; for (let q = 0; q < 3; q++) vt[tris[t * 3 + q]].delete(t); }
+    for (const t of [...vt[r]]) { for (let q = 0; q < 3; q++) if (tris[t * 3 + q] === r) tris[t * 3 + q] = k; vt[k].add(t); }
+    vt[r].clear();
+    for (const x of [...nr, ...nk, r, k]) touched[x] = 1;
+    collapsed++;
+  }
+  const keep: number[] = [];
+  for (let t = 0; t < topo.triCount; t++) if (alive[t]) keep.push(t);
+  const idx = new Uint32Array(keep.length * 3);
+  keep.forEach((t, i) => { idx[i * 3] = tris[t * 3]; idx[i * 3 + 1] = tris[t * 3 + 1]; idx[i * 3 + 2] = tris[t * 3 + 2]; });
+  const r = compact(v, idx, mesh.faceGroups, keep, mesh.groupKind);
+  return { ...r, collapsed };
+}
+
+/** Flip interior edges that improve vertex valence (towards 6), keeping creases and source-face boundaries. */
+function flipForValence(mesh: IndexedMesh, creaseDeg: number): EditResult & { flips: number } {
+  const topo = buildTopology(mesh, creaseDeg);
+  const look = edgeLookup(topo);
+  const v = mesh.vertices, n = topo.vertexCount;
+  const tris = Uint32Array.from(mesh.indices);
+  const val = new Int32Array(n);
+  for (let e = 0; e < topo.edgeCount; e++) { val[topo.edgeV[e * 2]]++; val[topo.edgeV[e * 2 + 1]]++; }
+  const onBorder = new Uint8Array(n);
+  for (let e = 0; e < topo.edgeCount; e++) if (topo.kind[e] !== 0) { onBorder[topo.edgeV[e * 2]] = 1; onBorder[topo.edgeV[e * 2 + 1]] = 1; }
+  const groups = mesh.faceGroups;
+  const P = (i: number) => [v[i * 3], v[i * 3 + 1], v[i * 3 + 2]];
+  const normal = (a: number[], b: number[], c: number[]) => { const u = sub(b, a), w = sub(c, a); return [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]; };
+  const dev = (i: number) => (onBorder[i] ? 0 : (val[i] - 6) ** 2);
+  const done = new Uint8Array(topo.triCount);
+  const created = new Set<number>(); // edges made by flips in this pass
+  let flips = 0;
+  for (let e = 0; e < topo.edgeCount; e++) {
+    const t1 = topo.edgeTris[e * 2], t2 = topo.edgeTris[e * 2 + 1];
+    if (topo.kind[e] !== 0 || t2 < 0 || done[t1] || done[t2]) continue;
+    if (groups && groups[t1] !== groups[t2]) continue;
+    const a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+    const third = (t: number) => { for (let q = 0; q < 3; q++) { const c = tris[t * 3 + q]; if (c !== a && c !== b) return c; } return -1; };
+    const c = third(t1), d = third(t2);
+    if (c < 0 || d < 0 || c === d) continue;
+    const cdKey = c < d ? c * n + d : d * n + c;
+    if (look.has(cdKey) || created.has(cdKey)) continue; // that edge exists already
+    const before = dev(a) + dev(b) + dev(c) + dev(d);
+    val[a]--; val[b]--; val[c]++; val[d]++;
+    const after = dev(a) + dev(b) + dev(c) + dev(d);
+    // orientation: t1 has a -> b; new triangles (c, a, d) and (d, b, c) when a -> b is in t1, else mirrored
+    const ia = [0, 1, 2].find((q) => tris[t1 * 3 + q] === a)!;
+    const forward = tris[t1 * 3 + ((ia + 1) % 3)] === b;
+    const [x, y] = forward ? [a, b] : [b, a];
+    const n1 = normal(P(c), P(x), P(d)), n2 = normal(P(d), P(y), P(c));
+    const o1 = normal(P(tris[t1 * 3]), P(tris[t1 * 3 + 1]), P(tris[t1 * 3 + 2])), o2 = normal(P(tris[t2 * 3]), P(tris[t2 * 3 + 1]), P(tris[t2 * 3 + 2]));
+    const okGeom = len(n1) > 1e-12 && len(n2) > 1e-12 && dot(n1, o1) > 0.5 * len(n1) * len(o1) && dot(n2, o2) > 0.5 * len(n2) * len(o2) && dot(n1, n2) > 0.5 * len(n1) * len(n2);
+    if (after >= before || !okGeom) { val[a]++; val[b]++; val[c]--; val[d]--; continue; }
+    tris.set([c, x, d], t1 * 3);
+    tris.set([d, y, c], t2 * 3);
+    done[t1] = done[t2] = 1;
+    created.add(cdKey);
+    flips++;
+  }
+  const src = Uint32Array.from({ length: topo.triCount }, (_, i) => i);
+  const out: IndexedMesh = { vertices: v, indices: tris };
+  if (mesh.faceGroups) { out.faceGroups = mesh.faceGroups; if (mesh.groupKind) out.groupKind = mesh.groupKind; }
+  return { mesh: out, triSource: src, flips };
+}
+
+/** Move free vertices toward their neighbours' centre, along the surface only. */
+function relaxTangential(mesh: IndexedMesh, creaseDeg: number, passes = 2): IndexedMesh {
+  const topo = buildTopology(mesh, creaseDeg);
+  const n = topo.vertexCount, ix = mesh.indices;
+  const nb: number[][] = Array.from({ length: n }, () => []);
+  const locked = new Uint8Array(n);
+  for (let e = 0; e < topo.edgeCount; e++) {
+    const a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+    nb[a].push(b); nb[b].push(a);
+    if (topo.kind[e] !== 0) locked[a] = locked[b] = 1;
+  }
+  const groups = mesh.faceGroups;
+  if (groups) for (let e = 0; e < topo.edgeCount; e++) {
+    const a = topo.edgeTris[e * 2], b = topo.edgeTris[e * 2 + 1];
+    if (a >= 0 && b >= 0 && groups[a] !== groups[b]) locked[topo.edgeV[e * 2]] = locked[topo.edgeV[e * 2 + 1]] = 1;
+  }
+  let cur = new Float32Array(mesh.vertices);
+  for (let pass = 0; pass < passes; pass++) {
+    const nrm = new Float32Array(n * 3);
+    for (let t = 0; t < ix.length; t += 3) {
+      const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+      const ux = cur[b] - cur[a], uy = cur[b + 1] - cur[a + 1], uz = cur[b + 2] - cur[a + 2], wx = cur[c] - cur[a], wy = cur[c + 1] - cur[a + 1], wz = cur[c + 2] - cur[a + 2];
+      const fx = uy * wz - uz * wy, fy = uz * wx - ux * wz, fz = ux * wy - uy * wx;
+      for (const i of [a, b, c]) { nrm[i] += fx; nrm[i + 1] += fy; nrm[i + 2] += fz; }
+    }
+    const next = new Float32Array(cur);
+    for (let i = 0; i < n; i++) {
+      if (locked[i] || nb[i].length < 3) continue;
+      const m = [0, 0, 0];
+      for (const j of nb[i]) for (let c = 0; c < 3; c++) m[c] += cur[j * 3 + c] / nb[i].length;
+      const d = [m[0] - cur[i * 3], m[1] - cur[i * 3 + 1], m[2] - cur[i * 3 + 2]];
+      const nl = Math.hypot(nrm[i * 3], nrm[i * 3 + 1], nrm[i * 3 + 2]) || 1;
+      const k = (d[0] * nrm[i * 3] + d[1] * nrm[i * 3 + 1] + d[2] * nrm[i * 3 + 2]) / (nl * nl);
+      for (let c = 0; c < 3; c++) next[i * 3 + c] = cur[i * 3 + c] + 0.5 * (d[c] - k * nrm[i * 3 + c]);
+    }
+    cur = next;
+  }
+  const out: IndexedMesh = { vertices: cur, indices: mesh.indices };
+  if (mesh.faceGroups) { out.faceGroups = mesh.faceGroups; if (mesh.groupKind) out.groupKind = mesh.groupKind; }
+  return out;
+}
+
+export interface RemeshResult extends EditResult { splits: number; collapses: number; flips: number }
+
+/**
+ * Even remeshing (split long edges, collapse short ones, flip toward valence 6, relax along the surface) so the
+ * triangles come out about `target` mm. Creases, open borders and source-face boundaries are kept. This helps coarse,
+ * uneven or sliver-filled meshes before bevelling or smoothing. The surface drifts slightly on curved areas.
+ */
+export function remeshEven(mesh: IndexedMesh, target: number, opts: { iterations?: number; creaseDeg?: number; maxTris?: number } = {}): RemeshResult {
+  const iterations = Math.max(1, Math.min(10, Math.round(opts.iterations ?? 4)));
+  const crease = opts.creaseDeg ?? 40;
+  let cur = mesh;
+  let source = new Uint32Array(mesh.indices.length / 3).map((_, i) => i);
+  let splits = 0, collapses = 0, flips = 0;
+  const step = (r: EditResult) => { source = Uint32Array.from(r.triSource, (s) => source[s]); cur = r.mesh; };
+  for (let it = 0; it < iterations; it++) {
+    const s = refineMesh(cur, (target * 4) / 3, { maxTris: opts.maxTris });
+    splits += s.splits; step(s);
+    const c = collapseShort(cur, target * 0.8, (target * 4) / 3, crease);
+    collapses += c.collapsed; step(c);
+    const f = flipForValence(cur, crease);
+    flips += f.flips; step(f);
+    cur = relaxTangential(cur, crease);
+  }
+  return { mesh: cur, triSource: source, splits, collapses, flips };
 }

@@ -209,6 +209,10 @@ describe('edge tool actions', () => {
     expect(o.paint!.color!.length).toBe(o.mesh.indices.length / 3);
     expect(useStore.getState().edgeSel).toBeNull();
     expect(useStore.getState().undoStack.length).toBe(1);
+    // Undo brings the mesh and the picked edges back
+    useStore.getState().undo();
+    expect(useStore.getState().objects[0].mesh).toBe(mesh);
+    expect(useStore.getState().edgeSel!.edges).toHaveLength(12);
   });
 });
 

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
-import { bevelSelectedEdges, refineObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
+import { bevelSelectedEdges, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
 import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
@@ -250,7 +250,7 @@ export function EdgesPanel() {
   const n = s.edgeSel?.edges.length ?? 0;
   const quads = !!o && hasPolygonFaces(o.mesh);
   return (
-    <div className="float panel" style={{ width: 310, maxHeight: 'calc(100% - 150px)', overflowY: 'auto' }}>
+    <div className="float panel" style={{ width: 310, maxHeight: 'calc(100% - 260px)', overflowY: 'auto' }}>
       <h4>Edges</h4>
       <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click an edge to pick its whole run. <kbd>Shift</kbd> adds or removes, <kbd>Alt</kbd> picks a single segment.</p>
       <div className="row" style={{ marginBottom: 4 }}>
@@ -282,9 +282,12 @@ export function EdgesPanel() {
         <label className="row" style={{ gap: 4, fontSize: 12 }} title="Only move vertices of triangles that carry colour, support or seam paint"><input type="checkbox" checked={paintedOnly} onChange={(e) => setPaintedOnly(e.target.checked)} />Painted area only</label>
       </div>
       <h4 style={{ marginTop: 6 }}>Even triangles</h4>
-      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>Splits long edges so smoothing and subdividing behave on coarse or uneven meshes. The shape does not change.</p>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>Refine splits long edges (the shape does not change). Remesh also merges short edges and evens the triangles, which helps before bevelling or smoothing; creases and borders are kept.</p>
       <Slider label="Max edge" value={refineLen} min={0.2} max={20} step={0.1} unit="mm" onChange={setRefineLen} />
-      <div className="row"><button className="btn-secondary btn-small" disabled={!o} onClick={() => o && refineObject(o.id, refineLen)}>Refine</button></div>
+      <div className="row">
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && refineObject(o.id, refineLen)}>Refine</button>
+        <button className="btn-secondary btn-small" disabled={!o} onClick={() => o && remeshObject(o.id, refineLen, s.edgeAngle)}>Remesh</button>
+      </div>
       {msg && <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{msg}</p>}
     </div>
   );

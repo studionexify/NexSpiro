@@ -96,6 +96,8 @@ function compute(m: IndexedMesh, creaseDeg: number): Topology {
   const convex = new Int8Array(edgeCount);
   const n1 = [0, 0, 0], n2 = [0, 0, 0];
   const cosCrease = Math.cos((creaseDeg * Math.PI) / 180);
+  const cadGroups = m.groupKind === 'cad' ? m.faceGroups : undefined;
+  const cosCad = Math.cos((2 * Math.PI) / 180);
   for (let e = 0; e < edgeCount; e++) {
     const t1 = et[e * 2], t2 = et[e * 2 + 1];
     if (count[e] > 2) { kind[e] = EDGE_NONMANIFOLD; dihedral[e] = 180; continue; }
@@ -103,7 +105,7 @@ function compute(m: IndexedMesh, creaseDeg: number): Topology {
     faceNormal(v, ix, t1, n1); faceNormal(v, ix, t2, n2);
     const d = Math.max(-1, Math.min(1, n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]));
     dihedral[e] = (Math.acos(d) * 180) / Math.PI;
-    if (d <= cosCrease) {
+    if (d <= cosCrease || (cadGroups && cadGroups[t1] !== cadGroups[t2] && d <= cosCad)) {
       kind[e] = EDGE_SHARP;
       // convex when the far corner of face 2 lies behind face 1's plane
       const a = ev[e * 2], b = ev[e * 2 + 1];

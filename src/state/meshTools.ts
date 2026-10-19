@@ -1,9 +1,9 @@
 // Surface edit actions on scene objects: chamfer / fillet of picked edges, smooth subdivision, smoothing.
 // Each is one undo step. Per-triangle paint is carried across the edit.
 import { openEdgeCount } from '../engine/mesh';
-import { bevelEdges, refineMesh, remapTriArray, smoothMesh, subdivide, type EditResult, type EdgePair, type SmoothOptions, type SubdivOptions } from '../engine/meshedit';
+import { bevelEdges, refineMesh, remapTriArray, remeshEven, smoothMesh, subdivide, type EditResult, type EdgePair, type SmoothOptions, type SubdivOptions } from '../engine/meshedit';
 import { buildTopology, edgeChain, EDGE_SHARP } from '../engine/topology';
-import { dropToBed, useStore, worldBounds, type ObjectPaint, type SceneObject } from './store';
+import { dropToBed, edgeSelHistory, useStore, worldBounds, type ObjectPaint, type SceneObject } from './store';
 
 function remapPaint(p: ObjectPaint | undefined, src: Uint32Array): ObjectPaint | undefined {
   if (!p) return p;
@@ -18,6 +18,7 @@ function commit(id: string, r: EditResult, label: string) {
   const before = s.objects.find((o) => o.id === id);
   if (!before) return;
   const grounded = Math.abs(worldBounds(before).min[2]) < 1e-3;
+  edgeSelHistory.set(s.objects, s.edgeSel); // checkpoint() stores this very array, so Undo can restore the picked edges
   s.updateObjects((o): SceneObject => {
     const next: SceneObject = { ...o, mesh: r.mesh, openEdges: openEdgeCount(r.mesh), paint: remapPaint(o.paint, r.triSource) };
     return grounded ? dropToBed(next) : next;
@@ -30,6 +31,13 @@ export function selectedEdgeObject(): SceneObject | undefined {
   return s.edgeSel ? s.objects.find((o) => o.id === s.edgeSel!.objectId) : undefined;
 }
 
+/** A crease an Edges click may pick. On CAD imports that is the boundary between two CAD faces, not the tessellation inside a curved face. */
+function isFeature(o: SceneObject, t: ReturnType<typeof buildTopology>, e: number): boolean {
+  if (t.kind[e] !== EDGE_SHARP) return false;
+  const g = o.mesh.groupKind === 'cad' ? o.mesh.faceGroups : undefined;
+  return !g || g[t.edgeTris[e * 2]] !== g[t.edgeTris[e * 2 + 1]];
+}
+
 /** All crease edges of an object, as the current edge selection. */
 export function selectCreaseEdges(objectId: string) {
   const s = useStore.getState();
@@ -37,7 +45,7 @@ export function selectCreaseEdges(objectId: string) {
   if (!o) return;
   const t = buildTopology(o.mesh, s.edgeAngle);
   const edges: EdgePair[] = [];
-  for (let e = 0; e < t.edgeCount; e++) if (t.kind[e] === EDGE_SHARP) edges.push([t.edgeV[e * 2], t.edgeV[e * 2 + 1]]);
+  for (let e = 0; e < t.edgeCount; e++) if (isFeature(o, t, e)) edges.push([t.edgeV[e * 2], t.edgeV[e * 2 + 1]]);
   s.set({ edgeSel: edges.length ? { objectId, edges } : null });
 }
 
@@ -51,7 +59,7 @@ export function bevelSelectedEdges(size: number, segments: number): string | nul
   if (!r) return 'These edges cannot be bevelled (open or non-manifold edges, or size too small).';
   const what = segments > 1 ? 'Filleted' : 'Chamfered';
   const clamp = r.size < size - 1e-6 ? ` (size reduced to ${r.size.toFixed(2)} mm to fit the surrounding faces)` : '';
-  const skip = r.skipped ? `, ${r.skipped} skipped` : '';
+  const skip = r.skipped ? `, ${r.skipped} skipped (open edges, or squeezed by tiny triangles)` : '';
   commit(o.id, r, `${what} ${r.applied} edge${r.applied === 1 ? '' : 's'}${skip}${clamp}.`);
   return null;
 }
@@ -93,7 +101,7 @@ export function nearestEdge(o: SceneObject, tri: number, p: [number, number, num
 /** The run of edges a click on edge `e` selects: its crease chain, or just itself when it is not a crease (or `single`). */
 export function edgeRun(o: SceneObject, e: number, angle: number, single = false): EdgePair[] {
   const t = buildTopology(o.mesh, angle);
-  const ids = single || t.kind[e] !== EDGE_SHARP ? [e] : edgeChain(o.mesh, t, e, (x) => t.kind[x] === EDGE_SHARP);
+  const ids = single || !isFeature(o, t, e) ? [e] : edgeChain(o.mesh, t, e, (x) => isFeature(o, t, x));
   return ids.map((x) => [t.edgeV[x * 2], t.edgeV[x * 2 + 1]] as EdgePair);
 }
 
@@ -132,4 +140,12 @@ export function paintedRegion(o: SceneObject): Uint8Array | undefined {
     if (a) for (let t = 0; t < tris && t < a.length; t++) if (a[t]) { out[t] = 1; any = true; }
   }
   return any ? out : undefined;
+}
+
+/** Even remesh to about `target` mm triangles (splits, collapses, flips, relaxes). */
+export function remeshObject(id: string, target: number, creaseDeg: number): void {
+  const o = useStore.getState().objects.find((x) => x.id === id);
+  if (!o) return;
+  const r = remeshEven(o.mesh, target, { creaseDeg });
+  commit(id, r, `Remeshed: ${(r.mesh.indices.length / 3).toLocaleString()} triangles (${r.splits} splits, ${r.collapses} collapses, ${r.flips} flips).`);
 }

@@ -19,6 +19,7 @@ export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
 export type Vec3 = [number, number, number];
+export interface SceneEdgeSel { objectId: string; edges: [number, number][] }
 
 export interface ScenePart {
   id: string;
@@ -132,7 +133,7 @@ interface State {
   /** Dihedral angle (degrees) from which an edge counts as a crease. */
   edgeAngle: number;
   /** Edges picked with the Edges tool, by vertex pair of one object's mesh. */
-  edgeSel: { objectId: string; edges: [number, number][] } | null;
+  edgeSel: SceneEdgeSel | null;
 
   brushSize: number; // mm
   brushType: BrushType;
@@ -196,6 +197,9 @@ interface State {
   setMachine: (key: string, v: Config[string] | undefined) => void;
   markDirty: () => void;
 }
+
+/** Edge selection that was active when an undo snapshot was taken (keyed by the snapshot), so Undo brings the picked edges back. */
+export const edgeSelHistory = new WeakMap<object, SceneEdgeSel | null>();
 
 let idSeq = 0;
 export const newId = (p = 'obj') => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
@@ -318,13 +322,14 @@ export const useStore = create<State>((set, get) => ({
   undo: () => {
     const s = get();
     if (!s.undoStack.length) return;
-    set({ objects: s.undoStack[s.undoStack.length - 1], undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects] });
+    const back = s.undoStack[s.undoStack.length - 1];
+    set({ objects: back, undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects], edgeSel: edgeSelHistory.get(back) ?? null });
     get().markDirty();
   },
   redo: () => {
     const s = get();
     if (!s.redoStack.length) return;
-    set({ objects: s.redoStack[s.redoStack.length - 1], redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects] });
+    set({ objects: s.redoStack[s.redoStack.length - 1], redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects], edgeSel: null });
     get().markDirty();
   },
   setOverride: (key, v) => {

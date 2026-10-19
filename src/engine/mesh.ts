@@ -5,6 +5,8 @@ export interface IndexedMesh {
   indices: Uint32Array;
   /** Source face id per triangle (an OBJ quad or polygon, a CAD face). Triangles sharing an id came from one face. */
   faceGroups?: Uint32Array;
+  /** 'cad': the groups are B-rep faces of a STEP / IGES import, so a group boundary is a true model edge even where it is smooth-ish. */
+  groupKind?: 'cad';
 }
 
 /** Weld a triangle soup (flat xyz per corner) into an indexed mesh. `groups` (one id per soup triangle) is carried to `faceGroups`. */
