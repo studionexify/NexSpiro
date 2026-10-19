@@ -14,11 +14,12 @@ import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
 export type Vec3 = [number, number, number];
+export interface SceneEdgeSel { objectId: string; edges: [number, number][] }
 
 export interface ScenePart {
   id: string;
@@ -125,6 +126,14 @@ interface State {
   showAdvanced: boolean;
   search: string;
   showOverhangs: boolean;
+  /** Draw feature edges (creases, open borders, colour and face boundaries) on the models. */
+  showEdges: boolean;
+  /** Smooth shading across faces that bend less than edgeAngle (looks like a rounded body; geometry is unchanged). */
+  shadeSmooth: boolean;
+  /** Dihedral angle (degrees) from which an edge counts as a crease. */
+  edgeAngle: number;
+  /** Edges picked with the Edges tool, by vertex pair of one object's mesh. */
+  edgeSel: SceneEdgeSel | null;
 
   brushSize: number; // mm
   brushType: BrushType;
@@ -189,6 +198,9 @@ interface State {
   markDirty: () => void;
 }
 
+/** Edge selection that was active when an undo snapshot was taken (keyed by the snapshot), so Undo brings the picked edges back. */
+export const edgeSelHistory = new WeakMap<object, SceneEdgeSel | null>();
+
 let idSeq = 0;
 export const newId = (p = 'obj') => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 
@@ -247,6 +259,10 @@ export const useStore = create<State>((set, get) => ({
   showAdvanced: false,
   search: '',
   showOverhangs: false,
+  showEdges: false,
+  shadeSmooth: false,
+  edgeAngle: 30,
+  edgeSel: null,
 
   brushSize: 4,
   brushType: 'circle',
@@ -306,13 +322,14 @@ export const useStore = create<State>((set, get) => ({
   undo: () => {
     const s = get();
     if (!s.undoStack.length) return;
-    set({ objects: s.undoStack[s.undoStack.length - 1], undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects] });
+    const back = s.undoStack[s.undoStack.length - 1];
+    set({ objects: back, undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects], edgeSel: edgeSelHistory.get(back) ?? null });
     get().markDirty();
   },
   redo: () => {
     const s = get();
     if (!s.redoStack.length) return;
-    set({ objects: s.redoStack[s.redoStack.length - 1], redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects] });
+    set({ objects: s.redoStack[s.redoStack.length - 1], redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects], edgeSel: null });
     get().markDirty();
   },
   setOverride: (key, v) => {

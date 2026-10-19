@@ -1,4 +1,5 @@
 // The NexSpiro slicing pipeline (stages 2–10). Pure TypeScript, runs in a Web Worker or Node.
+import { smoothPaths } from './outlineSmooth';
 import { calibProgram } from './calibGcode';
 import { slice as advancedSlice } from './advanced/classic/slicer';
 import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, type Config } from '../profiles/settings';
@@ -265,11 +266,13 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     progress('Slicing mesh', 0.04 + 0.14 * ((oi + 1) / meshes.length));
   });
   const closeR = num('slice_closing_radius');
+  const smoothR = num('outline_smoothing'), smoothCorner = num('outline_smoothing_corner') || 35;
   const xyc = num('xy_contour_compensation'), xyh = num('xy_hole_compensation'), efc = raftN ? 0 : num('elefant_foot_compensation');
   for (const sl of objSlices) {
     for (let i = objStart; i < N; i++) {
       if (!sl[i].length) continue;
       if (closeR > 0) sl[i] = offset(offset(sl[i], closeR, 'round'), -closeR, 'round');
+      if (smoothR > 0) sl[i] = smoothPaths(sl[i], smoothR, smoothCorner);
       if (xyc || xyh) {
         const exs = toExPolygons(sl[i]);
         const outer = offset(exs.map((e) => e.contour), xyc);

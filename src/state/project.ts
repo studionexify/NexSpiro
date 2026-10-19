@@ -30,6 +30,9 @@ interface ProjectJson {
   plugins?: Record<string, unknown>;
   objects: (Omit<SceneObject, 'mesh' | 'parts' | 'paint'> & {
     meshIndex: number;
+    /** Source face id per triangle (quad / polygon groups from OBJ import), kept so subdivision still sees quads. */
+    faceGroups?: string;
+    groupKind?: 'cad';
     parts?: { id: string; name: string; type: string; position: number[]; rotation: number[]; scale: number[]; overrides: Config; v: string; i: string }[];
     paint?: Record<string, string>;
   })[];
@@ -92,7 +95,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     plugins: (await import('../plugins/registry')).pluginProjectData(),
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
-      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, patternex: o.patternex, meshIndex: i,
+      filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, patternex: o.patternex, meshIndex: i, faceGroups: objs[i].mesh.faceGroups ? u32(objs[i].mesh.faceGroups!) : undefined, groupKind: objs[i].mesh.groupKind,
       heightRanges: o.heightRanges, brimEars: o.brimEars, hidden: o.hidden,
       parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type, position: p.position, rotation: p.rotation, scale: p.scale, overrides: p.overrides, v: f32(p.mesh.vertices), i: u32(p.mesh.indices) })),
       paint: o.paint ? Object.fromEntries(Object.entries(o.paint).filter(([, a]) => a).map(([k, a]) => [k, b64(a as Uint8Array)])) : undefined,
@@ -141,7 +144,7 @@ export async function loadProject(data: ArrayBuffer) {
     filament: o.filament, overrides: o.overrides ? migrateConfig(o.overrides, json.version) : undefined, layerHeights: o.layerHeights, printable: o.printable,
     heightRanges: o.heightRanges?.map((r) => ({ ...r, overrides: migrateConfig(r.overrides, json.version) })), brimEars: o.brimEars, hidden: o.hidden,
     patternex: o.patternex ?? legacyPatternex(json.patternex, o.id),
-    mesh: meshes[o.meshIndex],
+    mesh: o.faceGroups ? { ...meshes[o.meshIndex], faceGroups: toU32(o.faceGroups), ...(o.groupKind ? { groupKind: o.groupKind } : {}) } : meshes[o.meshIndex],
     parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type as any, position: p.position as any, rotation: p.rotation as any, scale: p.scale as any, overrides: p.overrides ?? {}, mesh: { vertices: toF32(p.v), indices: toU32(p.i) } })),
     paint: o.paint ? Object.fromEntries(Object.entries(o.paint).map(([k, v]) => [k, unb64(v)])) : undefined,
   }));

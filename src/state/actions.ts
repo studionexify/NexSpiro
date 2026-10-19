@@ -22,7 +22,7 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
           return;
         }
       }
-      const models = await loadModelFile(f.name, f.data);
+      const models = /\.(step|stp|iges|igs|brep)$/i.test(f.name) ? await (await import('../io/cad')).loadCadFile(f.name, f.data) : await loadModelFile(f.name, f.data);
       for (const m of models) {
         let o: SceneObject = { id: newId(), name: m.name, mesh: m.mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: m.openEdges };
         o = centreOnBed(o, s.printerId);

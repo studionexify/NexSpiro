@@ -2,6 +2,9 @@
 import { useEffect, useRef } from 'react';
 import { growFaces, triAdjacency, triNormals } from '../engine/facesets';
 import * as THREE from 'three';
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { featureLines, pairLines } from './edgeOverlay';
+import { edgeRun, nearestEdge, pickEdge } from '../state/meshTools';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { flatFaces } from './flatFaces';
 import { grooveMesh } from '../state/cutConnectors';
@@ -85,7 +88,7 @@ function convexOverlap(a: Pt[], b: Pt[]) {
 }
 
 function overhangMaterial(): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.55, metalness: 0.05 });
+  const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.55, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   const uniforms = { uOverhang: { value: 0 }, uCos: { value: Math.cos((30 * Math.PI) / 180) }, uOOB: { value: 0 } };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -103,13 +106,15 @@ function overhangMaterial(): THREE.MeshStandardMaterial {
   return mat;
 }
 
-function geometryFor(mesh: SceneObject['mesh']): THREE.BufferGeometry {
+function geometryFor(mesh: SceneObject['mesh'], smoothDeg = 0): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(mesh.vertices, 3));
   g.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
-  const flat = g.toNonIndexed();
-  flat.computeVertexNormals();
+  let flat = g.toNonIndexed();
   g.dispose();
+  // smooth shading: normals blend across faces that bend less than `smoothDeg` (geometry itself is unchanged)
+  if (smoothDeg > 0) flat = toCreasedNormals(flat, (smoothDeg * Math.PI) / 180);
+  else flat.computeVertexNormals();
   flat.setAttribute('color', new THREE.BufferAttribute(new Float32Array(flat.getAttribute('position').count * 3), 3));
   return flat;
 }
@@ -274,7 +279,13 @@ export function Viewport() {
       }
       invalidate();
     };
-    const meshes = new Map<string, { mesh: THREE.Mesh; src: SceneObject['mesh']; colorKey: string; hull?: THREE.Mesh }>();
+    const meshes = new Map<string, { mesh: THREE.Mesh; src: SceneObject['mesh']; colorKey: string; hull?: THREE.Mesh; shade: number; edges?: THREE.LineSegments; edgeDeps?: unknown[]; picked?: THREE.LineSegments }>();
+    const edgeMat = new THREE.LineBasicMaterial({ vertexColors: true });
+    const pickMat = new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true });
+    const hoverMat = new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true });
+    const hoverLine = new THREE.LineSegments(new THREE.BufferGeometry(), hoverMat);
+    hoverLine.renderOrder = 12; hoverLine.raycast = () => {}; hoverLine.visible = false; hoverLine.frustumCulled = false;
+    let hoverKey = '';
     const outlineMat = outlineMaterial();
     let hoverId: string | null = null;
     const partMeshes = new Map<string, { mesh: THREE.Mesh; src: ScenePart['mesh'] }>();
@@ -353,6 +364,29 @@ export function Viewport() {
       invalidate();
     };
     let faceHover: THREE.Mesh | null = null;
+    /** Edges tool: highlight the run of edges a click would pick. */
+    const hoverEdge = (ev: PointerEvent) => {
+      const st = useStore.getState();
+      let key = '';
+      if (!iconAt(ev)) {
+        ray.setFromCamera(ndc(ev), camera);
+        const hit = ray.intersectObjects(objectMeshes(), false)[0];
+        const o = hit && st.objects.find((x) => x.id === hit.object.userData.id);
+        if (hit && o && hit.faceIndex != null) {
+          const p = hit.object.worldToLocal(hit.point.clone());
+          const e = nearestEdge(o, hit.faceIndex, [p.x, p.y, p.z], st.edgeAngle);
+          key = `${o.id}:${e}:${ev.altKey}`;
+          if (key !== hoverKey) {
+            const g = pairLines(o, edgeRun(o, e, st.edgeAngle, ev.altKey), '#ffd60a');
+            hoverLine.geometry.dispose();
+            hoverLine.geometry = g ?? new THREE.BufferGeometry();
+            hit.object.add(hoverLine);
+          }
+        }
+      }
+      hoverLine.visible = !!key;
+      if (key !== hoverKey) { hoverKey = key; invalidate(); }
+    };
     const hoverFace = (ev: PointerEvent) => {
       let h: THREE.Mesh | null = null;
       if (faceGroup.children.length) {
@@ -570,11 +604,12 @@ export function Viewport() {
       for (const [id, m] of partMeshes) if (!keepParts.has(id)) { disposeMesh(m.mesh); partMeshes.delete(id); }
       for (const o of s.objects) {
         let entry = meshes.get(o.id);
-        if (!entry || entry.src !== o.mesh) {
+        const shade = s.shadeSmooth ? s.edgeAngle : 0;
+        if (!entry || entry.src !== o.mesh || entry.shade !== shade) {
           if (entry) disposeMesh(entry.mesh);
-          const mesh = new THREE.Mesh(geometryFor(o.mesh), overhangMaterial());
+          const mesh = new THREE.Mesh(geometryFor(o.mesh, shade), overhangMaterial());
           mesh.userData.id = o.id;
-          entry = { mesh, src: o.mesh, colorKey: '' };
+          entry = { mesh, src: o.mesh, colorKey: '', shade };
           meshes.set(o.id, entry);
           objGroup.add(mesh);
         }
@@ -595,6 +630,18 @@ export function Viewport() {
         }
         if (entry.hull) entry.hull.visible = sel;
         entry.mesh.visible = !o.hidden;
+        // edge overlay: creases / open borders / colour outlines (Edges tool or the View toggle), and the picked edges
+        const edgeSel = s.edgeSel && s.edgeSel.objectId === o.id ? s.edgeSel : null;
+        const wantEdges = s.workspace === 'prepare' && (s.showEdges || s.tool === 'edges') && !o.hidden;
+        const deps = [o.mesh, wantEdges, s.edgeAngle, o.paint?.color, slots.join(), edgeSel];
+        if (!entry.edgeDeps || deps.some((d, i) => d !== entry!.edgeDeps![i])) {
+          entry.edgeDeps = deps;
+          for (const k of ['edges', 'picked'] as const) { const old = entry[k]; if (old) { old.parent?.remove(old); old.geometry.dispose(); entry[k] = undefined; } }
+          const fg = wantEdges ? featureLines(o, slots, s.edgeAngle) : null;
+          if (fg) { entry.edges = new THREE.LineSegments(fg, edgeMat); entry.edges.raycast = () => {}; entry.mesh.add(entry.edges); }
+          const pg = edgeSel && s.workspace === 'prepare' ? pairLines(o, edgeSel.edges, '#ff8a00') : null;
+          if (pg) { entry.picked = new THREE.LineSegments(pg, pickMat); entry.picked.renderOrder = 11; entry.picked.raycast = () => {}; entry.mesh.add(entry.picked); }
+        }
         // see-through while the live toolpath is shown on it, and for objects left out of the print
         const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
@@ -1010,6 +1057,8 @@ export function Viewport() {
           }
           if (h !== hoverId) { hoverId = h; applyHover(); }
           if (st.tool === 'face') hoverFace(ev);
+          else if (st.tool === 'edges') hoverEdge(ev);
+          else if (hoverLine.visible) { hoverLine.visible = false; hoverKey = ''; invalidate(); }
         }
       }
       const s = useStore.getState();
@@ -1127,6 +1176,15 @@ export function Viewport() {
       }
       const id = hit.object.userData.id as string;
       const partId = hit.object.userData.partId as string | undefined;
+      if (s.tool === 'edges' && !partId) {
+        // pick the run of edges nearest the click; Shift adds / removes, Alt picks one tessellation edge
+        if (hit.faceIndex != null) {
+          const p = hit.object.worldToLocal(hit.point.clone());
+          s.set({ selected: [id] });
+          pickEdge(id, hit.faceIndex, [p.x, p.y, p.z], { add: ev.shiftKey, single: ev.altKey });
+        }
+        return;
+      }
       if (s.tool === 'brim_ears' && !partId) {
         // click near an ear removes it, elsewhere adds one (ears sit on the first layer, so only XY matters)
         const o = s.objects.find((x) => x.id === id)!;
@@ -1527,7 +1585,7 @@ export function Viewport() {
         rebuildPlates();
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
-      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.paintOverhangAngle !== prev.paintOverhangAngle
+      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
