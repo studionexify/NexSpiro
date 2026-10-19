@@ -1,0 +1,169 @@
+// Flenex cut engine. A flexi is a solid model plus a list of cuts. Each cut is a plane (a point and a
+// normal) with a joint. Building cuts the model apart with a thin kerf, carves the sockets and slots,
+// then fuses the moving parts on, so the result prints in one piece and moves once it is off the bed.
+import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
+import type { IndexedMesh } from '../../engine/mesh';
+import { openEdgeCount } from '../../engine/mesh';
+import { free, meshOf, pieces, solid, toGeometry, transform, unionAll, bounds, type Solid, type V3 } from './csg';
+import { buildJoint, defaultJoint, type JointInfo, type JointSpec, type Probe } from './joints';
+import type { Fit } from './fit';
+
+export interface Cut {
+  id: string;
+  name: string;
+  /** A point in the section where the joint sits (model frame, mm). It is re-centred on the section. */
+  origin: V3;
+  /** Direction from piece A into piece B. */
+  normal: V3;
+  /** Rotates the hinge axis around the normal (°). */
+  roll: number;
+  /** Radius of the kerf disc (0 = automatic from the section). */
+  radius: number;
+  joint: JointSpec;
+  enabled: boolean;
+}
+
+export const newCut = (id: string, origin: V3, normal: V3, joint: JointSpec = defaultJoint(), roll = 0): Cut => ({ id, name: `Cut ${id}`, origin, normal, roll, radius: 0, joint, enabled: true });
+
+export interface CutReport {
+  id: string;
+  name: string;
+  ok: boolean;
+  /** Centre the joint was placed on. */
+  centre: V3;
+  radius: number;
+  info?: JointInfo;
+  probe?: Probe;
+  warnings: string[];
+}
+
+export interface FlexiResult {
+  mesh: IndexedMesh;
+  /** Connected pieces of the finished model, and the piece of each triangle. */
+  pieces: IndexedMesh[];
+  triPiece: Int32Array;
+  reports: CutReport[];
+  warnings: string[];
+  /** Mesh is closed (no open edges). */
+  closed: boolean;
+}
+
+const v3 = (a: V3) => new THREE.Vector3(a[0], a[1], a[2]);
+
+/** The frame of a cut: x across the hinge, y along its axis, z the normal. */
+export function cutFrame(origin: V3, normalIn: V3, roll: number, up: V3 = [0, 0, 1]): THREE.Matrix4 {
+  const n = v3(normalIn).normalize();
+  const upV = v3(up).normalize();
+  let a = upV.clone().sub(n.clone().multiplyScalar(upV.dot(n)));
+  if (a.lengthSq() < 1e-6) a = Math.abs(n.x) < 0.9 ? new THREE.Vector3(1, 0, 0).sub(n.clone().multiplyScalar(n.x)) : new THREE.Vector3(0, 1, 0).sub(n.clone().multiplyScalar(n.y));
+  a.normalize();
+  a.applyAxisAngle(n, roll * Math.PI / 180);
+  const u = a.clone().cross(n).normalize();
+  const m = new THREE.Matrix4().makeBasis(u, a, n);
+  m.setPosition(v3(origin));
+  return m;
+}
+
+/** BVH of the model for the probes. */
+export const modelBvh = (m: IndexedMesh) => new MeshBVH(toGeometry(m));
+
+/** Shoot rays from `origin` to learn the section: its centre, thinnest and widest reach, depth either side. */
+export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up: V3 = [0, 0, 1], rays = 24): { probe: Probe; centre: V3 } {
+  const M = cutFrame(origin, normal, roll, up);
+  const x = new THREE.Vector3(), y = new THREE.Vector3(), z = new THREE.Vector3();
+  M.extractBasis(x, y, z);
+  const ray = new THREE.Ray();
+  const hit = (o: THREE.Vector3, d: THREE.Vector3): number => {
+    ray.origin.copy(o); ray.direction.copy(d);
+    const h = bvh.raycastFirst(ray, THREE.DoubleSide);
+    return h ? h.distance : Infinity;
+  };
+  const c = v3(origin);
+  // inside test along the normal: an exit (back face) is hit first
+  const inside = (() => {
+    ray.origin.copy(c); ray.direction.copy(z);
+    const h = bvh.raycastFirst(ray, THREE.DoubleSide);
+    return !!h && h.face!.normal.dot(z) > 0;
+  })();
+  const dirs = Array.from({ length: rays }, (_, i) => { const a = (i / rays) * Math.PI * 2; return x.clone().multiplyScalar(Math.cos(a)).add(y.clone().multiplyScalar(Math.sin(a))); });
+  // re-centre on the section (mean of the wall hits), twice
+  for (let it = 0; it < 3; it++) {
+    const sum = new THREE.Vector3(); let n = 0;
+    for (const d of dirs) { const t = hit(c, d); if (isFinite(t)) { sum.add(c.clone().addScaledVector(d, t)); n++; } }
+    if (n < rays * 0.6) break;
+    sum.multiplyScalar(1 / n);
+    // keep the centre in the cut plane
+    const off = sum.clone().sub(c); off.addScaledVector(z, -off.dot(z));
+    c.add(off);
+  }
+  let inr = Infinity, outr = 0;
+  for (const d of dirs) { const t = hit(c, d); if (isFinite(t)) { inr = Math.min(inr, t); outr = Math.max(outr, t); } }
+  const fy = [hit(c, y), hit(c, y.clone().negate())].filter(isFinite);
+  const extentA = fy.length ? Math.min(...fy) : inr;
+  const dA = hit(c, z.clone().negate()), dB = hit(c, z);
+  return {
+    centre: [c.x, c.y, c.z],
+    probe: { inr: isFinite(inr) ? inr : 0, outr, depthA: isFinite(dA) ? dA : 1e3, depthB: isFinite(dB) ? dB : 1e3, extentA: isFinite(extentA) ? extentA : 0, inside },
+  };
+}
+
+/** Two joints' parts overlap when their reach spheres meet; they are grouped into separate boolean passes. */
+function batches<T extends { c: THREE.Vector3; r: number }>(items: T[]): T[][] {
+  const out: T[][] = [];
+  for (const it of items) {
+    const b = out.find((g) => g.every((o) => o.c.distanceTo(it.c) > o.r + it.r));
+    if (b) b.push(it); else out.push([it]);
+  }
+  return out;
+}
+
+export function buildFlexi(base: IndexedMesh, cuts: Cut[], fit: Fit, up: V3 = [0, 0, 1], progress?: (done: number, total: number) => void): FlexiResult {
+  const bvh = modelBvh(base);
+  const reports: CutReport[] = [];
+  const warnings: string[] = [];
+  const cutters: Solid[] = [], adds: Solid[] = [];
+  for (const cut of cuts) {
+    if (!cut.enabled) continue;
+    const { probe, centre } = probeCut(bvh, cut.origin, cut.normal, cut.roll, up);
+    const rep: CutReport = { id: cut.id, name: cut.name, ok: false, centre, radius: 0, probe, warnings: [] };
+    reports.push(rep);
+    if (!probe.inside || probe.inr < fit.minPin * 2) { rep.warnings.push(probe.inside ? 'The section here is too thin for a joint.' : 'This cut is outside the model.'); continue; }
+    const M = cutFrame(centre, cut.normal, cut.roll, up);
+    const radius = cut.radius > 0 ? cut.radius : probe.outr * 1.15 + fit.gap * 2;
+    const parts = buildJoint(cut.joint, { probe, fit, apex: apexFor(M, up), radiusLimit: radius });
+    rep.info = parts.info; rep.radius = radius; rep.warnings.push(...parts.info.warnings);
+    const tf = (m: IndexedMesh) => solid(transform(m, M));
+    cutters.push(tf(parts.kerf), ...parts.cutB.map(tf));
+    adds.push(...parts.addA.map(tf), ...parts.addB.map(tf));
+    rep.ok = true;
+    progress?.(reports.length, cuts.length + 2);
+  }
+  const bs = solid(base);
+  let r = bs;
+  if (cutters.length) { const cu = unionAll(cutters); r = bs.subtract(cu); free(cu); }
+  progress?.(cuts.length + 1, cuts.length + 2);
+  if (adds.length) { const ad = unionAll(adds); const r2 = r.add(ad); free(r, ad); r = r2; }
+  const m = meshOf(r);
+  free(r, ...(r === bs ? [] : [bs]), ...cutters, ...adds);
+  const res = pieces(m);
+  if (res.meshes.length < 2 && reports.some((x) => x.ok)) warnings.push('The cuts did not separate the model into pieces: a cut may not pass through the whole section.');
+  for (const r of reports) for (const o of reports) if (o !== r && o.ok && r.ok && o.id > r.id) {
+    const d = v3(r.centre).distanceTo(v3(o.centre));
+    const reach = (r.info?.reachB ?? 0) + (o.info?.reachB ?? 0);
+    if (d < reach * 0.9) r.warnings.push(`Too close to ${o.name} (${d.toFixed(1)} mm apart, the joints need about ${reach.toFixed(1)} mm).`);
+  }
+  for (const r of reports) for (const w of r.warnings) warnings.push(`${r.name}: ${w}`);
+  return { mesh: m, pieces: res.meshes, triPiece: res.triPiece, reports, warnings, closed: openEdgeCount(m) === 0 };
+}
+
+/** Angle in the (u, z) plane of the print-up direction, for teardrop pins (undefined when the pin axis is vertical). */
+function apexFor(M: THREE.Matrix4, up: V3): number | undefined {
+  const x = new THREE.Vector3(), y = new THREE.Vector3(), z = new THREE.Vector3();
+  M.extractBasis(x, y, z);
+  const u = v3(up);
+  if (Math.abs(u.dot(y)) > 0.95) return undefined;
+  return Math.atan2(u.dot(z), u.dot(x));
+}
+
+export { bounds };
