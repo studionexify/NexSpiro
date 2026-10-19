@@ -4,27 +4,30 @@ import { useSyncExternalStore } from 'react';
 import { newId, plateOrigin, useStore, type SceneObject } from '../../../state/store';
 import { centreOnBed } from '../../../state/ops';
 import { centreMesh } from '../../../io/load';
-import { openEdgeCount, repairTJunctions, weld, type IndexedMesh } from '../../../engine/mesh';
+import { openEdgeCount, type IndexedMesh } from '../../../engine/mesh';
 import { printerById } from '../../../profiles/printers';
-import { bounds, initKernel, solid, free, meshOf, transform, dropDegenerate, type V3 } from '../csg';
-import { autoCuts, buildCreature, chainCuts, stationAt, type Chain, type Mark, type Station } from '../creature';
-import { buildFlexi, type Cut, type FlexiResult } from '../flexi';
+import { bounds, type V3 } from '../csg';
+import type { Mark } from '../creature';
+import type { Cut, CutReport } from '../flexi';
+import { newCache, runBuild, type BuildRequest, type BuildResult } from '../build';
+import type { FromWorker, ToWorker } from '../worker';
+import { newGroup, type CutEdit, type CutGroup } from '../groups';
 import { defaultCreature, type CreatureDesign } from '../design';
 import { designFromPreset, presetById } from '../presets';
 import { applyPaint, PALETTE_DEFAULT, SCHEMES, type PaintOp } from '../paint';
 import { machineFor, type MachineInfo } from '../fit';
-import { fitToBed, rotateQuarters, type BedFit, type CutOrientation } from '../place';
+import type { BedFit, CutOrientation } from '../place';
 import type { JointKind } from '../joints';
 import { build3mf } from '../export3mf';
 import { saveFile } from '../../../platform';
-import * as THREE from 'three';
 
 const KEY = 'nexspiro.flenex.v1';
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 
 export type FxTab = 'design' | 'cuts' | 'paint' | 'print';
 export type FxView = 'colour' | 'pieces' | 'plain';
-export type FxTool = 'orbit' | 'place' | 'move' | 'brush' | 'bucket' | 'piece';
+export type FxTool = 'orbit' | 'place' | 'move' | 'trace' | 'brush' | 'bucket' | 'piece';
+export type AxisMode = 'centreline' | 'local' | 'surface';
 
 export interface FlenexUiState {
   source: 'creature' | 'import';
@@ -32,6 +35,11 @@ export interface FlenexUiState {
   presetId: string;
   cutsMode: 'auto' | 'manual';
   manualCuts: Cut[];
+  /** Parts of an imported model, each with a centre line and a number of cuts. */
+  groups: CutGroup[];
+  selectedGroup: string | null;
+  /** How a cut finds the direction square to the body while placing and dragging. */
+  axisMode: AxisMode;
   importName: string;
   importRot: [number, number, number];
   importScale: number;
@@ -59,13 +67,13 @@ export interface FlenexUiState {
 function load(): FlenexUiState {
   const design = designFromPreset(presetById('snake')!);
   const d: FlenexUiState = {
-    source: 'creature', design, presetId: 'snake', cutsMode: 'auto', manualCuts: [], importName: '', importRot: [0, 0, 0], importScale: 1,
+    source: 'creature', design, presetId: 'snake', cutsMode: 'auto', manualCuts: [], groups: [], selectedGroup: null, axisMode: 'centreline', importName: '', importRot: [0, 0, 0], importScale: 1,
     palette: PALETTE_DEFAULT.slice(), paintOps: SCHEMES[0].ops(1), tab: 'design', view: 'colour', tool: 'orbit', selectedCut: null, orientation: 'limb', placeKind: 'ball',
     slot: 1, brush: 6, bucketAngle: 30, clearance: 0, gap: 0, studioOpen: false, showCuts: true, showBed: true, placed: [],
   };
   try {
     const s = JSON.parse(storage?.getItem(KEY) ?? 'null');
-    if (s?.design?.version === 1) return { ...d, ...s, source: 'creature', importName: '', studioOpen: false, tool: 'orbit', manualCuts: s.cutsMode === 'manual' ? s.manualCuts ?? [] : [] };
+    if (s?.design?.version === 1) return { ...d, ...s, source: 'creature', importName: '', studioOpen: false, tool: 'orbit', manualCuts: s.cutsMode === 'manual' ? s.manualCuts ?? [] : [], groups: [], selectedGroup: null };
   } catch { /* fresh start */ }
   return d;
 }
@@ -78,46 +86,92 @@ export const useFx = () => useSyncExternalStore(subscribe, () => version);
 
 // ---------------------------------------------------------------- imported model (kept out of local storage)
 let importedMesh: IndexedMesh | null = null;
+let importId = 0;
 export const hasImport = () => importedMesh !== null;
+export const importedBase = () => importedMesh;
 
 // ---------------------------------------------------------------- build result
 export interface Built {
   /** Base solid (before cuts) and the finished flexi. */
   base: IndexedMesh;
-  flexi: FlexiResult;
+  flexi: { mesh: IndexedMesh; triPiece: Int32Array; pieceCount: number; reports: CutReport[]; warnings: string[]; closed: boolean };
   paint: Uint8Array;
-  stations: Station[];
+  spine?: V3[];
   marks: Mark[];
-  chains: Chain[];
   cuts: Cut[];
   machine: MachineInfo;
   fit: BedFit;
   warnings: string[];
   ms: number;
-  error?: string;
 }
 export let built: Built | null = null;
 export let building = false;
+/** What the worker is doing right now, for the status line. */
+export let statusText = '';
 /** Bumped when the mesh changed (viewer rebuilds geometry); paint-only changes bump `paintVersion`. */
 export let meshVersion = 0;
 export let paintVersion = 0;
+export let lastError = '';
 
 const machine = () => machineFor(useStore.getState().printerId, { clearance: fx.clearance || undefined, gap: fx.gap || undefined });
 export const currentMachine = machine;
 
 export function notify(): void {
   try {
-    const { manualCuts, ...rest } = fx;
+    const { manualCuts, groups, ...rest } = fx;
+    void groups;
     storage?.setItem(KEY, JSON.stringify({ ...rest, manualCuts: fx.cutsMode === 'manual' && fx.source === 'creature' ? manualCuts : [], placed: [] }));
   } catch { /* storage full */ }
   version++;
   listeners.forEach((l) => l());
 }
 
-let timer: ReturnType<typeof setTimeout> | undefined;
+// ---------------------------------------------------------------- worker
+let worker: Worker | null = null;
+let inflight = false;
 let token = 0;
+let pending: { token: number; resolve: (r: BuildResult) => void; reject: (e: Error) => void } | null = null;
+const direct = newCache();
+
+function spawn(): Worker {
+  const w = new Worker(new URL('../worker.ts', import.meta.url), { type: 'module' });
+  w.onmessage = (e: MessageEvent<FromWorker>) => {
+    const m = e.data;
+    if (m.type === 'progress') { if (m.token === token) { statusText = m.msg; listeners.forEach((l) => l()); } return; }
+    if (!pending || pending.token !== m.token) return;
+    const p = pending; pending = null; inflight = false;
+    if (m.type === 'result') p.resolve(m.res); else p.reject(new Error(m.message));
+  };
+  w.onerror = (e) => { if (pending) { const p = pending; pending = null; inflight = false; p.reject(new Error(e.message || 'The build worker stopped.')); } };
+  if (importedMesh) w.postMessage({ type: 'import', id: importId, vertices: importedMesh.vertices.slice(), indices: importedMesh.indices.slice() } satisfies ToWorker);
+  return w;
+}
+
+function request(req: BuildRequest): Promise<BuildResult> {
+  token++;
+  if (typeof Worker === 'undefined') {
+    if (importedMesh) direct.imports.set(importId, importedMesh);
+    return runBuild(req, direct, (m) => { statusText = m; });
+  }
+  // a newer request supersedes the running one: restart the worker instead of waiting for it
+  if (inflight && worker) { worker.terminate(); worker = null; pending?.reject(new Error('superseded')); pending = null; inflight = false; }
+  worker ??= spawn();
+  inflight = true;
+  const t = token;
+  return new Promise<BuildResult>((resolve, reject) => {
+    pending = { token: t, resolve, reject };
+    worker!.postMessage({ type: 'build', token: t, req } satisfies ToWorker);
+  });
+}
+
+const requestNow = (): BuildRequest => ({
+  source: fx.source, design: fx.design, importId, importRot: fx.importRot, importScale: fx.importScale, cutsMode: fx.cutsMode, manualCuts: fx.manualCuts, groups: fx.groups,
+  printerId: useStore.getState().printerId, clearance: fx.clearance, gap: fx.gap, paintOps: fx.paintOps,
+});
+
+let timer: ReturnType<typeof setTimeout> | undefined;
 /** Rebuild after edits (debounced). `paintOnly` skips the geometry. */
-export function schedule(paintOnly = false, delay = 220): void {
+export function schedule(paintOnly = false, delay = 200): void {
   notify();
   if (paintOnly && built) { repaint(); return; }
   clearTimeout(timer);
@@ -128,72 +182,37 @@ export function schedule(paintOnly = false, delay = 220): void {
 
 function repaint(): void {
   if (!built) return;
-  built.paint = applyPaint(fx.paintOps, { mesh: built.flexi.mesh, triPiece: built.flexi.triPiece, spine: spineOf(built), marks: built.marks });
+  built.paint = applyPaint(fx.paintOps, { mesh: built.flexi.mesh, triPiece: built.flexi.triPiece, spine: built.spine, marks: built.marks });
   paintVersion++;
   notify();
 }
 
-const spineOf = (b: Built): V3[] | undefined => (fx.source === 'creature' ? b.stations.map((s) => [s.P.x, s.P.y, s.top * 0.5] as V3) : undefined);
-
-/** Import → upright solid: rotation about z, scale, rest on z = 0, centred. Meshes from files are healed to be closed. */
-function importBase(): IndexedMesh {
-  let m = rotateQuarters(importedMesh!, fx.importRot);
-  m = { vertices: m.vertices.map((v) => v * fx.importScale), indices: m.indices };
-  const b = bounds(m);
-  const v = m.vertices.slice();
-  for (let i = 0; i < v.length; i += 3) { v[i] -= (b.min[0] + b.max[0]) / 2; v[i + 1] -= (b.min[1] + b.max[1]) / 2; v[i + 2] -= b.min[2]; }
-  m = { vertices: v, indices: m.indices };
-  try { const s = solid(m); const r = meshOf(s); free(s); return r; } catch { /* try healing */ }
-  const healed = dropDegenerate(repairTJunctions(weld(soupOf(m), 1e-4)));
-  const s = solid(healed); const r = meshOf(s); free(s);
-  return r;
-}
-const soupOf = (m: IndexedMesh) => { const o = new Float32Array(m.indices.length * 3); for (let i = 0; i < m.indices.length; i++) for (let k = 0; k < 3; k++) o[i * 3 + k] = m.vertices[m.indices[i] * 3 + k]; return o; };
-
-let baseKey = '', baseCache: { base: IndexedMesh; stations: Station[]; marks: Mark[]; chains: Chain[]; warnings: string[] } | null = null;
-
 export async function rebuild(): Promise<void> {
-  const my = ++token;
-  building = true;
-  const t0 = performance.now();
+  building = true; statusText = 'Starting…';
+  listeners.forEach((l) => l());
   try {
-    await initKernel();
-    const mac = machine();
-    let base: IndexedMesh, stations: Station[] = [], marks: Mark[] = [], chains: Chain[] = [], warnings: string[] = [];
-    if (fx.source === 'creature') {
-      const key = JSON.stringify([fx.design.body, fx.design.addons]);
-      if (key !== baseKey || !baseCache) {
-        const r = buildCreature(fx.design);
-        baseCache = { base: r.mesh, stations: r.stations, marks: r.marks, chains: r.chains, warnings: r.warnings };
-        baseKey = key;
-      }
-      ({ base, stations, marks, chains, warnings } = baseCache);
-    } else {
-      if (!importedMesh) throw new Error('Import a model first.');
-      base = importBase();
-    }
+    const job = request(requestNow());
+    const my = token;
+    const r = await job;
     if (my !== token) return;
-    let cuts: Cut[];
-    if (fx.source === 'creature' && fx.cutsMode === 'auto') {
-      const minInr = Math.max(2 * mac.fit.minPin, 8.5 * mac.fit.clearance) + mac.fit.clearance + mac.fit.wall + 0.2;
-      cuts = [...autoCuts(fx.design, stations, minInr), ...chainCuts(fx.design, chains, 100, minInr)];
-      if (cuts.length) fx.manualCuts = cuts.map((c) => structuredClone(c));
-    } else cuts = fx.manualCuts;
-    const flexi = cuts.length ? buildFlexi(base, cuts, mac.fit) : buildFlexi(base, [], mac.fit);
-    const paint = applyPaint(fx.paintOps, { mesh: flexi.mesh, triPiece: flexi.triPiece, spine: stations.length ? stations.map((s) => [s.P.x, s.P.y, s.top * 0.5] as V3) : undefined, marks });
-    const fit = fitToBed(flexi.mesh, mac.bed);
-    if (my !== token) return;
-    built = { base, flexi, paint, stations, marks, chains, cuts, machine: mac, fit, warnings: [...warnings, ...flexi.warnings], ms: performance.now() - t0 };
+    built = {
+      base: r.base, flexi: { mesh: r.mesh, triPiece: r.triPiece, pieceCount: r.pieceCount, reports: r.reports, warnings: r.warnings, closed: r.closed }, paint: r.paint, spine: r.spine, marks: r.marks,
+      cuts: r.cuts, machine: machine(), fit: r.fit, warnings: r.warnings, ms: r.ms,
+    };
+    // creature: the automatic cuts become the editable list when the user starts editing by hand
+    autoList = r.cuts;
+    lastError = '';
     meshVersion++; paintVersion++;
+    building = false; statusText = '';
+    notify();
   } catch (e) {
-    if (my !== token) return;
-    built = built ? { ...built, error: (e as Error).message } : null;
-    lastError = (e as Error).message;
-  } finally {
-    if (my === token) { building = false; notify(); }
+    if ((e as Error).message === 'superseded') return;
+    lastError = (e as Error).message; building = false; statusText = '';
+    notify();
   }
 }
-export let lastError = '';
+/** The cuts of the last automatic build (what "Edit by hand" starts from). */
+export let autoList: Cut[] = [];
 
 // ---------------------------------------------------------------- edits
 export const changed = () => schedule(false);
@@ -219,12 +238,38 @@ export function editCut(id: string, f: (c: Cut) => void): void { if (fx.cutsMode
 export const nextCutId = () => String(1 + Math.max(0, ...fx.manualCuts.map((c) => +c.id || 0)));
 
 export async function importModel(name: string, mesh: IndexedMesh): Promise<void> {
-  await initKernel();
-  const m = { vertices: mesh.vertices.slice(), indices: mesh.indices.slice() };
-  importedMesh = m;
+  importedMesh = { vertices: mesh.vertices.slice(), indices: mesh.indices.slice() };
+  importId++;
+  worker?.postMessage({ type: 'import', id: importId, vertices: importedMesh.vertices.slice(), indices: importedMesh.indices.slice() } satisfies ToWorker);
   fx.source = 'import'; fx.importName = name; fx.importRot = [0, 0, 0]; fx.importScale = 1;
-  fx.cutsMode = 'manual'; fx.manualCuts = []; fx.selectedCut = null; fx.tab = 'cuts'; fx.tool = 'place';
+  fx.cutsMode = 'manual'; fx.manualCuts = []; fx.groups = []; fx.selectedGroup = null; fx.selectedCut = null; fx.tab = 'cuts'; fx.tool = 'place';
   schedule(false, 10);
+}
+
+// ---------------------------------------------------------------- cut groups (parts of an imported model)
+let groupSeq = 0;
+export const newGroupId = () => `g${++groupSeq}${Math.random().toString(36).slice(2, 5)}`;
+export function addPart(path: V3[], name?: string, count = 6): CutGroup {
+  const g = newGroup(newGroupId(), name ?? `Part ${fx.groups.length + 1}`, path, { ...fx.design.segments.joint, kind: fx.placeKind }, count);
+  fx.groups = [...fx.groups, g]; fx.selectedGroup = g.id; fx.cutsMode = 'manual'; schedule();
+  return g;
+}
+export function editPart(id: string, f: (g: CutGroup) => void): void { const g = fx.groups.find((x) => x.id === id); if (g) { f(g); schedule(); } }
+export function removePart(id: string): void { fx.groups = fx.groups.filter((g) => g.id !== id); if (fx.selectedGroup === id) fx.selectedGroup = null; schedule(); }
+/** Re-space a part's cuts: edits to single cuts are forgotten. */
+export function respacePart(id: string): void { editPart(id, (g) => { g.edits = {}; }); }
+
+/** Edit any cut: a cut of a part is stored as an edit of that part (so it survives a new count), a free cut is changed in place. */
+export function editAnyCut(c: Cut, patch: (e: CutEdit & { joint?: Cut['joint'] }) => void): void {
+  if (c.group !== undefined) {
+    const g = fx.groups.find((x) => x.id === c.group);
+    if (g && c.index !== undefined) { const e = (g.edits[c.index] ??= {}); patch(e); schedule(); return; }
+  }
+  editCut(c.id, (x) => { const e: CutEdit & { joint?: Cut['joint'] } = { origin: x.origin, normal: x.normal, roll: x.roll, radius: x.radius, enabled: x.enabled, name: x.name, joint: x.joint }; patch(e); Object.assign(x, { origin: e.origin ?? x.origin, normal: e.normal ?? x.normal, roll: e.roll ?? x.roll, radius: e.radius ?? x.radius, enabled: e.enabled ?? x.enabled, name: e.name ?? x.name, joint: e.joint ?? x.joint }); });
+}
+export function removeAnyCut(c: Cut): void {
+  if (c.group !== undefined) { editAnyCut(c, (e) => { e.deleted = true; }); if (fx.selectedCut === c.id) fx.selectedCut = null; return; }
+  removeCut(c.id);
 }
 
 // ---------------------------------------------------------------- paint
@@ -305,5 +350,4 @@ export function loadProject(data: unknown): void {
   schedule();
 }
 
-export { stationAt, THREE };
 void plateOrigin;

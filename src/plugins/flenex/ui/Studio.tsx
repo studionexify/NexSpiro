@@ -11,7 +11,7 @@ import { cutAt } from '../place';
 import { cutFrame } from '../flexi';
 import { EditorColumn, PrinterPicker } from './Editor';
 import {
-  addCut, addPaint, built, building, currentMachine, editCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, useFx,
+  addCut, addPaint, built, building, statusText, currentMachine, editCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, useFx,
 } from './state';
 
 export function FlenexStudioHost() {
@@ -103,7 +103,7 @@ function Viewer() {
         camera.position.copy(ctr).add(new THREE.Vector3(0.35, -0.8, 0.9).normalize().multiplyScalar((size / 2) / Math.tan((camera.fov * Math.PI) / 360) * 1.15));
       }
       drawOverlay();
-      setStatus(`${m.indices.length / 3} triangles · ${b.flexi.pieces.length} pieces · ${b.ms.toFixed(0)} ms`);
+      setStatus(`${m.indices.length / 3} triangles · ${b.flexi.pieceCount} pieces · ${b.ms.toFixed(0)} ms`);
     };
 
     const recolour = () => {
@@ -209,7 +209,7 @@ function Viewer() {
         {fx.tool !== 'orbit' && <button className="btn-small btn-secondary" onClick={() => { fx.tool = 'orbit'; notify(); }}>Stop tool ({fx.tool})</button>}
       </div>
       {fx.tool !== 'orbit' && <div className="fx-hint">{fx.tool === 'place' ? 'Click the model to place a cut · right-drag to orbit' : fx.tool === 'brush' ? 'Drag to paint · right-drag to orbit' : fx.tool === 'bucket' ? 'Click to fill a surface area' : fx.tool === 'piece' ? 'Click a segment to colour it' : 'Click to move the selected cut'}</div>}
-      {building && <div className="fx-busy">Building…</div>}
+      {building && <div className="fx-busy">{statusText || 'Building…'}</div>}
       <div className="lx-status">{lastError && !built ? lastError : status}</div>
     </div>
   );
@@ -227,7 +227,7 @@ function Report() {
     <>
       <div className="mx-card">
         <div className="mx-card-title">Summary</div>
-        <div className="fx-stat"><span>Pieces</span><b>{b.flexi.pieces.length}</b></div>
+        <div className="fx-stat"><span>Pieces</span><b>{b.flexi.pieceCount}</b></div>
         <div className="fx-stat"><span>Joints working</span><b>{ok}{bad ? ` · ${bad} failed` : ''}</b></div>
         <div className="fx-stat"><span>Size</span><b>{b.fit.size.map((x) => x.toFixed(0)).join(' × ')} mm</b></div>
         <div className="fx-stat"><span>Bed {mac.bed.x}×{mac.bed.y}</span><b className={b.fit.fits ? 'ok' : 'bad'}>{b.fit.fits ? 'fits' : 'too big'}</b></div>

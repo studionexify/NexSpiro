@@ -57,3 +57,35 @@ describe('print-in-place joints', () => {
     expect(fitFor(0.2).clearance).toBeLessThan(fitFor(0.4).clearance);
   });
 });
+
+describe('more cut types', () => {
+  const kinds: [JointKind, number, boolean][] = [['chain', 2, true], ['dowel', 2, false], ['snap', 2, false], ['dovetail', 2, false], ['plain', 2, false], ['universal', 3, true]];
+  for (const [kind, count, moves] of kinds) for (const r of [11, 16]) {
+    it(`${kind} in a Ø${2 * r} rod: closed, ${count} pieces, clearance kept${moves ? ', moves' : ''}`, () => {
+      const fit = fitFor(0.4);
+      const res = buildFlexi(cylinder(r, r, -60, 60, 48), [newCut('1', [0.2, 0.1, 0], [0, 0, 1], defaultJoint(kind))], fit);
+      const rep = res.reports[0];
+      expect(rep.ok, rep.warnings.join('|')).toBe(true);
+      expect(openEdgeCount(res.mesh)).toBe(0);
+      expect(res.pieces.length).toBe(count);
+      const ps = lower(res.pieces);
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+        if (kind === 'universal' && i === 0 && j === 2) continue;
+        // only touching-range neighbours are compared for assembly joints (they are fits, not gaps)
+        const d = minDistance(ps[i], ps[j]);
+        expect(d, `${kind} pieces ${i}/${j}`).toBeGreaterThan(Math.min(kind === 'plain' ? fit.gap - 0.05 : 0.1, fit.clearance - 0.03));
+      }
+      if (kind === 'universal') {
+        const info = rep.info!, M = cutFrame(rep.centre, [0, 0, 1], 0);
+        const [A, Mid, B] = ps;
+        const rot = info.rom - 2;
+        for (const sign of [1, -1]) {
+          const p1 = new THREE.Vector3(...info.pivot).applyMatrix4(M), a1 = new THREE.Vector3(...info.axis!).transformDirection(M);
+          expect(volume(boolean(rotateAbout(A, p1, a1, sign * rot), boolean(Mid, B, 'union'), 'intersection')), 'hinge 1').toBeLessThan(0.05);
+          const p2 = new THREE.Vector3(...info.pivot2!).applyMatrix4(M), a2 = new THREE.Vector3(...info.axis2!).transformDirection(M);
+          expect(volume(boolean(rotateAbout(B, p2, a2, sign * rot), boolean(Mid, A, 'union'), 'intersection')), 'hinge 2').toBeLessThan(0.05);
+        }
+      }
+    });
+  }
+});

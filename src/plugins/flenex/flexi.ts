@@ -6,6 +6,7 @@ import { MeshBVH } from 'three-mesh-bvh';
 import type { IndexedMesh } from '../../engine/mesh';
 import { openEdgeCount } from '../../engine/mesh';
 import { free, meshOf, pieces, solid, toGeometry, transform, unionAll, bounds, type Solid, type V3 } from './csg';
+import { buildExtraJoint, EXTRA_KINDS } from './joints-extra';
 import { buildJoint, defaultJoint, type JointInfo, type JointSpec, type Probe } from './joints';
 import type { Fit } from './fit';
 
@@ -22,6 +23,9 @@ export interface Cut {
   radius: number;
   joint: JointSpec;
   enabled: boolean;
+  /** Set on cuts that come from a part (group) and the position in it. */
+  group?: string;
+  index?: number;
 }
 
 export const newCut = (id: string, origin: V3, normal: V3, joint: JointSpec = defaultJoint(), roll = 0): Cut => ({ id, name: `Cut ${id}`, origin, normal, roll, radius: 0, joint, enabled: true });
@@ -153,7 +157,7 @@ export function buildFlexi(base: IndexedMesh, cuts: Cut[], fit: Fit, up: V3 = [0
     if (!probe.inside || probe.inr < fit.minPin * 2) { rep.warnings.push(probe.inside ? 'The section here is too thin for a joint.' : 'This cut is outside the model.'); continue; }
     const M = cutFrame(centre, cut.normal, cut.roll, up);
     const radius = cut.radius > 0 ? cut.radius : Math.max(probe.outr, sectionReach(base, centre, cut.normal, probe.outr * 6)) * 1.04 + fit.gap * 2;
-    const parts = buildJoint(cut.joint, { probe, fit, apex: apexFor(M, up), radiusLimit: radius });
+    const parts = (EXTRA_KINDS.has(cut.joint.kind) ? buildExtraJoint : buildJoint)(cut.joint, { probe, fit, apex: apexFor(M, up), radiusLimit: radius });
     rep.info = parts.info; rep.radius = radius; rep.warnings.push(...parts.info.warnings);
     const tf = (m: IndexedMesh) => solid(transform(m, M));
     cutters.push(tf(parts.kerf), ...parts.cutB.map(tf));

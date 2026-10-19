@@ -10,7 +10,7 @@ import { boolean, bounds, cylinder, fromGeometry, merge, prism, sphere, sweptSlo
 import type { IndexedMesh } from '../../engine/mesh';
 import type { Fit } from './fit';
 
-export type JointKind = 'ball' | 'hinge' | 'swivel';
+export type JointKind = 'ball' | 'hinge' | 'swivel' | 'universal' | 'chain' | 'dowel' | 'snap' | 'dovetail' | 'plain';
 export type PinShape = 'round' | 'hex' | 'teardrop';
 
 export interface JointSpec {
@@ -25,15 +25,26 @@ export interface JointSpec {
   pin: PinShape;
   /** Per-cut clearance override (mm, 0 = machine). */
   clearance: number;
+  /** How deep pins and dovetails go (1 = automatic). */
+  reach: number;
 }
 
-export const JOINTS: { id: JointKind; name: string; blurb: string }[] = [
-  { id: 'ball', name: 'Ball & socket', blurb: 'Moves in every direction. The classic flexi joint.' },
-  { id: 'hinge', name: 'Hinge', blurb: 'Bends one way around a pin; stiff sideways. Alternate directions along the body.' },
-  { id: 'swivel', name: 'Swivel (mushroom)', blurb: 'Twists around the spine with a little tilt.' },
+export type JointGroup = 'moving' | 'assembly';
+export const JOINTS: { id: JointKind; name: string; group: JointGroup; blurb: string }[] = [
+  { id: 'ball', name: 'Ball & socket', group: 'moving', blurb: 'Moves in every direction. The classic flexi joint.' },
+  { id: 'hinge', name: 'Hinge', group: 'moving', blurb: 'Bends one way around a pin; stiff sideways. Alternate directions along the body.' },
+  { id: 'universal', name: 'Universal (double hinge)', group: 'moving', blurb: 'Two hinges at right angles with a floating block between: bends any way, firmer than a ball.' },
+  { id: 'swivel', name: 'Swivel (mushroom)', group: 'moving', blurb: 'Twists around the spine with a little tilt.' },
+  { id: 'chain', name: 'Chain link', group: 'moving', blurb: 'Two interlocked rings. Needs almost no length, so pieces can be very short.' },
+  { id: 'dowel', name: 'Dowel pin', group: 'assembly', blurb: 'A pin in a close-fit hole. Not a moving joint: for printing big models in parts.' },
+  { id: 'snap', name: 'Snap pin', group: 'assembly', blurb: 'A barbed pin that clicks into its socket and holds.' },
+  { id: 'dovetail', name: 'Dovetail slide', group: 'assembly', blurb: 'A tongue sliding into a dovetail groove. Pieces lock against pulling apart.' },
+  { id: 'plain', name: 'Plain cut', group: 'assembly', blurb: 'A clean gap and nothing else: loose pieces, e.g. a detachable head or wing.' },
 ];
 
-export const defaultJoint = (kind: JointKind = 'ball'): JointSpec => ({ kind, scale: 1, rom: kind === 'hinge' ? 30 : 24, neck: 0.5, pin: 'round', clearance: 0 });
+export const defaultJoint = (kind: JointKind = 'ball'): JointSpec => ({
+  kind, scale: 1, rom: kind === 'hinge' || kind === 'universal' ? 30 : kind === 'chain' ? 25 : kind === 'ball' || kind === 'swivel' ? 24 : 0, neck: 0.5, pin: 'round', clearance: 0, reach: 1,
+});
 
 /** What the model looks like at the cut: found by shooting rays from the joint centre. */
 export interface Probe {
@@ -71,11 +82,16 @@ export interface JointInfo {
   /** Where the joint pivots (local frame) and the axis it bends around (undefined: every direction). */
   pivot: V3;
   axis?: V3;
+  /** Universal joints: the second pivot and axis. */
+  pivot2?: V3;
+  axis2?: V3;
+  /** Does it move after printing? */
+  moves?: boolean;
   warnings: string[];
 }
 
-const D2R = Math.PI / 180;
-const EMBED = 1.0;
+export const D2R = Math.PI / 180;
+export const EMBED = 1.0;
 
 /** Solid of revolution about z from a (r, z) profile; adds the axis points when the profile does not touch it. */
 export function revolve(profile: [number, number][], seg = 28): IndexedMesh {
@@ -90,7 +106,7 @@ export function revolve(profile: [number, number][], seg = 28): IndexedMesh {
 }
 
 /** Closed 2D polygon in (u, z) extruded along the hinge axis y from a0 to a1. */
-function axisPrism(poly: [number, number][], a0: number, a1: number): IndexedMesh {
+export function axisPrism(poly: [number, number][], a0: number, a1: number): IndexedMesh {
   const m = prism(poly, 0, a1 - a0);
   // prism gives x = u, y = z(local), extrusion = +z → map (x, y, z) to (u, a, z_local): swap y and z
   const v = m.vertices, out = new Float32Array(v.length);
@@ -123,7 +139,7 @@ export function pinPoly(cx: number, cz: number, r: number, shape: PinShape, apex
 }
 
 /** Offset an open (r, z) polyline to its right-hand side by d, with mitred corners. */
-function offsetPolyline(pts: [number, number][], d: number): [number, number][] {
+export function offsetPolyline(pts: [number, number][], d: number): [number, number][] {
   const nrm = (a: [number, number], b: [number, number]): [number, number] => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1; return [dz / l, -dx / l]; };
   const out: [number, number][] = [];
   for (let i = 0; i < pts.length; i++) {
@@ -180,7 +196,7 @@ export function buildJoint(spec: JointSpec, ctx: JointContext): JointParts {
     const neck = cylinder(rn, rn, -g / 2 - EMBED, zc, 20);
     return {
       kerf: revolve(kerfProfile, 40), cutB: [cavity], addA: [boolean(head, neck, 'union')], addB: [],
-      info: { kind: 'ball', head: rb, neck: rn, rom, reachB: zc + rb + c, reachA: EMBED, span: rs, pivot: [0, 0, zc], warnings: w },
+      info: { kind: 'ball', head: rb, neck: rn, rom, reachB: zc + rb + c, reachA: EMBED, span: rs, pivot: [0, 0, zc], moves: true, warnings: w },
     };
   }
 
@@ -198,11 +214,25 @@ export function buildJoint(spec: JointSpec, ctx: JointContext): JointParts {
     const rom = Math.min(spec.rom, Math.atan(c / Math.max(0.5, lip)) / D2R + 6);
     return {
       kerf: revolve(kerfProfile, 40), cutB: [cav], addA: [boolean(stem, head, 'union')], addB: [],
-      info: { kind: 'swivel', head: rh, neck: rs, rom, reachB: z1 + c, reachA: EMBED, span: rh + c, pivot: [0, 0, zm], axis: [0, 0, 1], warnings: w },
+      info: { kind: 'swivel', head: rh, neck: rs, rom, reachB: z1 + c, reachA: EMBED, span: rh + c, pivot: [0, 0, zm], axis: [0, 0, 1], moves: true, warnings: w },
     };
   }
 
   // hinge: tongue (A) in a slot (B) around a pin (B)
+  const h = hingeCore(P, spec, ctx, c, g);
+  w.push(...h.warnings);
+  return {
+    kerf: hingeKerf(R, g, t),
+    cutB: [h.slot], addA: [h.tongue], addB: [h.pin],
+    info: { kind: 'hinge', head: h.rp, neck: h.T / 2, rom: spec.rom, reachB: h.slotTop, reachA: EMBED, span: Math.max(h.slotHalf, h.Ws / 2 + EMBED), pivot: [0, 0, h.zp], axis: [0, 1, 0], moves: true, warnings: w },
+  };
+}
+
+export interface HingeCore { slot: IndexedMesh; tongue: IndexedMesh; pin: IndexedMesh; zp: number; rp: number; rt: number; T: number; Ws: number; slotTop: number; slotHalf: number; warnings: string[] }
+
+/** The three parts of a hinge in its own frame (A below z = -g/2, B above z = +g/2, axis along y). */
+export function hingeCore(P: Probe, spec: JointSpec, ctx: JointContext, c: number, g: number): HingeCore {
+  const { fit } = ctx, w: string[] = [];
   const pinShape = spec.pin;
   let rp = Math.max(fit.minPin, 0.22 * P.inr * spec.scale);
   rp = Math.min(rp, 3.6);
@@ -228,15 +258,11 @@ export function buildJoint(spec: JointSpec, ctx: JointContext): JointParts {
   const hole = axisPrism(pinPoly(0, zp, rp + c, pinShape, ctx.apex), -T / 2 - 1, T / 2 + 1);
   const tongue = boolean(tongueRaw, hole, 'difference');
   const pin = axisPrism(pinPoly(0, zp, rp, pinShape, ctx.apex), -Ws / 2 - EMBED, Ws / 2 + EMBED);
-  return {
-    kerf: hingeKerf(R, g, t),
-    cutB: [slot], addA: [tongue], addB: [pin],
-    info: { kind: 'hinge', head: rp, neck: T / 2, rom: spec.rom, reachB: slotTop, reachA: EMBED, span: Math.max(slotHalf, Ws / 2 + EMBED), pivot: [0, 0, zp], axis: [0, 1, 0], warnings: w },
-  };
+  return { slot, tongue, pin, zp, rp, rt, T, Ws, slotTop, slotHalf, warnings: w };
 }
 
 /** Hinge kerf: a bow-tie in (u, z) extruded along the axis. */
-function hingeKerf(R: number, g: number, t: number): IndexedMesh {
+export function hingeKerf(R: number, g: number, t: number): IndexedMesh {
   const poly: [number, number][] = [[-R, -g / 2 - t * R], [0, -g / 2], [R, -g / 2 - t * R], [R, g / 2 + t * R], [0, g / 2], [-R, g / 2 + t * R]];
   return axisPrism(poly, -R, R);
 }

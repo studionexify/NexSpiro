@@ -14,7 +14,8 @@ let wasm: any = null;
 let loading: Promise<void> | null = null;
 export function initKernel(): Promise<void> {
   loading ??= (async () => {
-    const inBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+    // a page or a worker needs the bundled file's address; Node finds it by itself
+    const inBrowser = typeof process === 'undefined' || !process.versions?.node;
     wasm = await Module(inBrowser ? { locateFile: () => wasmUrl } : undefined);
     wasm.setup();
   })();

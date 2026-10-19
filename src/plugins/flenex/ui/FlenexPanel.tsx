@@ -20,7 +20,7 @@ export function FlenexPanel() {
       </div>
       <div className="mx-card">
         <div className="mx-card-title">Current design</div>
-        <div className="mx-sub"><b>{fx.source === 'import' ? fx.importName : fx.design.name}</b>{built ? ` · ${built.flexi.pieces.length} pieces · ${built.cuts.length} joints` : ''}</div>
+        <div className="mx-sub"><b>{fx.source === 'import' ? fx.importName : fx.design.name}</b>{built ? ` · ${built.flexi.pieceCount} pieces · ${built.cuts.length} joints` : ''}</div>
         <div className="fx-chips" style={{ marginTop: 6 }}>
           {['snake', 'dragon', 'fish', 'gecko', 'octopus'].map((id) => <button key={id} className="btn-small btn-secondary" onClick={() => { loadPreset(id); openStudio(true); }}>{PRESETS.find((p) => p.id === id)?.name}</button>)}
         </div>
