@@ -1,17 +1,37 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
-import { PRINTERS, printerById, printerName } from '../profiles/printers';
+import { PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
-import { baseProcess } from '../profiles/resolve';
+import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
 import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
+import { PlateThumb, PrinterThumb } from './assets/Thumbs';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
 import { ParamRow } from './ParamRow';
 import { useAdvanced } from '../state/advanced';
 import { AdvancedPanel } from './advanced/AdvancedPanel';
+
+/** Collapsed state of the sidebar sections, kept between sessions. */
+const COLLAPSE_KEY = 'nexspiro.sidebar.collapsed.v1';
+const readCollapsed = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '{}'); } catch { return {}; } };
+function useCollapsed(id: string): [boolean, () => void] {
+  const [c, setC] = useState(() => !!readCollapsed()[id]);
+  return [c, () => { const v = !c; setC(v); try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ ...readCollapsed(), [id]: v })); } catch { /* storage unavailable */ } }];
+}
+
+/** Section title: icon, name and a chevron; clicking it collapses the section. */
+function CardTitle({ icon, label, closed, onToggle }: { icon: string; label: string; closed: boolean; onToggle: () => void }) {
+  return (
+    <button className="card-title card-toggle" aria-expanded={!closed} title={closed ? `Expand ${label}` : `Collapse ${label}`} onClick={onToggle}>
+      <Icon name="chevronDown" size={14} className={`card-chev ${closed ? 'closed' : ''}`} />
+      <Icon name={icon} size={17} />{label}
+    </button>
+  );
+}
+const Body = ({ closed, children }: { closed: boolean; children: ReactNode }) => (closed ? null : <>{children}</>);
 
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 
@@ -48,37 +68,58 @@ function BaseProcessRow() {
 }
 
 function PrinterCard() {
-  const { printerId, plate, set, markDirty } = useStore();
+  const { printerId, plate, machineOverrides, set, markDirty, setMachine } = useStore();
   const [edit, setEdit] = useState(false);
+  const [closed, toggle] = useCollapsed('printer');
   const printer = printerById(printerId);
+  const nozzle = effectiveNozzle(printerId, machineOverrides);
   const vendors = [...new Set(PRINTERS.map((p) => p.vendor))];
+  const plateLabel = printer.plates.find((p) => p.type === plate)?.label ?? plate;
   return (
     <section className="card">
       <div className="card-head">
-        <span className="card-title"><Icon name="printer" />Printer</span>
+        <CardTitle icon="printer" label="Printer" closed={closed} onToggle={toggle} />
         <span className="spacer" />
-        <span className="badge">{printer.bed.x}×{printer.bed.y}×{printer.bed.z} mm</span>
+        <span className="badge" title="Build volume">{printer.bed.x}×{printer.bed.y}×{printer.bed.z} mm</span>
+        <button className="icon-btn" title="Edit printer settings" aria-label="Edit printer settings" onClick={() => setEdit(true)}><Icon name="edit" size={16} /></button>
       </div>
-      <div className="row">
-        <select className="select" value={printerId} aria-label="Printer" onChange={(e) => {
-          const p = printerById(e.target.value);
-          set({ printerId: p.id, plate: p.plates.some((x) => x.type === plate) ? plate : p.plates[0].type, machineOverrides: {} });
-          markDirty();
-        }}>
-          {vendors.map((v) => (
-            <optgroup key={v} label={v}>
-              {PRINTERS.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{printerName(p)}</option>)}
-            </optgroup>
-          ))}
-        </select>
-        <button className="icon-btn" title="Edit printer settings" onClick={() => setEdit(true)}><Icon name="edit" /></button>
-      </div>
-      <div className="row">
-        <Icon name="plate" size={16} style={{ color: 'var(--text-muted)' }} />
-        <select className="select" value={plate} aria-label="Build plate" onChange={(e) => { set({ plate: e.target.value as any }); markDirty(); }}>
-          {printer.plates.map((p) => <option key={p.type} value={p.type}>{p.label}</option>)}
-        </select>
-      </div>
+      <Body closed={closed}>
+        <div className="thumb-pair">
+          <label className="thumb-card" title={`${printer.vendor} ${printer.model}`}>
+            <PrinterThumb printer={printer} />
+            <select className="thumb-select" value={printerId} aria-label="Printer" onChange={(e) => {
+              const p = printerById(e.target.value);
+              set({ printerId: p.id, plate: p.plates.some((x) => x.type === plate) ? plate : p.plates[0].type, machineOverrides: {} });
+              markDirty();
+            }}>
+              {vendors.map((v) => (
+                <optgroup key={v} label={v}>
+                  {PRINTERS.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{p.vendor === 'Generic' ? p.model : `${p.vendor} ${p.model}`}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <span className="thumb-caption">{printer.model}</span>
+          </label>
+          <label className="thumb-card" title={plateLabel}>
+            <PlateThumb type={plate} />
+            <select className="thumb-select" value={plate} aria-label="Build plate" onChange={(e) => { set({ plate: e.target.value as any }); markDirty(); }}>
+              {printer.plates.map((p) => <option key={p.type} value={p.type}>{p.label}</option>)}
+            </select>
+            <span className="thumb-caption">{plateLabel.replace(/ \(.*\)| Spring Steel/g, '')}</span>
+          </label>
+        </div>
+        <div className="row nozzle-row">
+          <Icon name="nozzle" size={16} style={{ color: 'var(--text-muted)' }} />
+          <span className="muted">Nozzle</span>
+          <div className="seg nozzle-seg" role="radiogroup" aria-label="Nozzle diameter">
+            {NOZZLES.map((n) => (
+              <button key={n} role="radio" aria-checked={nozzle === n} className={nozzle === n ? 'on' : ''} title={`${n} mm nozzle`}
+                onClick={() => { setMachine('nozzle_diameter', n === printer.nozzle ? undefined : n); markDirty(); }}>{n}</button>
+            ))}
+          </div>
+          <span className="unit">mm</span>
+        </div>
+      </Body>
       {edit && <PrinterModal onClose={() => setEdit(false)} />}
     </section>
   );
@@ -88,6 +129,7 @@ function FilamentCard() {
   const { filaments, plate, printerId, set, markDirty } = useStore();
   const [edit, setEdit] = useState<number | null>(null);
   const [flush, setFlush] = useState(false);
+  const [closed, toggle] = useCollapsed('filament');
   const ams = !!printerById(printerId).machine.has_ams;
   const update = (k: number, patch: Partial<{ presetId: string; color: string }>) => {
     set({ filaments: filaments.map((f, i) => (i === k ? { ...f, ...patch } : f)) });
@@ -106,16 +148,16 @@ function FilamentCard() {
   return (
     <section className="card">
       <div className="card-head">
-        <span className="card-title"><Icon name="filament" />Filament</span>
+        <CardTitle icon="filamentB" label="Filament" closed={closed} onToggle={toggle} />
         <span className="spacer" />
-        <span className="badge" title={ams ? 'Automatic filament changes' : 'Manual filament changes (M600 pause)'}>{ams ? 'AMS' : 'Manual swap'}</span>
+        <span className="badge" title={ams ? 'Automatic filament changes (AMS)' : 'Manual filament changes (M600 pause)'}>{ams ? 'AMS' : <Icon name="edit" size={12} />}</span>
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
           onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
           <Icon name="add" />
         </button>
       </div>
-      <div className="slots">
+      <Body closed={closed}><div className="slots">
         {filaments.map((f, k) => {
           const fil = filamentById(f.presetId);
           const bed = fil.bedTemp[plate] ?? 0;
@@ -135,7 +177,7 @@ function FilamentCard() {
             </div>
           );
         })}
-      </div>
+      </div></Body>
       {edit !== null && <FilamentModal slot={edit} onClose={() => setEdit(null)} />}
       {flush && <FlushModal onClose={() => setFlush(false)} />}
     </section>
@@ -144,7 +186,7 @@ function FilamentCard() {
 
 function ProcessCard() {
   const s = useStore();
-  const base = useMemo(() => baseProcess({ printerId: s.printerId, presetId: s.presetId }), [s.printerId, s.presetId]);
+  const base = useMemo(() => baseProcess({ printerId: s.printerId, presetId: s.presetId, machineOverrides: s.machineOverrides }), [s.printerId, s.presetId, s.machineOverrides]);
   const global: Config = { ...base, ...s.overrides };
   const modifiedCount = Object.keys(s.overrides).length;
   const q = s.search.trim().toLowerCase();
@@ -163,6 +205,7 @@ function ProcessCard() {
   const groups = [...new Set(list.map((p) => (q ? `${p.tab} › ${p.group}` : p.group)))];
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [searchOpen, setSearchOpen] = useState(false);
+  const [cardClosed, toggleCard] = useCollapsed('process');
 
   // per-object values: the object's override, else the global value
   const ov = (k: string): { value: Config[string]; modified: boolean } => {
@@ -196,14 +239,15 @@ function ProcessCard() {
   return (
     <section className="card process">
       <div className="card-head">
-        <span className="card-title"><Icon name="layers" />Process</span>
+        <CardTitle icon="layers" label="Process" closed={cardClosed} onToggle={toggleCard} />
         <span className="spacer" />
-        <div className="seg" role="tablist">
-          <button className={!objMode ? 'on' : ''} onClick={() => s.set({ processMode: 'global' })} title="Settings for the whole plate">Global</button>
-          <button className={objMode ? 'on' : ''} onClick={() => s.set({ processMode: 'objects' })} title="Settings for the selected objects only">Objects</button>
+        <div className="seg icon-seg" role="tablist">
+          <button className={!objMode ? 'on' : ''} aria-label="Global settings" onClick={() => s.set({ processMode: 'global' })} title="Global: settings for the whole plate"><Icon name="plate" size={15} /></button>
+          <button className={objMode ? 'on' : ''} aria-label="Object settings" onClick={() => s.set({ processMode: 'objects' })} title="Objects: settings for the selected objects only"><Icon name="cube" size={15} /></button>
         </div>
         <button className={`icon-btn ${searchOpen ? 'active' : ''}`} title="Search settings (Ctrl+F)" onClick={() => { setSearchOpen(!searchOpen); s.set({ search: '' }); }}><Icon name="search" /></button>
       </div>
+      <Body closed={cardClosed}>
       {!objMode && (
         <div className="row">
           <select className="select" value={s.presetId} aria-label="Process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
@@ -238,8 +282,8 @@ function ProcessCard() {
         {!q && (
           <div className="ptabs">
             {tabs.map((t) => (
-              <button key={t} className={`ptab ${tab === t ? 'active' : ''}`} onClick={() => s.set({ processTab: t })}>
-                <Icon name={TAB_ICONS[t as ProcessTab]} size={15} />{t}
+              <button key={t} className={`ptab ${tab === t ? 'active' : ''}`} title={t} aria-label={t} onClick={() => s.set({ processTab: t })}>
+                <Icon name={TAB_ICONS[t as ProcessTab]} size={17} />{tab === t && t}
                 {tabCount(t) > 0 && <span className="tab-count" title={`${tabCount(t)} changed value${tabCount(t) > 1 ? 's' : ''}`}>{tabCount(t)}</span>}
               </button>
             ))}
@@ -249,7 +293,7 @@ function ProcessCard() {
           {groups.map((g) => (
             <div key={g}>
               <div className={`group-title ${closed[g] ? 'closed' : ''}`} onClick={() => setClosed({ ...closed, [g]: !closed[g] })}>
-                <Icon name="chevronDown" size={14} />{g}
+                <Icon name="chevronDown" size={14} /><Icon name={TAB_ICONS[(q ? g.split(' › ')[0] : tab) as ProcessTab] ?? 'layers'} size={14} className="group-ico" />{g}
               </div>
               {!closed[g] && list.filter((p) => (q ? `${p.tab} › ${p.group}` : p.group) === g).map((p) => {
                 if (!objMode) return <ParamRow key={p.key} def={p} value={global[p.key]} baseValue={base[p.key]} cfg={global} modified={p.key in s.overrides}
@@ -263,6 +307,7 @@ function ProcessCard() {
           {!list.length && <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>No matching parameters.</div>}
         </div>
       </>}
+      </Body>
     </section>
   );
 }
@@ -278,6 +323,7 @@ function ObjectsCard() {
     if (kind === 'part') st.set({ selected: [id], selectedPart: partId!, contextMenu: { x: e.clientX, y: e.clientY, kind, plate, id, partId } });
     else st.set({ selected: st.selected.includes(id) ? st.selected : [id], selectedPart: null, contextMenu: { x: e.clientX, y: e.clientY, kind, plate, id } });
   };
+  const [closed, toggle] = useCollapsed('objects');
   const pick = (e: React.MouseEvent, id: string, pi: number) => {
     const toggle = e.ctrlKey || e.metaKey;
     s.set({ selected: toggle ? (s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id]) : [id], selectedPart: null, selectedRange: null, activePlate: pi });
@@ -285,11 +331,11 @@ function ObjectsCard() {
   return (
     <section className="card objects-card">
       <div className="card-head">
-        <span className="card-title"><Icon name="cube" />Objects</span>
+        <CardTitle icon="cube" label="Objects" closed={closed} onToggle={toggle} />
         <span className="spacer" />
         <span className="badge">{s.objects.length}</span>
       </div>
-      <div className="objlist" role="tree">
+      {!closed && <div className="objlist" role="tree">
         {s.plates.map((pl, pi) => {
           const objs = s.objects.filter((o) => objectPlate(o, s.printerId, plates) === pi);
           return (
@@ -353,7 +399,7 @@ function ObjectsCard() {
           );
         })}
         {!s.objects.length && <div className="empty-hint" style={{ margin: 0 }}>No objects. Right-click the plate to add a shape, or drop a model file here.</div>}
-      </div>
+      </div>}
     </section>
   );
 }

@@ -7,46 +7,53 @@ import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, sig
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
 
-/** The Prepare toolbar: object commands, then the gizmos and tools. */
+/** The Prepare toolbar: object commands, then the gizmos and tools (large Bambu-style icons). */
 export function Toolbar() {
   const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates } = useStore();
   const has = selected.length > 0 || !!selectedPart;
   const one = selected.length === 1 && !selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string, disabled = false) => (
-    <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label} disabled={disabled}
+    <button className={`icon-btn ${tool === t ? 'active' : ''}`} title={`${label} (${key})`} aria-label={label} aria-pressed={tool === t} disabled={disabled}
       onClick={() => set({ tool: tool === t ? 'select' : t })}><Icon name={icon} /></button>
   );
   const locked = !!plates[activePlate]?.locked;
   const [arrOpen, setArrOpen] = useState(false);
   return (
-    <div className="float toolbar" role="toolbar">
-      <button className="icon-btn" title="Add (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="add" /></button>
-      <button className="icon-btn" title="Add plate" aria-label="Add plate" onClick={addPlate}><Icon name="addPlate" /></button>
-      <button className="icon-btn" title={has ? 'Auto orient selected (O)' : 'Auto orient all objects on the plate (O)'} aria-label="Auto orient"
-        disabled={!objects.length || (!has && locked)} onClick={() => (has ? autoOrient() : orientPlate())}><Icon name="orient" /></button>
-      <span style={{ position: 'relative', display: 'inline-flex' }}>
-        <button className="icon-btn" title="Arrange all objects (A) · Shift+A: arrange selected · right click: arrange settings" aria-label="Arrange" disabled={!objects.length}
-          onClick={(e) => (e.shiftKey ? arrangeSelected() : arrangeAll())} onContextMenu={(e) => { e.preventDefault(); setArrOpen(!arrOpen); }}><Icon name="arrange" /></button>
-        {arrOpen && <ArrangeSettings onClose={() => setArrOpen(false)} />}
-      </span>
-      <button className="icon-btn" title="Split to objects" aria-label="Split to objects" disabled={!one} onClick={() => splitObject(selected[0])}><Icon name="split" /></button>
-      {T('vlh', 'vlh', 'Variable layer height', 'H', !objects.length)}
+    <div className="float toolbar" role="toolbar" aria-label="Prepare tools">
+      <div className="tb-group">
+        <button className="icon-btn tb-main" title="Add model (Ctrl+I)" aria-label="Add model" onClick={importDialog}><Icon name="addCube" /></button>
+        <button className="icon-btn tb-main" title="Add plate" aria-label="Add plate" onClick={addPlate}><Icon name="addPlateB" /></button>
+        <button className="icon-btn" title={has ? 'Auto orient selected (O)' : 'Auto orient all objects on the plate (O)'} aria-label="Auto orient"
+          disabled={!objects.length || (!has && locked)} onClick={() => (has ? autoOrient() : orientPlate())}><Icon name="autoOrient" /></button>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <button className="icon-btn" title="Arrange all objects (A) · Shift+A: arrange selected · right click: arrange settings" aria-label="Arrange" disabled={!objects.length}
+            onClick={(e) => (e.shiftKey ? arrangeSelected() : arrangeAll())} onContextMenu={(e) => { e.preventDefault(); setArrOpen(!arrOpen); }}><Icon name="arrangeB" /></button>
+          {arrOpen && <ArrangeSettings onClose={() => setArrOpen(false)} />}
+        </span>
+        <button className="icon-btn" title="Split to objects" aria-label="Split to objects" disabled={!one} onClick={() => splitObject(selected[0])}><Icon name="splitB" /></button>
+        {T('vlh', 'vlhB', 'Variable layer height', 'H', !objects.length)}
+      </div>
       <span className="sep" />
-      {T('move', 'move', 'Move', 'M')}
-      {T('rotate', 'rotate', 'Rotate', 'R')}
-      {T('scale', 'scale', 'Scale', 'S')}
-      {T('face', 'face', 'Lay on face', 'F')}
-      {T('cut', 'cut', 'Cut', 'C')}
-      {T('boolean', 'boolean', 'Mesh boolean', 'B')}
-      {T('paint_support', 'brushSupport', 'Support painting', 'L')}
-      {T('paint_seam', 'brushSeam', 'Seam painting', 'P')}
-      {T('text', 'text', 'Text shape', 'T')}
-      {T('paint_color', 'brushColor', 'Color painting', 'N')}
-      {T('measure', 'measure', 'Measure', 'U')}
-      {T('brim_ears', 'ears', 'Brim ears', 'E')}
-      {T('edges', 'edges', 'Edges: chamfer, fillet, smooth', 'G', !objects.length)}
+      <div className="tb-group">
+        {T('move', 'moveB', 'Move', 'M')}
+        {T('rotate', 'rotateB', 'Rotate', 'R')}
+        {T('scale', 'scaleB', 'Scale', 'S')}
+        {T('face', 'faceB', 'Lay on face', 'F')}
+        {T('cut', 'cutB', 'Cut', 'C')}
+        {T('boolean', 'booleanB', 'Mesh boolean', 'B')}
+      </div>
       <span className="sep" />
-      <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhang" /></button>
+      <div className="tb-group">
+        {T('paint_support', 'supportPaint', 'Support painting', 'L')}
+        {T('paint_seam', 'seamPaint', 'Seam painting', 'P')}
+        {T('paint_color', 'colorPaint', 'Colour painting', 'N')}
+        {T('text', 'textB', 'Text shape', 'T')}
+        {T('measure', 'measureB', 'Measure', 'U')}
+        {T('brim_ears', 'earsB', 'Brim ears', 'E')}
+        {T('edges', 'edgesB', 'Edges: chamfer, fillet, smooth', 'G', !objects.length)}
+      </div>
+      <span className="sep" />
+      <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" aria-pressed={showOverhangs} onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhangB" /></button>
     </div>
   );
 }
@@ -153,61 +160,7 @@ export function ObjectInfo() {
   );
 }
 
-/** Numeric transform panel for the active tool. */
-export function TransformPanel() {
-  const { tool, objects, selected, updateObjects, selectedPart } = useStore();
-  const o = objects.find((x) => x.id === selected[0]);
-  const [uniform, setUniform] = useState(true);
-  if (!o || selectedPart || !['move', 'rotate', 'scale'].includes(tool)) return null;
-  const b = worldBounds(o);
-  const size = [0, 1, 2].map((k) => b.max[k] - b.min[k]);
-  const commit = (fn: (o: SceneObject) => SceneObject, drop = true) => updateObjects((x) => (drop ? dropToBed(fn(x)) : fn(x)), [o.id]);
-  const field = (axis: number, value: number, onSet: (v: number) => void, unit: string) => (
-    <div className="xyz" key={axis}>
-      <span className={`ax ${'xyz'[axis]}`}>{'XYZ'[axis]}</span>
-      <NumField value={value} onSet={onSet} />
-      <span className="unit">{unit}</span>
-    </div>
-  );
-  return (
-    <div className="float panel">
-      {tool === 'move' && <>
-        <h4>Move · world coordinates</h4>
-        {[0, 1, 2].map((k) => field(k, k === 2 ? b.min[2] : (b.min[k] + b.max[k]) / 2, (v) => {
-          const delta = k === 2 ? v - b.min[2] : v - (b.min[k] + b.max[k]) / 2;
-          commit((x) => { const p = [...x.position] as [number, number, number]; p[k] += delta; return { ...x, position: p }; }, false);
-        }, 'mm'))}
-        <button className="btn-secondary btn-small" disabled={Math.abs(b.min[2]) < 1e-4} onClick={() => commit((x) => x)}>Drop to bed</button>
-      </>}
-      {tool === 'rotate' && <>
-        <h4>Rotate · degrees</h4>
-        {[0, 1, 2].map((k) => field(k, o.rotation[k], (v) => commit((x) => { const r = [...x.rotation] as [number, number, number]; r[k] = v; return { ...x, rotation: r }; }), '°'))}
-        <button className="btn-secondary btn-small" onClick={() => commit((x) => ({ ...x, rotation: [0, 0, 0] }))}>Reset rotation</button>
-      </>}
-      {tool === 'scale' && <>
-        <h4 className="row" style={{ justifyContent: 'space-between' }}>Scale
-          <label className="row" style={{ fontWeight: 400, gap: 6, marginTop: 0 }}><Icon name="lock" size={14} />Uniform
-            <button className={`toggle ${uniform ? 'on' : ''}`} onClick={() => setUniform(!uniform)} aria-label="Uniform scale" /></label>
-        </h4>
-        {[0, 1, 2].map((k) => field(k, o.scale[k] * 100, (v) => commit((x) => {
-          const f = v / 100;
-          const sc = uniform ? ([f, f, f].map((ff, i) => (x.scale[i] / x.scale[k]) * ff) as [number, number, number]) : (() => { const t = [...x.scale] as [number, number, number]; t[k] = f; return t; })();
-          return { ...x, scale: sc };
-        }), '%'))}
-        <h4 style={{ marginTop: 10 }}>Size</h4>
-        {[0, 1, 2].map((k) => field(k, size[k], (v) => commit((x) => {
-          const f = v / size[k];
-          const sc = (uniform ? x.scale.map((s) => s * f) : x.scale.map((s, i) => (i === k ? s * f : s))) as [number, number, number];
-          return { ...x, scale: sc };
-        }), 'mm'))}
-        <div className="row">
-          <button className="btn-secondary btn-small" onClick={() => commit((x) => ({ ...x, scale: x.scale.map((s) => s * 25.4) as [number, number, number] }))}>From inches</button>
-          <button className="btn-secondary btn-small" onClick={() => commit((x) => ({ ...x, scale: [1, 1, 1] }))}>Reset</button>
-        </div>
-      </>}
-    </div>
-  );
-}
+export { TransformPanel } from './TransformPanel';
 
 function NumField({ value, onSet }: { value: number; onSet: (v: number) => void }) {
   const [draft, setDraft] = useState<string | null>(null);

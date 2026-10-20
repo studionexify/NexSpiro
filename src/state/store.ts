@@ -204,6 +204,32 @@ export const edgeSelHistory = new WeakMap<object, SceneEdgeSel | null>();
 let idSeq = 0;
 export const newId = (p = 'obj') => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 
+const clonePlain = <T,>(v: T): T => (v === undefined || v === null ? v : typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)));
+const cloneTyped = (a?: Uint8Array) => (a ? a.slice() : a);
+
+/**
+ * A full copy of an object with everything edited on it: parts (positive, negative, modifiers, enforcers, blockers),
+ * settings, paint, artwork, layer heights, height ranges, brim ears. Parts and height ranges get fresh ids; meshes are
+ * immutable and shared by reference. `over` is applied last (name, position ...).
+ */
+export function cloneObject(o: SceneObject, over: Partial<SceneObject> = {}): SceneObject {
+  const id = over.id ?? newId();
+  const c: SceneObject = {
+    ...o,
+    id,
+    position: [...o.position] as Vec3, rotation: [...o.rotation] as Vec3, scale: [...o.scale] as Vec3,
+    overrides: o.overrides ? { ...o.overrides } : undefined,
+    parts: o.parts?.map((p) => ({ ...p, id: newId('part'), position: [...p.position] as Vec3, rotation: [...p.rotation] as Vec3, scale: [...p.scale] as Vec3, overrides: { ...p.overrides } })),
+    paint: o.paint ? { support: cloneTyped(o.paint.support), seam: cloneTyped(o.paint.seam), color: cloneTyped(o.paint.color), motion: cloneTyped(o.paint.motion), adv: cloneTyped(o.paint.adv) } : undefined,
+    layerHeights: o.layerHeights ? [...o.layerHeights] : undefined,
+    heightRanges: o.heightRanges?.map((r) => ({ ...r, id: newId('hr'), overrides: { ...r.overrides } })),
+    brimEars: o.brimEars?.map((e) => [...e] as [number, number, number?]),
+    patternex: o.patternex ? clonePlain(o.patternex) : undefined,
+  };
+  if (c.patternex) c.patternex = { ...c.patternex, placements: c.patternex.placements.map((p: any) => ({ ...p, object_id: id })) };
+  return { ...c, ...over, id };
+}
+
 const LS = 'nexspiro.prefs.v1';
 const loadPrefs = (): any => {
   try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; }
@@ -316,7 +342,7 @@ export const useStore = create<State>((set, get) => ({
   duplicateSelected: () => {
     const sel = get().objects.filter((o) => get().selected.includes(o.id));
     if (!sel.length) return;
-    const copies = sel.map((o) => ({ ...o, id: newId(), name: `${o.name} (copy)`, position: [o.position[0] + 10, o.position[1] + 10, o.position[2]] as Vec3 }));
+    const copies = sel.map((o) => cloneObject(o, { name: `${o.name} (copy)`, position: [o.position[0] + 10, o.position[1] + 10, o.position[2]] as Vec3 }));
     get().addObjects(copies);
   },
   undo: () => {

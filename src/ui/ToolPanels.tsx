@@ -4,7 +4,7 @@ import { embossVolume, objectFromWorld, svgMesh, textMesh, type EmbossKind } fro
 import { DEFAULT_GROOVE, type ConnectorSettings, type ConnectorShape, type ConnectorStyle, type ConnectorType, type GrooveSettings } from '../state/cutConnectors';
 import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
-import { addText, booleanSelected, cutObject, FONTS, type TextOptions } from '../state/tools';
+import { addText, applyPartsBoolean, booleanSelected, hasShapeParts, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
 import { bevelSelectedEdges, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
 import { hasPolygonFaces } from '../engine/meshedit';
@@ -111,6 +111,10 @@ export function BooleanPanel() {
           <button key={op} className="btn-secondary btn-small" disabled={sel.length < 2} onClick={() => booleanSelected(op)}>{label}</button>
         ))}
       </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <button className="btn-secondary btn-small" disabled={!sel.some((o) => o && hasShapeParts(o))} title="Merge positive parts into the object and cut out negative parts" onClick={() => applyPartsBoolean()}>Apply parts (positive / negative)</button>
+      </div>
+      <p className="muted" style={{ fontSize: 11, marginBottom: 0 }}>Objects with parts are combined with their parts applied. Overlapping shells are merged automatically.</p>
     </div>
   );
 }

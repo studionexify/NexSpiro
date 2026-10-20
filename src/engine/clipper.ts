@@ -6,6 +6,10 @@ import type { ExPolygon, IntPoint, Path, Paths } from './types';
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export const SCALE = 10000;
+const STATS: Record<string,{n:number;ms:number;pts:number}> = ((globalThis as any).__clipStats = {});
+const vc = (a: Paths) => { let n = 0; for (const p of a) n += p.length; return n; };
+const timed = <T,>(name: string, pts: number, f: () => T): T => { const e = (new Error().stack ?? '').split('\n')[3] ?? ''; const k = name + ' ' + e.replace(/.*\//,'').replace(')',''); const t = performance.now(); const r = f(); const o = (STATS[k] ??= {n:0,ms:0,pts:0}); o.n++; o.ms += performance.now()-t; o.pts += pts; return r; };
+
 
 export const toInt = (v: number) => Math.round(v * SCALE);
 export const toMm = (v: number) => v / SCALE;
@@ -25,15 +29,18 @@ function exec(type: number, subj: Paths, clip: Paths, fill = PFT.pftNonZero): Pa
   return out;
 }
 
-export const union = (a: Paths, b: Paths = [], fill = PFT.pftNonZero) => exec(CT.ctUnion, a, b, fill);
-export const intersection = (a: Paths, b: Paths) => (a.length && b.length ? exec(CT.ctIntersection, a, b) : []);
-export const difference = (a: Paths, b: Paths) => (!a.length ? [] : !b.length ? a : exec(CT.ctDifference, a, b));
+export const union = (a: Paths, b: Paths = [], fill = PFT.pftNonZero) => timed('union', vc(a)+vc(b), () => exec(CT.ctUnion, a, b, fill));
+export const intersection = (a: Paths, b: Paths) => (a.length && b.length ? timed('inter', vc(a)+vc(b), () => exec(CT.ctIntersection, a, b)) : []);
+export const difference = (a: Paths, b: Paths) => (!a.length ? [] : !b.length ? a : timed('diff', vc(a)+vc(b), () => exec(CT.ctDifference, a, b)));
 export const unionEvenOdd = (a: Paths) => exec(CT.ctUnion, a, [], PFT.pftEvenOdd);
 
 /** Offset closed polygons by delta (mm). Negative shrinks. */
 export function offset(paths: Paths, deltaMm: number, join: 'miter' | 'round' = 'miter'): Paths {
   if (!paths.length) return [];
   if (deltaMm === 0) return paths;
+  return timed('offset', vc(paths), () => offset0(paths, deltaMm, join));
+}
+function offset0(paths: Paths, deltaMm: number, join: 'miter' | 'round'): Paths {
   const co = new C.ClipperOffset(2, SCALE * 0.0025);
   co.AddPaths(paths, join === 'round' ? JT.jtRound : JT.jtMiter, ET.etClosedPolygon);
   const out: Paths = [];

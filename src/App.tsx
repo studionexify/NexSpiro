@@ -20,6 +20,7 @@ import { PlateList, PlateSettingsHost } from './ui/PlateControls';
 import { InstantTooltips } from './ui/Tooltip';
 import { arrangeAll, arrangeSelected } from './state/ops';
 import { copyObjects, pasteObjects } from './state/objectOps';
+import { cancelSlice } from './state/slicing';
 import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
@@ -197,6 +198,7 @@ function useShortcuts() {
       }
       if (mod && k >= '0' && k <= '7') { viewApi.current?.setView((['iso', 'top', 'bottom', 'front', 'back', 'left', 'right', 'iso'] as const)[+k]); e.preventDefault(); return; }
       if (e.key === '?' && !mod) { s.set({ shortcutsOpen: !s.shortcutsOpen }); e.preventDefault(); return; }
+      if (e.key === 'Escape' && s.slice.status === 'slicing') { cancelSlice(); e.preventDefault(); return; }
       if (mod && k === 'z') { e.shiftKey ? s.redo() : s.undo(); e.preventDefault(); return; }
       if (mod && k === 'y') { s.redo(); e.preventDefault(); return; }
       if (mod && k === 'i') { importDialog(); e.preventDefault(); return; }

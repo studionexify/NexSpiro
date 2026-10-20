@@ -13,7 +13,7 @@ import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, newId, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
+  dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace, silhouette } from '../state/ops';
@@ -629,7 +629,10 @@ export function Viewport() {
           entry.mesh.add(entry.hull);
         }
         if (entry.hull) entry.hull.visible = sel;
-        entry.mesh.visible = !o.hidden;
+        // Preview: models of the plate that is sliced give way to its toolpaths; every other model (and all of them while slicing) stays as a ghost
+        const inPreview = s.workspace === 'preview';
+        const covered = inPreview && !!s.slice.result && s.slice.status !== 'slicing' && objectPlate(o, s.printerId, s.plates.length) === s.slice.plate;
+        entry.mesh.visible = !o.hidden && !covered;
         // edge overlay: creases / open borders / colour outlines (Edges tool or the View toggle), and the picked edges
         const edgeSel = s.edgeSel && s.edgeSel.objectId === o.id ? s.edgeSel : null;
         const wantEdges = s.workspace === 'prepare' && (s.showEdges || s.tool === 'edges') && !o.hidden;
@@ -643,7 +646,7 @@ export function Viewport() {
           if (pg) { entry.picked = new THREE.LineSegments(pg, pickMat); entry.picked.renderOrder = 11; entry.picked.raycast = () => {}; entry.mesh.add(entry.picked); }
         }
         // see-through while the live toolpath is shown on it, and for objects left out of the print
-        const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
+        const ghost = showsMotion(s) || inPreview ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
@@ -673,7 +676,7 @@ export function Viewport() {
           const pm = pe.mesh.material as THREE.MeshStandardMaterial;
           pm.color.set(PART_COLORS[p.type]);
           pm.opacity = s.selectedPart === p.id ? 0.7 : 0.4;
-          pe.mesh.visible = !isPaintTool(s.tool);
+          pe.mesh.visible = !isPaintTool(s.tool) && s.workspace === 'prepare';
           if (!dragging || !s.selected.includes(o.id)) {
             pe.mesh.matrixAutoUpdate = false;
             pe.mesh.matrix.copy(om.clone().multiply(trsMatrix(p)));
@@ -1524,7 +1527,7 @@ export function Viewport() {
     const syncPreview = () => {
       const s = useStore.getState();
       const preview = s.workspace === 'preview';
-      objGroup.visible = !preview;
+      objGroup.visible = true;
       selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
       motionLines.visible = showsMotion(s);
@@ -1586,7 +1589,7 @@ export function Viewport() {
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
-        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins) syncObjects();
+        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments)) rebuildMotionPreview();

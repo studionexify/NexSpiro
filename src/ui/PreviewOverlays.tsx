@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FEATURE_LABELS, FEATURE_ORDER, type FeatureType } from '../engine/types';
 import { sliceAndPreview } from '../state/actions';
 import { exportPlateFile } from '../state/printjob';
+import { cancelSlice } from '../state/slicing';
 import { openPrintDialog } from './PrintModal';
 import { printerById } from '../profiles/printers';
 import { useStore, type ColorScheme } from '../state/store';
@@ -237,6 +238,9 @@ export function SliceProgress() {
       <div className="row"><b>Slicing plate</b><span className="spacer" /><span className="mono">{Math.round(slice.progress * 100)}%</span></div>
       <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>{slice.stage}…</div>
       <div className="bar"><div style={{ width: `${slice.progress * 100}%` }} /></div>
+      <div className="row" style={{ marginTop: 10, justifyContent: 'flex-end' }}>
+        <button className="btn-secondary btn-small" title="Cancel slicing (Esc)" aria-label="Cancel slicing" onClick={() => cancelSlice()}><Icon name="cancel" size={15} />Cancel</button>
+      </div>
     </div>
   );
 }

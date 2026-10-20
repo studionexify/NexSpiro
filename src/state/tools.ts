@@ -5,7 +5,7 @@ import { cutAtZ0 } from '../engine/meshops';
 import { connectorMeshes, grooveMesh, type ConnectorSettings, type GrooveSettings } from './cutConnectors';
 import { openEdgeCount, repairTJunctions, transformVertices, weld, type IndexedMesh } from '../engine/mesh';
 import { centreMesh } from '../io/load';
-import { dropToBed, newId, objectMatrix, useStore, worldBounds, type SceneObject, type ScenePart, type Vec3 } from './store';
+import { dropToBed, newId, objectMatrix, partWorldMatrix, useStore, worldBounds, type SceneObject, type ScenePart, type Vec3 } from './store';
 import type { Config } from '../profiles/settings';
 
 // ---------------------------------------------------------------- helpers
@@ -104,7 +104,49 @@ export function cutObject(id: string, o: CutOptions) {
 // ---------------------------------------------------------------- boolean
 export type BoolOp = 'union' | 'difference' | 'intersection';
 
-export function booleanMeshes(a: IndexedMesh, b: IndexedMesh, op: BoolOp): IndexedMesh {
+/** Connected shells of a mesh as separate meshes. */
+function shellsOf(m: IndexedMesh): IndexedMesh[] {
+  const nv = m.vertices.length / 3, T = m.indices.length / 3;
+  const parent = new Int32Array(nv).map((_, i) => i);
+  const find = (a: number): number => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  for (let t = 0; t < T; t++) for (let k = 1; k < 3; k++) { const a = find(m.indices[t * 3]), b = find(m.indices[t * 3 + k]); if (a !== b) parent[b] = a; }
+  const groups = new Map<number, number[]>();
+  for (let t = 0; t < T; t++) { const r = find(m.indices[t * 3]); const g = groups.get(r); if (g) g.push(t); else groups.set(r, [t]); }
+  return [...groups.values()].map((tris) => {
+    const soup = new Float32Array(tris.length * 9);
+    tris.forEach((t, j) => { for (let c = 0; c < 3; c++) { const vi = m.indices[t * 3 + c] * 3; soup.set([m.vertices[vi], m.vertices[vi + 1], m.vertices[vi + 2]], j * 9 + c * 3); } });
+    return weld(soup);
+  });
+}
+
+/** Signed volume (negative = inside out). */
+function volumeOf(m: IndexedMesh) {
+  const v = m.vertices, ix = m.indices;
+  let vol = 0;
+  for (let t = 0; t < ix.length; t += 3) {
+    const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+    vol += (v[a] * (v[b + 1] * v[c + 2] - v[b + 2] * v[c + 1]) - v[a + 1] * (v[b] * v[c + 2] - v[b + 2] * v[c]) + v[a + 2] * (v[b] * v[c + 1] - v[b + 1] * v[c])) / 6;
+  }
+  return vol;
+}
+
+/** Clean input for the CSG evaluator: welded, T-junctions closed, no degenerate triangles, outward winding. */
+function cleanForCsg(m: IndexedMesh, tol = 1e-5): IndexedMesh {
+  const soup: number[] = [];
+  const v = m.vertices, ix = m.indices;
+  for (let t = 0; t < ix.length; t += 3) {
+    const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+    const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2], wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    if (nx * nx + ny * ny + nz * nz < 1e-14) continue; // zero-area sliver
+    soup.push(v[a], v[a + 1], v[a + 2], v[b], v[b + 1], v[b + 2], v[c], v[c + 1], v[c + 2]);
+  }
+  let r = repairTJunctions(weld(new Float32Array(soup), tol));
+  if (volumeOf(r) < 0) { const f = r.indices.slice(); for (let t = 0; t < f.length; t += 3) { const k = f[t + 1]; f[t + 1] = f[t + 2]; f[t + 2] = k; } r = { vertices: r.vertices, indices: f }; }
+  return r;
+}
+
+const csgOnce = (a: IndexedMesh, b: IndexedMesh, op: BoolOp): IndexedMesh => {
   const ev = new Evaluator();
   ev.attributes = ['position'];
   ev.useGroups = false;
@@ -112,24 +154,115 @@ export function booleanMeshes(a: IndexedMesh, b: IndexedMesh, op: BoolOp): Index
   A.updateMatrixWorld(); B.updateMatrixWorld();
   const res = ev.evaluate(A, B, op === 'union' ? ADDITION : op === 'difference' ? SUBTRACTION : INTERSECTION);
   return fromGeometry(res.geometry);
+};
+
+const nudged = (m: IndexedMesh, d: number): IndexedMesh => {
+  // a few microns of shift breaks exactly coincident faces, the usual cause of CSG holes
+  const v = m.vertices.slice();
+  for (let i = 0; i < v.length; i += 3) { v[i] += d; v[i + 1] += d * 0.7; v[i + 2] += d * 0.4; }
+  return { vertices: v, indices: m.indices };
+};
+
+/**
+ * Boolean of two meshes, robust to overlapping and multi-shell input: each side is cleaned and its own overlapping
+ * shells are merged first; if the result is not closed, the operand is retried slightly shifted and coarser-welded.
+ */
+export function booleanMeshes(a: IndexedMesh, b: IndexedMesh, op: BoolOp): IndexedMesh {
+  const solid = (m: IndexedMesh) => {
+    const c = cleanForCsg(m);
+    const shells = shellsOf(c);
+    if (shells.length < 2 || shells.length > 64) return c;
+    // overlapping shells inside one operand confuse the evaluator: merge them first
+    try { return shells.map((x) => cleanForCsg(x)).reduce((acc, x) => csgOnce(acc, x, 'union')); } catch { return c; }
+  };
+  const A = solid(a), B = solid(b);
+  const attempts: [number, number][] = [[0, 1e-5], [2e-4, 1e-5], [-3e-4, 1e-4], [1e-3, 1e-3]];
+  let best: IndexedMesh | null = null, lastErr: unknown = null;
+  for (const [d, tol] of attempts) {
+    try {
+      const r = csgOnce(tol === 1e-5 ? A : cleanForCsg(A, tol), d ? nudged(tol === 1e-5 ? B : cleanForCsg(B, tol), d) : tol === 1e-5 ? B : cleanForCsg(B, tol), op);
+      const open = openEdgeCount(r);
+      if (!best || openEdgeCount(best) > open) best = r;
+      if (open === 0) return r;
+    } catch (e) { lastErr = e; }
+  }
+  if (best) return best;
+  throw lastErr ?? new Error('the meshes could not be combined');
+}
+
+/** Boolean of a list: union folds; difference subtracts the union of the others from the first; intersection folds. */
+export function booleanAll(ms: IndexedMesh[], op: BoolOp): IndexedMesh {
+  if (ms.length < 2) return ms[0];
+  if (op === 'difference') return booleanMeshes(ms[0], ms.slice(1).reduce((acc, x) => booleanMeshes(acc, x, 'union')), 'difference');
+  return ms.slice(1).reduce((acc, x) => booleanMeshes(acc, x, op), ms[0]);
 }
 
 /** Combine the first selected object with the others. Difference subtracts the others from the first. */
 export function booleanSelected(op: BoolOp) {
   const s = useStore.getState();
-  const objs = s.selected.map((id) => s.objects.find((o) => o.id === id)!).filter(Boolean);
+  const objs = s.selected.map((id) => s.objects.find((o) => o.id === id)!).filter(Boolean).map((o) => bakeObjectParts(o));
   if (objs.length < 2) { s.set({ toast: { kind: 'warn', text: 'Select two or more objects (Shift+click). The first one is the base.' } }); return; }
-  let m = worldMesh(objs[0]);
-  try {
-    for (const o of objs.slice(1)) m = booleanMeshes(m, worldMesh(o), op);
-  } catch (e: any) { s.set({ toast: { kind: 'error', text: `Boolean failed: ${e?.message ?? e}` } }); return; }
-  if (!m.indices.length) { s.set({ toast: { kind: 'warn', text: 'The result is empty (the objects do not overlap).' } }); return; }
+  let m: IndexedMesh;
+  try { m = booleanAll(objs.map(worldMesh), op); }
+  catch (e: any) { s.set({ toast: { kind: 'error', text: `Boolean failed: ${e?.message ?? e}. Check the models are closed (no open edges) and try again.` } }); return; }
+  if (!m.indices.length) { s.set({ toast: { kind: 'warn', text: op === 'intersection' ? 'The result is empty (the objects do not overlap).' : 'The result is empty.' } }); return; }
   const res = objectFromWorld(`${objs[0].name} (${op})`, m, { filament: objs[0].filament, overrides: objs[0].overrides });
   s.checkpoint();
-  const ids = new Set(objs.map((o) => o.id));
+  const ids = new Set(s.selected);
   s.set({ objects: [...s.objects.filter((o) => !ids.has(o.id)), dropToBed(res)], selected: [res.id], selectedPart: null });
   s.markDirty();
 }
+
+// ---------------------------------------------------------------- parts → one mesh
+/** True when an object carries positive or negative parts that change its shape. */
+export const hasShapeParts = (o: SceneObject) => !!o.parts?.some((p) => p.type === 'part' || p.type === 'negative');
+
+const partWorldMesh = (o: SceneObject, p: ScenePart): IndexedMesh => ({ vertices: transformVertices(p.mesh.vertices, partWorldMatrix(o, p).elements), indices: p.mesh.indices });
+
+/** Mesh of the object (world coordinates) with positive parts merged in and negative parts cut out. */
+export function bakedWorldMesh(o: SceneObject): IndexedMesh {
+  let m = worldMesh(o);
+  const pos = (o.parts ?? []).filter((p) => p.type === 'part').map((p) => partWorldMesh(o, p));
+  const neg = (o.parts ?? []).filter((p) => p.type === 'negative').map((p) => partWorldMesh(o, p));
+  if (pos.length) m = booleanAll([m, ...pos], 'union');
+  if (neg.length) m = booleanMeshes(m, neg.length > 1 ? booleanAll(neg, 'union') : neg[0], 'difference');
+  return m;
+}
+
+/**
+ * The object with its positive and negative parts applied to the body (one workable mesh). Modifiers, support
+ * enforcers and blockers stay as parts. Returns the object unchanged when it has no shape parts; throws if the boolean fails.
+ */
+export function bakeObjectParts(o: SceneObject): SceneObject {
+  if (!hasShapeParts(o)) return o;
+  const m = bakedWorldMesh(o);
+  const [cx, cy, cz] = centreMesh(m);
+  const next: SceneObject = { ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: openEdgeCount(m), layerHeights: undefined };
+  const inv = objectMatrix(next).invert().elements;
+  const rest = (o.parts ?? []).filter((p) => p.type !== 'part' && p.type !== 'negative');
+  // remaining volumes are re-expressed in the new object frame
+  next.parts = rest.map((p) => ({ ...p, mesh: { vertices: transformVertices(partWorldMesh(o, p).vertices, inv), indices: p.mesh.indices }, position: [0, 0, 0] as Vec3, rotation: [0, 0, 0] as Vec3, scale: [1, 1, 1] as Vec3 }));
+  return next;
+}
+
+/** Bake the selected objects' positive / negative parts into their meshes (Boolean tool button). */
+export function applyPartsBoolean(ids = useStore.getState().selected) {
+  const s = useStore.getState();
+  const targets = s.objects.filter((o) => ids.includes(o.id) && hasShapeParts(o));
+  if (!targets.length) { s.set({ toast: { kind: 'info', text: 'The selected objects have no positive or negative parts to apply.' } }); return; }
+  try {
+    const baked = new Map(targets.map((o) => [o.id, bakeObjectParts(o)]));
+    s.checkpoint();
+    s.set({ objects: s.objects.map((o) => (baked.has(o.id) ? dropToBed({ ...baked.get(o.id)!, paint: undefined }) : o)), selectedPart: null });
+    s.markDirty();
+  } catch (e: any) { s.set({ toast: { kind: 'error', text: `Boolean failed: ${e?.message ?? e}` } }); }
+}
+
+/**
+ * Whether the object's own mesh is a closed solid the slicer and the boolean can work with. Parts never change it:
+ * they stay editable volumes until they are applied or exported.
+ */
+export function meshIsWorkable(o: SceneObject): boolean { return o.openEdges === 0; }
 
 // ---------------------------------------------------------------- text
 export const FONTS: Record<string, { label: string; load: () => Promise<any> }> = {

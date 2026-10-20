@@ -1170,7 +1170,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       jobsByObj.set(o, jobs);
       for (const fil of new Set(objIslands.map((s) => s.fil))) {
         const fInner = filInner[i][o].get(fil) ?? [];
-        const clipTo = (r: Paths, w: number) => (r.length && fInner.length ? intersection(r, offset(fInner, -(w / 2) + overlap * w)) : []);
+        const clipLimit = new Map<number, Paths>(); // the same fill limit is asked for by many regions of one layer
+        const clipTo = (r: Paths, w: number) => {
+          if (!r.length || !fInner.length) return [];
+          const d = -(w / 2) + overlap * w;
+          let lim = clipLimit.get(d);
+          if (!lim) { lim = offset(fInner, d); clipLimit.set(d, lim); }
+          return intersection(r, lim);
+        };
         const fills: PathItem[] = [];
         const add = (polys: Polyline2[], feature: FeatureType, width: number, flow = 1, extra: Partial<PathItem> = {}) => {
           for (const p of polys) fills.push({ ...p, pts: simplify(p.pts, resolution, p.closed), feature, width, flow, ...extra });
@@ -1480,8 +1487,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const levels = OVERHANG_LEVELS;
       // a segment overhangs by fraction f when its centre lies beyond the lower layer edge by (f - 0.5)·w
       const rkey = `${o}:${w.toFixed(3)}`;
+      // rings are nested (each contains the previous), so they are made only when a point is found outside the smaller ones
       let rings = overhangRings.get(rkey);
-      if (!rings) { rings = levels.map((f) => offset(lower, (f - 0.5) * w)); overhangRings.set(rkey, rings); }
+      if (!rings) { rings = []; overhangRings.set(rkey, rings); }
+      const ringAt = (b: number) => (rings![b] ??= offset(lower, (levels[b] - 0.5) * w));
       const pts = item.pts, n = pts.length / 2;
       const feats: FeatureType[] = new Array(n).fill(item.feature);
       const speeds: number[] = new Array(n).fill(0);
@@ -1495,7 +1504,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       for (let k = 1; k < n; k++) {
         const mx = (pts[k * 2 - 2] + pts[k * 2]) / 2, my = (pts[k * 2 - 1] + pts[k * 2 + 1]) / 2;
         let bucket = 0;
-        for (let b = 0; b < levels.length; b++) if (!pointInPaths(mx, my, rings[b])) bucket = b + 1;
+        while (bucket < levels.length && !pointInPaths(mx, my, ringAt(bucket))) bucket++;
         if (!bucket) { if (fanOn && fanThr <= 0 && item.feature === 'outer_wall') fans[k] = fanSpeed; continue; }
         any = true;
         if (bucket >= 3) feats[k] = 'overhang_wall'; // centre of the line is unsupported
