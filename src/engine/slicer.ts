@@ -236,18 +236,20 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   // ---------- stage 2/3: slice objects & parts
   progress('Slicing mesh', 0.04);
   const mode = (str('slicing_mode') || 'regular') as SlicingMode;
+  // outline points that deviate less than half the path resolution carry no information (and cost every later polygon operation)
+  const sliceTol = Math.min(0.02, Math.max(0.005, num('resolution') * 0.5));
   const objSlices: Paths[][] = [];
   const modSlices: { o: number; ov: Config; slices: Paths[] }[] = [];
   const encVol: Paths[] = Array.from({ length: N }, () => []);
   const blkVol: Paths[] = Array.from({ length: N }, () => []);
   meshes.forEach((m, oi) => {
-    const s = sliceMesh(m as IndexedMesh, planes, mode);
-    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceMesh(p as IndexedMesh, planes, mode));
+    const s = sliceMesh(m as IndexedMesh, planes, mode, sliceTol);
+    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceMesh(p as IndexedMesh, planes, mode, sliceTol));
     if (positives.length) for (let i = 0; i < N; i++) {
       const add = positives.flatMap((n) => n[i]);
       if (add.length) s[i] = union(s[i], add);
     }
-    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes));
+    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes, 'even_odd', sliceTol));
     if (negatives.length) for (let i = 0; i < N; i++) {
       const cut = negatives.flatMap((n) => n[i]);
       if (cut.length && s[i].length) s[i] = difference(s[i], union(cut));
@@ -255,7 +257,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     for (const p of m.parts ?? []) {
       if (p.type === 'modifier') {
         const ov = pick(p.overrides, MODIFIER_KEYS);
-        if (Object.keys(ov).length) modSlices.push({ o: oi, ov, slices: sliceMesh(p as IndexedMesh, planes) });
+        if (Object.keys(ov).length) modSlices.push({ o: oi, ov, slices: sliceMesh(p as IndexedMesh, planes, 'even_odd', sliceTol) });
       } else if (p.type === 'support_enforcer' || p.type === 'support_blocker') {
         const ps = sliceMesh(p as IndexedMesh, planes);
         const target = p.type === 'support_enforcer' ? encVol : blkVol;

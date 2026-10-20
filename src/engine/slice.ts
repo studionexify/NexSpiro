@@ -19,7 +19,7 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
  */
 export type SlicingMode = 'regular' | 'even_odd' | 'close_holes';
 
-export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode = 'even_odd'): Paths[] {
+export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode = 'even_odd', tol = 0.005): Paths[] {
   const v = mesh.vertices, ix = mesh.indices;
   const nV = v.length / 3;
   const triCount = ix.length / 3;
@@ -116,10 +116,10 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode
       }
     }
     if (!loops.length) { result.push([]); continue; }
-    if (mode === 'even_odd') { result.push(cleanPaths(unionEvenOdd(loops))); continue; }
+    if (mode === 'even_odd') { result.push(cleanPaths(unionEvenOdd(loops), tol)); continue; }
     let r = union(loops); // non-zero winding: overlapping shells merge
     if (mode === 'close_holes') r = r.filter((p) => C.Clipper.Orientation(p));
-    result.push(cleanPaths(r));
+    result.push(cleanPaths(r, tol));
   }
   return result;
 }
