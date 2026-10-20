@@ -6,6 +6,7 @@ import { applyTuning, CALIBRATIONS, startCalibration, useCalibration, type Calib
 import { openProjectDialog, saveProject } from '../state/project';
 import { FILAMENTS } from '../profiles/filaments';
 import { addSample, importDialog, SAMPLES } from '../state/actions';
+import { effectiveNozzle } from '../profiles/resolve';
 import { useStore } from '../state/store';
 import { Icon } from './icons';
 
@@ -55,7 +56,7 @@ export function HomePage() {
 }
 
 export function ProjectPage() {
-  const { objects, printerId, filaments, presetId, plates, project, slice, set } = useStore();
+  const { objects, printerId, filaments, presetId, machineOverrides, plates, project, slice, set } = useStore();
   const p = PRINTERS.find((x) => x.id === printerId)!;
   const upd = (k: keyof typeof project, v: string) => set({ project: { ...project, [k]: v } });
   const stats = slice.result?.stats;
@@ -96,7 +97,7 @@ export function ProjectPage() {
         <div className="tile">
           <h3 style={{ marginTop: 0 }}>Bill of materials</h3>
           <div className="summary" style={{ marginTop: 0, border: 0, paddingTop: 0 }}>
-            <span className="k">Printer</span><span className="v">{printerName(p)}</span>
+            <span className="k">Printer</span><span className="v">{printerName(p, effectiveNozzle(printerId, machineOverrides))}</span>
             <span className="k">Process</span><span className="v">{presetId} mm</span>
             <span className="k">Plates</span><span className="v">{plates.length}</span>
             <span className="k">Objects</span><span className="v">{objects.length}</span>
@@ -136,7 +137,7 @@ export function ProjectPage() {
 }
 
 export function CalibrationPage() {
-  const { printerId, filaments } = useStore();
+  const { printerId, filaments, machineOverrides } = useStore();
   const printer = printerById(printerId);
   const fil = filamentById(filaments[0].presetId);
   const [open, setOpen] = useState<CalibId | null>(null);
@@ -147,7 +148,7 @@ export function CalibrationPage() {
   return (
     <div className="page">
       <h1>Calibration</h1>
-      <p className="lead">Each test builds its model and per-height settings for <b>{printerName(printer)}</b> with <b>{fil.name}</b> (slot 1). Print it, then save the best value to the filament.</p>
+      <p className="lead">Each test builds its model and per-height settings for <b>{printerName(printer, effectiveNozzle(printerId, machineOverrides))}</b> with <b>{fil.name}</b> (slot 1). Print it, then save the best value to the filament.</p>
       {Object.keys(tuning).length > 0 && (
         <div className="tile" style={{ marginBottom: 14 }}>
           <div className="row"><b style={{ color: 'var(--text-strong)' }}>Calibrated values for slot 1</b><span className="spacer" />
