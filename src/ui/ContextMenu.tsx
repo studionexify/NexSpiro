@@ -10,6 +10,7 @@ import {
 import { addPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
 import { openFillBed } from './FillBedDialog';
 import { openPlateSettings } from './PlateControls';
+import { collapseAllObjects, expandAllObjects } from '../state/tree';
 import { useStore, type ContextMenuState } from '../state/store';
 import { Icon, ShapeIcon } from './icons';
 import type { PartType } from '../engine/types';
@@ -47,6 +48,8 @@ function plateItems(m: ContextMenuState): MenuItem[] {
     { label: 'Arrange', icon: 'arrangeB', disabled: !count || !!pl?.locked, onClick: () => arrange(undefined, m.plate) },
     { label: 'Arrange All Plates', icon: 'arrangeB', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
     { label: 'Auto Orient', icon: 'autoOrient', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
+    { label: 'Expand All', icon: 'expandAll', disabled: !count, onClick: expandAllObjects },
+    { label: 'Collapse All', icon: 'collapseAll', disabled: !count, onClick: collapseAllObjects },
     { label: 'Delete All', icon: 'deleteAll', iconColor: '#D93025', disabled: !count, onClick: () => clearPlate(m.plate) },
     { sep: true },
     { label: 'Lock', icon: 'lockB', checked: !!pl?.locked, onClick: () => updatePlate(m.plate, { locked: !pl?.locked }) },

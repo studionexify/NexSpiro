@@ -13,6 +13,7 @@ import { FilamentModal, Modal, PrinterModal } from './Modals';
 import { ParamRow } from './ParamRow';
 import { useAdvanced } from '../state/advanced';
 import { AdvancedPanel } from './advanced/AdvancedPanel';
+import { collapseAllObjects, expandAllObjects, toggleObjectRow, useTree } from '../state/tree';
 
 /** Collapsed state of the sidebar sections, kept between sessions. */
 const COLLAPSE_KEY = 'nexspiro.sidebar.collapsed.v1';
@@ -323,6 +324,7 @@ function ObjectsCard() {
     else st.set({ selected: st.selected.includes(id) ? st.selected : [id], selectedPart: null, contextMenu: { x: e.clientX, y: e.clientY, kind, plate, id } });
   };
   const [closed, toggle] = useCollapsed('objects');
+  const rowsClosed = useTree((t) => t.collapsed);
   const pick = (e: React.MouseEvent, id: string, pi: number) => {
     const toggle = e.ctrlKey || e.metaKey;
     s.set({ selected: toggle ? (s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id]) : [id], selectedPart: null, selectedRange: null, activePlate: pi });
@@ -332,6 +334,8 @@ function ObjectsCard() {
       <div className="card-head">
         <CardTitle icon="cube" label="Objects" closed={closed} onToggle={toggle} />
         <span className="spacer" />
+        <button className="icon-btn" title="Expand all" aria-label="Expand all" onClick={expandAllObjects}><Icon name="expandAll" size={14} /></button>
+        <button className="icon-btn" title="Collapse all" aria-label="Collapse all" onClick={collapseAllObjects}><Icon name="collapseAll" size={14} /></button>
         <span className="badge">{s.objects.length}</span>
       </div>
       {!closed && <div className="objlist" role="tree">
@@ -342,12 +346,17 @@ function ObjectsCard() {
               {plates > 1 && <div className={`plate-row ${pi === s.activePlate ? 'active' : ''}`} onClick={() => s.set({ activePlate: pi })}>{pl.name}{pl.locked ? ' 🔒' : ''} · {objs.length}</div>}
               {objs.map((o) => {
                 const own = Object.keys(o.overrides ?? {}).length;
+                const hasKids = own > 0 || !!o.heightRanges?.length || !!o.parts?.length;
+                const shut = !!rowsClosed[o.id];
                 return (
                   <div key={o.id}>
                     <div role="treeitem" aria-selected={s.selected.includes(o.id) && !s.selectedPart}
                       className={`objrow ${s.selected.includes(o.id) && !s.selectedPart ? 'sel' : ''} ${o.printable === false ? 'off' : ''}`}
                       onClick={(e) => pick(e, o.id, pi)} onContextMenu={(e) => menuAt(e, 'object', o.id)}
                       onDoubleClick={() => renameObject(o.id)}>
+                      {hasKids
+                        ? <button className="obj-eye" title={shut ? 'Expand' : 'Collapse'} aria-label={shut ? 'Expand' : 'Collapse'} aria-expanded={!shut} onClick={(e) => { e.stopPropagation(); toggleObjectRow(o.id); }}><Icon name="chevronDown" size={13} style={{ transform: shut ? 'rotate(-90deg)' : undefined }} /></button>
+                        : <span style={{ width: 22, flex: 'none' }} />}
                       <button className={`obj-eye ${o.hidden ? 'off' : ''}`} title={o.hidden ? 'Show in the 3D view' : 'Hide in the 3D view'} aria-label={o.hidden ? 'Show' : 'Hide'}
                         onClick={(e) => { e.stopPropagation(); s.updateObjects((x) => ({ ...x, hidden: !x.hidden || undefined }), [o.id]); }}>
                         <Icon name={o.hidden ? 'eyeOff' : 'eye'} size={13} />
@@ -367,12 +376,12 @@ function ObjectsCard() {
                         {s.filaments.map((_, k) => <option key={k} value={k}>{k + 1}</option>)}
                       </select>
                     </div>
-                    {own > 0 && (
+                    {!shut && own > 0 && (
                       <div className="objrow sub" onClick={() => s.set({ selected: [o.id], selectedPart: null, processMode: 'objects' })}>
                         <Icon name="gear" size={12} /><span className="name">{Object.keys(o.overrides!).map((k) => PARAM_BY_KEY[k]?.label ?? k).join(', ')}</span>
                       </div>
                     )}
-                    {(o.heightRanges ?? []).map((r) => (
+                    {!shut && (o.heightRanges ?? []).map((r) => (
                       <div key={r.id} className={`objrow part ${s.selectedRange === r.id && !s.selectedPart ? 'sel' : ''}`}
                         onClick={() => s.set({ selected: [o.id], selectedPart: null, selectedRange: r.id, processMode: 'objects', activePlate: pi })}>
                         <Icon name="layers" size={12} />
@@ -383,7 +392,7 @@ function ObjectsCard() {
                         <button className="icon-btn" title="Delete height range" onClick={(e) => { e.stopPropagation(); updateHeightRange(o.id, r.id, null); }}><Icon name="close" size={12} /></button>
                       </div>
                     ))}
-                    {(o.parts ?? []).map((p) => (
+                    {!shut && (o.parts ?? []).map((p) => (
                       <div key={p.id} className={`objrow part ${s.selectedPart === p.id ? 'sel' : ''}`}
                         onClick={() => s.set({ selected: [o.id], selectedPart: p.id, activePlate: pi })} onContextMenu={(e) => menuAt(e, 'part', o.id, p.id)}>
                         <span className="part-dot" style={{ background: PART_DOT[p.type] }} />

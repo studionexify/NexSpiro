@@ -274,7 +274,7 @@ export default function App() {
         <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
           {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
-          {workspace === 'preview' && <><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
+          {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewCube />
           <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
