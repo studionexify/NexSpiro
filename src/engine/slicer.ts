@@ -23,6 +23,7 @@ import { isSmoothLoop, loopLength, scarfLoop, seamGapLoop } from './seam';
 import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
+import { pushAll } from './util';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -72,6 +73,34 @@ function pointInPaths(x: number, y: number, paths: Paths): boolean {
   let inside = 0;
   for (const p of paths) if (C.Clipper.PointInPolygon(pt, p) !== 0) inside++;
   return inside % 2 === 1;
+}
+
+/** Even-odd point-in-polygons test with the edges bucketed by Y, for many queries against the same outline. */
+function insideTester(paths: Paths): (x: number, y: number) => boolean {
+  const ex: number[] = [];
+  let y0 = Infinity, y1 = -Infinity;
+  for (const p of paths) for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    ex.push(p[j].X, p[j].Y, p[i].X, p[i].Y);
+    y0 = Math.min(y0, p[i].Y); y1 = Math.max(y1, p[i].Y);
+  }
+  const m = ex.length / 4;
+  if (!m) return () => false;
+  const B = Math.max(1, Math.min(512, m >> 2)), bh = Math.max(1, (y1 - y0) / B);
+  const bins: number[][] = Array.from({ length: B }, () => []);
+  for (let e = 0; e < m; e++) {
+    const lo = Math.min(ex[e * 4 + 1], ex[e * 4 + 3]), hi = Math.max(ex[e * 4 + 1], ex[e * 4 + 3]);
+    for (let b = Math.max(0, Math.floor((lo - y0) / bh)); b <= Math.min(B - 1, Math.floor((hi - y0) / bh)); b++) bins[b].push(e * 4);
+  }
+  return (x, y) => {
+    const X = x * SCALE, Y = y * SCALE;
+    if (Y < y0 || Y > y1) return false;
+    let inside = false;
+    for (const e of bins[Math.min(B - 1, Math.floor((Y - y0) / bh))]) {
+      const ax = ex[e], ay = ex[e + 1], bx = ex[e + 2], by = ex[e + 3];
+      if ((ay > Y) !== (by > Y) && X < ((bx - ax) * (Y - ay)) / (by - ay) + ax) inside = !inside;
+    }
+    return inside;
+  };
 }
 
 const rectPath = (x0: number, y0: number, x1: number, y1: number) => [
@@ -236,28 +265,33 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   // ---------- stage 2/3: slice objects & parts
   progress('Slicing mesh', 0.04);
   const mode = (str('slicing_mode') || 'regular') as SlicingMode;
+  // outline points that deviate less than the path resolution carry no information (and cost every later polygon operation)
+  const sliceTol = Math.min(0.02, Math.max(0.005, num('resolution')));
   const objSlices: Paths[][] = [];
   const modSlices: { o: number; ov: Config; slices: Paths[] }[] = [];
   const encVol: Paths[] = Array.from({ length: N }, () => []);
   const blkVol: Paths[] = Array.from({ length: N }, () => []);
   meshes.forEach((m, oi) => {
-    const s = sliceMesh(m as IndexedMesh, planes, mode);
-    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceMesh(p as IndexedMesh, planes, mode));
+    const s = sliceMesh(m as IndexedMesh, planes, mode, sliceTol);
+    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceMesh(p as IndexedMesh, planes, mode, sliceTol));
     if (positives.length) for (let i = 0; i < N; i++) {
       const add = positives.flatMap((n) => n[i]);
       if (add.length) s[i] = union(s[i], add);
     }
-    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes));
+    // volumes that overlap each other (several negative parts, parts and negatives, shells inside one mesh) are
+    // merged: 'regular' unions the shells of a mesh instead of cancelling their overlap, and the cut is one union
+    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes, 'regular', sliceTol));
     if (negatives.length) for (let i = 0; i < N; i++) {
-      const cut = negatives.flatMap((n) => n[i]);
-      if (cut.length && s[i].length) s[i] = difference(s[i], union(cut));
+      if (!s[i].length) continue;
+      const cut = union(negatives.flatMap((n) => n[i]));
+      if (cut.length) s[i] = difference(s[i], cut);
     }
     for (const p of m.parts ?? []) {
       if (p.type === 'modifier') {
         const ov = pick(p.overrides, MODIFIER_KEYS);
-        if (Object.keys(ov).length) modSlices.push({ o: oi, ov, slices: sliceMesh(p as IndexedMesh, planes) });
+        if (Object.keys(ov).length) modSlices.push({ o: oi, ov, slices: sliceMesh(p as IndexedMesh, planes, 'regular', sliceTol).map((l) => union(l)) });
       } else if (p.type === 'support_enforcer' || p.type === 'support_blocker') {
-        const ps = sliceMesh(p as IndexedMesh, planes);
+        const ps = sliceMesh(p as IndexedMesh, planes, 'regular', sliceTol);
         const target = p.type === 'support_enforcer' ? encVol : blkVol;
         for (let i = 0; i < N; i++) if (ps[i].length) target[i] = target[i].concat(ps[i]);
       }
@@ -407,12 +441,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             gapFill: !arachne && !vase,
             topOneWall: topOne,
           });
-          regInner.push(...w.inner);
+          pushAll(regInner, w.inner);
           islands.push({ obj: oi, fil: reg.fil, ex, walls: w });
         }
         const u = union(regInner);
         objMap.set(reg.fil, u);
-        objInner.push(...u);
+        pushAll(objInner, u);
       }
       inners.push(union(objInner));
       finners.push(objMap);
@@ -467,9 +501,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         // shells straight under the top surfaces / over the bottom surfaces of the layers around
         const projTop: Paths = [], projBot: Paths = [];
         // (the surface layer itself counts as one of the shell layers)
-        for (let k = 1; k < topLayers && i + k < N; k++) projTop.push(...surf[i + k][o].top);
-        for (let k = 1; k < botLayers && i - k >= objStart; k++) projBot.push(...surf[i - k][o].bottomAll);
-        if (i + topLayers >= N) projTop.push(...inner); // the last layers of the plan are top shells
+        for (let k = 1; k < topLayers && i + k < N; k++) pushAll(projTop, surf[i + k][o].top);
+        for (let k = 1; k < botLayers && i - k >= objStart; k++) pushAll(projBot, surf[i - k][o].bottomAll);
+        if (i + topLayers >= N) pushAll(projTop, inner); // the last layers of the plan are top shells
         // "ensure vertical shell thickness": wherever the layers above / below do not fully cover this one
         // (sloping surfaces), the shell is made thick horizontally too
         const covered = (from: number, to: number) => {
@@ -517,7 +551,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       }
       // modifier volumes re-parameterise sparse infill inside them
       const sparseMods: Regions['sparseMods'] = [];
-      for (const mod of modSlices) {
+      // where modifiers overlap, the one added last wins: it takes its area first
+      for (const mod of [...modSlices].reverse()) {
         if (mod.o !== o || !mod.slices[i].length || !sparse.length) continue;
         const r = intersection(sparse, mod.slices[i]);
         if (!r.length) continue;
@@ -655,11 +690,11 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (!supTris[o].length) return;
         const zt = zs[i] - shift;
         const enf = footprintsInBand(m as IndexedMesh, supTris[o], 1, zt - hs[i], zt);
-        if (enf.length) add.push(...difference(intersection(enf, objSlices[o][i]), objSlices[o][i - 1]));
+        if (enf.length) pushAll(add, difference(intersection(enf, objSlices[o][i]), objSlices[o][i - 1]));
         const blk = footprintsInBand(m as IndexedMesh, supTris[o], 2, zt - hs[i], zt, 0.5);
         if (blk.length) sub = sub.concat(blk);
       });
-      if (encVol[i].length) add.push(...intersection(difference(layerSlices[i], layerSlices[i - 1]), union(encVol[i])));
+      if (encVol[i].length) pushAll(add, intersection(difference(layerSlices[i], layerSlices[i - 1]), union(encVol[i])));
       if (add.length) over[i] = union(over[i], add);
       if (sub.length && over[i].length) over[i] = difference(over[i], union(sub));
       if (blkVol[i].length) blocked[i] = union(blkVol[i]);
@@ -833,7 +868,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     };
     for (let o = 0; o < meshes.length; o++) {
       const b = brimFor(objSlices[o][objStart] ?? [], o);
-      if (b.length) { brimByObj.set(o, b); brimLoops.push(...b); }
+      if (b.length) { brimByObj.set(o, b); pushAll(brimLoops, b); }
     }
     if (brimType === 'auto_brim' && brimLoops.length) brimType = 'outer_only';
     const skirtN = Math.round(num('skirt_loops'));
@@ -963,6 +998,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       return floatOrPercent(v, direct);
     }) : null;
     const infillArea = reduceMode === 'auto' ? union(objs.flatMap((o) => regions[i][o].sparse)) : [];
+    const inInfill = infillArea.length ? insideTester(infillArea) : () => false;
     let firstTravel = true;
     const hopAllowed = (zz: number) => zz >= tnum('retract_lift_above') - 1e-9 && (tnum('retract_lift_below') <= 0 || zz <= tnum('retract_lift_below') + 1e-9);
 
@@ -986,7 +1022,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const sparseHop = lastFeature === 'sparse_infill' && feat === 'sparse_infill';
       let skipRetract = false;
       if (reduceMode === 'enabled') skipRetract = sparseHop;
-      else if (reduceMode === 'auto' && sparseHop && infillArea.length) skipRetract = pointInPaths((px + x) / 2, (py + y) / 2, infillArea) && pointInPaths(x, y, infillArea);
+      else if (reduceMode === 'auto' && sparseHop && infillArea.length) skipRetract = inInfill((px + x) / 2, (py + y) / 2) && inInfill(x, y);
       const layerChange = firstTravel && i > 0 && tbool('retract_when_changing_layer');
       const needRetract = retractLen > 0 && (d > minTravel || layerChange) && !skipRetract;
       if (needRetract && !retracted) retract();
@@ -1153,10 +1189,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const towerActive = useTower && i <= lastChangeLayer;
 
     // --- items of this layer, grouped by filament (walls / fills of each island; support; flush candidates)
-    interface IslandJob { isl: Island; fills: PathItem[]; wallFil: number; gapFil: number }
+    interface IslandJob { isl: Island; fills: PathItem[]; wallFil: number; gapFil: number; inside?: (x: number, y: number) => boolean }
     const jobsByObj = new Map<number, IslandJob[]>();
     const lowerSupport = i > objStart ? objSlices.map((sl) => sl[i - 1]) : null;
-    const overhangRings = new Map<string, Paths[]>(); // per object & line width, this layer
+    const overhangRings = new Map<string, ((x: number, y: number) => boolean)[]>(); // per object & line width, this layer
     for (const o of objs) {
       const objIslands = layerIslands[i].filter((s) => s.obj === o);
       if (!objIslands.length) continue;
@@ -1170,7 +1206,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       jobsByObj.set(o, jobs);
       for (const fil of new Set(objIslands.map((s) => s.fil))) {
         const fInner = filInner[i][o].get(fil) ?? [];
-        const clipTo = (r: Paths, w: number) => (r.length && fInner.length ? intersection(r, offset(fInner, -(w / 2) + overlap * w)) : []);
+        const clipLimit = new Map<number, Paths>(); // the same fill limit is asked for by many regions of one layer
+        const clipTo = (r: Paths, w: number) => {
+          if (!r.length || !fInner.length) return [];
+          const d = -(w / 2) + overlap * w;
+          let lim = clipLimit.get(d);
+          if (!lim) { lim = offset(fInner, d); clipLimit.set(d, lim); }
+          return intersection(r, lim);
+        };
         const fills: PathItem[] = [];
         const add = (polys: Polyline2[], feature: FeatureType, width: number, flow = 1, extra: Partial<PathItem> = {}) => {
           for (const p of polys) fills.push({ ...p, pts: simplify(p.pts, resolution, p.closed), feature, width, flow, ...extra });
@@ -1255,7 +1298,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         const filIslands = jobs.filter((j) => j.isl.fil === fil);
         for (const it of fills) {
           let owner = filIslands[0];
-          if (filIslands.length > 1) owner = filIslands.find((j) => pointInPaths(it.pts[0], it.pts[1], exToPaths(j.isl.ex))) ?? filIslands[0];
+          if (filIslands.length > 1) owner = filIslands.find((j) => (j.inside ??= insideTester(exToPaths(j.isl.ex)))(it.pts[0], it.pts[1])) ?? filIslands[0];
           if (owner) owner.fills.push(it);
         }
       }
@@ -1448,7 +1491,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
             wallItems.push(item);
           }
         }
-        if (isl.walls.thin.length) wallItems.push(...orderPaths(isl.walls.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice(), flow: 1 } as PathItem)), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+        if (isl.walls.thin.length) pushAll(wallItems, orderPaths(isl.walls.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice(), flow: 1 } as PathItem)), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
       }
       const gapItems: PathItem[] = [];
       if (mine(job.gapFil)) {
@@ -1459,7 +1502,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const fillOrdered = () => {
         const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
         const outp: PathItem[] = [];
-        for (const g of groups) outp.push(...orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+        for (const g of groups) pushAll(outp, orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
         return outp;
       };
       if (!wallItems.length && !isFill.length && !gapItems.length) return;
@@ -1480,8 +1523,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const levels = OVERHANG_LEVELS;
       // a segment overhangs by fraction f when its centre lies beyond the lower layer edge by (f - 0.5)·w
       const rkey = `${o}:${w.toFixed(3)}`;
+      // rings are nested (each contains the previous), so they are made only when a point is found outside the smaller ones
       let rings = overhangRings.get(rkey);
-      if (!rings) { rings = levels.map((f) => offset(lower, (f - 0.5) * w)); overhangRings.set(rkey, rings); }
+      if (!rings) { rings = []; overhangRings.set(rkey, rings); }
+      const ringAt = (b: number) => (rings![b] ??= insideTester(offset(lower, (levels[b] - 0.5) * w)));
       const pts = item.pts, n = pts.length / 2;
       const feats: FeatureType[] = new Array(n).fill(item.feature);
       const speeds: number[] = new Array(n).fill(0);
@@ -1495,7 +1540,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       for (let k = 1; k < n; k++) {
         const mx = (pts[k * 2 - 2] + pts[k * 2]) / 2, my = (pts[k * 2 - 1] + pts[k * 2 + 1]) / 2;
         let bucket = 0;
-        for (let b = 0; b < levels.length; b++) if (!pointInPaths(mx, my, rings[b])) bucket = b + 1;
+        while (bucket < levels.length && !ringAt(bucket)(mx, my)) bucket++;
         if (!bucket) { if (fanOn && fanThr <= 0 && item.feature === 'outer_wall') fans[k] = fanSpeed; continue; }
         any = true;
         if (bucket >= 3) feats[k] = 'overhang_wall'; // centre of the line is unsupported
@@ -1508,9 +1553,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }
     /** Wall points over an overhang (to keep seams off them). */
     function overhangPoints(pts: number[], lower: Paths, w: number): [number, number][] {
-      const ring = offset(lower, 0);
+      const inside = insideTester(lower);
       const out: [number, number][] = [];
-      for (let k = 0; k < pts.length; k += 2) if (!pointInPaths(pts[k], pts[k + 1], ring)) out.push([pts[k], pts[k + 1]]);
+      for (let k = 0; k < pts.length; k += 2) if (!inside(pts[k], pts[k + 1])) out.push([pts[k], pts[k + 1]]);
       void w;
       return out;
     }

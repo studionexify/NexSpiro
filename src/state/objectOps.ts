@@ -5,8 +5,9 @@ import { openEdgeCount, transformVertices, type IndexedMesh } from '../engine/me
 import { centreMesh } from '../io/load';
 import { saveFile } from '../platform';
 import { arrange, centreOnBed, primitive, SHAPES, type ShapeKind } from './ops';
-import { objectFromWorld } from './tools';
-import { dropToBed, newId, objectMatrix, objectPlate, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
+import { askExportMode } from '../ui/ExportBooleanDialog';
+import { bakedWorldMesh, hasShapeParts, objectFromWorld } from './tools';
+import { cloneObject, dropToBed, newId, objectMatrix, objectPlate, partWorldMatrix, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
 
 const worldMesh = (o: SceneObject): IndexedMesh => ({ vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices });
 
@@ -23,6 +24,17 @@ export function mirroredObject(o: SceneObject, axis: 0 | 1 | 2): SceneObject {
   const [cx, cy, cz] = centreMesh(m);
   // paint is per triangle and the triangle order is kept, so it stays valid
   const next = dropToBed({ ...o, mesh: m, position: [cx, cy, cz], rotation: [0, 0, 0], scale: [1, 1, 1], parts: undefined, layerHeights: undefined });
+  // parts are reflected with the body: baked into the new object frame
+  if (o.parts?.length) {
+    const inv = objectMatrix(next).invert().elements;
+    next.parts = o.parts.map((p) => {
+      const pw = transformVertices(p.mesh.vertices, partWorldMatrix(o, p).elements);
+      for (let i = axis; i < pw.length; i += 3) pw[i] = 2 * c - pw[i];
+      const pix = p.mesh.indices.slice();
+      for (let t = 0; t < pix.length; t += 3) { const k = pix[t + 1]; pix[t + 1] = pix[t + 2]; pix[t + 2] = k; }
+      return { ...p, mesh: { vertices: transformVertices(pw, inv), indices: pix }, position: [0, 0, 0] as Vec3, rotation: [0, 0, 0] as Vec3, scale: [1, 1, 1] as Vec3 };
+    });
+  }
   // Patternex artwork is mirrored with the object (same reflection, re-expressed in the new frame)
   if (o.patternex) {
     const reflect = (p: Vec3, isDir: boolean): Vec3 => { const q = [...p] as Vec3; q[axis] = isDir ? -q[axis] : 2 * c - q[axis]; return q; };
@@ -34,7 +46,6 @@ export function mirroredObject(o: SceneObject, axis: 0 | 1 | 2): SceneObject {
 /** Mirror the object along a world axis. */
 export function mirrorObjects(axis: 0 | 1 | 2, ids = useStore.getState().selected) {
   const s = useStore.getState();
-  if (s.objects.some((o) => ids.includes(o.id) && o.parts?.length)) s.set({ toast: { kind: 'warn', text: 'Mirroring removed the parts and modifiers on the object. Add them again if you need them.' } });
   s.updateObjects((o) => mirroredObject(o, axis), ids);
 }
 
@@ -109,7 +120,7 @@ export function cloneObjects(count: number, ids = useStore.getState().selected) 
   const s = useStore.getState();
   const src = s.objects.filter((o) => ids.includes(o.id));
   if (!src.length || count < 1) return;
-  const copies = src.flatMap((o) => Array.from({ length: count }, (_, k) => ({ ...o, id: newId(), name: `${o.name} (${k + 2})`, position: [o.position[0] + 6 * (k + 1), o.position[1] + 6 * (k + 1), o.position[2]] as Vec3 })));
+  const copies = src.flatMap((o) => Array.from({ length: count }, (_, k) => cloneObject(o, { name: `${o.name} (${k + 2})`, position: [o.position[0] + 6 * (k + 1), o.position[1] + 6 * (k + 1), o.position[2]] as Vec3 })));
   s.addObjects(copies);
   arrange();
 }
@@ -134,7 +145,11 @@ export function togglePrintable(ids = useStore.getState().selected) {
 
 /** Binary STL of the objects in world coordinates. */
 export function stlBytes(objs: SceneObject[]): ArrayBuffer {
-  const meshes = objs.map(worldMesh);
+  return stlBytesOfMeshes(objs.map(worldMesh));
+}
+
+/** Binary STL of meshes that are already in world coordinates. */
+export function stlBytesOfMeshes(meshes: IndexedMesh[]): ArrayBuffer {
   const T = meshes.reduce((a, m) => a + m.indices.length / 3, 0);
   const buf = new ArrayBuffer(84 + T * 50);
   const dv = new DataView(buf);
@@ -162,7 +177,17 @@ export async function exportStl(ids = useStore.getState().selected) {
   const objs = s.objects.filter((o) => ids.includes(o.id));
   if (!objs.length) return;
   const name = (objs.length === 1 ? objs[0].name : 'objects').replace(/[^\w.-]+/g, '_');
-  const saved = await saveFile(`${name}.stl`, stlBytes(objs), 'stl');
+  let meshes: IndexedMesh[];
+  if (objs.some(hasShapeParts)) {
+    const mode = await askExportMode();
+    if (!mode) return;
+    try {
+      meshes = objs.flatMap((o) => (!hasShapeParts(o) ? [worldMesh(o)]
+        : mode === 'boolean' ? [bakedWorldMesh(o)]
+          : [worldMesh(o), ...(o.parts ?? []).filter((p) => p.type === 'part').map((p) => ({ vertices: transformVertices(p.mesh.vertices, partWorldMatrix(o, p).elements), indices: p.mesh.indices }))]));
+    } catch (e: any) { s.set({ toast: { kind: 'error', text: `Boolean failed: ${e?.message ?? e}. Export without boolean instead.` } }); return; }
+  } else meshes = objs.map(worldMesh);
+  const saved = await saveFile(`${name}.stl`, stlBytesOfMeshes(meshes), 'stl');
   if (saved) s.set({ toast: { kind: 'info', text: `STL exported: ${saved}` } });
 }
 
@@ -179,7 +204,7 @@ export function pasteObjects(at?: [number, number]) {
   const cx = (Math.min(...b.map((x) => x.min[0])) + Math.max(...b.map((x) => x.max[0]))) / 2;
   const cy = (Math.min(...b.map((x) => x.min[1])) + Math.max(...b.map((x) => x.max[1]))) / 2;
   const [dx, dy] = at ? [at[0] - cx, at[1] - cy] : [10, 10];
-  useStore.getState().addObjects(clipboard.map((o) => ({ ...o, id: newId(), position: [o.position[0] + dx, o.position[1] + dy, o.position[2]] as Vec3 })));
+  useStore.getState().addObjects(clipboard.map((o) => cloneObject(o, { position: [o.position[0] + dx, o.position[1] + dy, o.position[2]] as Vec3 })));
 }
 
 /** Delete every object on a plate. */

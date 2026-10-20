@@ -13,6 +13,7 @@ import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
 import { clearancePass, type ClearanceReport } from './clearance';
 import { difference } from '../clipper';
+import { pushAll } from '../util';
 
 export interface WallLoop { pts: number[]; closed: boolean; feature: FeatureType; width: number; flow: number; /** Per-point Z offsets from the layer top. */ zs?: number[]; /** Per-point bead widths. */ widths?: number[] }
 export interface WallResult { loops: WallLoop[][]; inner: Paths }
@@ -188,8 +189,8 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
       const r = timed(m.id, () => m.infill!(ctx, o, rest, c, k === fillers.length - 1));
       if (!r) continue;
       any = true;
-      if (Array.isArray(r)) { paths.push(...r); rest = []; break; }
-      paths.push(...r.paths);
+      if (Array.isArray(r)) { pushAll(paths, r); rest = []; break; }
+      pushAll(paths, r.paths);
       if (r.used.length) rest = difference(rest, r.used);
     }
     return any ? { paths, rest } : undefined;

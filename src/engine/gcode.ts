@@ -1,4 +1,5 @@
 // Stage 9–10: kinematic estimate, cooling (slowdown + fan), G-code emission.
+import { joinLines, lineCount, TypedBuilder } from './util';
 import type { Config } from '../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from './types';
 import { FEATURE_ORDER } from './types';
@@ -202,11 +203,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   // 2) write
   const out: string[] = [];
   let lineNo = 0;
-  const push = (text: string) => { out.push(text); lineNo += text.split('\n').length; };
-  const moves: number[] = [];
-  const aux: number[] = [];
-  const lines: number[] = [];
-  const feats: number[] = [];
+  const push = (text: string) => { out.push(text); lineNo += lineCount(text); };
+  const moves = new TypedBuilder(Float32Array);
+  const aux = new TypedBuilder(Float32Array);
+  const lines = new TypedBuilder(Uint32Array);
+  const feats = new TypedBuilder(Uint8Array);
   const layerRes: LayerResult[] = [];
   let filamentMm = 0;
   let tool = 0;
@@ -444,19 +445,17 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     else push(`; ${k} = ${String(v)}`);
   }
   push('; CONFIG_BLOCK_END');
-  let gcode = out.join('\n') + '\n';
-  gcode = gcode.replace('__TIME__', fmtTime(total)).replace('__FILMM__', n(filamentMm, 2)).replace('__FILG__', n(grams, 2));
-  if (cfg.gcode_add_line_number === true) {
-    let nLine = 0;
-    gcode = gcode.split('\n').map((l) => (l && !l.startsWith(';') ? `N${++nLine} ${l}` : l)).join('\n');
-  }
+  // the placeholders sit in the header: fill them in before the big join so the large string is built only once
+  const fill = (t: string) => t.replace('__TIME__', fmtTime(total)).replace('__FILMM__', n(filamentMm, 2)).replace('__FILG__', n(grams, 2));
+  for (let k = 0; k < Math.min(out.length, 400); k++) out[k] = fill(out[k]);
+  const gcode = joinLines(out, cfg.gcode_add_line_number === true);
 
   return {
     gcode,
-    moves: new Float32Array(moves),
-    moveFeatures: new Uint8Array(feats),
-    moveAux: new Float32Array(aux),
-    moveLines: new Uint32Array(lines),
+    moves: moves.toTyped(),
+    moveFeatures: feats.toTyped(),
+    moveAux: aux.toTyped(),
+    moveLines: lines.toTyped(),
     layers: layerRes,
     stats: {
       timeSeconds: total,

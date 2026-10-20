@@ -13,7 +13,12 @@ declare global {
 export const isDesktop = () => typeof window !== 'undefined' && !!window.nexspiro;
 
 export async function saveFile(defaultName: string, data: string | ArrayBuffer, ext: string): Promise<string | null> {
-  if (window.nexspiro) return window.nexspiro.saveFile({ defaultName, data, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+  // big G-code goes over as bytes: a 100 MB string is copied (as UTF-16) by the IPC layer, the bytes are not
+  if (window.nexspiro) {
+    const bytes = typeof data === 'string' && data.length > 1_000_000 ? new TextEncoder().encode(data) : null;
+    const payload = bytes ? (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) : data;
+    return window.nexspiro.saveFile({ defaultName, data: payload, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+  }
   const blob = new Blob([data], { type: 'application/octet-stream' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

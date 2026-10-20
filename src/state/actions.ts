@@ -50,9 +50,15 @@ export function newProject() {
   s.set({ objects: [], selected: [], selectedPart: null, undoStack: [], redoStack: [], workspace: 'prepare', project: emptyProject(), plates: [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0, slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 } });
 }
 
+/** Slice the active plate; the Preview tab opens at once so the progress window is visible there. */
 export async function sliceAndPreview() {
+  const st = useStore.getState();
+  if (st.slice.status === 'slicing') { st.set({ workspace: 'preview' }); return; }
+  st.set({ workspace: 'preview' });
   const out = await sliceNow();
-  if (out) useStore.getState().set({ workspace: 'preview' });
+  const after = useStore.getState();
+  // cancelled, failed or nothing to slice: back to Prepare (a replaced slice is still running, so stay)
+  if (!out && after.slice.status !== 'slicing' && after.workspace === 'preview') after.set({ workspace: 'prepare' });
 }
 
 export async function exportGcode() {

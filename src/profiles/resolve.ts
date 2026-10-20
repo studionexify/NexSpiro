@@ -18,16 +18,37 @@ export interface ProfileSelection {
 }
 
 /** Base process values before user overrides (used for "modified" detection). */
-export function baseProcess(sel: Pick<ProfileSelection, 'printerId' | 'presetId'>): Config {
+/** Nozzle diameters offered on every printer (mm). */
+export const NOZZLES = [0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0];
+
+/** The nozzle in use: the user's choice (machine override) or the printer's own. */
+export function effectiveNozzle(printerId: string, machineOverrides?: Config): number {
+  const v = Number(machineOverrides?.nozzle_diameter);
+  return v > 0 ? v : printerById(printerId).nozzle;
+}
+
+export function baseProcess(sel: Pick<ProfileSelection, 'printerId' | 'presetId' | 'machineOverrides'>): Config {
   const printer = printerById(sel.printerId);
   const preset = PROCESS_PRESETS.find((p) => p.id === sel.presetId) ?? PROCESS_PRESETS[3];
-  const nz = printer.nozzle;
+  const nz = effectiveNozzle(sel.printerId, sel.machineOverrides);
   const scaled: Config = nz === 0.4 ? {} : {
     line_width: +(nz * 1.05).toFixed(2), outer_wall_line_width: +(nz * 1.05).toFixed(2), inner_wall_line_width: +(nz * 1.125).toFixed(2),
     top_surface_line_width: +(nz * 1.05).toFixed(2), sparse_infill_line_width: +(nz * 1.125).toFixed(2),
     internal_solid_infill_line_width: +(nz * 1.05).toFixed(2), support_line_width: +(nz * 1.05).toFixed(2), initial_layer_line_width: +(nz * 1.25).toFixed(2),
   };
-  return { ...PROCESS_DEFAULTS, ...scaled, ...printer.processOverrides, ...preset.values };
+  const merged: Config = { ...PROCESS_DEFAULTS, ...scaled, ...printer.processOverrides, ...preset.values };
+  // layers stay between 10% and 75% of the nozzle diameter (and never below 0.04 mm)
+  const lo = Math.max(0.04, +(nz * 0.1).toFixed(2)), hi = Math.floor(nz * 75 + 1e-9) / 100;
+  const fit = (v: unknown) => Math.min(hi, Math.max(lo, Number(v)));
+  merged.layer_height = +fit(merged.layer_height).toFixed(2);
+  merged.initial_layer_print_height = +fit(merged.initial_layer_print_height).toFixed(2);
+  return merged;
+}
+
+/** Layer height limits that follow the nozzle (variable layer height bounds). */
+function nozzleLimits(nz: number, machine: Config): Config {
+  if (nz === 0.4) return {};
+  return { min_layer_height: Math.min(Number(machine.min_layer_height ?? 0.08), Math.max(0.04, +(nz * 0.2).toFixed(2))), max_layer_height: Math.floor(nz * 75 + 1e-9) / 100 };
 }
 
 /** Printer settings: defaults ← printer profile ← user edits. */
@@ -53,15 +74,20 @@ export function resolveConfig(sel: ProfileSelection): Config {
   const fil = filamentById(sel.filamentId);
   const fcfg = filamentConfig(fil, sel.filamentOverrides);
   const [bed0, bed] = bedTemps(fcfg, sel.plate);
+  const machine = machineConfig(sel.printerId, sel.machineOverrides);
+  const nz = effectiveNozzle(sel.printerId, sel.machineOverrides);
   return {
     ...baseProcess(sel),
     ...sel.overrides,
-    ...machineConfig(sel.printerId, sel.machineOverrides),
+    ...machine,
+    ...nozzleLimits(nz, machine),
+    ...(sel.machineOverrides?.min_layer_height !== undefined ? { min_layer_height: sel.machineOverrides.min_layer_height } : {}),
+    ...(sel.machineOverrides?.max_layer_height !== undefined ? { max_layer_height: sel.machineOverrides.max_layer_height } : {}),
     ...fcfg,
     ...retractionOverrides(fcfg),
     printer_model: `${printer.vendor} ${printer.model}`,
     gcode_flavor: printer.flavor,
-    nozzle_diameter: printer.nozzle,
+    nozzle_diameter: nz,
     bed_x: printer.bed.x, bed_y: printer.bed.y, bed_z: printer.bed.z,
     printable_height: printer.bed.z,
     curr_bed_type: sel.plate,

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONNECTION_INFO, type ConnectionKind, type PrinterStatus, type RemoteFile, type SavedDevice } from '../connect/types';
 import { onSerialPortRequest } from '../connect/client';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
+import { effectiveNozzle } from '../profiles/resolve';
 import { connectDevice, disconnectDevice, initDevices, removeDevice, run, saveDevice, uploadAndPrint, useDevices } from '../state/devices';
 import { newId, useStore } from '../state/store';
 import { isDesktop } from '../platform';
@@ -165,6 +166,9 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
   const busy = useDevices((s) => s.busy[dev.id]);
   const up = useDevices((s) => s.upload[dev.id]);
   const p = printerById(dev.printerId);
+  // the nozzle chosen in the project applies to the printer the project is sliced for
+  const projPrinter = useStore((s) => s.printerId), projMachine = useStore((s) => s.machineOverrides);
+  const nozzle = dev.printerId === projPrinter ? effectiveNozzle(projPrinter, projMachine) : p.nozzle;
   const online = st.state !== 'offline' && st.state !== 'connecting';
   const active = st.state === 'printing' || st.state === 'paused';
 
@@ -174,7 +178,7 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
         <Icon name="printer" size={26} style={{ color: 'var(--accent)' }} />
         <div>
           <h1 style={{ margin: 0 }}>{dev.name}</h1>
-          <div className="muted" style={{ fontSize: 12 }}>{printerName(p)} · {CONNECTION_INFO[dev.config.kind].label}{dev.config.host ? ` · ${dev.config.host}` : ''}{st.firmware ? ` · firmware ${st.firmware}` : ''}</div>
+          <div className="muted" style={{ fontSize: 12 }}>{printerName(p, nozzle)} · {CONNECTION_INFO[dev.config.kind].label}{dev.config.host ? ` · ${dev.config.host}` : ''}{st.firmware ? ` · firmware ${st.firmware}` : ''}</div>
         </div>
         <span className="pill" style={{ background: 'var(--surface-tertiary)', color: STATE_COLOR[st.state] }}><StatusDot s={st} />{busy ?? STATE_LABEL[st.state]}</span>
         <span className="spacer" />

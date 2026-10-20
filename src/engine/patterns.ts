@@ -2,6 +2,7 @@
 import { bounds, clipLines, SCALE, toInt } from './clipper';
 import { linesFill } from './fill';
 import type { Path, Paths, Polyline2 } from './types';
+import { pushAll } from './util';
 
 const toPoly = (p: Path, closed = false): Polyline2 => {
   const pts: number[] = [];
@@ -326,17 +327,17 @@ export function anchorInfill(lines: Polyline2[], region: Paths, width: number, a
     // cur's free end is enterEnd: walk forward from it
     const pts: number[] = [];
     const head = tails.get(`${cur}:${enterEnd}`);
-    if (head) pts.push(...reversed(head));
+    if (head) pushAll(pts, reversed(head));
     let end: 0 | 1 = enterEnd;
     for (let guard = 0; guard <= open.length; guard++) {
       done[cur] = 1;
       const seg = end === 0 ? open[cur].pts : reversed(open[cur].pts);
-      pts.push(...seg);
+      pushAll(pts, seg);
       const exit = (1 - end) as 0 | 1;
       const key = `${cur}:${exit}`;
       const p = partner.get(key);
-      if (!p) { const tail = tails.get(key); if (tail) pts.push(...tail); break; }
-      pts.push(...links.get(key)!);
+      if (!p) { const tail = tails.get(key); if (tail) pushAll(pts, tail); break; }
+      pushAll(pts, links.get(key)!);
       const [ln, en] = p.split(':').map(Number);
       if (done[ln]) break;
       cur = ln; end = en as 0 | 1;

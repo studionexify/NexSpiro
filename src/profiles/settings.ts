@@ -66,8 +66,8 @@ export const SPARSE_PATTERNS = o(
 
 export const PROCESS_PARAMS: ParamDef[] = [
   // ======================================================================== Quality
-  { key: 'layer_height', label: 'Layer height', tab: 'Quality', group: 'Layer height', type: 'float', unit: 'mm', min: 0.04, max: 0.6, step: 0.01, def: 0.2, tip: 'Vertical thickness of each layer. Smaller values give smoother sides but print slower. Rule of thumb: 20–70% of nozzle diameter.' },
-  { key: 'initial_layer_print_height', label: 'Initial layer height', tab: 'Quality', group: 'Layer height', type: 'float', unit: 'mm', min: 0.05, max: 0.6, step: 0.01, def: 0.2, tip: 'Thickness of the first layer. A slightly thicker first layer absorbs small bed flatness errors.' },
+  { key: 'layer_height', label: 'Layer height', tab: 'Quality', group: 'Layer height', type: 'float', unit: 'mm', min: 0.04, max: 0.8, step: 0.01, def: 0.2, tip: 'Vertical thickness of each layer. Smaller values give smoother sides but print slower. Rule of thumb: 20–70% of nozzle diameter.' },
+  { key: 'initial_layer_print_height', label: 'Initial layer height', tab: 'Quality', group: 'Layer height', type: 'float', unit: 'mm', min: 0.05, max: 0.8, step: 0.01, def: 0.2, tip: 'Thickness of the first layer. A slightly thicker first layer absorbs small bed flatness errors.' },
 
   { key: 'line_width', label: 'Default', tab: 'Quality', group: 'Line width', type: 'float', unit: 'mm', min: 0.1, max: 2, step: 0.01, def: 0.42, advanced: true, tip: 'Fallback extrusion width when a specific line type is set to 0.' },
   { key: 'initial_layer_line_width', label: 'Initial layer', tab: 'Quality', group: 'Line width', type: 'float', unit: 'mm', min: 0, max: 2, step: 0.01, def: 0.5, advanced: true, tip: 'Width of walls on the first layer. Wider first-layer lines increase bed contact and adhesion.' },

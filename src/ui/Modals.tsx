@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { FILAMENT_PAGES, FILAMENT_PARAMS, NULLABLE_FILAMENT_KEYS, filamentConfig } from '../profiles/filamentParams';
 import { MACHINE_PAGES, MACHINE_PARAMS } from '../profiles/machineParams';
-import { machineConfig } from '../profiles/resolve';
+import { effectiveNozzle, machineConfig } from '../profiles/resolve';
 import type { Config } from '../profiles/settings';
 import { ParamPages } from './ParamRow';
 import { filamentById } from '../profiles/filaments';
-import { printerById, printerName } from '../profiles/printers';
+import { printerById } from '../profiles/printers';
 import { useStore } from '../state/store';
 import { Icon } from './icons';
 
@@ -28,14 +28,14 @@ export function PrinterModal({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('');
   const n = Object.keys(machineOverrides).length;
   return (
-    <Modal title={`Printer settings — ${n ? '* ' : ''}${printerName(p)}`} onClose={onClose} footer={<>
+    <Modal title={`Printer settings — ${n ? '* ' : ''}${p.vendor} ${p.model}`} onClose={onClose} footer={<>
       <button className="btn-secondary btn-small" disabled={!n} onClick={() => { for (const k of Object.keys(machineOverrides)) setMachine(k, undefined); markDirty(); }}>Revert all</button>
       <span className="spacer" />
       <button className="btn-primary btn-small" onClick={onClose}>Done</button>
     </>}>
       <div className="row" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
         <span className="badge">{p.bed.x} × {p.bed.y} × {p.bed.z} mm</span>
-        <span className="badge">Nozzle {p.nozzle} mm</span>
+        <span className="badge">Nozzle {effectiveNozzle(printerId, machineOverrides)} mm</span>
         <span className="badge">{p.flavor === 'bbl' ? 'Marlin (A1/P1/X1/H2 dialect)' : p.flavor === 'klipper' ? 'Klipper' : 'Marlin'}</span>
         <span className="spacer" />
         <input className="input" style={{ width: 180 }} placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)} />

@@ -6,7 +6,7 @@ import { printerById } from '../profiles/printers';
 import type { Config } from '../profiles/settings';
 import { mirroredObject } from './objectOps';
 import { currentConfig } from './slicing';
-import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
+import { cloneObject, dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
 
 export interface FillBedOptions {
   /** Minimum gap in mm toward N, NE, E, SE, S, SW, W, NW. */
@@ -120,14 +120,13 @@ export function fillBed(id: string, opt: FillBedOptions, onProgress?: (placed: n
       }
       const [first, ...rest] = out;
       const moved = placeCopy(o, first, ox + first.x, oy + first.y);
-      const copies = rest.map((pl, k) => ({ ...placeCopy(o, pl, ox + pl.x, oy + pl.y), id: newId(), name: `${o.name} (${k + 2})` }));
+      const copies = rest.map((pl, k) => cloneObject(placeCopy(o, pl, ox + pl.x, oy + pl.y), { name: `${o.name} (${k + 2})` }));
       st.checkpoint();
       st.set({ objects: [...st.objects.map((x) => (x.id === id ? moved : x)), ...copies], selected: [id, ...copies.map((c) => c.id)], selectedPart: null });
       st.markDirty();
       const mirrored = rest.filter((pl) => pl.mirror !== 'none').length;
       const notes = [`${out.length} on the plate (${rest.length} new cop${rest.length === 1 ? 'y' : 'ies'}).`];
       if (mirrored) notes.push(`${mirrored} ${mirrored === 1 ? 'is' : 'are'} mirrored.`);
-      if (mirrored && o.parts?.length) notes.push('Mirrored copies lost their parts and modifiers.');
       st.set({ toast: { kind: 'info', text: notes.join(' ') } });
       finish(out.length);
     };

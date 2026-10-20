@@ -26,6 +26,19 @@ export const plateObjects = (plate = useStore.getState().activePlate) => {
   return s.objects.filter((o) => objectPlate(o, s.printerId, s.plates.length) === plate);
 };
 
+/** Stops the running slice: the worker is terminated, the waiting caller gets null and nothing is reported as an error. */
+export function cancelSlice() {
+  const was = useStore.getState().slice.status === 'slicing';
+  worker?.terminate();
+  worker = null;
+  const p = pending;
+  pending = null;
+  p?.(null);
+  if (!was && !p) return;
+  const st = useStore.getState();
+  st.set({ slice: { ...st.slice, status: 'idle', stage: '', progress: 0, error: null, dirty: true }, toast: { kind: 'info', text: 'Slicing cancelled' } });
+}
+
 export function sliceNow(): Promise<SliceOutput | null> {
   const s = useStore.getState();
   const plate = s.activePlate;
@@ -37,7 +50,8 @@ export function sliceNow(): Promise<SliceOutput | null> {
   }
   worker?.terminate();
   pending?.(null); // a slice that is replaced never finishes
-  worker = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
+  const mine = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
+  worker = mine;
   const id = ++seq;
   const [ox, oy] = plateOrigin(plate, s.printerId);
   const toPlate = new THREE.Matrix4().makeTranslation(-ox, -oy, 0);
@@ -62,11 +76,20 @@ export function sliceNow(): Promise<SliceOutput | null> {
   }));
   s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate, dirty: false } }); // edits during the slice mark it dirty again
   return new Promise((done) => {
-    const resolve = (r: SliceOutput | null) => { if (pending === resolve) pending = null; done(r); };
+    const resolve = (r: SliceOutput | null) => { if (pending === resolve) pending = null; if (worker === mine) { mine.terminate(); worker = null; } done(r); };
     pending = resolve;
-    worker!.onmessage = (ev) => {
+    // a worker that dies (out of memory, script error) is reported once, unless this slice was replaced or cancelled
+    const fail = (message: string) => {
+      if (worker !== mine) return;
+      const st = useStore.getState();
+      st.set({ slice: { ...st.slice, status: 'error', error: message, dirty: true }, toast: { kind: 'error', text: `Slicing failed: ${message}` } });
+      resolve(null);
+    };
+    mine.onerror = (e) => { e.preventDefault?.(); fail(e.message || 'the slicer stopped unexpectedly'); };
+    mine.onmessageerror = () => fail('the slicer sent back data that could not be read');
+    mine.onmessage = (ev) => {
       const m = ev.data;
-      if (m.id !== id) return;
+      if (m.id !== id || worker !== mine) return;
       const st = useStore.getState();
       if (m.type === 'progress') st.set({ slice: { ...st.slice, stage: m.stage, progress: m.pct } });
       else if (m.type === 'done') {
@@ -77,12 +100,9 @@ export function sliceNow(): Promise<SliceOutput | null> {
           toast: out.warnings.length ? { kind: 'warn', text: out.warnings.join(' ') } : null,
         });
         resolve(out);
-      } else {
-        st.set({ slice: { ...st.slice, status: 'error', error: m.message, dirty: true }, toast: { kind: 'error', text: `Slicing failed: ${m.message}` } });
-        resolve(null);
-      }
+      } else fail(m.message);
     };
-    worker!.postMessage({
+    mine.postMessage({
       id, meshes, cfg: currentConfig(plate),
       opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
     }, meshes.map((m) => m.vertices.buffer));

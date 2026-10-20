@@ -7,6 +7,10 @@
 // changed once more only because the G-code config block now reads gcode_flavor = bbl (flavour renamed).
 // All four changed again only because the config block lists the new outline_smoothing / outline_smoothing_corner
 // settings (off by default); with those two lines removed the G-code hashes are exactly the previous ones.
+// The two cylinder hashes changed with the slicing speed-up: cross-section outlines now drop the points that lie
+// on a straight wall (the crossings of a flat face's diagonal edge, which slid from layer to layer) and the ones
+// within the path resolution, so identical layers are recognised and their polygon work is reused. Wall points
+// move by less than the Resolution setting (0.012 mm); the cube and the supported tee are unchanged.
 import { describe, expect, it } from 'vitest';
 import { weld } from '../../src/engine/mesh';
 import { slice } from '../../src/engine/slicer';
@@ -20,9 +24,9 @@ const mesh = (soup: Float32Array, name: string) => { const m = weld(soup); retur
 
 const CASES: { name: string; run: () => string; hash: string }[] = [
   { name: 'cube on P1S', run: () => slice([mesh(box(100, 100, 0, 20, 20, 20), 'cube')], cfgFor('bbl-p1s')).gcode, hash: '7dd6f36a96ecbe31f2f552da94da456c' },
-  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: 'd76c564824cffe1694795ef4b52a7302' },
+  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: '06922a7b6c1e12ce6333e312b2d2bb11' },
   { name: 'tee with tree support on Prusa MK4S', run: () => slice([mesh(tee(100, 100), 'tee')], cfgFor('prusa-mk4s', { enable_support: true, support_type: 'tree_auto' })).gcode, hash: '27611b99212ef529083a35669598290c' },
-  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true })).gcode, hash: '840a85fefcfaab584f9581dd7495b9e4' },
+  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true })).gcode, hash: '7210fbd336b08f7048c6c555b954be06' },
 ];
 
 describe('Basic mode is the classic engine', () => {

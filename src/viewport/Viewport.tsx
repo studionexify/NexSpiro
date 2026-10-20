@@ -13,7 +13,7 @@ import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, newId, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
+  dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace, silhouette } from '../state/ops';
@@ -32,6 +32,7 @@ import { arrange, deletePlate, orientPlate, updatePlate } from '../state/ops';
 import { selectPlate } from '../state/objectOps';
 import { openPlateSettings } from '../ui/PlateControls';
 import { useAdvanced } from '../state/advanced';
+import { planeHit, ringRadius, rotateAngle, tickBasis } from './rotateSnap';
 import { fieldColor, ZONE_RGB } from '../ui/advanced/colors';
 
 export type ViewName = 'iso' | 'top' | 'bottom' | 'front' | 'left' | 'right' | 'back';
@@ -629,7 +630,10 @@ export function Viewport() {
           entry.mesh.add(entry.hull);
         }
         if (entry.hull) entry.hull.visible = sel;
-        entry.mesh.visible = !o.hidden;
+        // Preview: models of the plate that is sliced give way to its toolpaths; every other model (and all of them while slicing) stays as a ghost
+        const inPreview = s.workspace === 'preview';
+        const covered = inPreview && !!s.slice.result && s.slice.status !== 'slicing' && objectPlate(o, s.printerId, s.plates.length) === s.slice.plate;
+        entry.mesh.visible = !o.hidden && !covered;
         // edge overlay: creases / open borders / colour outlines (Edges tool or the View toggle), and the picked edges
         const edgeSel = s.edgeSel && s.edgeSel.objectId === o.id ? s.edgeSel : null;
         const wantEdges = s.workspace === 'prepare' && (s.showEdges || s.tool === 'edges') && !o.hidden;
@@ -643,7 +647,7 @@ export function Viewport() {
           if (pg) { entry.picked = new THREE.LineSegments(pg, pickMat); entry.picked.renderOrder = 11; entry.picked.raycast = () => {}; entry.mesh.add(entry.picked); }
         }
         // see-through while the live toolpath is shown on it, and for objects left out of the print
-        const ghost = showsMotion(s) ? 0.45 : o.printable === false ? 0.45 : 1;
+        const ghost = showsMotion(s) || inPreview ? 0.45 : o.printable === false ? 0.45 : 1;
         if (mat.opacity !== ghost) { mat.transparent = ghost < 1; mat.opacity = ghost; mat.depthWrite = ghost === 1; mat.needsUpdate = true; }
         const u = mat.userData.uniforms;
         u.uOverhang.value = s.showOverhangs || s.tool === 'paint_support' ? 1 : 0;
@@ -673,7 +677,7 @@ export function Viewport() {
           const pm = pe.mesh.material as THREE.MeshStandardMaterial;
           pm.color.set(PART_COLORS[p.type]);
           pm.opacity = s.selectedPart === p.id ? 0.7 : 0.4;
-          pe.mesh.visible = !isPaintTool(s.tool);
+          pe.mesh.visible = !isPaintTool(s.tool) && s.workspace === 'prepare';
           if (!dragging || !s.selected.includes(o.id)) {
             pe.mesh.matrixAutoUpdate = false;
             pe.mesh.matrix.copy(om.clone().multiply(trsMatrix(p)));
@@ -773,7 +777,9 @@ export function Viewport() {
       const pi = plateAt(proxy.position.x, proxy.position.y, s.printerId, s.plates.length);
       if (pi !== s.activePlate) s.set({ activePlate: pi });
     });
+    let applyRing: (() => void) | null = null; // rotate rings: replaces three's angle before the meshes follow the proxy
     gizmo.addEventListener('objectChange', () => {
+      applyRing?.();
       const t = gizmoTarget();
       if (!t) return;
       if (gizmo.mode === 'scale' && altDown && gizmo.axis) {
@@ -794,8 +800,9 @@ export function Viewport() {
     });
     gizmo.addEventListener('change', invalidate);
 
-    // Rotate gizmo scale : 72 ticks (5°), a long tooth every 10°. While dragging, the pointer
-    // inside the tick band snaps to 5° and in the band just outside it to 45° (8 snap regions); Shift snaps to 5° anywhere.
+    // Rotate gizmo scale: 72 ticks (5°), a long tooth every 10°, 8 long marks (45°). Tick 0 sits on the point where the drag
+    // began. The angle is the pointer's polar angle around the ring (three's own tangent-based angle is replaced): inside the tick
+    // band it snaps to 5°, just outside it to 45°; Shift snaps to 5° anywhere. The readout follows the pointer.
     const tickGeo = (() => {
       const v: number[] = [];
       for (let i = 0; i < 72; i++) {
@@ -809,31 +816,56 @@ export function Viewport() {
     const ticks = new THREE.LineSegments(tickGeo, new THREE.LineBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true, opacity: 0.9 }));
     ticks.renderOrder = 20; ticks.visible = false;
     scene.add(ticks);
+    const readout = document.createElement('div');
+    readout.style.cssText = 'position:absolute;pointer-events:none;display:none;padding:2px 6px;border-radius:3px;background:rgba(30,30,30,.9);color:#fff;font:12px/1.3 system-ui,sans-serif;z-index:5';
+    el.appendChild(readout);
     let shiftSnap = false;
-    const ringRadius = () => {
-      // TransformControls sizes its gizmo by camera distance; the rotate ring has radius 0.5 in gizmo units
-      const cam = camera as THREE.PerspectiveCamera;
-      const d = cam.position.distanceTo(proxy.position);
-      const factor = (d * Math.min((1.9 * Math.tan((Math.PI * cam.fov) / 360)) / cam.zoom, 7)) / 7;
-      return 0.5 * gizmo.size * factor;
+    const lastPtr = { x: 0, y: 0 };
+    // an X / Y / Z ring in world space whose plane the camera is not looking along
+    let ring: { axis: THREE.Vector3; start: THREE.Vector3; q0: THREE.Quaternion; angle: number } | null = null;
+    const ringHit = () => {
+      if (!ring) return null;
+      const r = renderer.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((lastPtr.x - r.left) / r.width) * 2 - 1, -((lastPtr.y - r.top) / r.height) * 2 + 1), camera);
+      const h = planeHit(ray.ray, proxy.position, ring.axis);
+      return h ? h.sub(proxy.position) : null;
     };
-    const rotateSnapAt = (ev: PointerEvent) => {
-      if (!dragging || gizmo.mode !== 'rotate' || !gizmo.axis || !'XYZ'.includes(gizmo.axis)) { ticks.visible = false; return; }
-      const R = ringRadius();
-      const axis = new THREE.Vector3(gizmo.axis === 'X' ? 1 : 0, gizmo.axis === 'Y' ? 1 : 0, gizmo.axis === 'Z' ? 1 : 0);
+    const updateRing = () => {
+      if (!ring) { ticks.visible = false; readout.style.display = 'none'; return; }
+      const R = ringRadius(camera, gizmo.size, proxy.position);
       ticks.position.copy(proxy.position);
-      ticks.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+      ticks.quaternion.copy(tickBasis(ring.start, ring.axis));
       ticks.scale.setScalar(R);
       ticks.visible = true;
-      // distance of the pointer from the ring centre, in the ring's plane
-      ray.setFromCamera(ndc(ev), camera);
-      const hit = new THREE.Vector3();
-      const len = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(axis, proxy.position), hit) ? hit.distanceTo(proxy.position) / R : 0;
-      const step = len >= 1.15 && len <= 1.45 ? 45 : (len >= 0.92 && len < 1.15) || shiftSnap ? 5 : 0;
-      gizmo.setRotationSnap(step ? THREE.MathUtils.degToRad(step) : null);
+      const deg = THREE.MathUtils.radToDeg(ring.angle);
+      readout.textContent = `${'XYZ'[ring.axis.x ? 0 : ring.axis.y ? 1 : 2]}: ${deg.toFixed(2)}°`;
+      readout.style.display = 'block';
+      const r = renderer.domElement.getBoundingClientRect();
+      readout.style.left = `${lastPtr.x - r.left + 14}px`; readout.style.top = `${lastPtr.y - r.top + 10}px`;
+      invalidate();
     };
-    renderer.domElement.addEventListener('pointermove', rotateSnapAt, { capture: true });
-    gizmo.addEventListener('dragging-changed', (e: any) => { if (!e.value) { ticks.visible = false; gizmo.setRotationSnap(shiftSnap ? THREE.MathUtils.degToRad(5) : null); } });
+    renderer.domElement.addEventListener('pointerdown', (ev) => { lastPtr.x = ev.clientX; lastPtr.y = ev.clientY; }, { capture: true });
+    renderer.domElement.addEventListener('pointermove', (ev) => { lastPtr.x = ev.clientX; lastPtr.y = ev.clientY; if (ring) updateRing(); }, { capture: true });
+    gizmo.addEventListener('dragging-changed', (e: any) => {
+      if (!e.value) { ring = null; updateRing(); return; }
+      ring = null;
+      if (gizmo.mode !== 'rotate' || !gizmo.axis || !'XYZ'.includes(gizmo.axis) || gizmo.space !== 'world') return;
+      const axis = new THREE.Vector3(gizmo.axis === 'X' ? 1 : 0, gizmo.axis === 'Y' ? 1 : 0, gizmo.axis === 'Z' ? 1 : 0);
+      const dragStart = { axis, start: new THREE.Vector3(), q0: proxy.quaternion.clone(), angle: 0 };
+      ring = dragStart;
+      const h = ringHit();
+      if (!h || h.lengthSq() < 1e-12) { ring = null; return; }
+      dragStart.start.copy(h);
+      updateRing();
+    });
+    applyRing = () => {
+      if (!ring) return;
+      const end = ringHit();
+      if (!end || end.lengthSq() < 1e-12) return; // ring seen edge-on: keep three's own result
+      ring.angle = rotateAngle(ring.start, end, ring.axis, ringRadius(camera, gizmo.size, proxy.position), shiftSnap);
+      proxy.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(ring.axis, ring.angle)).multiply(ring.q0).normalize();
+      updateRing();
+    };
 
     // ---------------- picking & painting
     const ray = new THREE.Raycaster();
@@ -1524,7 +1556,7 @@ export function Viewport() {
     const syncPreview = () => {
       const s = useStore.getState();
       const preview = s.workspace === 'preview';
-      objGroup.visible = !preview;
+      objGroup.visible = true;
       selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
       motionLines.visible = showsMotion(s);
@@ -1586,7 +1618,7 @@ export function Viewport() {
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
-        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins) syncObjects();
+        || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments)) rebuildMotionPreview();

@@ -10,7 +10,9 @@ import {
 import { addPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
 import { openFillBed } from './FillBedDialog';
 import { openPlateSettings } from './PlateControls';
+import { collapseAllObjects, expandAllObjects } from '../state/tree';
 import { useStore, type ContextMenuState } from '../state/store';
+import { Icon, ShapeIcon } from './icons';
 import type { PartType } from '../engine/types';
 import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
 import { editObjectArtwork, openPatternLibrary } from '../plugins/patternex/ui/PatternexPanel';
@@ -24,6 +26,10 @@ export interface MenuItem {
   sub?: MenuItem[];
   sep?: true;
   swatch?: string;
+  /** Line icon (icons.tsx name) and optional colour; or a coloured primitive icon. */
+  icon?: string;
+  iconColor?: string;
+  shape?: string;
 }
 
 /** Shapes offered for parts and modifiers. */
@@ -34,20 +40,22 @@ function plateItems(m: ContextMenuState): MenuItem[] {
   const count = s.objects.length;
   const pl = s.plates[m.plate];
   return [
-    { label: 'Add model…', kbd: 'Ctrl+I', onClick: importDialog },
-    { label: 'Add primitive', sub: [...SHAPES.map(([k, l]) => ({ label: l, onClick: () => addShape(k, m.world) })), { sep: true }, { label: 'Text shape…', kbd: 'T', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
-    { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
+    { label: 'Add model…', icon: 'addCube', kbd: 'Ctrl+I', onClick: importDialog },
+    { label: 'Add Primitive', icon: 'primitives', sub: [...SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => addShape(k, m.world) })), { sep: true }, { label: 'Text shape…', icon: 'textB', kbd: 'T', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
+    { label: 'Paste', icon: 'paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
     { sep: true },
-    { label: 'Select all on plate', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
-    { label: 'Arrange plate', disabled: !count || !!pl?.locked, onClick: () => arrange(undefined, m.plate) },
-    { label: 'Arrange all plates', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
-    { label: 'Auto orient plate', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
-    { label: 'Delete all on plate', disabled: !count, onClick: () => clearPlate(m.plate) },
+    { label: 'Select All', icon: 'selectAll', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
+    { label: 'Arrange', icon: 'arrangeB', disabled: !count || !!pl?.locked, onClick: () => arrange(undefined, m.plate) },
+    { label: 'Arrange All Plates', icon: 'arrangeB', kbd: 'A', disabled: !count, onClick: () => arrangeAll() },
+    { label: 'Auto Orient', icon: 'autoOrient', disabled: !count || !!pl?.locked, onClick: () => orientPlate(m.plate) },
+    { label: 'Expand All', icon: 'expandAll', disabled: !count, onClick: expandAllObjects },
+    { label: 'Collapse All', icon: 'collapseAll', disabled: !count, onClick: collapseAllObjects },
+    { label: 'Delete All', icon: 'deleteAll', iconColor: '#D93025', disabled: !count, onClick: () => clearPlate(m.plate) },
     { sep: true },
-    { label: 'Lock plate', checked: !!pl?.locked, onClick: () => updatePlate(m.plate, { locked: !pl?.locked }) },
-    { label: 'Plate settings…', onClick: () => openPlateSettings(m.plate) },
-    { label: 'Add plate', onClick: addPlate },
-    { label: 'Delete plate', disabled: s.plates.length < 2, onClick: () => deletePlate(m.plate) },
+    { label: 'Lock', icon: 'lockB', checked: !!pl?.locked, onClick: () => updatePlate(m.plate, { locked: !pl?.locked }) },
+    { label: 'Plate Settings…', icon: 'gear', onClick: () => openPlateSettings(m.plate) },
+    { label: 'Add Plate', icon: 'addPlateB', onClick: addPlate },
+    { label: 'Delete Plate', icon: 'deleteB', disabled: s.plates.length < 2, onClick: () => deletePlate(m.plate) },
   ];
 }
 
@@ -56,63 +64,64 @@ function objectItems(m: ContextMenuState): MenuItem[] {
   const ids = s.selected.length ? s.selected : m.id ? [m.id] : [];
   const one = ids.length === 1 ? s.objects.find((o) => o.id === ids[0]) : undefined;
   const printable = !s.objects.filter((o) => ids.includes(o.id)).every((o) => o.printable === false);
+  const PART_ICON: Record<PartType, [string, string]> = { part: ['partAdd', '#1FAA3C'], negative: ['partNeg', '#D93025'], modifier: ['partMod', '#E3A21A'], support_enforcer: ['partEnf', '#1E88E5'], support_blocker: ['partBlk', '#E53935'] };
   const partSub = (type: PartType): MenuItem => ({
-    label: `Add ${PART_LABELS[type].toLowerCase()}`, disabled: !one,
-    sub: PART_SHAPES.map(([k, l]) => ({ label: l, onClick: () => one && addPart(one.id, type, k) })),
+    label: `Add ${PART_LABELS[type].toLowerCase()}`, disabled: !one, icon: PART_ICON[type][0], iconColor: PART_ICON[type][1],
+    sub: PART_SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => one && addPart(one.id, type, k) })),
   });
   const items: MenuItem[] = [
-    { label: one ? `Rename “${one.name}”…` : `${ids.length} objects`, disabled: !one, onClick: () => one && renameObject(one.id) },
+    { label: one ? `Rename “${one.name}”…` : `${ids.length} objects`, icon: 'editName', disabled: !one, onClick: () => one && renameObject(one.id) },
     { sep: true },
-    { label: 'Copy', kbd: 'Ctrl+C', onClick: () => copyObjects(ids) },
-    { label: 'Paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects() },
-    { label: 'Duplicate', kbd: 'Ctrl+D', onClick: () => cloneObjects(1, ids) },
-    { label: 'Clone…', onClick: () => { const n = parseInt(prompt('Number of copies', '2') ?? '', 10); if (n > 0) cloneObjects(Math.min(n, 200), ids); } },
-    { label: 'Fill bed with copies…', disabled: !one, onClick: () => one && openFillBed(one.id) },
-    { label: 'Delete', kbd: 'Del', onClick: () => s.removeSelected() },
+    { label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', onClick: () => copyObjects(ids) },
+    { label: 'Paste', icon: 'paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects() },
+    { label: 'Duplicate', icon: 'duplicate', kbd: 'Ctrl+D', onClick: () => cloneObjects(1, ids) },
+    { label: 'Clone…', icon: 'clone', onClick: () => { const n = parseInt(prompt('Number of copies', '2') ?? '', 10); if (n > 0) cloneObjects(Math.min(n, 200), ids); } },
+    { label: 'Fill bed with copies…', icon: 'fillBed', disabled: !one, onClick: () => one && openFillBed(one.id) },
+    { label: 'Delete', icon: 'deleteB', iconColor: '#D93025', kbd: 'Del', onClick: () => s.removeSelected() },
     { sep: true },
-    { label: 'Center on plate', onClick: () => centreObjects(ids) },
-    { label: 'Drop to bed', onClick: () => dropObjects(ids) },
-    { label: 'Auto orient', kbd: 'O', onClick: () => autoOrient(ids) },
-    { label: 'Mirror', sub: [{ label: 'Along X', onClick: () => mirrorObjects(0, ids) }, { label: 'Along Y', onClick: () => mirrorObjects(1, ids) }, { label: 'Along Z', onClick: () => mirrorObjects(2, ids) }] },
-    { label: 'Split to objects', disabled: !one, onClick: () => one && splitObject(one.id) },
+    { label: 'Center on plate', icon: 'centre', onClick: () => centreObjects(ids) },
+    { label: 'Drop to bed', icon: 'dropBed', onClick: () => dropObjects(ids) },
+    { label: 'Auto orient', icon: 'autoOrient', kbd: 'O', onClick: () => autoOrient(ids) },
+    { label: 'Mirror', icon: 'mirror', sub: [{ label: 'Along X', icon: 'mirror', onClick: () => mirrorObjects(0, ids) }, { label: 'Along Y', icon: 'mirror', onClick: () => mirrorObjects(1, ids) }, { label: 'Along Z', icon: 'mirror', onClick: () => mirrorObjects(2, ids) }] },
+    { label: 'Split to objects', icon: 'splitB', disabled: !one, onClick: () => one && splitObject(one.id) },
     { sep: true },
-    { label: 'Filament', sub: s.filaments.map((f, k) => ({ label: `Filament ${k + 1}`, swatch: f.color, checked: !!one && (one.filament ?? 0) === k, onClick: () => setObjectFilament(k, ids) })) },
-    { label: 'Printable', checked: printable, onClick: () => togglePrintable(ids) },
-    ...(s.plates.length > 1 ? [{ label: 'Move to plate', sub: s.plates.map((p, k) => ({ label: p.name, disabled: k === m.plate, onClick: () => { s.set({ selected: ids }); moveToPlate(k); } })) }] : []),
+    { label: 'Filament', icon: 'filamentB', sub: s.filaments.map((f, k) => ({ label: `Filament ${k + 1}`, swatch: f.color, checked: !!one && (one.filament ?? 0) === k, onClick: () => setObjectFilament(k, ids) })) },
+    { label: 'Printable', icon: 'printable', checked: printable, onClick: () => togglePrintable(ids) },
+    ...(s.plates.length > 1 ? [{ label: 'Move to plate', icon: 'moveToPlate', sub: s.plates.map((p, k) => ({ label: p.name, disabled: k === m.plate, onClick: () => { s.set({ selected: ids }); moveToPlate(k); } })) }] : []),
     { sep: true },
     partSub('part'),
     partSub('negative'),
     partSub('modifier'),
     partSub('support_enforcer'),
     partSub('support_blocker'),
-    { label: 'Add height range modifier', disabled: !one, onClick: () => one && addHeightRange(one.id) },
+    { label: 'Add height range modifier', icon: 'heightRange', disabled: !one, onClick: () => one && addHeightRange(one.id) },
     { sep: true },
-    { label: 'Paint support', kbd: 'L', onClick: () => s.set({ selected: ids, tool: 'paint_support' }) },
-    { label: 'Paint seam', kbd: 'P', onClick: () => s.set({ selected: ids, tool: 'paint_seam' }) },
-    { label: 'Paint colour', kbd: 'N', disabled: s.filaments.length < 2, onClick: () => s.set({ selected: ids, tool: 'paint_color' }) },
-    { label: 'Cut', kbd: 'C', disabled: !one, onClick: () => s.set({ selected: ids, tool: 'cut' }) },
+    { label: 'Paint support', icon: 'supportPaint', kbd: 'L', onClick: () => s.set({ selected: ids, tool: 'paint_support' }) },
+    { label: 'Paint seam', icon: 'seamPaint', kbd: 'P', onClick: () => s.set({ selected: ids, tool: 'paint_seam' }) },
+    { label: 'Paint colour', icon: 'colorPaint', kbd: 'N', disabled: s.filaments.length < 2, onClick: () => s.set({ selected: ids, tool: 'paint_color' }) },
+    { label: 'Cut', icon: 'cutB', kbd: 'C', disabled: !one, onClick: () => s.set({ selected: ids, tool: 'cut' }) },
   ];
-  if (s.plugins.includes('motionex')) items.push({ label: 'Motion on whole object (Motionex)', onClick: () => applyMotionToObjects(ids) });
+  if (s.plugins.includes('motionex')) items.push({ label: 'Motion on whole object (Motionex)', icon: 'motion', onClick: () => applyMotionToObjects(ids) });
   if (s.plugins.includes('patternex')) {
     const placed = s.objects.filter((o) => ids.includes(o.id)).reduce((n, o) => n + (o.patternex?.placements.length ?? 0), 0);
-    items.push({ label: 'Artwork (Patternex)', sub: [
+    items.push({ label: 'Artwork (Patternex)', icon: 'artwork', sub: [
       { label: 'Add from pattern library…', onClick: () => { s.set({ selected: ids }); openPatternLibrary(); } },
       { label: `Edit inks and placement${placed ? ` (${placed})` : ''}`, disabled: !placed, onClick: () => editObjectArtwork(ids[0]) },
       { label: 'Remove artwork', disabled: !placed, onClick: () => s.updateObjects((o) => ({ ...o, patternex: undefined }), ids) },
     ] });
   }
-  items.push({ sep: true }, { label: 'Export as STL…', onClick: () => exportStl(ids) });
+  items.push({ sep: true }, { label: 'Export as STL…', icon: 'exportB', onClick: () => exportStl(ids) });
   return items;
 }
 
 function partItems(m: ContextMenuState): MenuItem[] {
   const s = useStore.getState();
   return [
-    { label: 'Delete part', kbd: 'Del', onClick: () => { s.set({ selected: [m.id!], selectedPart: m.partId! }); useStore.getState().removeSelected(); } },
-    { label: 'Move', kbd: 'M', onClick: () => s.set({ tool: 'move' }) },
-    { label: 'Rotate', kbd: 'R', onClick: () => s.set({ tool: 'rotate' }) },
-    { label: 'Scale', kbd: 'S', onClick: () => s.set({ tool: 'scale' }) },
-    { label: 'Edit settings', onClick: () => s.set({ processMode: 'objects' }) },
+    { label: 'Delete part', icon: 'deleteB', iconColor: '#D93025', kbd: 'Del', onClick: () => { s.set({ selected: [m.id!], selectedPart: m.partId! }); useStore.getState().removeSelected(); } },
+    { label: 'Move', icon: 'moveB', kbd: 'M', onClick: () => s.set({ tool: 'move' }) },
+    { label: 'Rotate', icon: 'rotateB', kbd: 'R', onClick: () => s.set({ tool: 'rotate' }) },
+    { label: 'Scale', icon: 'scaleB', kbd: 'S', onClick: () => s.set({ tool: 'scale' }) },
+    { label: 'Edit settings', icon: 'gear', onClick: () => s.set({ processMode: 'objects' }) },
   ];
 }
 
@@ -152,10 +161,11 @@ function MenuList({ items, x, y, onDone }: { items: MenuItem[]; x: number; y: nu
             onClick={() => { if (it.sub) return; it.onClick?.(); onDone(); }}>
             <span className="ctx-label">
               <span className="ctx-check">{it.checked ? '✓' : ''}</span>
+              <span className="ctx-icon">{it.shape ? <ShapeIcon kind={it.shape} size={18} /> : it.icon ? <Icon name={it.icon} size={18} style={it.iconColor ? { color: it.iconColor } : undefined} /> : null}</span>
               {it.swatch && <i className="ctx-swatch" style={{ background: it.swatch }} />}
               {it.label}
             </span>
-            {it.sub ? <span className="ctx-arrow">›</span> : it.kbd ? <kbd>{it.kbd}</kbd> : null}
+            {it.sub ? <span className="ctx-arrow"><Icon name="chevronRight" size={14} /></span> : it.kbd ? <kbd>{it.kbd}</kbd> : null}
           </button>
         ))}
       </div>

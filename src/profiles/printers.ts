@@ -344,4 +344,5 @@ PRINTERS.push(
 );
 
 export const printerById = (id: string) => PRINTERS.find((p) => p.id === id) ?? PRINTERS[0];
-export const printerName = (p: PrinterProfile) => `${p.vendor} ${p.model} ${p.nozzle} nozzle`;
+/** Display name; pass the nozzle in use (see effectiveNozzle) to show a chosen nozzle instead of the printer's own. */
+export const printerName = (p: PrinterProfile, nozzle: number = p.nozzle) => `${p.vendor} ${p.model} ${nozzle} nozzle`;
