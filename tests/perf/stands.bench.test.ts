@@ -2,13 +2,13 @@
 import { it } from 'vitest';
 import { slice } from '../../src/engine/slicer';
 import { resolveConfig } from '../../src/profiles/resolve';
-import { standsPlate } from './stands';
+import { holdersPlate, standsPlate } from './stands';
 
 const run = process.env.NEXSPIRO_BENCH ? it : it.skip;
 run('slices 9 wavy stands', () => {
   const n = Number(process.env.NEXSPIRO_N ?? 9);
   const cfg = resolveConfig({ printerId: 'bbl-p1s', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} });
-  const meshes = standsPlate(n);
+  const meshes = process.env.NEXSPIRO_SHAPE === 'wavy' ? standsPlate(n) : holdersPlate(n);
   const tris = meshes.reduce((a, m) => a + m.indices.length / 3, 0);
   const marks: string[] = [];
   let t0 = performance.now(), last = '';

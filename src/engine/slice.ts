@@ -19,6 +19,51 @@ const C: any = (ClipperLib as any).default ?? ClipperLib;
  */
 export type SlicingMode = 'regular' | 'even_odd' | 'close_holes';
 
+/** Points lying on the line through their neighbours (within 0.2 µm): the crossings of a flat wall's diagonal edges, which slide from layer to layer. */
+function dropCollinear(loop: Paths[number]): Paths[number] {
+  const out: Paths[number] = [];
+  for (const p of loop) {
+    while (out.length >= 2) {
+      const a = out[out.length - 2], b = out[out.length - 1];
+      const dx = p.X - a.X, dy = p.Y - a.Y, L2 = dx * dx + dy * dy;
+      const c = (b.X - a.X) * dy - (b.Y - a.Y) * dx;
+      if (L2 > 0 && c * c <= 4 * L2 && (b.X - a.X) * dx + (b.Y - a.Y) * dy >= 0) out.pop(); else break;
+    }
+    out.push(p);
+  }
+  return out.length >= 3 ? out : loop;
+}
+
+/** Douglas–Peucker on a closed integer loop: points that deviate less than tol (clipper units) from the line through their neighbours go. */
+function simplifyLoop(loop: Paths[number], tol: number): Paths[number] {
+  if (loop.length < 8 || tol <= 0) return loop;
+  // anchor on the extreme points (stable from layer to layer) by rotating the loop to start at the lowest X (then Y)
+  let s0 = 0;
+  for (let i = 1; i < loop.length; i++) if (loop[i].X < loop[s0].X || (loop[i].X === loop[s0].X && loop[i].Y < loop[s0].Y)) s0 = i;
+  if (s0) loop = loop.slice(s0).concat(loop.slice(0, s0));
+  const n = loop.length;
+  let far = 1, fd = -1;
+  for (let i = 1; i < n; i++) { const d = (loop[i].X - loop[0].X) ** 2 + (loop[i].Y - loop[0].Y) ** 2; if (d > fd || (d === fd && loop[i].X > loop[far].X)) { fd = d; far = i; } }
+  const keep = new Uint8Array(n);
+  keep[0] = 1; keep[far] = 1;
+  const t2 = tol * tol;
+  const stack: [number, number][] = [[0, far], [far, n]]; // the second run closes back on point 0 (index n)
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const A = loop[a], B = loop[b % n];
+    const dx = B.X - A.X, dy = B.Y - A.Y, L = dx * dx + dy * dy;
+    let md = -1, mi = -1;
+    for (let i = a + 1; i < b; i++) {
+      const px = loop[i].X - A.X, py = loop[i].Y - A.Y;
+      const d = L === 0 ? px * px + py * py : ((px * dy - py * dx) ** 2) / L;
+      if (d > md) { md = d; mi = i; }
+    }
+    if (md > t2) { keep[mi] = 1; stack.push([a, mi], [mi, b]); }
+  }
+  const out = loop.filter((_, i) => keep[i]);
+  return out.length >= 3 ? out : loop;
+}
+
 export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode = 'even_odd', tol = 0.005): Paths[] {
   const v = mesh.vertices, ix = mesh.indices;
   const nV = v.length / 3;
@@ -112,7 +157,7 @@ export function sliceMesh(mesh: IndexedMesh, planes: number[], mode: SlicingMode
       if (keys.length >= 3) {
         const loop = keys.map((k) => ({ X: Math.round(ptX.get(k)! * SCALE), Y: Math.round(ptY.get(k)! * SCALE) }));
         if (vote < 0) loop.reverse();
-        loops.push(loop);
+        loops.push(simplifyLoop(dropCollinear(loop), tol * SCALE));
       }
     }
     if (!loops.length) { result.push([]); continue; }

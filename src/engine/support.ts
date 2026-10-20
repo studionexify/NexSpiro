@@ -2,6 +2,7 @@
 import { difference, intersection, offset, opening, SCALE, union, bounds, toExPolygons, exToPaths, area } from './clipper';
 import ClipperLib from 'clipper-lib';
 import type { Path, Paths } from './types';
+import { pushAll } from './util';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -72,12 +73,12 @@ export function filterOverhangs(over: Paths[], slices: Paths[], lineWidth: numbe
         if (!difference(paths, reachable).length) continue;
       }
       if (opts.criticalOnly) {
-        if (!anchors.length) { keep.push(...paths); continue; } // floating island
+        if (!anchors.length) { pushAll(keep, paths); continue; } // floating island
         const tip = difference(paths, offset(below, opts.reach));
-        if (tip.length) keep.push(...tip);
+        if (tip.length) pushAll(keep, tip);
         continue;
       }
-      keep.push(...paths);
+      pushAll(keep, paths);
     }
     return keep.length ? union(keep) : [];
   });

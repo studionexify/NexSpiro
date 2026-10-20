@@ -1,6 +1,7 @@
 // Frozen classic engine of Advanced mode (as on main at 08b924a). Advanced mode slices with this engine
 // only, so Basic-engine changes never alter Advanced output and vice versa.
 // Stage 9–10: kinematic estimate, cooling slowdown and G-code emission.
+import { joinLines } from '../../util';
 import type { Config } from '../../../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from '../../types';
 import { FEATURE_ORDER } from '../../types';
@@ -278,8 +279,9 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
   out.push(`; filament used [cm3] = ${n(filamentMm * filArea / 1000, 2)}`);
   out.push(`; total filament cost = ${n(cost, 2)}`);
   out.push(`; total filament change = ${toolChanges}`);
-  let gcode = out.join('\n') + '\n';
-  gcode = gcode.replace('__TIME__', fmtTime(total)).replace('__FILMM__', n(filamentMm, 2)).replace('__FILG__', n(grams, 2));
+  const fill = (t: string) => t.replace('__TIME__', fmtTime(total)).replace('__FILMM__', n(filamentMm, 2)).replace('__FILG__', n(grams, 2));
+  for (let k = 0; k < Math.min(out.length, 400); k++) out[k] = fill(out[k]);
+  const gcode = joinLines(out);
 
   return {
     gcode,

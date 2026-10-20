@@ -18,6 +18,7 @@ import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../../.
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from '../../types';
 import { createAdvancedSession } from '../session';
+import { pushAll } from '../../util';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -303,7 +304,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           if (custom) {
             for (const ring of custom.loops) loops.push(ring.map((l) => ({ ...l })));
             if (adv?.wallsPost) adv.wallsPost(oi, i, ex, loops);
-            regInner.push(...custom.inner);
+            pushAll(regInner, custom.inner);
             islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: custom.inner, thin: [] });
             continue;
           }
@@ -320,7 +321,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
               if (ps.length) loops.push(ps.map((p) => ({ pts: pathToPoly(p), closed: true, feature, width: w, flow: 1 })));
               A = sn.wide.length ? offset(sn.wide, -sp) : [];
             }
-            regInner.push(...A);
+            pushAll(regInner, A);
             if (adv?.wallsPost) adv.wallsPost(oi, i, ex, loops);
             islands.push({ obj: oi, fil: reg.fil, ex, loops, inner: A, thin });
             continue;
@@ -338,12 +339,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
           }
           const inner = walls > 0 ? (loops.length === walls ? offset(ip, -boundary) : []) : ip;
           if (adv?.wallsPost && !vase) adv.wallsPost(oi, i, ex, loops);
-          regInner.push(...inner);
+          pushAll(regInner, inner);
           islands.push({ obj: oi, fil: reg.fil, ex, loops, inner, thin: [] });
         }
         const u = union(regInner);
         fmap.set(reg.fil, u);
-        objInner.push(...u);
+        pushAll(objInner, u);
       }
       inners.push(union(objInner));
       finners.push(fmap);
@@ -454,11 +455,11 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       meshes.forEach((m, o) => {
         if (!supTris[o].length) return;
         const enf = footprintsInBand(m as IndexedMesh, supTris[o], 1, zs[i] - hs[i], zs[i]);
-        if (enf.length) add.push(...difference(intersection(enf, objSlices[o][i]), objSlices[o][i - 1]));
+        if (enf.length) pushAll(add, difference(intersection(enf, objSlices[o][i]), objSlices[o][i - 1]));
         const blk = footprintsInBand(m as IndexedMesh, supTris[o], 2, zs[i] - hs[i], zs[i], 0.5);
         if (blk.length) sub = sub.concat(blk);
       });
-      if (encVol[i].length) add.push(...intersection(difference(layerSlices[i], layerSlices[i - 1]), union(encVol[i])));
+      if (encVol[i].length) pushAll(add, intersection(difference(layerSlices[i], layerSlices[i - 1]), union(encVol[i])));
       if (add.length) over[i] = union(over[i], add);
       if (sub.length && over[i].length) over[i] = difference(over[i], union(sub));
       if (blkVol[i].length) blocked[i] = union(blkVol[i]);
@@ -861,15 +862,15 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
               if (k === 0) seams.push([pts[0], pts[1]]);
               if (!perPoint && fuzzy !== 'none' && i > 0 && (fuzzy === 'all' || k === 0)) pts = fuzz(pts, onum(o, 'fuzzy_skin_thickness'), num('fuzzy_skin_point_distance'), rnd);
               const item: PathItem = { ...loop, pts, zs, widths, spiral: vase && i >= Math.round(num('bottom_shell_layers')) };
-              wallItems.push(...(i > 0 && !vase && !perPoint ? splitOverhang(item, lowerSupport) : [item]));
+              pushAll(wallItems, (i > 0 && !vase && !perPoint ? splitOverhang(item, lowerSupport) : [item]));
             }
           }
-          if (isl.thin.length) wallItems.push(...orderPaths(isl.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice() })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+          if (isl.thin.length) pushAll(wallItems, orderPaths(isl.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice() })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
           const isFill = byIsland.get(isl) ?? [];
           const fillOrdered = () => {
             const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
             const outp: PathItem[] = [];
-            for (const g of groups) outp.push(...orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+            for (const g of groups) pushAll(outp, orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
             return outp;
           };
           if (bool('is_infill_first')) { for (const it of fillOrdered()) extrudePath(it); for (const it of wallItems) extrudePath(it); }

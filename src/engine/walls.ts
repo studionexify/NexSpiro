@@ -3,6 +3,7 @@
 import { clipLines, difference, exToPaths, intersection, offset, opening, orientation, SCALE, union } from './clipper';
 import { medialAxis, splitNarrow, type VarPath } from './arachne';
 import type { ExPolygon, FeatureType, Path, Paths } from './types';
+import { pushAll } from './util';
 
 export interface WallItem {
   pts: number[];
@@ -107,7 +108,7 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
     const rings: Paths = [];
     polys.forEach((ps, k) => {
       const w = k === 0 ? p.wo : p.wi;
-      rings.push(...difference(offset(ps, w / 2), offset(ps, -w / 2)));
+      pushAll(rings, difference(offset(ps, w / 2), offset(ps, -w / 2)));
     });
     const covered = union([...rings, ...inner, ...thinCover(thin)]);
     const g = opening(difference(ip, covered), p.wo * 0.1);
@@ -185,7 +186,7 @@ function thinCover(items: WallItem[]): Paths {
   for (const t of items) {
     const path: Path = [];
     for (let k = 0; k < t.pts.length; k += 2) path.push({ X: Math.round(t.pts[k] * SCALE), Y: Math.round(t.pts[k + 1] * SCALE) });
-    out.push(...strokeOpen(path, t.width / 2));
+    pushAll(out, strokeOpen(path, t.width / 2));
   }
   return out;
 }
