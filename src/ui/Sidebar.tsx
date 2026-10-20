@@ -110,14 +110,13 @@ function PrinterCard() {
         </div>
         <div className="row nozzle-row">
           <Icon name="nozzle" size={16} style={{ color: 'var(--text-muted)' }} />
-          <span className="muted">Nozzle</span>
+          <span className="muted" title="Nozzle diameter (mm)">Ø</span>
           <div className="seg nozzle-seg" role="radiogroup" aria-label="Nozzle diameter">
             {NOZZLES.map((n) => (
               <button key={n} role="radio" aria-checked={nozzle === n} className={nozzle === n ? 'on' : ''} title={`${n} mm nozzle`}
                 onClick={() => { setMachine('nozzle_diameter', n === printer.nozzle ? undefined : n); markDirty(); }}>{n}</button>
             ))}
           </div>
-          <span className="unit">mm</span>
         </div>
       </Body>
       {edit && <PrinterModal onClose={() => setEdit(false)} />}
