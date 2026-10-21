@@ -111,3 +111,12 @@ Final state: **122 of 138 (target x profile) cells pass; 35 of 46 targets pass i
 | `harmonic_dome` (extreme), `sgd_slicing` (default) | One outlier move each (24 deg ramp; 6 % on one bridge segment) | Investigate the seam of two warps |
 | `plugin/bulnex` default | Preview shows one cycle while G-code repeats the body; bottom-surface beads of repeated copies have no declared entry | Decide whether preview should show all cycles |
 | 4 STATUS cells | Fixture cannot make the tech run in that profile (e.g. part too thin) | Larger fixtures |
+
+## Addendum: pins opt-in, vertical-plunge exemption, Bulnex job summary
+
+- `z_weave.pins` now defaults to `false` (opt-in). Pin beads are declared as round strands and never start inside a pin void.
+- The 90° rule exempts a pure-vertical plunge only if it passes a clear-void cone check (depth ≤ tipLen − margin; no deposited plastic inside the nozzle cone). 2% volumetric tolerance unchanged.
+- Bulnex: the preview and per-print stats describe one print; `SliceStats.repeat` carries cycles, per-cycle time, cool/push/re-heat, whole-job time and filament, shown in the print dialog, preview overlay, plate page and Bulnex panel.
+- Final grid: 141 cells, 127 passing, 14 failing (16 target/assertion pairs).
+- Open: `spatial_lattice` plunges are not in clear voids (genuine finding); `foam_control` undeclared expansion flow; `sgd_slicing` one ~6% bridge; `harmonic_dome` one 24° ramp; `plugin/bulnex` body-transform geometry gaps; `corner_overshoot`/`tangent_entry` Boundary, `co_molding`/`band_gap` Extreme still under triage.
+- Golden hashes (Advanced) re-pinned after verified behaviour changes; phase3 pin test now sets `pins: true`.
