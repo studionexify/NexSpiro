@@ -1,5 +1,6 @@
 // Floating pill under the engine toggle for the current selection (Prepare only).
 import { autoOrient } from '../../state/actions';
+import { repairObjects } from '../../state/meshTools';
 import { useStore, type Tool } from '../../state/store';
 import { useClearanceStatus } from '../../state/ui';
 import { Icon } from '../icons';
@@ -24,6 +25,7 @@ export function ObjectPill() {
       {T('rotate', 'Rotate', 'R')}
       {T('scale', 'Scale', 'S')}
       {T('face', 'Lay flat', 'F')}
+      {objects.some((o) => selected.includes(o.id) && o.openEdges > 0) && <button className="sh-ib" style={{ color: 'var(--ns-warn, var(--warning))' }} title="This model has open edges — close holes and repair the mesh" onClick={() => repairObjects(selected)}>Fix model</button>}
       <button className="sh-ib" title="Auto orient (O)" onClick={() => autoOrient()}>Auto-orient<kbd>O</kbd></button>
       <span className="sh-div" />
       <button className="sh-ib" title="Duplicate (Ctrl+D)" aria-label="Duplicate" onClick={duplicateSelected}><Icon name="copy" size={16} /></button>

@@ -397,6 +397,7 @@ export function paletteItems(): PaletteItem[] {
     } });
   }
   const act = (id: string, label: string, hint: string | undefined, run: () => void) => items.push({ id: `action:${id}`, section: 'Actions', label, hint, run: () => { close(); run(); } });
+  act('repair', 'Fix model (close holes, repair mesh errors)', 'selection or all', () => void import('./meshTools').then((m) => m.repairObjects()));
   act('slice', 'Slice plate', 'Ctrl+R', () => void import('./actions').then((m) => m.sliceAndPreview()));
   act('export', 'Export G-code', 'Ctrl+G', () => {
     if (!sliceSummary().ready) { useStore.getState().set({ toast: { kind: 'info', text: clearanceStatus().state === 'collision' ? clearanceStatus().message : 'Slice the plate first (Ctrl+R), then export or print it.' } }); return; }
