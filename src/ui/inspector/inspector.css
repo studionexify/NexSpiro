@@ -84,3 +84,11 @@
 .insp .grp { font-size: 11px; font-weight: 600; color: var(--i-t2); margin: 10px 0 2px; display: flex; align-items: center; gap: 6px; }
 .insp .grp::after { content: ''; flex: 1; height: 1px; background: var(--i-line); }
 .insp .empty-hint { margin: 0; }
+.sync-ams { font-size: 11px; font-weight: 600; color: var(--accent, #2f7cf6); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.sync-ams:hover { text-decoration: underline; }
+.sync-ams.disabled { color: var(--i-t3, #999); cursor: not-allowed; text-decoration: none; opacity: .7; }
+.insp .chip.user { border-style: dashed; }
+.insp .chip.user.mod::after { content: '•'; margin-left: 3px; color: var(--warn, #e0a030); }
+.up-list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.up-list .r { display: flex; align-items: center; gap: 6px; }
+.up-list .r input { flex: 1; min-width: 0; }

@@ -12,7 +12,8 @@ import { applyIntentPreset, INTENT_PRESETS, openEffect, setEffectEnabled, useAct
 import { ParamRow } from '../ParamRow';
 import { Icon } from '../icons';
 import { Modal } from '../Modals';
-import { FilamentCard, ObjectsCard, PART_HELP, PrinterCard, useProcessModel } from '../Sidebar';
+import { FilamentCard, ObjectsCard, PART_HELP, PresetOptions, PrinterCard, useProcessModel } from '../Sidebar';
+import { activeUserPreset, applyUserPreset, currentPresetValue, deleteUserPreset, isActiveUserPresetModified, renameUserPreset, saveUserPreset, selectPresetValue, updateUserPreset } from '../../state/userPresets';
 import { AdvancedPanel } from '../advanced/AdvancedPanel';
 import { useTools, type ResolvedTool } from '../advanced/hooks';
 import { HINTS } from './hints';
@@ -66,38 +67,79 @@ function Crumb({ objView }: { objView: boolean }) {
 
 function PresetSection() {
   const active = useActiveIntentPreset();
+  const s = useStore();
+  const up = activeUserPreset(s);
+  const upMod = isActiveUserPresetModified(s);
   const [saveOpen, setSaveOpen] = useState(false);
   return (
     <section>
-      <div className="h">Preset <a role="button" tabIndex={0} onClick={() => setSaveOpen(true)} title="Choose the process preset your changes build on">Save as…</a></div>
+      <div className="h">Preset
+        {up && upMod && <a role="button" tabIndex={0} onClick={() => updateUserPreset(up.id)} title={`Overwrite "${up.name}" with the current settings`}>Update preset</a>}
+        <a role="button" tabIndex={0} onClick={() => setSaveOpen(true)} title="Save the current settings as your own preset, or manage presets">Save as…</a>
+      </div>
       <div className="chips">
         {INTENT_PRESETS.map((p) => (
-          <button key={p.id} className={`chip ${active === p.id ? 'on' : ''}`} title={`${p.description}${p.engine === 'advanced' ? ' · uses the Physics Core (advanced engine)' : ''}`}
-            aria-pressed={active === p.id} onClick={() => applyIntentPreset(p.id)}>
+          <button key={p.id} className={`chip ${active === p.id && !up ? 'on' : ''}`} title={`${p.description}${p.engine === 'advanced' ? ' · uses the Physics Core (advanced engine)' : ''}`}
+            aria-pressed={active === p.id && !up} onClick={() => { applyIntentPreset(p.id); s.set({ userPresetId: null }); }}>
             {p.engine === 'advanced' && <span aria-hidden>⚛</span>}{p.label}
           </button>
         ))}
-        {!INTENT_PRESETS.length && <span className="muted-s">No presets available.</span>}
+        {s.userPresets.map((p) => {
+          const on = up?.id === p.id;
+          return (
+            <button key={p.id} className={`chip user ${on ? 'on' : ''} ${on && upMod ? 'mod' : ''}`} aria-pressed={on}
+              title={`Your preset (on ${PROCESS_PRESETS.find((x) => x.id === p.basePresetId)?.name ?? p.basePresetId}, ${Object.keys(p.overrides).length} change${Object.keys(p.overrides).length === 1 ? '' : 's'})${on && upMod ? ' · modified since applied' : ''}`}
+              onClick={() => applyUserPreset(p.id)}>{p.name}</button>
+          );
+        })}
+        {!INTENT_PRESETS.length && !s.userPresets.length && <span className="muted-s">No presets available.</span>}
       </div>
       {saveOpen && <PresetModal onClose={() => setSaveOpen(false)} />}
     </section>
   );
 }
 
-/** Process preset choice + reset — the existing preset handling (system presets; changes stay in the project). */
+/** Save the current settings as a user preset; choose the system preset; rename / overwrite / delete user presets. */
 function PresetModal({ onClose }: { onClose: () => void }) {
   const s = useStore();
   const n = Object.keys(s.overrides).length;
+  const [name, setName] = useState('');
+  const [names, setNames] = useState<Record<string, string>>({});
+  const save = () => { if (saveUserPreset(name)) setName(''); };
   return (
-    <Modal title="Process preset" onClose={onClose} footer={<>
+    <Modal title="Process presets" onClose={onClose} footer={<>
       <button className="btn-secondary btn-small" disabled={!n} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}>Discard {n || ''} change{n === 1 ? '' : 's'}</button>
       <span className="spacer" />
       <button className="btn-primary btn-small" onClick={onClose}>Done</button>
     </>}>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Your changes are layered on top of a system preset and are saved with the project (Ctrl+S).</p>
-      <select className="select" value={s.presetId} aria-label="Process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-        {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name} @{printerById(s.printerId).model}{n && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Save the current process settings ({PROCESS_PRESETS.find((p) => p.id === s.presetId)?.name ?? s.presetId}{n ? ` + ${n} change${n === 1 ? '' : 's'}` : ''}) as your own preset. Presets are kept on this computer and saved with the project.</p>
+      <div className="row" style={{ display: 'flex', gap: 6 }}>
+        <input className="input" style={{ flex: 1 }} placeholder="Preset name" aria-label="New preset name" value={name} autoFocus
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
+        <button className="btn-primary btn-small" disabled={!name.trim()} onClick={save}>Save</button>
+      </div>
+      <div className="muted-s" style={{ margin: '12px 0 4px' }}>Base preset</div>
+      <select className="select" value={currentPresetValue(s)} aria-label="Process preset" onChange={(e) => selectPresetValue(e.target.value)}>
+        <PresetOptions modified={n > 0} model />
       </select>
+      {s.userPresets.length > 0 && <>
+        <div className="muted-s" style={{ margin: '12px 0 0' }}>My presets</div>
+        <div className="up-list">
+          {s.userPresets.map((p) => {
+            const v = names[p.id] ?? p.name;
+            const commit = () => { if (v.trim() && v !== p.name) renameUserPreset(p.id, v); setNames(({ [p.id]: _, ...r }) => r); };
+            return (
+              <div key={p.id} className="r">
+                <input className="input" value={v} aria-label={`Rename ${p.name}`} onChange={(e) => setNames({ ...names, [p.id]: e.target.value })}
+                  onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} />
+                <button className="btn-secondary btn-small" title="Use this preset" onClick={() => applyUserPreset(p.id)}>Apply</button>
+                <button className="btn-secondary btn-small" title="Overwrite with the current settings" onClick={() => updateUserPreset(p.id)}>Update</button>
+                <button className="icon-btn" title="Delete preset" aria-label={`Delete ${p.name}`} onClick={() => { if (confirm(`Delete preset "${p.name}"?`)) deleteUserPreset(p.id); }}><Icon name="close" size={14} /></button>
+              </div>
+            );
+          })}
+        </div>
+      </>}
     </Modal>
   );
 }

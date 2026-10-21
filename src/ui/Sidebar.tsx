@@ -4,6 +4,10 @@ import { PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
 import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
+import { activeUserPreset, currentPresetValue, isActiveUserPresetModified, selectPresetValue } from '../state/userPresets';
+import { USER_PREFIX } from '../profiles/userPresets';
+import { amsUnavailableReason, syncAmsFromPrinter } from '../state/amsSync';
+import { useDevices } from '../state/devices';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
@@ -59,8 +63,8 @@ export function BaseProcessRow() {
     <div className="base-process">
       <Icon name="layers" size={15} />
       <span className="muted">Base process</span>
-      <select className="select" value={s.presetId} aria-label="Base process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-        {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}{n && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+      <select className="select" value={currentPresetValue(s)} aria-label="Base process preset" onChange={(e) => selectPresetValue(e.target.value)}>
+        <PresetOptions modified={n > 0} />
       </select>
       <button className="icon-btn" title="Layer height, walls, speeds… (shared with Basic mode)" onClick={() => setOpen(true)}><Icon name="edit" size={15} /></button>
       {open && <Modal title="Base process settings (shared with Basic mode)" onClose={() => setOpen(false)}><div className="base-process-modal"><ProcessCard /></div></Modal>}
@@ -125,6 +129,35 @@ export function PrinterCard() {
   );
 }
 
+/** System presets, then the user's saved presets ("user:<id>" values). `modified` marks the active entry. */
+export function PresetOptions({ modified, model }: { modified: boolean; model?: boolean }) {
+  const s = useStore();
+  const up = activeUserPreset(s);
+  const upMod = isActiveUserPresetModified(s);
+  const mark = (on: boolean, name: string, suffix = '') => `${on && model ? '* ' : ''}${name}${suffix}${on ? ' (modified)' : ''}`;
+  const at = model ? ` @${printerById(s.printerId).model}` : '';
+  return <>
+    <optgroup label="System presets">
+      {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{mark(!up && modified && p.id === s.presetId, p.name, at)}</option>)}
+    </optgroup>
+    {s.userPresets.length > 0 && (
+      <optgroup label="My presets">
+        {s.userPresets.map((p) => <option key={p.id} value={USER_PREFIX + p.id}>{mark(up?.id === p.id && upMod, p.name)}</option>)}
+      </optgroup>
+    )}
+  </>;
+}
+
+/** "Sync AMS" link: copies the connected printer's AMS trays into the filament slots; disabled with the reason otherwise. */
+export function SyncAmsLink() {
+  const reason = useDevices((d) => amsUnavailableReason(d));
+  return (
+    <a role="button" tabIndex={reason ? -1 : 0} className={`sync-ams ${reason ? 'disabled' : ''}`} aria-disabled={!!reason}
+      title={reason ?? 'Set the filament slots from the trays loaded in the connected printer\'s AMS'}
+      onClick={() => { if (!reason) syncAmsFromPrinter(); }} onKeyDown={(e) => { if (!reason && e.key === 'Enter') syncAmsFromPrinter(); }}>Sync AMS</a>
+  );
+}
+
 export function FilamentCard() {
   const { filaments, plate, printerId, set, markDirty } = useStore();
   const [edit, setEdit] = useState<number | null>(null);
@@ -151,6 +184,7 @@ export function FilamentCard() {
         <CardTitle icon="filamentB" label="Filament" closed={closed} onToggle={toggle} />
         <span className="spacer" />
         <span className="badge" title={ams ? 'Automatic filament changes (AMS)' : 'Manual filament changes (M600 pause)'}>{ams ? 'AMS' : <Icon name="edit" size={12} />}</span>
+        <SyncAmsLink />
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
           onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
@@ -271,8 +305,8 @@ export function ProcessCard() {
       <Body closed={cardClosed}>
       {!objMode && (
         <div className="row">
-          <select className="select" value={s.presetId} aria-label="Process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-            {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{modifiedCount && p.id === s.presetId ? '* ' : ''}{p.name} @{printerById(s.printerId).model}{modifiedCount && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+          <select className="select" value={currentPresetValue(s)} aria-label="Process preset" onChange={(e) => selectPresetValue(e.target.value)}>
+            <PresetOptions modified={modifiedCount > 0} model />
           </select>
           <button className="icon-btn" title="Reset all modified values" disabled={!modifiedCount} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" /></button>
         </div>
