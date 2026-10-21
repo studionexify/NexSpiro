@@ -1,6 +1,7 @@
 // Right-click menus on the 3D view: one for an empty spot on a plate,
 // one for an object (or a selection of objects) and one for a part.
 import { addHeightRange } from '../state/ops';
+import { repairObjects } from '../state/meshTools';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { arrange, autoOrient, importDialog } from '../state/actions';
 import {
@@ -83,6 +84,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Drop to bed', icon: 'dropBed', onClick: () => dropObjects(ids) },
     { label: 'Auto orient', icon: 'autoOrient', kbd: 'O', onClick: () => autoOrient(ids) },
     { label: 'Mirror', icon: 'mirror', sub: [{ label: 'Along X', icon: 'mirror', onClick: () => mirrorObjects(0, ids) }, { label: 'Along Y', icon: 'mirror', onClick: () => mirrorObjects(1, ids) }, { label: 'Along Z', icon: 'mirror', onClick: () => mirrorObjects(2, ids) }] },
+    { label: 'Fix model', icon: 'shield', iconColor: s.objects.some((o) => ids.includes(o.id) && o.openEdges > 0) ? '#E3A21A' : undefined, onClick: () => repairObjects(ids) },
     { label: 'Split to objects', icon: 'splitB', disabled: !one, onClick: () => one && splitObject(one.id) },
     { sep: true },
     { label: 'Filament', icon: 'filamentB', sub: s.filaments.map((f, k) => ({ label: `Filament ${k + 1}`, swatch: f.color, checked: !!one && (one.filament ?? 0) === k, onClick: () => setObjectFilament(k, ids) })) },

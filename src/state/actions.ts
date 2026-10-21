@@ -27,7 +27,7 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
         let o: SceneObject = { id: newId(), name: m.name, mesh: m.mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: m.openEdges };
         o = centreOnBed(o, s.printerId);
         added.push(o);
-        if (m.openEdges) s.set({ toast: { kind: 'warn', text: `${m.name}: mesh has ${m.openEdges} open edges and may not slice cleanly.` } });
+        if (m.openEdges) s.set({ toast: { kind: 'warn', text: `${m.name}: mesh has ${m.openEdges} open edges and may not slice cleanly. Fix it with Fix model.` } });
       }
     } catch (e: any) {
       s.set({ toast: { kind: 'error', text: e?.message ?? `Could not open ${f.name}` } });
