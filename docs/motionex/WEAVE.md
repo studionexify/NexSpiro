@@ -30,7 +30,7 @@ The panel estimates the number of changes, the extra time (the printer's `filame
 
 *Set up print settings* sets the following, giving one woven skin over a solid floor:
 - 1 wall, 0% infill, no top shell, 4 bottom layers;
-- spiral vase off, aligned seam, no scarf seam;
+- spiral vase off, aligned seam, no scarf seam, outer wall at 80 mm/s;
 - no prime tower when bleeding.
 
 Use a solid body (Plantex *Weave* presets, or any closed vase model).

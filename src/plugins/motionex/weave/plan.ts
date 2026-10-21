@@ -52,11 +52,13 @@ export function formatDuration(s: number): string {
 
 /**
  * Print settings weave mode needs: one wall, no infill or top skin (a single woven skin over a solid
- * floor), spiral vase off, aligned seam, no prime tower when bleeding colours.
+ * floor), spiral vase off, aligned seam, outer wall at 80 mm/s, no prime tower when bleeding colours.
  */
 export function weavePrintSettings(w: WeaveSettings): Record<string, string | number | boolean> {
   return {
     spiral_mode: false, wall_loops: 1, sparse_infill_density: 0, top_shell_layers: 0, bottom_shell_layers: 4,
-    seam_position: 'aligned', seam_slope_type: 'none', ...(w.mode === 'colour' && w.change.mode === 'bleed' ? { enable_prime_tower: false } : {}),
+    seam_position: 'aligned', seam_slope_type: 'none',
+    // pixel-sized moves: slower outer wall places each bead where the picture wants it
+    outer_wall_speed: 80, ...(w.mode === 'colour' && w.change.mode === 'bleed' ? { enable_prime_tower: false } : {}),
   };
 }

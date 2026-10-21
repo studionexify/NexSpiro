@@ -90,7 +90,7 @@ export function defaultWeave(): WeaveSettings {
     enabled: false, mode: 'colour',
     image: { w: 2, h: 2, px: [0, 1, 1, 0], name: 'Checker' },
     slots: [0, 1], layers_per_colour: 1, z_start: 1.2, z_end: 1e4, tiles_around: 1, fit_height: 'stretch', follow_curve: true,
-    depth_mm: 0.12, recess: 0.6, stitch: 0.25, shift_px_per_row: 0, smooth_mm: 0.25,
+    depth_mm: 0.12, recess: 0.4, stitch: 0.25, shift_px_per_row: 0, smooth_mm: 0.25,
     seam: { inward: true, angle_deg: 90, tuck_mm: 0.8 },
     change: { mode: 'purge', volume_mm3: 30 }, mono_style: 'texture',
     picture: { kind: 'motif', motif: 'checker', dither: 'floyd', levels: 2, pixel_mm: 1.2 },

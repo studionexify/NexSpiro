@@ -315,7 +315,7 @@ export function WeaveCard() {
 
       <Estimate w={w} />
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
-        <button className="btn-secondary btn-small" title="1 wall, no infill or top skin, solid floor, spiral vase off, aligned seam, no prime tower when bleeding" onClick={() => {
+        <button className="btn-secondary btn-small" title="1 wall, no infill or top skin, solid floor, spiral vase off, aligned seam, outer wall 80 mm/s, no prime tower when bleeding" onClick={() => {
           const s = useStore.getState();
           for (const [k, v] of Object.entries(weavePrintSettings(w))) s.setOverride(k, v);
         }}>Set up print settings</button>
