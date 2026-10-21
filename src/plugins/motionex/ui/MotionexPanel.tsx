@@ -18,6 +18,9 @@ import type { CollisionMode } from '../core/toolhead';
 import { patternexMotionApps, px } from '../../patternex/ui/PatternexPanel';
 import { regionColor, regionList, regionTriangles } from '../../patternex/ui/preview';
 import { openMotionexEditor } from './motionexEditor';
+import { WeaveCard, weaveColours } from './WeavePanel';
+import { buildWeavePreview } from '../weave/preview';
+import { loadWeave } from '../index';
 import './editor.css';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -58,18 +61,25 @@ export function motionexPreview(): PreviewLines | null {
     const c = new THREE.Color(SURFACE_COLORS[surfaceOf(a) - 1]);
     apps.push({ app: a, brush, surface: surfaceOf(a), color: [c.r, c.g, c.b] });
   }
-  if (!apps.length) return null;
+  const weaveOn = mx.weave.enabled;
+  if (!apps.length && !weaveOn) return null;
   const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
     .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
-  lastPreview = buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId), 0.25, mx.previewView);
-  return lastPreview;
+  lastPreview = apps.length ? buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId), 0.25, mx.previewView) : null;
+  if (!weaveOn) return lastPreview;
+  // the woven picture, coloured by the filament that shows at each pixel
+  const woven = buildWeavePreview(objs, mx.weave, Number(currentConfig().layer_height) || 0.2, weaveColours().map((c) => [c[0] / 255, c[1] / 255, c[2] / 255]));
+  if (!woven) return lastPreview;
+  if (!lastPreview) return { ...woven, layers: 0, view: mx.previewView, range: [0, 0], events: 0 };
+  const cat = (a: Float32Array, b: Float32Array) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+  return { ...lastPreview, positions: cat(lastPreview.positions, woven.positions), colors: cat(lastPreview.colors, woven.colors) };
 }
 /** The last preview built, for the legend in the Motion tab. */
 export let lastPreview: PreviewLines | null = null;
 
 /** Slicer config, or undefined when no motion is switched on. */
 export function motionexConfig(printerId: string): MotionexConfig | undefined {
-  return mx.applications.some((a) => a.enabled) ? toConfig(mx, printerId) : undefined;
+  return mx.applications.some((a) => a.enabled) || mx.weave.enabled ? toConfig(mx, printerId) : undefined;
 }
 
 const MAX_SURFACES = SURFACE_COLORS.length;
@@ -78,7 +88,7 @@ const MAX_SURFACES = SURFACE_COLORS.length;
 export function motionexProject() {
   const used = new Set(mx.applications.map((a) => a.brush_id));
   return {
-    applications: structuredClone(mx.applications), options: { ...mx.options }, collisionMode: mx.collisionMode,
+    applications: structuredClone(mx.applications), options: { ...mx.options }, collisionMode: mx.collisionMode, weave: structuredClone(mx.weave),
     brushes: [...used].map((id) => mx.library.get(id)).filter((b) => !!b).map((b) => structuredClone(b)),
   };
 }
@@ -90,6 +100,7 @@ export function loadMotionexProject(data: unknown) {
   mx.applications = d.applications ?? [];
   if (d.options) mx.options = { ...mx.options, ...d.options };
   if (d.collisionMode) mx.collisionMode = d.collisionMode;
+  mx.weave = loadWeave(d.weave);
   changed();
 }
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
@@ -215,6 +226,7 @@ export function MotionexPanel() {
       </section>
       {!picking && <Placement a={act} />}
       {act && !picking && <MoreOptions a={act} first={apps.indexOf(act) === 0} />}
+      {!picking && <WeaveCard />}
       <Report />
       {editing !== undefined && <EditorHost startId={editing} onClose={() => setEditing(undefined)} />}
     </div>

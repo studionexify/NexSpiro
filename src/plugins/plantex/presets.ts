@@ -3,7 +3,7 @@
 import type { PlantexSpec, ProfilePoint, RefPlane, SectionSpec, TextureLayer } from './model';
 import { DEFAULT_SECTION } from './model';
 
-export type PresetCategory = 'Planter' | 'Vase' | 'Bowl' | 'Tall';
+export type PresetCategory = 'Planter' | 'Vase' | 'Bowl' | 'Tall' | 'Weave';
 export interface Preset { id: string; category: PresetCategory; spec: Partial<PlantexSpec> }
 
 const P = (...pts: [number, number][]): ProfilePoint[] => pts.map(([z, r]) => ({ z, r }));
@@ -103,6 +103,13 @@ export const PRESETS: Preset[] = [
   { id: 'tall-oval', category: 'Tall', spec: { name: 'Oval Sleeve', kind: 'vase', vaseMode: true, height: 200, profile: TALLCYL, section: S({ kind: 'circle', aspect: 1.6 }), textures: [T({ kind: 'waves', depth: 1.4, countU: 4, countV: 18, shape: 0.2 })] } },
   { id: 'tall-square-twist', category: 'Tall', spec: { name: 'Square Twist', kind: 'vase', vaseMode: true, height: 200, profile: P([0, 30], [0.5, 34], [1, 28]), section: S({ kind: 'superellipse', exponent: 6 }), twist: 180 } },
   { id: 'morph-star', category: 'Tall', spec: { name: 'Star to Circle', kind: 'vase', vaseMode: true, height: 190, profile: P([0, 34], [1, 30]), section: { ...S({ kind: 'star', n: 6, depth: 0.25 }), morphTo: S({ kind: 'circle' }) }, twist: 90 } },
+  // ---- weave bodies: plain closed walls for Motionex weave (the picture is woven in while slicing)
+  { id: 'weave-amphora', category: 'Weave', spec: { name: 'Weave Amphora', kind: 'vase', vaseMode: true, height: 170, profile: P([0, 30], [0.08, 31], [0.4, 50], [0.75, 42], [0.9, 31], [1, 31]) } },
+  { id: 'weave-flared', category: 'Weave', spec: { name: 'Weave Flared Column', kind: 'vase', vaseMode: true, height: 180, profile: P([0, 38], [0.68, 38], [0.76, 40], [0.88, 50], [1, 60]), section: S({ kind: 'superellipse', exponent: 2.6 }) } },
+  { id: 'weave-twist-ovoid', category: 'Weave', spec: { name: 'Weave Twisted Ovoid', kind: 'vase', vaseMode: true, height: 200, profile: P([0, 30], [0.35, 46], [0.75, 40], [1, 22]), section: S({ kind: 'superellipse', exponent: 3, aspect: 0.78 }), twist: 70, twistEase: 'ease' } },
+  { id: 'weave-saucer', category: 'Weave', spec: { name: 'Weave Saucer Column', kind: 'vase', vaseMode: true, height: 150, profile: P([0, 62], [0.06, 72], [0.12, 68], [0.2, 36], [1, 36]) } },
+  { id: 'weave-jar', category: 'Weave', spec: { name: 'Weave Ginger Jar', kind: 'vase', vaseMode: true, height: 190, profile: P([0, 34], [0.4, 54], [0.8, 44], [0.92, 34], [1, 34]) } },
+  { id: 'weave-cylinder', category: 'Weave', spec: { name: 'Weave Cylinder', kind: 'vase', vaseMode: true, height: 160, profile: P([0, 40], [1, 40]) } },
 ];
 
 /** Texture library: named recipes the user drops onto a design. */
