@@ -129,7 +129,7 @@ describe('surface passes (#8, #26, #25)', () => {
 
 describe('interlocking (#7, #19)', () => {
   it('weaves inner walls and infill with an alternating Z wave and drives Z-pins into the core', () => {
-    const { out, rep } = adv(indexed(box(90, 90, 0, 30, 30, 12), 'b'), 'bbl-x1c', ['z_weave'], 'structural');
+    const { out, rep } = adv(indexed(box(90, 90, 0, 30, 30, 12), 'b'), 'bbl-x1c', ['z_weave'], 'structural', {}, { z_weave: { pins: true } }); // pins are opt-in
     const r = rep.get('z_weave')!;
     expect(r.status).toBe('adapted'); // Z-axis limits on the X1C
     expect(Number(r.stats!.woven_points)).toBeGreaterThan(1000);

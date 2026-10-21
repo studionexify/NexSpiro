@@ -670,12 +670,14 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (len < 1e-5) continue;
         run += len;
         const zz = (it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : zTop) + (zoff ? zoff[k / 2] : 0);
+        // volumetric conservation: E follows the true 3-D segment length (spiral and curved-layer paths change Z)
+        const len3 = Math.hypot(len, zz - curZ);
         if (varW) {
           const sw = (varW[k / 2 - 1] + varW[k / 2]) / 2, sxs = xsOf(sw);
           const sv = Math.min(v * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
-          ops.push({ k: 'move', x, y, z: zz, e: len * (sxs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow, f: sv, feature: it.feature, w: sw, h: hEff, travel: false });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * (sxs / filArea) * (fl.flowRatio || 1) * it.flow * objFlow, f: sv, feature: it.feature, w: sw, h: hEff, travel: false });
         } else
-        ops.push({ k: 'move', x, y, z: zz, e: len * ePerMm, f: v, feature: it.feature, w: it.width, h: hEff, travel: false });
+        ops.push({ k: 'move', x, y, z: zz, e: len3 * ePerMm, f: v, feature: it.feature, w: it.width, h: hEff, travel: false });
         px = x; py = y; curZ = zz;
       }
       lastFeature = it.feature;

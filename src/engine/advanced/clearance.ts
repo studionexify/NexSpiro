@@ -2,8 +2,10 @@
 // order, keeps height maps of printed plastic (finished layers, and the current layer with a lag), and
 // tests every move that leaves its layer's plane against the nozzle cone and the head's volumes
 // (heater block, fan duct, carriage). Offending points are lifted (up to half a layer) or reported.
-import type { LayerOps } from './classic/gcode';
+import type { LayerOps, Op } from './classic/gcode';
+import type { Move } from './runs';
 import type { ToolheadProfile } from '../../plugins/motionex/core/toolhead';
+import { rescaleE } from './runs';
 
 /** worst: deepest collision found; worstLeft: deepest one left unresolved. */
 export interface ClearanceReport { checked: number; collisions: number; raised: number; unresolved: number; worst: number; worstLeft: number }
@@ -132,7 +134,11 @@ export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { 
           const maxLift = Math.max(op.h * (op.feature === 'sparse_infill' || op.feature === 'internal_solid_infill' ? 1 : 0.5), -(op.dev ?? 0) + op.h * 0.25);
           if (fix && floor - op.z <= maxLift + 1e-4) {
             const lift = floor - op.z;
-            op.e *= (op.h + lift) / Math.max(op.h, 1e-6);
+            // the bead keeps its bottom and gains the lift in thickness: declared height and E follow the same cross-section
+            if (op.feature !== 'bridge') { // a bridge is a round strand in mid-air: raised, it keeps its section
+              op.e = rescaleE(op.e, op.w, op.h, op.h + lift);
+              op.h = +(op.h + lift).toFixed(5);
+            }
             op.z = +(op.z + lift).toFixed(4);
             rep.raised++;
           } else { rep.unresolved++; rep.worstLeft = Math.max(rep.worstLeft, floor - op.z); }
@@ -144,4 +150,106 @@ export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { 
     for (let i = 0; i < printed.length; i += 3) done.stamp(printed[i], printed[i + 1], printed[i + 2]);
   }
   return rep;
+}
+
+/**
+ * After the head-clearance lifts, a bead can sit steeper than the machine's slope limit against its neighbour
+ * (a lifted bead between unlifted ones). Raise the lower neighbours - raising only adds clearance - until every
+ * extruding step within a continuous run is at most `maxSlopeDeg`. A bead is never raised by more than the
+ * clearance pass could lift it (half a layer; a whole layer in infill). Raised beads keep their bottom and gain
+ * the lift in thickness, and E follows the new cross-section. Returns steps still too steep.
+ */
+export function limitRamp(layers: LayerOps[], maxSlopeDeg: number): { raised: number; left: number } {
+  const tan = Math.tan((Math.min(maxSlopeDeg, 80) * Math.PI) / 180) * 0.98;
+  let raised = 0, left = 0;
+  for (const L of layers) {
+    const ops = L.ops;
+    let i = 0;
+    while (i < ops.length) {
+      const first = ops[i];
+      const skip = (o: Op) => o.k !== 'move' || o.travel || o.e <= 0 || !!o.noClear || !!o.fixed || o.feature === 'ironing';
+      if (skip(first) || i === 0) { i++; continue; }
+      let si = i - 1; // a de-retract or comment between the travel and the first bead does not move the head
+      while (si >= 0 && ops[si].k !== 'move' && !(ops[si].k === 'raw' && (ops[si] as { resetPos?: boolean }).resetPos)) si--;
+      const start = ops[si];
+      if (!start || start.k !== 'move') { i++; continue; }
+      // continuous run of extruding moves from i
+      const idx: number[] = [];
+      let j = i;
+      while (j < ops.length) { const o = ops[j]; if (!skip(o)) { idx.push(j); j++; } else break; }
+      i = j;
+      const n = idx.length;
+      const ms = idx.map((k) => ops[k] as Move);
+      const px = [start.x, ...ms.map((m) => m.x)], py = [start.y, ...ms.map((m) => m.y)];
+      const z0 = [start.z, ...ms.map((m) => m.z)];
+      const z = z0.slice();
+      let startUp = 0;
+      const dxy = ms.map((_, q) => Math.hypot(px[q + 1] - px[q], py[q + 1] - py[q]));
+      const cap = ms.map((m) => m.h * (m.feature === 'sparse_infill' || m.feature === 'internal_solid_infill' ? 1 : 0.5));
+      const allow = (q: number) => Math.max(0, tan * dxy[q] - 0.0012); // G-code coordinates are rounded to 1 µm: keep clear of the limit on short steps
+      const room = (q: number) => z0[q + 1] + cap[q] - z[q + 1];
+      for (let pass = 0; pass < 4; pass++) {
+        let changed = false;
+        for (let q = 0; q < n; q++) { // forward: bead q+1 follows q
+          const need = z[q] - allow(q) - z[q + 1];
+          if (need > 1e-5) { const up = Math.min(need, Math.max(0, room(q))); if (up > 0) { z[q + 1] += up; changed = true; } }
+        }
+        for (let q = n - 1; q >= 0; q--) { // backward: bead q (index q in z, a moved bead unless q == 0) follows q+1
+          const need = z[q + 1] - allow(q) - z[q];
+          if (need > 1e-5 && q >= 1) { const up = Math.min(need, Math.max(0, room(q - 1))); if (up > 0) { z[q] += up; changed = true; } }
+          // the run starts from a travel end: that point may simply go higher, so a climb is eased in from there
+          else if (need > 1e-5 && q === 0 && start.travel && dxy[0] > 0.05) { z[0] += need; changed = true; startUp = Math.max(startUp, z[0] - z0[0]); }
+        }
+        if (!changed) break;
+      }
+      for (let q = 0; q < n; q++) if (Math.atan2(Math.abs(z[q + 1] - z[q]), dxy[q]) > Math.atan(tan / 0.98) + 1e-6) left++;
+      let any = false;
+      for (let q = 0; q < n; q++) {
+        const m = ms[q], up = z[q + 1] - z0[q + 1];
+        if (up < 1e-5) continue;
+        any = true;
+        if (m.feature !== 'bridge') { // a bridge is a round strand in mid-air: raised, it keeps its section
+          m.e = rescaleE(m.e, m.w, m.h, m.h + up); // the length change is settled once by restoreLengths
+          m.h = +(m.h + up).toFixed(5);
+        }
+        m.z = +z[q + 1].toFixed(4);
+        raised++;
+      }
+      void any;
+      if (startUp > 1e-6) start.z = +(start.z + startUp).toFixed(4);
+    }
+  }
+  return { raised, left };
+}
+
+/** True 3-D length from each extruding move back to the move before it, taken before passes that move beads in Z. */
+export function snapshotLengths(layers: LayerOps[]): Map<Op, number> {
+  const snap = new Map<Op, number>();
+  for (const L of layers) {
+    let prev: Op | null = null;
+    for (const o of L.ops) {
+      if (o.k === 'raw' && o.resetPos) prev = null;
+      if (o.k !== 'move') continue;
+      if (prev && prev.k === 'move' && !o.travel && o.e > 0) snap.set(o, Math.hypot(o.x - prev.x, o.y - prev.y, o.z - prev.z));
+      prev = o;
+    }
+  }
+  return snap;
+}
+
+/** After beads were lifted, scale each bead's E by the change of its true 3-D length so volume stays conserved. */
+export function restoreLengths(layers: LayerOps[], snap: Map<Op, number>): void {
+  for (const L of layers) {
+    let prev: Op | null = null;
+    for (const o of L.ops) {
+      if (o.k === 'raw' && o.resetPos) prev = null;
+      if (o.k !== 'move') continue;
+      const was = snap.get(o);
+      if (was !== undefined && prev && prev.k === 'move') {
+        const now = Math.hypot(o.x - prev.x, o.y - prev.y, o.z - prev.z);
+        if (was > 1e-9) o.e *= now / was;
+      }
+      prev = o;
+    }
+  }
 }

@@ -11,7 +11,7 @@ import { resolveTechs, type ResolvedTech } from './techs';
 import type { AdvancedConfig, AdvancedReport, TechId, TechReport, ParamValue } from './types';
 import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
-import { clearancePass, type ClearanceReport } from './clearance';
+import { clearancePass, limitRamp, restoreLengths, snapshotLengths, type ClearanceReport } from './clearance';
 import { difference } from '../clipper';
 import { pushAll } from '../util';
 
@@ -118,6 +118,9 @@ export interface AdvancedSession {
   report(): AdvancedReport;
 }
 
+/** Tech parameters that no module reads yet (see AUDIT_WIRING.md). */
+const UNWIRED_PARAMS: [TechId, string][] = [['sdf_frep', 'tpms'], ['sdf_frep', 'cell'], ['sdf_frep', 'grade'], ['conformal_layers', 'layers']];
+
 export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: AdvancedConfig, filaments: FilamentSlot[], warn: (m: string) => void): AdvancedSession {
   const t0 = now();
   const num = (k: string) => Number(cfg[k] ?? 0);
@@ -155,8 +158,14 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
       return ctx.shared.get(key) as T;
     },
   };
+  // parameters with no reader in this engine build: say so when the user changed them, instead of ignoring them silently
+  for (const [id, key] of UNWIRED_PARAMS) {
+    const t = techs.get(id);
+    const spec = t?.def.params.find((p) => p.key === key);
+    if (t?.enabled && spec && t.params[key] !== spec.def) ctx.warn(`${t.def.name}: "${spec.label}" is not implemented in this engine build; the setting is ignored.`);
+  }
   const active = MODULES.filter((m) => ctx.on(m.id));
-  const timed = <T>(id: TechId, fn: () => T): T => {
+  const timed =<T>(id: TechId, fn: () => T): T => {
     const s = now();
     try { return fn(); } finally { const r = ctx.report(id); r.ms = (r.ms ?? 0) + (now() - s); }
   };
@@ -207,10 +216,13 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     setLayers(z, h) { ctx.layerZ = z; ctx.layerH = h; },
     post(layers, c) {
       // curved layers back to real space first, then every geometry pass, then the head-clearance check
-      if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
+      if (warp) { const n = unwarpLayers(layers, warp, 0.01, 0.3, caps.maxSlopeDeg); if (n) ctx.nonPlanar = true; }
       for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
       if (ctx.nonPlanar) {
+        const lengths = snapshotLengths(layers);
         clearance = clearancePass(layers, caps.toolhead, caps.bed, true, 3, debugCollision);
+        limitRamp(layers, caps.maxSlopeDeg);
+        restoreLengths(layers, lengths);
         if (clearance.raised) ctx.warn(`Head clearance: lifted ${clearance.raised} non-planar points so the ${caps.toolhead.name} clears the print.`);
         if (clearance.unresolved) ctx.warn(`Head clearance: ${clearance.unresolved} non-planar points may touch the print with the ${caps.toolhead.name} (worst ${clearance.worstLeft.toFixed(2)} mm). Check the toolhead shape in Machine capabilities.`);
       }

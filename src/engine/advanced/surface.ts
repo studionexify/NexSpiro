@@ -4,6 +4,7 @@
 import type { LayerOps, Op } from './classic/gcode';
 import type { FeatureType } from '../types';
 import type { PartAnalysis } from './analysis';
+import { rescaleE } from './runs';
 
 type Move = Extract<Op, { k: 'move' }>;
 
@@ -31,6 +32,8 @@ export interface SnapOptions {
   reach?: number;
   /** Split moves so the bead follows the surface at this spacing (mm). */
   step?: number;
+  /** Steepest climb or dive the nozzle may make between pieces (deg): the machine's head-clearance slope. */
+  rampDeg?: number;
   /** Only ever lower beads (anti-aliasing the outer edge), never raise them. */
   lowerOnly?: boolean;
 }
@@ -52,13 +55,16 @@ export function snapToSurface(layers: LayerOps[], parts: PartAnalysis[], o: Snap
       const len = Math.hypot(op.x - px, op.y - py);
       const n = Math.max(1, Math.ceil(len / step));
       const z0 = pz;
+      // E per mm of true 3-D path, then each piece takes its own 3-D length and its own bead height
+      const dens = op.e / Math.max(Math.hypot(len, op.z - z0), 1e-9);
+      let qz = z0;
       for (let s = 1; s <= n; s++) {
         const t = s / n;
         const x = px + (op.x - px) * t, y = py + (op.y - py) * t;
         const zl = z0 + (op.z - z0) * t;
         const h = op.h;
         const hit = surfaceAbove(parts, x, y, zl - h * (0.5 + reach), h * (2 * reach + 0.5));
-        let z = zl, e = op.e / n;
+        let z = zl, nhDecl = h;
         // only where this layer's band contains the surface: elsewhere the bead is interior or below it
         const prior = op.dev ?? 0;
         let dev = prior;
@@ -67,11 +73,20 @@ export function snapToSurface(layers: LayerOps[], parts: PartAnalysis[], o: Snap
           const dz = Math.max(-0.5 * h - prior, Math.min(0.5 * h - prior, hit.z - zl));
           const nh = Math.max(o.minH, h + dz);
           z = zl - h + nh;
-          e *= nh / h;
+          nhDecl = nh;
           dev = prior + (z - zl);
           if (Math.abs(z - zl) > 1e-4) moved++;
         }
-        const m: Move = { ...op, x, y, z: +z.toFixed(4), e, noArc: true, dev };
+        if (o.rampDeg !== undefined && !Number.isNaN(qz)) {
+          // never climb or dive faster than the head allows: a bead entering the surface eases in over several pieces
+          const lim = Math.tan((Math.min(o.rampDeg, 80) * Math.PI) / 180) * 0.95 * Math.hypot(len / n, 0);
+          const zc = Math.max(qz - lim, Math.min(qz + lim, z));
+          if (zc !== z) { nhDecl = Math.max(o.minH, nhDecl + (zc - z)); z = zc; }
+        }
+        const zr = +z.toFixed(4);
+        const e = rescaleE(dens * Math.hypot(len / n, zr - qz), op.w, h, nhDecl);
+        qz = zr;
+        const m: Move = { ...op, x, y, z: zr, e, h: nhDecl, noArc: true, dev };
         out.push(m);
       }
       px = op.x; py = op.y; pz = op.z;

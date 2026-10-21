@@ -28,6 +28,8 @@ export interface HanexMove {
   f: number;
   /** Flow multiplier applied (curvature modulation × flowRatio). */
   flow: number;
+  /** Nominal bead cross-section (mm²) before the flow multiplier: sheet step × sheet height, or the rim bead. */
+  area?: number;
   /** Wavefront index (D = k·Δd) for wave moves. */
   k?: number;
 }
@@ -191,7 +193,7 @@ export function planComponent(comp: OverhangComponent, p: HanexProfile, opts: Pl
       const flow = p.flowRatio * mod;
       const vol = area * flow * len;
       volume += vol;
-      moves.push({ x: pl[i][0], y: pl[i][1], kind, e: vol / Af, f: kind === 'rim' ? p.rimSpeed : p.waveSpeed, flow, k });
+      moves.push({ x: pl[i][0], y: pl[i][1], kind, e: vol / Af, f: kind === 'rim' ? p.rimSpeed : p.waveSpeed, flow, k, area });
     }
     if (kind === 'wave') waveLength += polylineLength(pl);
     cur = pl[pl.length - 1];
@@ -201,7 +203,7 @@ export function planComponent(comp: OverhangComponent, p: HanexProfile, opts: Pl
     if (cur && dist(cur, q) <= LINK_MAX * w && segmentInside(cur, q, linkable)) {
       const len = dist(cur, q), vol = sheetArea * p.flowRatio * len;
       volume += vol; linkLength += len;
-      moves.push({ x: q[0], y: q[1], kind: 'link', e: vol / Af, f: p.waveSpeed, flow: p.flowRatio });
+      moves.push({ x: q[0], y: q[1], kind: 'link', e: vol / Af, f: p.waveSpeed, flow: p.flowRatio, area: sheetArea });
       cur = q;
     } else travelTo(q);
   };

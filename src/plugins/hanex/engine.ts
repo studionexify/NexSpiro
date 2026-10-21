@@ -12,6 +12,7 @@ import { pointInRings, type Ring } from './core/geom';
 import { planLayer } from './core/layer';
 import { faceBand, maxWaveFaceAngle, triggerWidth, validateProfile, type HanexProfile } from './core/profile';
 import type { RegionPlan } from './core/plan';
+import { widthForArea } from '../../engine/advanced/runs';
 
 export interface HanexConfig {
   profile: HanexProfile;
@@ -169,7 +170,12 @@ function postToolpath(layers: LayerOps[], c: HanexConfig, ctx: Parameters<Engine
           continue;
         }
         if (r && p.retractLength > 0) { ops.push({ k: 'retract', len: -p.retractLength, speed: p.retractSpeed }); r = false; }
-        ops.push({ k: 'move', x: m.x, y: m.y, z, e: m.e, f: m.f, feature: WAVE_FEATURE, w: p.lineWidth, h, travel: false, fixed: true });
+        // declared bead = the sheet this move lays down (step x sheet height, at the move's flow relative to the print's
+        // own flow ratio), so preview and E agree; the sheet is not a layer-height line
+        const base = (Number(ctx.cfg.filament_flow_ratio) || 1) * (Number(ctx.cfg.print_flow_ratio) || 1);
+        const sh = p.sheetHeight;
+        const wDecl = m.area !== undefined ? widthForArea((m.area * m.flow) / base, sh) : p.lineWidth;
+        ops.push({ k: 'move', x: m.x, y: m.y, z, e: m.e, f: m.f, feature: WAVE_FEATURE, w: wDecl, h: m.area !== undefined ? sh : h, travel: false, fixed: true });
       }
     }
     // the z-hop lift keeps x/y: fill them in from the previous move

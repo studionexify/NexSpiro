@@ -7,6 +7,7 @@
 import type { LayerOps, Op } from '../classic/gcode';
 import { moveTime } from '../classic/gcode';
 import { smoothstep } from '../grid';
+import { flowPatch } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 
 const T0 = 205, T1 = 250;
@@ -77,6 +78,7 @@ export const foamControl: TechModule = {
       const X = expansion(Tn, xmax);
       const op = layers[st.layer].ops[st.op] as Extract<Op, { k: 'move' }>;
       op.e /= X;
+      op.w = flowPatch(op, 1 / X).w; // declared as the unexpanded melt bead: the filament really is 1/X of the nominal volume
       xlo = Math.min(xlo, X); xhi = Math.max(xhi, X); scale += 1 / X;
     }
     // 5) write the commands (from the end so indices stay valid)

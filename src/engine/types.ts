@@ -168,6 +168,21 @@ export interface SliceStats {
   byFeature: Partial<Record<FeatureType, { time: number; filamentMm: number; grams?: number }>>;
   /** Filament purged during filament changes (flush), per slot in grams. */
   flushGrams?: number;
+  /**
+   * The file prints the plate several times (Bulnex: print, eject, repeat). Every other number above and the preview
+   * describe ONE print; this is the whole job.
+   */
+  repeat?: {
+    cycles: number;
+    partsPerCycle: number;
+    /** One print, from the figures above (seconds). */
+    perCycleSeconds: number;
+    /** Cool-down wait, push strokes and re-heat added around each print (seconds, per cycle). */
+    coolSeconds: number; pushSeconds: number; reheatSeconds: number;
+    /** Whole job: every print plus every cool-down/push, and every re-heat between prints (the last cycle does not re-heat). */
+    totalSeconds: number;
+    totalGrams: number; totalMm: number; totalCost: number;
+  };
 }
 
 export interface SliceOutput {

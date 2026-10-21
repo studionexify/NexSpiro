@@ -8,7 +8,7 @@ export const conformalLayers: TechModule = {
   post(s, layers) {
     const r = s.report('conformal_layers');
     const moved = snapToSurface(layers, s.parts, {
-      features: new Set(['top_surface', 'ironing']), maxSlope: Math.max(1, Math.min(89, 90 - 1)), minH: 0.04, reach: 0.5,
+      features: new Set(['top_surface', 'ironing']), maxSlope: Math.max(1, Math.min(89, s.caps.maxSlopeDeg)), minH: 0.04, reach: 0.5, rampDeg: s.caps.maxSlopeDeg,
     });
     if (!moved) { r.status = 'idle'; r.reason = 'No sloped top skins.'; return; }
     s.nonPlanar = true;

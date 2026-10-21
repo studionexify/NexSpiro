@@ -4,7 +4,7 @@
 // node, and so on along each row; then the horizontal struts of the new level are laid. The cell height
 // is capped by the nozzle tip length, so the heater block never reaches a strut printed one level down.
 import type { Op } from '../classic/gcode';
-import type { Move } from '../runs';
+import { widthForArea, type Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 
 export const spatialLattice: TechModule = {
@@ -15,16 +15,20 @@ export const spatialLattice: TechModule = {
     const base = 3;
     const tip = s.caps.toolhead.nozzle.tip_len;
     const cell = Math.max(1, Math.min(s.pnum('spatial_lattice', 'cell'), tip - 0.4));
-    const pitch = Math.max(cell, s.caps.toolhead.nozzle.tip_len); // horizontal node pitch
+    // node pitch: the next node's post top (one cell above the nozzle) must lie outside the nozzle cone
+    const nz = s.caps.toolhead.nozzle, wBead = s.num('line_width') || s.caps.nozzle * 1.05;
+    const pitch = Math.max(cell, nz.tip_len, nz.tip_diameter / 2 + cell * Math.tan((nz.cone_angle_deg * Math.PI) / 180) + s.caps.toolhead.margin + wBead + 0.1);
     const flowK = s.pnum('spatial_lattice', 'flow'), v = s.pnum('spatial_lattice', 'speed'), dwell = s.pnum('spatial_lattice', 'dwell');
     const w = s.num('line_width') || s.caps.nozzle * 1.05;
     const fd = s.filaments[0]?.diameter ?? 1.75;
-    const ePerMm = ((Math.PI * (w / 2) ** 2) / (Math.PI * (fd / 2) ** 2)) * flowK;
+    const ePerMm = ((Math.PI * (w / 2) ** 2) / (Math.PI * (fd / 2) ** 2)) * flowK * (s.filaments[0]?.flowRatio || 1);
+    const hRound = w * 0.9999; // round strand of diameter w: declared bead (w, hRound) has area pi w^2 / 4
+    const wDecl = widthForArea(flowK * Math.PI * (w / 2) ** 2, hRound); // over-extrusion `flow` shows as a wider bead
     const z0 = layers[base - 1].z;
     const zTop = layers[layers.length - 1].z;
     const levels = Math.floor((zTop - z0) / cell);
     if (levels < 1) { r.status = 'idle'; r.reason = 'Part too short for a truss.'; return; }
-    const tmpl: Move = { k: 'move', x: 0, y: 0, z: 0, e: 0, f: v, feature: 'inner_wall', w, h: cell, travel: false, noClear: true, noArc: true };
+    const tmpl: Move = { k: 'move', x: 0, y: 0, z: 0, e: 0, f: v, feature: 'inner_wall', w: wDecl, h: hRound, travel: false, noClear: true, noArc: true };
     let posts = 0, diagonals = 0, struts = 0;
     const inside = (x: number, y: number, z: number) => s.parts.some((a) => -a.sdf.sdf.sample(x, y, z) >= 0.5);
     const a0 = s.parts[0].sdf;

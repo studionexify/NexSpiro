@@ -2,7 +2,7 @@
 // the passes that make printed surfaces follow the true CAD surface between layer steps.
 import type { LayerOps, Op } from '../classic/gcode';
 import { snapToSurface } from '../surface';
-import { moveLike, type Move } from '../runs';
+import { beadArea, flowPatch, moveLike, rescaleE, type Move } from '../runs';
 import type { TechModule } from '../session';
 import { PlasticMap, headFloor } from '../clearance';
 import { isolines, maskDistance, smoothLoop, loopLength, type RasterRegion } from '../offsets';
@@ -18,7 +18,7 @@ export const subvoxelAA: TechModule = {
     // the nozzle tip spans the neighbour, so raising inner beads would plough the next one over
     const moved = snapToSurface(layers, s.parts, {
       features: new Set(['outer_wall', 'overhang_wall']),
-      maxSlope: s.pnum('subvoxel_aa', 'maxSlope'), minH: s.pnum('subvoxel_aa', 'minH'), reach: 0.5, lowerOnly: true,
+      maxSlope: Math.min(s.pnum('subvoxel_aa', 'maxSlope'), s.caps.maxSlopeDeg), minH: s.pnum('subvoxel_aa', 'minH'), reach: 0.5, rampDeg: s.caps.maxSlopeDeg, lowerOnly: true,
     });
     if (!moved) { r.status = 'idle'; r.reason = 'No walls under shallow slopes.'; return; }
     s.nonPlanar = true;
@@ -47,19 +47,20 @@ export const perimeterFeathering: TechModule = {
     layers.forEach((L, li) => {
       if (li < 2 || s.helicalLayers.has(li)) return;
       const out: Op[] = [];
-      let px = NaN, py = NaN;
+      let px = NaN, py = NaN, pz = NaN, qx = NaN, qy = NaN;
       for (const op of L.ops) {
         if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; }
         if (op.k !== 'move' || op.travel || op.e <= 0 || op.feature !== 'outer_wall' || Number.isNaN(px)) {
-          if (op.k === 'move') { px = op.x; py = op.y; }
+          if (op.k === 'move') { px = op.x; py = op.y; pz = op.z; qx = op.x; qy = op.y; }
           out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
+        const dens = op.e / Math.max(Math.hypot(len, op.z - (Number.isNaN(pz) ? op.z : pz)), 1e-9); // E per mm of the incoming bead's true 3-D length
         const n = Math.max(1, Math.ceil(len / 0.6));
         for (let k = 1; k <= n; k++) {
           const t = k / n, x = px + (op.x - px) * t, y = py + (op.y - py) * t;
           const nn = normalAt(s.parts, x, y, op.z - op.h / 2);
-          let z = op.z, ox = 0, oy = 0, e = op.e / n;
+          let z = op.z, ox = 0, oy = 0, hNew = op.h;
           // rounded sides leaning in (up-facing, 30°–80° from horizontal): shingle the bead down and out
           const prior = op.dev ?? 0;
           if (nn && nn[2] > 0.17 && nn[2] < 0.87) {
@@ -70,12 +71,15 @@ export const perimeterFeathering: TechModule = {
             const cot = hl / nn[2]; // horizontal shift per mm of drop along the true surface
             const shift = Math.min(dz * cot, op.w * 0.5);
             ox = (nn[0] / hl) * shift; oy = (nn[1] / hl) * shift;
-            z = op.z - dz; e *= 1 + dz / op.h;
+            z = op.z - dz; hNew = op.h + dz; // the shingled bead is thicker by the drop
             if (dz > 1e-4) moved++;
           }
-          out.push(moveLike(op, x + ox, y + oy, z, e, { dev: prior + (z - op.z) }));
+          // volume conserved on the sloped bead: E follows the true 3-D length and the declared (thicker) height
+          const seg3 = Math.hypot(x + ox - qx, y + oy - qy, z - (Number.isNaN(pz) ? op.z : pz)); // from where the previous piece really ended (shingling shifts x, y)
+          out.push(moveLike(op, x + ox, y + oy, z, rescaleE(dens * seg3, op.w, op.h, hNew), { dev: prior + (z - op.z), h: hNew }));
+          pz = z; qx = x + ox; qy = y + oy;
         }
-        px = op.x; py = op.y;
+        px = op.x; py = op.y; pz = op.z;
       }
       L.ops = out;
     });
@@ -112,7 +116,7 @@ export const conformalIroning: TechModule = {
     const spacing = s.pnum('conformal_ironing', 'spacing'), flow = s.pnum('conformal_ironing', 'flow'), speed = s.pnum('conformal_ironing', 'speed');
     const h = s.num('layer_height') || 0.2, w = s.num('line_width') || s.caps.nozzle;
     const fd = s.filaments[0]?.diameter ?? 1.75;
-    const ePerMm = (w * h * flow) / (Math.PI * (fd / 2) ** 2);
+    const ePerMm = ((beadArea(w, h) * flow) / (Math.PI * (fd / 2) ** 2)) * (s.filaments[0]?.flowRatio || 1);
     // everything printed, for the head check of the final pass
     const done = new PlasticMap(s.caps.bed.x + 2, s.caps.bed.y + 2), none = new PlasticMap(4, 4);
     let top = 0;
@@ -141,7 +145,7 @@ export const conformalIroning: TechModule = {
         return i >= 0 && j >= 0 && i < reg.r.nx && j < reg.r.ny && reg.r.mask[q] ? reg.z[q] : NaN;
       };
       for (const loop of loops) {
-        let drawing = false, lx = 0, ly = 0;
+        let drawing = false, lx = 0, ly = 0, lz = 0;
         const lift = () => { ops.push({ k: 'retract', len: retract, speed: rs }, travel(lx, ly, safe)); drawing = false; };
         const n = loop.length / 2;
         for (let k = 0; k <= n; k++) {
@@ -154,10 +158,10 @@ export const conformalIroning: TechModule = {
             ops.push(travel(x, y, safe), travel(x, y, z + 0.4), travel(x, y, z, 10), { k: 'retract', len: -retract, speed: rs });
             drawing = true; passes++;
           } else {
-            ops.push(moveLike(tmpl, x, y, z, Math.hypot(x - lx, y - ly) * ePerMm, { f: speed }));
+            ops.push(moveLike(tmpl, x, y, z, Math.hypot(x - lx, y - ly, z - lz) * ePerMm, { f: speed, ...flowPatch({ w: w, h: tmpl.h }, flow * beadArea(w, h) / Math.max(beadArea(w, tmpl.h), 1e-12)) }));
             points++;
           }
-          lx = x; ly = y;
+          lx = x; ly = y; lz = z;
         }
         if (drawing) lift();
       }

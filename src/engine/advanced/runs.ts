@@ -81,3 +81,16 @@ export function signedArea(x: number[], y: number[]): number {
 /** Template move with the run's properties. */
 export const moveLike = (m: Move, x: number, y: number, z: number, e: number, patch: Partial<Move> = {}): Move =>
   ({ ...m, x, y, z: +z.toFixed(4), e, t: undefined, noArc: true, ...patch });
+
+/** Cross-section of a bead of width w and height h (rounded-edge model the slicer uses for E). */
+export const beadArea = (w: number, h: number): number => (w > h ? (w - h) * h + Math.PI * (h / 2) ** 2 : w * h);
+/** Continuous version of beadArea for rescaling: round at w == h (thick bridges), ellipse when taller than wide. */
+const contArea = (w: number, h: number): number => (h <= w ? (w - h) * h + Math.PI * (h / 2) ** 2 : (Math.PI / 4) * w * h);
+/** E of a bead whose height changes from h0 to h1 at the same width and 3-D length (volume ∝ cross-section). */
+export const rescaleE = (e: number, w: number, h0: number, h1: number): number => (contArea(w, h0) > 0 ? (e * contArea(w, h1)) / contArea(w, h0) : e);
+
+/** Inverse of beadArea at fixed height: the width whose bead has cross-section `area`. */
+export const widthForArea = (area: number, h: number): number => (area >= Math.PI * (h / 2) ** 2 ? (area - Math.PI * (h / 2) ** 2) / h + h : area / h);
+/** Declared geometry for a bead printed at `flow` x the nominal volume (a taper): same height, effective width. */
+export const flowPatch = (m: { w: number; h: number }, flow: number): { w: number } =>
+  ({ w: m.w > 0 && flow > 0 ? widthForArea(flow * beadArea(m.w, m.h), m.h) : m.w });

@@ -102,6 +102,7 @@ export function ProjectPage() {
             <span className="k">Plates</span><span className="v">{plates.length}</span>
             <span className="k">Objects</span><span className="v">{objects.length}</span>
             {stats && <><span className="k">Plate {slice.plate + 1} time</span><span className="v">{Math.floor(stats.timeSeconds / 3600)}h {Math.round((stats.timeSeconds % 3600) / 60)}m</span></>}
+            {stats?.repeat && <><span className="k">Plate {slice.plate + 1} whole job ({stats.repeat.cycles}×)</span><span className="v">{Math.floor(stats.repeat.totalSeconds / 3600)}h {Math.round((stats.repeat.totalSeconds % 3600) / 60)}m</span></>}
           </div>
           <h3>Filaments</h3>
           {filaments.map((f, i) => {

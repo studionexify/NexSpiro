@@ -1,7 +1,7 @@
 // #7 Sinusoidal Z-weaving & Z-pinning and #19 topological knot braiding: interlocking between layers
 // and between neighbouring walls.
 import type { Op } from '../classic/gcode';
-import { moveLike, type Move } from '../runs';
+import { moveLike, rescaleE, type Move } from '../runs';
 import type { TechModule, WallLoop } from '../session';
 import type { PartAnalysis } from '../analysis';
 
@@ -74,21 +74,27 @@ export const zWeave: TechModule = {
       const stackIdx = Math.floor((li - 3) / N);
       const sites = pins ? pinSitesCache(stackIdx, () => pinSites(layers[Math.min(layers.length - 1, 3 + stackIdx * N + N - 1)].z)) : [];
       const out: Op[] = [];
-      let px = NaN, py = NaN;
+      let px = NaN, py = NaN, pz = NaN;
       for (const op of L.ops) {
         if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; }
         if (op.k !== 'move') { out.push(op); continue; }
-        if (op.travel || op.e <= 0 || Number.isNaN(px)) { px = op.x; py = op.y; out.push(op); continue; }
+        if (op.travel || op.e <= 0 || Number.isNaN(px)) { px = op.x; py = op.y; pz = op.z; out.push(op); continue; }
         if (!WOVEN.has(op.feature)) {
           if (tops.has(op.feature) || op.feature === 'outer_wall') offs.set(op.x, op.y, 0);
-          px = op.x; py = op.y; out.push(op); continue;
+          px = op.x; py = op.y; pz = op.z; out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
+        const dens = op.e / Math.max(Math.hypot(len, op.z - (Number.isNaN(pz) ? op.z : pz)), 1e-9); // E per mm of the incoming bead's true 3-D length
         const n = Math.max(1, Math.ceil(len / (lambda / 8)));
+        let lx = px, ly = py; // end of the previous piece
+        const inVoid = (x: number, y: number) => sites.some(([sx, sy]) => (sx - x) ** 2 + (sy - y) ** 2 < (rv + w / 2) ** 2);
         for (let q = 1; q <= n; q++) {
           const t = q / n, x = px + (op.x - px) * t, y = py + (op.y - py) * t;
-          // pins: no infill inside the void circles of this stack
-          if (op.feature === 'sparse_infill' && sites.length && sites.some(([sx, sy]) => (sx - x) ** 2 + (sy - y) ** 2 < (rv + w / 2) ** 2)) {
+          // pins: no infill inside the void circles of this stack. A piece is a bead from the previous piece's end to
+          // its own end, so both ends must be outside the void - otherwise the bead would start inside it.
+          const bx = lx, by = ly;
+          lx = x; ly = y;
+          if (op.feature === 'sparse_infill' && sites.length && (inVoid(x, y) || inVoid(bx, by))) {
             out.push({ ...op, x, y, e: 0, travel: true, feature: 'travel', t: undefined });
             continue;
           }
@@ -97,12 +103,16 @@ export const zWeave: TechModule = {
           const below = offs.get(x, y);
           const height = Math.max(0.3 * L.h, L.h + off - below);
           offs.set(x, y, off);
-          const m = moveLike(op, x, y, op.z + off, (op.e / n) * (height / L.h));
+          // volumetric conservation: the bead follows the sloped segment, so E scales with its true 3-D length
+          const seg3 = Math.hypot(len / n, op.z + off - (Number.isNaN(pz) ? op.z : pz));
+          // ...and the bead's declared height is the real local height (layer + off - below), so the preview and E agree
+          const m = moveLike(op, x, y, op.z + off, rescaleE(dens * seg3, op.w, op.h, height), { h: height });
+          pz = op.z + off;
           if (m.f > vMax) { m.f = vMax; slowed++; }
           out.push(m);
           woven++;
         }
-        px = op.x; py = op.y;
+        px = op.x; py = op.y; pz = op.z + (sign * amp * Math.sin(k * op.x) * Math.sin(k * op.y));
       }
       if (stackTop && sites.length) {
         // fill each void: dive into it, extrude while rising to the layer top
@@ -115,7 +125,10 @@ export const zWeave: TechModule = {
           out.push({ k: 'move', x, y, z: +(zl + 0.4).toFixed(4), e: 0, f: s.num('travel_speed') || 200, feature: 'travel', w: 0, h: L.h, travel: true });
           out.push({ k: 'move', x, y, z: +(zl - dive).toFixed(4), e: 0, f: 5, feature: 'travel', w: 0, h: L.h, travel: true, fixed: true });
           out.push({ k: 'retract', len: -retract, speed: rs });
-          const pin: Move = { k: 'move', x, y, z: +zl.toFixed(4), e: vol / filA, f: Math.max(0.5, Math.min(2, (s.caps.maxFlow * 0.3) / (Math.PI * rv * rv))), feature: 'sparse_infill', w: 2 * rv, h: N * L.h, travel: false, fixed: true, noArc: true };
+          // the column is a volume dump: pi rv^2 over the filled stack, laid down while the tip rises `dive`. Declared as the round
+          // bead of that average cross-section so the preview and the E check agree (the plunge itself is judged by the clear-void rule)
+          const dBead = 2 * Math.sqrt(vol / (Math.PI * Math.max(dive, 1e-6)));
+          const pin: Move = { k: 'move', x, y, z: +zl.toFixed(4), e: (vol / filA) * (s.filaments[0]?.flowRatio || 1), f: Math.max(0.5, Math.min(2, (s.caps.maxFlow * 0.3) / (Math.PI * rv * rv))), feature: 'sparse_infill', w: dBead, h: dBead * 0.9999, travel: false, fixed: true, noArc: true };
           out.push(pin);
           out.push({ k: 'raw', text: 'G4 P300 ; let the pin settle', time: 0.3 });
           pinCount++;
@@ -175,6 +188,12 @@ export const knotBraiding: TechModule = {
       for (let i = 0; i < n; i++) { const j = (i + 1) % n; area += P[i * 2] * P[j * 2 + 1] - P[j * 2] * P[i * 2 + 1]; }
       const left = area > 0 ? 1 : -1;
       const A: number[] = [], B: number[] = [], zA: number[] = [], zB: number[] = [];
+      // the over-crossing bump must not climb steeper than the head clearance allows: widen it, and if that is not
+      // enough (th would exceed the whole crossing), lower it. Max slope = liftH * om / th <= tanCap.
+      const tanCap = Math.tan((Math.min(s.caps.maxSlopeDeg, 80) * Math.PI) / 180) * 0.95;
+      let liftH = lift * h, th = 0.35;
+      th = Math.max(th, (liftH * om) / tanCap);
+      if (th > 1) { th = 1; liftH = tanCap / om; }
       for (let i = 0; i < n; i++) {
         const i0 = (i - 1 + n) % n, i1 = (i + 1) % n;
         const tx = P[i1 * 2] - P[i0 * 2], ty = P[i1 * 2 + 1] - P[i0 * 2 + 1], tl = Math.hypot(tx, ty) || 1;
@@ -184,8 +203,8 @@ export const knotBraiding: TechModule = {
         // strand A starts on ring 1, strand B on ring 2; they swap sides through each crossing
         A.push(mx - nx * (spacing / 2) * c, my - ny * (spacing / 2) * c);
         B.push(mx + nx * (spacing / 2) * c, my + ny * (spacing / 2) * c);
-        const bump = Math.max(0, 1 - Math.abs(c) / 0.35);
-        zA.push(bump * lift * h); zB.push(bump * lift * h);
+        const bump = Math.max(0, 1 - Math.abs(c) / th);
+        zA.push(bump * liftH); zB.push(bump * liftH);
       }
       // alternate which strand fills which slot every layer: a strand over on layer n is under on n+1
       const swap = layer % 2 === 1;

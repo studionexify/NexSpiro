@@ -24,6 +24,7 @@ import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
+import type { BulnexReport } from '../plugins/bulnex/model';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -1131,6 +1132,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         run += len;
         const idx = k / 2;
         const zz = it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : it.depth ? zTop - (it.depth[idx] ?? 0) * h : zTop;
+        // volumetric conservation: E follows the true 3-D segment length (spiral / non-planar paths change Z along the move)
+        const len3 = Math.hypot(len, zz - curZ);
         const feat = it.feats?.[idx] ?? it.feature;
         const segFlow = it.flows?.[idx] ?? 1;
         let sv = v;
@@ -1140,9 +1143,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (varW) {
           const sw = (varW[idx - 1] + varW[idx]) / 2, sxs = xsOf(sw);
           const vv = Math.min(sv * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
-          ops.push({ k: 'move', x, y, z: zz, e: len * (sxs / filArea) * flowMul * segFlow, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * (sxs / filArea) * flowMul * segFlow, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow });
         } else if (segFlow > 1e-6) {
-          ops.push({ k: 'move', x, y, z: zz, e: len * ePerMm * segFlow, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow, ...(it.depth ? { noArc: true } : {}) });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * ePerMm * segFlow, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow, ...(it.depth ? { noArc: true } : {}) });
         } else {
           ops.push({ k: 'move', x, y, z: zz, e: 0, f: sv, feature: 'travel', w: 0, h, travel: true });
         }
@@ -1199,7 +1202,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       curObj = o;
       const rg = regions[i][o];
       const sw = olw(o, i, 'internal_solid_infill_line_width'), twid = olw(o, i, 'top_surface_line_width'), spw = olw(o, i, 'sparse_infill_line_width');
-      const w0 = lw0('initial_layer_line_width'), wb = lw0('initial_layer_infill_line_width') || w0;
+      const w0 = lw0('initial_layer_line_width'), wb = (Number(cfg.initial_layer_infill_line_width) || w0);
       const overlap = onum(o, i, 'infill_wall_overlap') / 100;
       const solidAngle = solidDir + (i % 2 ? 90 : 0);
       const jobs: IslandJob[] = objIslands.map((isl) => ({ isl, fills: [], wallFil: featFil(o, i, 'wall', isl.fil), gapFil: featFil(o, i, 'wall', isl.fil) }));
@@ -1806,6 +1809,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
+  // a program that repeats the print (Bulnex) is longer than the single print the preview and stats describe: say so
+  const bx1 = pluginRun.reports.bulnex as BulnexReport | undefined;
+  if (bx1 && !bx1.calibration && bx1.cycles >= 1 && bx1.row) {
+    const st = res.stats, n = bx1.cycles;
+    st.repeat = {
+      cycles: n, partsPerCycle: bx1.row.parts, perCycleSeconds: st.timeSeconds,
+      coolSeconds: bx1.coolS, pushSeconds: bx1.pushS, reheatSeconds: bx1.reheatS,
+      totalSeconds: n * (st.timeSeconds + bx1.coolS + bx1.pushS) + (n - 1) * bx1.reheatS,
+      totalGrams: st.filamentGrams * n, totalMm: st.filamentMm * n, totalCost: st.filamentCost * n,
+    };
+  }
   return { ...res, warnings, pluginReports: pluginRun.reports };
 }
 

@@ -61,7 +61,7 @@ export function BulnexPanel() {
   const sug = tpl ? suggestRow(tpl, s.gap, s.rotate) : null;
   const rep = st.slice.result?.pluginReports?.bulnex as BulnexReport | undefined;
   const mat = materialOf(filamentById(st.filaments[0]?.presetId ?? 'generic-pla').type);
-  const cycleS = rep && st.slice.result ? st.slice.result.stats.timeSeconds + rep.cycleOverheadS : 0;
+  const rp = st.slice.result?.stats.repeat;
 
   return (
     <div className="mx-panel">
@@ -115,7 +115,11 @@ export function BulnexPanel() {
         {!rep ? <p className="mx-muted">Slice to check the parts. Problems are warnings — the file is still written.</p> : <>
           {rep.checks.map((k, i) => <p key={i} className={`mx-muted${k.level === 'warn' ? ' px-warn' : ''}`}>{k.level === 'warn' ? '⚠ ' : '✓ '}{k.text}</p>)}
           {rep.row && !c.calibration && <p className="mx-muted">Push line X {rep.row.x.toFixed(1)} mm, from Y {rep.row.startY.toFixed(1)} mm to the front edge at Z {rep.row.z.toFixed(1)} mm.</p>}
-          {cycleS > 0 && !c.calibration && <p className="mx-muted">≈ {fmtH(cycleS)} per cycle · {rep.cycles} cycles ≈ <b>{fmtH(cycleS * rep.cycles)}</b> · {rep.cycles * (rep.row?.parts ?? 0)} parts.</p>}
+          {rp && !c.calibration && <div className="mx-muted">
+            <p><b>This file prints {rp.cycles}× ({rp.cycles * rp.partsPerCycle} part{rp.cycles * rp.partsPerCycle === 1 ? '' : 's'}).</b> The preview shows one print.</p>
+            <p>One print ≈ {fmtH(rp.perCycleSeconds)} · cool-down {fmtH(rp.coolSeconds)} · push {fmtH(rp.pushSeconds)} · re-heat {fmtH(rp.reheatSeconds)} (not after the last print).</p>
+            <p>Whole job ≈ <b>{fmtH(rp.totalSeconds)}</b> · filament ≈ {(rp.totalMm / 1000).toFixed(1)} m / {rp.totalGrams.toFixed(0)} g · cost {rp.totalCost.toFixed(2)}.</p>
+          </div>}
         </>}
       </section>
 

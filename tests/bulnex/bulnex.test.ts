@@ -53,6 +53,23 @@ describe('bulnex g-code', () => {
     // the eject comes before the end G-code
     expect(g.lastIndexOf('all cycles done')).toBeLessThan(g.indexOf('NexSpiro end G-code'));
   });
+  it('reports the whole job (cycles, time, filament) while stats and preview stay one print', () => {
+    const cfg = { ...DEFAULT_BULNEX, cycles: 4, passes: 2, coolWaitMin: 2 };
+    const out = slice([mesh(box(120, 20, 0, 16, 16, 12))], cfgFor(), () => {}, { plugins: { bulnex: cfg } });
+    const r = out.stats.repeat!;
+    expect(r.cycles).toBe(4);
+    expect(r.partsPerCycle).toBe(1);
+    expect(r.perCycleSeconds).toBe(out.stats.timeSeconds);
+    expect(r.coolSeconds).toBe(120);
+    // four prints with their cool-down and push, three re-heats (none after the last)
+    expect(r.totalSeconds).toBeCloseTo(4 * (out.stats.timeSeconds + r.coolSeconds + r.pushSeconds) + 3 * r.reheatSeconds, 6);
+    expect(r.totalGrams).toBeCloseTo(out.stats.filamentGrams * 4, 6);
+    // the preview holds one print only
+    expect(out.layers.length).toBe(out.stats.layerCount);
+    // no repeat block without the plugin or in calibration mode
+    expect(slice([mesh(box(120, 20, 0, 16, 16, 12))], cfgFor()).stats.repeat).toBeUndefined();
+    expect(slice([mesh(box(120, 20, 0, 16, 16, 12))], cfgFor(), () => {}, { plugins: { bulnex: { ...cfg, calibration: true } } }).stats.repeat).toBeUndefined();
+  });
   it('flags a ring the nozzle would pass through', () => {
     // two separate walls with a gap on the push line
     const a = box(110, 20, 0, 6, 16, 12), b = box(130, 20, 0, 6, 16, 12);

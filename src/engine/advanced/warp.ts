@@ -4,6 +4,7 @@
 import type { LayerOps, Op } from './classic/gcode';
 import type { Warp } from './session';
 import type { TechId } from './types';
+import { rescaleE } from './runs';
 
 /** First layers stay flat on the bed: the warp is zero up to FLAT and fades in over RAMP above it. */
 export const FLAT = 0.45, RAMP = 1.2;
@@ -117,19 +118,37 @@ export class SumWarp implements Warp {
  * curved layer bends away from the straight chord by more than `tol`, so planar regions keep their
  * long moves; extrusion is scaled by the local layer-thickness ratio. Returns the non-planar move count.
  */
-export function unwarpLayers(layers: LayerOps[], w: Warp, tol = 0.01, minSeg = 0.3): number {
+export function unwarpLayers(layers: LayerOps[], w: Warp, tol = 0.01, minSeg = 0.3, maxSlopeDeg = 90): number {
   let curved = 0;
+  const tanMax = Math.tan((Math.min(maxSlopeDeg, 89) * Math.PI) / 180) * 0.95;
   for (const L of layers) {
     const out: Op[] = [];
     let px = NaN, py = NaN, pz = NaN, pdz = 0;
+    // last emitted point in real space: each piece's E follows its true 3-D length there
+    let qx = NaN, qy = NaN, qz = NaN;
     for (const op of L.ops) {
-      if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; pz = NaN; }
+      if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; pz = NaN; qx = NaN; }
       if (op.k !== 'move') { out.push(op); continue; }
       const dz1 = w.dz(op.x, op.y, op.z);
       const emitTo = (x: number, y: number, zw: number, dz: number, share: number) => {
-        const r = op.travel ? 1 : Math.max(0.05, w.ratio(x, y, zw));
+        const r = op.travel || op.feature === 'bridge' ? 1 : Math.max(0.05, w.ratio(x, y, zw)); // a bridge strand is round: layer stretch does not thicken it
         if (Math.abs(dz) > 1e-4) curved++;
-        out.push({ ...op, x, y, z: +(zw + dz).toFixed(4), e: op.e * share * r, h: op.h * r, ...(Math.abs(dz) > 1e-4 ? { noArc: true } : {}) });
+        let zr = +(zw + dz).toFixed(4);
+        // a short piece never climbs or dives faster than the machine's head-clearance slope, whatever the warp does between its ends
+        if (!op.travel && op.e > 0 && !Number.isNaN(qx) && maxSlopeDeg < 90) {
+          const lim = tanMax * Math.hypot(x - qx, y - qy);
+          zr = +Math.max(qz - lim, Math.min(qz + lim, zr)).toFixed(4);
+        }
+        // volume conserved: the piece is as long as it is in real space (warping stretches it) and its bead is r x as thick
+        let e = op.e * share * r;
+        if (!op.travel && !Number.isNaN(qx) && !Number.isNaN(px) && op.e > 0) {
+          const opLen = Math.max(Math.hypot(op.x - px, op.y - py, op.z - pz), 1e-9);
+          e = rescaleE((op.e * Math.hypot(x - qx, y - qy, zr - qz)) / opLen, op.w, op.h, op.h * r);
+        }
+        // a bead piece shorter than 5 µm in XY is a duplicate point of the path (rounding), not a move
+        if (!op.travel && op.e > 0 && !Number.isNaN(qx) && Math.hypot(x - qx, y - qy) < 0.005) return;
+        qx = x; qy = y; qz = zr;
+        out.push({ ...op, x, y, z: zr, e, h: op.h * r, ...(Math.abs(dz) > 1e-4 ? { noArc: true } : {}) });
       };
       if (Number.isNaN(px) || op.fixed) { emitTo(op.x, op.y, op.z, dz1, 1); }
       else {

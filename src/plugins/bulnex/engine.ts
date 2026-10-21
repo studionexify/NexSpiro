@@ -4,7 +4,7 @@
 import type { EnginePlugin, PluginSession } from '../api';
 import { areaTotal, bounds, pointIn, SCALE } from '../../engine/clipper';
 import {
-  A1_CURRENT, APPROACH_GAP, checkParts, cycleOverhead, planRow, PUSH_END_Y, pushZFor,
+  A1_CURRENT, APPROACH_GAP, checkParts, cycleParts, planRow, PUSH_END_Y, pushZFor,
   type BulnexConfig, type BulnexReport, type PartGeometry, type PushRow,
 } from './model';
 
@@ -116,7 +116,8 @@ export const bulnexEngine: EnginePlugin<BulnexConfig, BulnexReport> = {
     const row = s?.row ?? null;
     const checks = checkParts(parts, config, String(ctx.cfg.filament_type ?? ''), Number(ctx.cfg.bed_y ?? 256));
     for (const c of checks) if (c.level === 'warn') ctx.warn(`Bulnex: ${c.text}`);
-    return { parts, row, checks, cycles: config.cycles, cycleOverheadS: cycleOverhead(config, row, Number(ctx.cfg.bed_temperature_initial_layer ?? 60)) };
+    const parts3 = cycleParts(config, row, Number(ctx.cfg.bed_temperature_initial_layer ?? 60));
+    return { parts, row, checks, cycles: config.cycles, cycleOverheadS: parts3.coolS + parts3.pushS + parts3.reheatS, ...parts3, calibration: !!config.calibration };
   },
 
   programBody(body, config, ctx) {

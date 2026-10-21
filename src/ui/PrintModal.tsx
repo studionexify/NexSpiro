@@ -101,7 +101,10 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
               {devices.map((d) => <option key={d.id} value={d.id}>{d.name} — {CONNECTION_INFO[d.config.kind].label}</option>)}
             </select>
             <span>Status</span><span className="row"><StatusDot s={st} />{st?.state ?? 'offline'}{st?.message ? ` — ${st.message}` : ''}</span>
-            {result && <><span>Estimate</span><span>{fmtDuration(result.stats.timeSeconds)} · {result.stats.filamentGrams.toFixed(1)} g</span></>}
+            {result && !result.stats.repeat && <><span>Estimate</span><span>{fmtDuration(result.stats.timeSeconds)} · {result.stats.filamentGrams.toFixed(1)} g</span></>}
+            {result?.stats.repeat && <><span>Prints</span><span>{result.stats.repeat.cycles}× ({result.stats.repeat.cycles * result.stats.repeat.partsPerCycle} parts)</span>
+              <span>One print</span><span>{fmtDuration(result.stats.timeSeconds)} · {result.stats.filamentGrams.toFixed(1)} g</span>
+              <span>Whole job</span><span>{fmtDuration(result.stats.repeat.totalSeconds)} · {result.stats.repeat.totalGrams.toFixed(1)} g</span></>}
           </div>
           {dev && printerById(dev.printerId).flavor !== profile.flavor && (
             <p style={{ color: '#E5484D', fontSize: 12 }}><Icon name="warn" size={12} /> This plate is sliced for {profile.vendor} {profile.model}; {dev.name} is a {printerById(dev.printerId).model}. Re-slice for the right printer first.</p>
