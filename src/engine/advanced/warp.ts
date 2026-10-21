@@ -4,6 +4,7 @@
 import type { LayerOps, Op } from './classic/gcode';
 import type { Warp } from './session';
 import type { TechId } from './types';
+import { rescaleE } from './runs';
 
 /** First layers stay flat on the bed: the warp is zero up to FLAT and fades in over RAMP above it. */
 export const FLAT = 0.45, RAMP = 1.2;
@@ -122,14 +123,24 @@ export function unwarpLayers(layers: LayerOps[], w: Warp, tol = 0.01, minSeg = 0
   for (const L of layers) {
     const out: Op[] = [];
     let px = NaN, py = NaN, pz = NaN, pdz = 0;
+    // last emitted point in real space: each piece's E follows its true 3-D length there
+    let qx = NaN, qy = NaN, qz = NaN;
     for (const op of L.ops) {
-      if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; pz = NaN; }
+      if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; pz = NaN; qx = NaN; }
       if (op.k !== 'move') { out.push(op); continue; }
       const dz1 = w.dz(op.x, op.y, op.z);
       const emitTo = (x: number, y: number, zw: number, dz: number, share: number) => {
         const r = op.travel ? 1 : Math.max(0.05, w.ratio(x, y, zw));
         if (Math.abs(dz) > 1e-4) curved++;
-        out.push({ ...op, x, y, z: +(zw + dz).toFixed(4), e: op.e * share * r, h: op.h * r, ...(Math.abs(dz) > 1e-4 ? { noArc: true } : {}) });
+        const zr = +(zw + dz).toFixed(4);
+        // volume conserved: the piece is as long as it is in real space (warping stretches it) and its bead is r x as thick
+        let e = op.e * share * r;
+        if (!op.travel && !Number.isNaN(qx) && !Number.isNaN(px) && op.e > 0) {
+          const opLen = Math.max(Math.hypot(op.x - px, op.y - py, op.z - pz), 1e-9);
+          e = rescaleE((op.e * Math.hypot(x - qx, y - qy, zr - qz)) / opLen, op.w, op.h, op.h * r);
+        }
+        qx = x; qy = y; qz = zr;
+        out.push({ ...op, x, y, z: zr, e, h: op.h * r, ...(Math.abs(dz) > 1e-4 ? { noArc: true } : {}) });
       };
       if (Number.isNaN(px) || op.fixed) { emitTo(op.x, op.y, op.z, dz1, 1); }
       else {

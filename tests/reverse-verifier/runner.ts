@@ -319,7 +319,10 @@ export function trimPrePosition(moves: M.GMove[]): { moves: M.GMove[]; dropped: 
 
 /** The three checks every (target, profile) gets, plus the declared-geometry harness check. */
 export function standardRows(out: SliceOutput, cfg: Config, thetaMaxDeg: number): { moves: M.GMove[]; ctx: VolCtx; results: M.AssertionResult[] } {
-  const moves = trimPrePosition(parseGcode(out.gcode).moves).moves;
+  // machine start G-code (purge lines, priming) is not toolpath: judge only what follows the first layer change
+  const lines = out.gcode.split('\n');
+  const firstLayer = lines.findIndex((l) => l.startsWith(';LAYER_CHANGE')) + 1;
+  const moves = trimPrePosition(parseGcode(out.gcode).moves).moves.filter((m) => firstLayer <= 0 || m.line >= firstLayer);
   const ctx = makeCtx(out, cfg, moves);
   const results = [
     volumetric(moves, ctx),

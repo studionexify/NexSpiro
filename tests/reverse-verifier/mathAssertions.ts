@@ -30,12 +30,15 @@ export const TOL = Object.freeze({
   /** Numerical slack on angle comparisons (rad). */
   angle: 1e-9,
   /**
-   * Measurement floor, not a tolerance: G-code prints E with 5 decimals (quantum 1e-5, so +/-5e-6 per move).
-   * Below E = 1e-3 mm the file's own rounding can eat 0.5 % of the budget on one move (and more when a run sums
-   * several), leaving too little of the 2 % for geometry. Such runs are counted in metrics.belowResolution
-   * (never silently dropped) and are not judged.
+   * Measurement floor, not a tolerance: G-code prints E with 5 decimals, so every printed move carries up to
+   * +/-5e-6 mm of rounding. A segment (or a run of k short segments summed) whose worst-case rounding k*5e-6
+   * exceeds 0.5 % of its expected E cannot be judged at 2 % from the file alone; it is counted in
+   * metrics.belowResolution, never silently dropped.
    */
-  eResolution: 1e-3,
+  eQuantum: 5e-6,
+  eQuantumShare: 0.005,
+  /** Coordinates print with 3 decimals: worst-case length error of one segment is 1e-3 mm (same 0.5 % share; this is where minSegmentLen = 0.2 comes from). */
+  coordQuantum: 1e-3,
   /** Z-weave: Pearson correlation of adjacent-layer Z offsets must be at most this (anti-phase). */
   zWeaveCorrelation: -0.8,
 });
@@ -152,16 +155,16 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
   const failures: Failure[] = [];
   let maxRel = 0, checkedMm = 0, checkedSeg = 0, belowRes = 0;
   let debt = 0; // filament currently retracted (mm)
-  let accA = 0, accE = 0, accKey = '', accLine = 0, accLen = 0; // run accumulator for sub-minSegmentLen segments
+  let accA = 0, accE = 0, accKey = '', accLine = 0, accLen = 0, accN = 0; // run accumulator for sub-minSegmentLen segments
   const flush = () => {
-    if (accLen > 0 && accE > 0 && accE < TOL.eResolution) belowRes++;
+    if (accLen > 0 && accE > 0 && (accN * TOL.eQuantum > TOL.eQuantumShare * accE || accN * TOL.coordQuantum > TOL.eQuantumShare * accLen)) belowRes++;
     else if (accLen > 0 && accE > 0) {
       const rel = Math.abs(accA - accE) / accE;
       maxRel = Math.max(maxRel, rel);
       checkedMm += accLen; checkedSeg++;
       if (rel > TOL.volumetric) failures.push({ assertion: name, line: accLine, message: `run dE ${accA.toFixed(5)} vs expected ${accE.toFixed(5)} (${(rel * 100).toFixed(2)} %) [${accKey}]`, actual: accA, expected: accE });
     }
-    accA = accE = accLen = 0;
+    accA = accE = accLen = accN = 0;
   };
 
   for (const { m, start, k } of withStart(moves)) {
@@ -188,7 +191,7 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
     if (!(h > 0) || !(W > 0)) { failures.push({ assertion: name, line: m.line, message: `unknown geometry W=${W} h=${h}` }); continue; }
     const eExp = expectedE(dL, W, h, flow, o.crossSection, o.filamentDiameter);
 
-    if (dL >= TOL.minSegmentLen && eExp < TOL.eResolution) { flush(); belowRes++; }
+    if (dL >= TOL.minSegmentLen && TOL.eQuantum > TOL.eQuantumShare * eExp) { flush(); belowRes++; }
     else if (dL >= TOL.minSegmentLen) {
       flush();
       const rel = Math.abs(m.e - eExp) / eExp;
@@ -197,7 +200,7 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
     } else {
       const key = `${m.feature}|${m.layerIndex}|${W}|${h}`;
       if (key !== accKey) { flush(); accKey = key; accLine = m.line; }
-      accA += m.e; accE += eExp; accLen += dL;
+      accA += m.e; accE += eExp; accLen += dL; accN++;
     }
     void k;
   }

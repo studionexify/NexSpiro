@@ -72,7 +72,7 @@ export const metricMorph: TechModule = {
     for (let k = 0; k < nLayers; k++) {
       const z = +(h + k * hh).toFixed(4), lh = k ? hh : h;
       const ops: Op[] = [{ k: 'raw', text: `; NexSpiro metric morph sheet layer ${k + 1}/${nLayers}` }];
-      const ePerMm = beadArea(w, lh) / area; // same rounded-bead cross-section the planar engine extrudes
+      const ePerMm = (beadArea(w, lh) / area) * (s.filaments[0]?.flowRatio || 1); // same rounded-bead cross-section the planar engine extrudes
       const m = (x: number, y: number, e: number, feature: Move['feature']): Move => ({ k: 'move', x: +x.toFixed(4), y: +y.toFixed(4), z, e, f: speed, feature, w, h: lh, travel: false });
       const run = (pts: number[], feature: Move['feature'], closed: boolean) => {
         if (pts.length < 4) return;

@@ -115,7 +115,7 @@ export const conformalIroning: TechModule = {
     const spacing = s.pnum('conformal_ironing', 'spacing'), flow = s.pnum('conformal_ironing', 'flow'), speed = s.pnum('conformal_ironing', 'speed');
     const h = s.num('layer_height') || 0.2, w = s.num('line_width') || s.caps.nozzle;
     const fd = s.filaments[0]?.diameter ?? 1.75;
-    const ePerMm = (beadArea(w, h) * flow) / (Math.PI * (fd / 2) ** 2);
+    const ePerMm = ((beadArea(w, h) * flow) / (Math.PI * (fd / 2) ** 2)) * (s.filaments[0]?.flowRatio || 1);
     // everything printed, for the head check of the final pass
     const done = new PlasticMap(s.caps.bed.x + 2, s.caps.bed.y + 2), none = new PlasticMap(4, 4);
     let top = 0;

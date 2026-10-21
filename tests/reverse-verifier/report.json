@@ -77,10 +77,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8195220251046066,
-      "checkedMm": 5964.857211956373,
-      "checkedSegments": 606,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.4181117499750633,
+      "checkedMm": 5959.097211956366,
+      "checkedSegments": 526,
+      "belowResolution": 80,
       "failureCount": 0
     },
     "firstFailures": []
@@ -218,9 +218,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.19851661682926758,
-      "checkedMm": 26899.441072374226,
-      "checkedSegments": 16514,
-      "belowResolution": 0,
+      "checkedMm": 26881.964333433552,
+      "checkedSegments": 16423,
+      "belowResolution": 91,
       "failureCount": 0
     },
     "firstFailures": []
@@ -289,9 +289,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.1298664691898383,
-      "checkedMm": 4732.085572504122,
-      "checkedSegments": 4144,
-      "belowResolution": 0,
+      "checkedMm": 4730.403668820792,
+      "checkedSegments": 4124,
+      "belowResolution": 20,
       "failureCount": 0
     },
     "firstFailures": []
@@ -430,10 +430,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.8268620369101776,
-      "checkedMm": 17396.954718924007,
-      "checkedSegments": 2061,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.45093602048311004,
+      "checkedMm": 17396.29003854969,
+      "checkedSegments": 2055,
+      "belowResolution": 6,
       "failureCount": 0
     },
     "firstFailures": []
@@ -500,10 +500,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.33972134267973386,
-      "checkedMm": 1908.6453127604655,
-      "checkedSegments": 272,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.20983600758449797,
+      "checkedMm": 1908.2889309427474,
+      "checkedSegments": 270,
+      "belowResolution": 2,
       "failureCount": 0
     },
     "firstFailures": []
@@ -571,9 +571,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.4450746442806911,
-      "checkedMm": 92936.09591011453,
-      "checkedSegments": 8514,
-      "belowResolution": 93,
+      "checkedMm": 92935.7777089203,
+      "checkedSegments": 8512,
+      "belowResolution": 95,
       "failureCount": 0
     },
     "firstFailures": []
@@ -946,10 +946,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.8268620369101776,
-      "checkedMm": 17356.414718924032,
-      "checkedSegments": 2056,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.45093602048311004,
+      "checkedMm": 17355.750038549715,
+      "checkedSegments": 2050,
+      "belowResolution": 6,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1016,10 +1016,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.33972134267973386,
-      "checkedMm": 2033.9733127604657,
-      "checkedSegments": 314,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.20983600758449797,
+      "checkedMm": 2033.6169309427476,
+      "checkedSegments": 312,
+      "belowResolution": 2,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1087,9 +1087,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.4450746442806911,
-      "checkedMm": 90293.19191011346,
-      "checkedSegments": 8232,
-      "belowResolution": 93,
+      "checkedMm": 90292.87370891923,
+      "checkedSegments": 8230,
+      "belowResolution": 95,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1156,10 +1156,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3839193866529153,
-      "checkedMm": 26751.782097421117,
-      "checkedSegments": 16514,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.19851661682926758,
+      "checkedMm": 26723.03744026461,
+      "checkedSegments": 16332,
+      "belowResolution": 182,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1228,9 +1228,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.16164852924216283,
-      "checkedMm": 7184.891891268308,
-      "checkedSegments": 4655,
-      "belowResolution": 0,
+      "checkedMm": 7184.7052150780755,
+      "checkedSegments": 4654,
+      "belowResolution": 1,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1299,9 +1299,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5869980946072624,
-      "checkedMm": 17776.734101743667,
-      "checkedSegments": 16355,
-      "belowResolution": 0,
+      "checkedMm": 17764.22519931381,
+      "checkedSegments": 16284,
+      "belowResolution": 71,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1380,9 +1380,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.39908840272453544,
-      "checkedMm": 32125.74351051231,
-      "checkedSegments": 12175,
-      "belowResolution": 0,
+      "checkedMm": 32100.539385770393,
+      "checkedSegments": 12041,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1446,10 +1446,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 31851.92216025702,
-      "checkedSegments": 11874,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.2685721281724339,
+      "checkedMm": 31826.7180355151,
+      "checkedSegments": 11740,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1513,10 +1513,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4337.619505848583,
-      "checkedSegments": 1032,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.19422617626697536,
+      "checkedMm": 4336.442880164689,
+      "checkedSegments": 1024,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1580,10 +1580,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1647,10 +1647,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1714,10 +1714,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1782,10 +1782,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 34948.013798779204,
-      "checkedSegments": 2564,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 34922.809674037286,
+      "checkedSegments": 2430,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1850,10 +1850,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 34948.013798779204,
-      "checkedSegments": 2564,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 34922.809674037286,
+      "checkedSegments": 2430,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1918,10 +1918,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4893.62270093501,
-      "checkedSegments": 1082,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4892.446075251114,
+      "checkedSegments": 1074,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1987,9 +1987,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.131001621850424,
-      "checkedMm": 52008.314663702076,
-      "checkedSegments": 10559,
-      "belowResolution": 1,
+      "checkedMm": 51958.644952289345,
+      "checkedSegments": 10208,
+      "belowResolution": 352,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2096,9 +2096,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.131001621850424,
-      "checkedMm": 52008.314663702076,
-      "checkedSegments": 10559,
-      "belowResolution": 1,
+      "checkedMm": 51958.644952289345,
+      "checkedSegments": 10208,
+      "belowResolution": 352,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2204,10 +2204,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.5256626311819164,
-      "checkedMm": 116334.9916204833,
-      "checkedSegments": 23357,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.41007283121340954,
+      "checkedMm": 116315.77374104109,
+      "checkedSegments": 23193,
+      "belowResolution": 164,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2271,10 +2271,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2338,10 +2338,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2405,10 +2405,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2473,10 +2473,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2541,10 +2541,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2609,10 +2609,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2678,9 +2678,9 @@
     "failureCount": 92,
     "metrics": {
       "maxRelErrPct": 279.19161558990015,
-      "checkedMm": 31440.334041221737,
-      "checkedSegments": 34877,
-      "belowResolution": 0,
+      "checkedMm": 31415.129916479826,
+      "checkedSegments": 34743,
+      "belowResolution": 134,
       "failureCount": 92
     },
     "firstFailures": [
@@ -2848,10 +2848,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32097.3709205681,
-      "checkedSegments": 9347,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32072.16679582618,
+      "checkedSegments": 9213,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2931,10 +2931,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8057891904377836,
-      "checkedMm": 4266.301815337413,
-      "checkedSegments": 12282,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 2769.8220752511183,
+      "checkedSegments": 570,
+      "belowResolution": 11712,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3014,9 +3014,9 @@
     "failureCount": 85,
     "metrics": {
       "maxRelErrPct": 2.874347516001559,
-      "checkedMm": 52007.21223469566,
-      "checkedSegments": 20233,
-      "belowResolution": 1,
+      "checkedMm": 51955.58686563497,
+      "checkedSegments": 19871,
+      "belowResolution": 363,
       "failureCount": 85
     },
     "firstFailures": [
@@ -3168,10 +3168,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8275093513889242,
-      "checkedMm": 52006.49890915035,
-      "checkedSegments": 20233,
-      "belowResolution": 1,
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51954.87354008966,
+      "checkedSegments": 19871,
+      "belowResolution": 363,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3235,10 +3235,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.5256626311819164,
-      "checkedMm": 116334.97061113751,
-      "checkedSegments": 48037,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5603081596203477,
+      "checkedMm": 116315.75273169532,
+      "checkedSegments": 47873,
+      "belowResolution": 164,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3302,10 +3302,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 25943.88638543173,
-      "checkedSegments": 5140,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 25918.557809896323,
+      "checkedSegments": 5002,
+      "belowResolution": 138,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3369,10 +3369,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 22118.069798779397,
-      "checkedSegments": 1460,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 22092.86567403747,
+      "checkedSegments": 1326,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3436,10 +3436,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4113.811561522224,
-      "checkedSegments": 914,
-      "belowResolution": 112,
+      "maxRelErrPct": 0.24107632402358561,
+      "checkedMm": 4112.63493583833,
+      "checkedSegments": 906,
+      "belowResolution": 120,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3500,64 +3500,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 32,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 171.20368483536294,
-      "checkedMm": 7567.085246166625,
-      "checkedSegments": 782,
-      "belowResolution": 0,
-      "failureCount": 32
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 7190.676381496941,
+      "checkedSegments": 667,
+      "belowResolution": 113,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 22,
-        "layer": 0,
-        "message": "dE 15.00000 vs expected 5.53090 (171.20 %), dL3D=180.0000 [?]",
-        "actual": 15,
-        "expected": 5.530898302176797
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 24,
-        "layer": 0,
-        "message": "dE 12.00000 vs expected 5.53090 (116.96 %), dL3D=180.0000 [?]",
-        "actual": 12,
-        "expected": 5.530898302176797
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 53,
-        "message": "run dE 0.00279 vs expected 0.00464 (39.85 %) [outer wall|0|0.5|0.20000000298023224]",
-        "actual": 0.00279,
-        "expected": 0.004638310994745076
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 248,
-        "message": "run dE 0.00194 vs expected 0.00322 (39.76 %) [outer wall|1|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00194,
-        "expected": 0.0032204991527175317
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 483,
-        "message": "run dE 0.00194 vs expected 0.00322 (39.76 %) [outer wall|2|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00194,
-        "expected": 0.0032204991527175317
-      }
-    ],
-    "byFeature": {
-      "(none)": {
-        "count": 2,
-        "worstPct": 171.20368483536294
-      },
-      "outer wall": {
-        "count": 30,
-        "worstPct": 39.84879402953144
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/corner_overshoot",
@@ -3591,25 +3543,14 @@
     "profile": "Default",
     "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
       "declaredHits": 780,
       "maxPosErrMm": 0.000503662109380798,
-      "failureCount": 2
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "declared-geometry-map",
-        "line": 22,
-        "message": "no declared move on G-code line 22"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 24,
-        "message": "no declared move on G-code line 24"
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/corner_overshoot",
@@ -3627,31 +3568,15 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 62,
+    "failureCount": 60,
     "metrics": {
-      "maxRelErrPct": 171.20368483536294,
-      "checkedMm": 7581.044850621105,
-      "checkedSegments": 812,
-      "belowResolution": 0,
-      "failureCount": 62
+      "maxRelErrPct": 40.07671885173654,
+      "checkedMm": 7207.799988243137,
+      "checkedSegments": 727,
+      "belowResolution": 83,
+      "failureCount": 60
     },
     "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 22,
-        "layer": 0,
-        "message": "dE 15.00000 vs expected 5.53090 (171.20 %), dL3D=180.0000 [?]",
-        "actual": 15,
-        "expected": 5.530898302176797
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 24,
-        "layer": 0,
-        "message": "dE 12.00000 vs expected 5.53090 (116.96 %), dL3D=180.0000 [?]",
-        "actual": 12,
-        "expected": 5.530898302176797
-      },
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 52,
@@ -3675,13 +3600,25 @@
         "message": "dE 0.00523 vs expected 0.00870 (39.89 %), dL3D=0.2832 [outer wall]",
         "actual": 0.00523,
         "expected": 0.00870122817445991
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 253,
+        "layer": 1,
+        "message": "dE 0.00523 vs expected 0.00873 (40.08 %), dL3D=0.2840 [outer wall]",
+        "actual": 0.00523,
+        "expected": 0.008727826480428904
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 487,
+        "layer": 2,
+        "message": "dE 0.00523 vs expected 0.00870 (39.89 %), dL3D=0.2832 [outer wall]",
+        "actual": 0.00523,
+        "expected": 0.00870122817445991
       }
     ],
     "byFeature": {
-      "(none)": {
-        "count": 2,
-        "worstPct": 171.20368483536294
-      },
       "outer wall": {
         "count": 60,
         "worstPct": 40.07671885173654
@@ -3720,25 +3657,14 @@
     "profile": "Extreme Modulation",
     "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
       "declaredHits": 810,
       "maxPosErrMm": 0.000503662109380798,
-      "failureCount": 2
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "declared-geometry-map",
-        "line": 22,
-        "message": "no declared move on G-code line 22"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 24,
-        "message": "no declared move on G-code line 24"
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/corner_overshoot",
@@ -3761,39 +3687,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 534.6654632647446,
-      "checkedMm": 16472.701477415623,
-      "checkedSegments": 1529,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.31118980630495924,
+      "checkedMm": 16103.948865159633,
+      "checkedSegments": 1450,
+      "belowResolution": 77,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 22,
-        "layer": 0,
-        "message": "dE 15.00000 vs expected 2.36345 (534.67 %), dL3D=180.0000 [?]",
-        "actual": 15,
-        "expected": 2.363449859527474
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 24,
-        "layer": 0,
-        "message": "dE 12.00000 vs expected 2.36345 (407.73 %), dL3D=180.0000 [?]",
-        "actual": 12,
-        "expected": 2.363449859527474
-      }
-    ],
-    "byFeature": {
-      "(none)": {
-        "count": 2,
-        "worstPct": 534.6654632647446
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/corner_overshoot",
@@ -3827,25 +3730,14 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
       "declaredHits": 1527,
       "maxPosErrMm": 0.0005034790039104564,
-      "failureCount": 2
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "declared-geometry-map",
-        "line": 22,
-        "message": "no declared move on G-code line 22"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 24,
-        "message": "no declared move on G-code line 24"
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/spatial_lattice",
@@ -3863,63 +3755,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2970,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 13.260608366128368,
+      "maxRelErrPct": 0.1893408873735773,
       "checkedMm": 9534.386596944367,
       "checkedSegments": 3183,
       "belowResolution": 0,
-      "failureCount": 2970
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 666,
-        "layer": 11,
-        "message": "dE 0.08813 vs expected 0.10160 (13.26 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.08813,
-        "expected": 0.10159901052608981
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 668,
-        "layer": 11,
-        "message": "dE 0.13917 vs expected 0.16044 (13.26 %), dL3D=2.8425 [inner wall]",
-        "actual": 0.13917,
-        "expected": 0.16044369443714615
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 669,
-        "layer": 11,
-        "message": "dE 0.08813 vs expected 0.10160 (13.26 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.08813,
-        "expected": 0.10159901052608981
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 671,
-        "layer": 11,
-        "message": "dE 0.13917 vs expected 0.16044 (13.26 %), dL3D=2.8425 [inner wall]",
-        "actual": 0.13917,
-        "expected": 0.16044369443714615
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 672,
-        "layer": 11,
-        "message": "dE 0.08813 vs expected 0.10160 (13.26 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.08813,
-        "expected": 0.10159901052608981
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 2970,
-        "worstPct": 13.260608366128368
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spatial_lattice",
@@ -4019,63 +3864,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2970,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 10.214029700229789,
+      "maxRelErrPct": 0.1893408873735773,
       "checkedMm": 9534.386596944367,
       "checkedSegments": 3183,
       "belowResolution": 0,
-      "failureCount": 2970
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 666,
-        "layer": 11,
-        "message": "dE 0.11197 vs expected 0.10160 (10.21 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.11197,
-        "expected": 0.10159901052608981
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 668,
-        "layer": 11,
-        "message": "dE 0.17683 vs expected 0.16044 (10.21 %), dL3D=2.8425 [inner wall]",
-        "actual": 0.17683,
-        "expected": 0.16044369443714615
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 669,
-        "layer": 11,
-        "message": "dE 0.11197 vs expected 0.10160 (10.21 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.11197,
-        "expected": 0.10159901052608981
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 671,
-        "layer": 11,
-        "message": "dE 0.17683 vs expected 0.16044 (10.21 %), dL3D=2.8425 [inner wall]",
-        "actual": 0.17683,
-        "expected": 0.16044369443714615
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 672,
-        "layer": 11,
-        "message": "dE 0.11197 vs expected 0.10160 (10.21 %), dL3D=1.8000 [inner wall]",
-        "actual": 0.11197,
-        "expected": 0.10159901052608981
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 2970,
-        "worstPct": 10.214029700229789
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spatial_lattice",
@@ -4175,63 +3973,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 21,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 48.97898587590261,
-      "checkedMm": 693.2922266345764,
-      "checkedSegments": 123,
-      "belowResolution": 0,
-      "failureCount": 21
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 693.1451484240896,
+      "checkedSegments": 122,
+      "belowResolution": 1,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 416,
-        "layer": 24,
-        "message": "dE 0.06336 vs expected 0.12418 (48.98 %), dL3D=2.2000 [inner wall]",
-        "actual": 0.06336,
-        "expected": 0.12417656842077662
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 421,
-        "layer": 24,
-        "message": "dE 0.06336 vs expected 0.12418 (48.98 %), dL3D=2.2000 [inner wall]",
-        "actual": 0.06336,
-        "expected": 0.12417656842077662
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 422,
-        "layer": 24,
-        "message": "dE 0.06336 vs expected 0.12418 (48.98 %), dL3D=2.2000 [inner wall]",
-        "actual": 0.06336,
-        "expected": 0.12417656842077662
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 431,
-        "layer": 24,
-        "message": "dE 0.06336 vs expected 0.12418 (48.98 %), dL3D=2.2000 [inner wall]",
-        "actual": 0.06336,
-        "expected": 0.12417656842077662
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 436,
-        "layer": 24,
-        "message": "dE 0.06336 vs expected 0.12418 (48.98 %), dL3D=2.2000 [inner wall]",
-        "actual": 0.06336,
-        "expected": 0.12417656842077662
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 21,
-        "worstPct": 48.97898587590261
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spatial_lattice",
@@ -4333,10 +4084,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 36711.665001503476,
-      "checkedSegments": 13696,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.28085268306956856,
+      "checkedMm": 36686.46087676155,
+      "checkedSegments": 13562,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4400,10 +4151,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 25687.01997878792,
-      "checkedSegments": 4036,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 25661.815854046,
+      "checkedSegments": 3902,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4467,10 +4218,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 5466.452634696047,
-      "checkedSegments": 2314,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 5465.276009012151,
+      "checkedSegments": 2306,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4534,10 +4285,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5310290152413683,
-      "checkedMm": 83434.9100287737,
-      "checkedSegments": 43818,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 83320.56961960846,
+      "checkedSegments": 42440,
+      "belowResolution": 1378,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4598,58 +4349,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 34,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.2773166753932994,
-      "checkedMm": 106037.28293113208,
-      "checkedSegments": 24658,
-      "belowResolution": 51,
-      "failureCount": 34
+      "maxRelErrPct": 0.6014890204047479,
+      "checkedMm": 105836.57358163253,
+      "checkedSegments": 23023,
+      "belowResolution": 1686,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3700,
-        "message": "run dE 0.00111 vs expected 0.00109 (2.18 %) [internal solid infill|8|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00111,
-        "expected": 0.0010863710031010635
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3700,
-        "message": "run dE 0.00120 vs expected 0.00117 (2.28 %) [internal solid infill|8|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.0012,
-        "expected": 0.0011732806833489263
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 6806,
-        "message": "run dE 0.00111 vs expected 0.00109 (2.18 %) [internal solid infill|10|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00111,
-        "expected": 0.0010863710031010635
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 6806,
-        "message": "run dE 0.00120 vs expected 0.00117 (2.28 %) [internal solid infill|10|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.0012,
-        "expected": 0.0011732806833489263
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 9892,
-        "message": "run dE 0.00111 vs expected 0.00109 (2.18 %) [internal solid infill|12|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00111,
-        "expected": 0.0010863710031010635
-      }
-    ],
-    "byFeature": {
-      "internal solid infill": {
-        "count": 34,
-        "worstPct": 2.2773166753932994
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/dovetail",
@@ -4710,10 +4419,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 247756.411777207,
-      "checkedSegments": 87269,
-      "belowResolution": 60,
+      "maxRelErrPct": 0.22129083460879084,
+      "checkedMm": 246230.54545563765,
+      "checkedSegments": 69077,
+      "belowResolution": 18252,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4776,40 +4485,64 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 2,
+    "failureCount": 218,
     "metrics": {
-      "maxRelErrPct": 5.244149930194361,
-      "checkedMm": 16733.54242255192,
-      "checkedSegments": 7873,
-      "belowResolution": 1,
-      "failureCount": 2
+      "maxRelErrPct": 21.75372154058811,
+      "checkedMm": 16720.951284735296,
+      "checkedSegments": 7802,
+      "belowResolution": 72,
+      "failureCount": 218
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 5080,
+        "line": 4800,
         "layer": 50,
-        "message": "dE 0.03618 vs expected 0.03438 (5.24 %), dL3D=0.6714 [bridge]",
-        "actual": 0.03618,
-        "expected": 0.03437720768707546
+        "message": "dE 0.02046 vs expected 0.02606 (21.48 %), dL3D=0.5089 [bridge]",
+        "actual": 0.02046,
+        "expected": 0.026055972038410317
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 6636,
-        "layer": 52,
-        "message": "dE 0.01102 vs expected 0.01146 (3.83 %), dL3D=0.3721 [internal solid infill]",
-        "actual": 0.01102,
-        "expected": 0.011459434681721536
+        "line": 4801,
+        "layer": 50,
+        "message": "dE 0.02039 vs expected 0.02592 (21.34 %), dL3D=0.5063 [bridge]",
+        "actual": 0.02039,
+        "expected": 0.02592181799277942
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4803,
+        "layer": 50,
+        "message": "dE 0.02039 vs expected 0.02592 (21.35 %), dL3D=0.5063 [bridge]",
+        "actual": 0.02039,
+        "expected": 0.025923587684891367
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4809,
+        "layer": 50,
+        "message": "dE 0.08169 vs expected 0.10405 (21.49 %), dL3D=2.0323 [bridge]",
+        "actual": 0.08169,
+        "expected": 0.10405495611495563
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4815,
+        "layer": 50,
+        "message": "dE 0.04098 vs expected 0.05220 (21.49 %), dL3D=1.0195 [bridge]",
+        "actual": 0.04098,
+        "expected": 0.05219970100001755
       }
     ],
     "byFeature": {
       "internal solid infill": {
         "count": 1,
-        "worstPct": 3.834697730966255
+        "worstPct": 3.747433391339186
       },
       "bridge": {
-        "count": 1,
-        "worstPct": 5.244149930194361
+        "count": 217,
+        "worstPct": 21.75372154058811
       }
     }
   },
@@ -4879,16 +4612,63 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": true,
-    "failureCount": 0,
+    "pass": false,
+    "failureCount": 24,
     "metrics": {
-      "maxRelErrPct": 1.8268964083836017,
-      "checkedMm": 16302.865062440093,
-      "checkedSegments": 1849,
-      "belowResolution": 0,
-      "failureCount": 0
+      "maxRelErrPct": 21.460673899608498,
+      "checkedMm": 16290.444716572254,
+      "checkedSegments": 1781,
+      "belowResolution": 68,
+      "failureCount": 24
     },
-    "firstFailures": []
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2198,
+        "layer": 50,
+        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
+        "actual": 0.32607,
+        "expected": 0.4151296123718265
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2200,
+        "layer": 50,
+        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
+        "actual": 0.32607,
+        "expected": 0.4151296123718265
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2202,
+        "layer": 50,
+        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
+        "actual": 0.32607,
+        "expected": 0.4151296123718265
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2204,
+        "layer": 50,
+        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
+        "actual": 0.32607,
+        "expected": 0.4151296123718265
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2206,
+        "layer": 50,
+        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
+        "actual": 0.32607,
+        "expected": 0.4151296123718265
+      }
+    ],
+    "byFeature": {
+      "bridge": {
+        "count": 24,
+        "worstPct": 21.460673899608498
+      }
+    }
   },
   {
     "target": "adv/sgd_slicing",
@@ -4950,10 +4730,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.8051719208988994,
-      "checkedMm": 36797.40623966491,
-      "checkedSegments": 3687,
-      "belowResolution": 7,
+      "maxRelErrPct": 0.21562194224705702,
+      "checkedMm": 36770.97592333802,
+      "checkedSegments": 3505,
+      "belowResolution": 189,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5017,10 +4797,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7590411634037614,
-      "checkedMm": 31973.77690742456,
-      "checkedSegments": 3488,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.46101260340088096,
+      "checkedMm": 31646.03672756317,
+      "checkedSegments": 2871,
+      "belowResolution": 617,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5084,10 +4864,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6335740859673337,
-      "checkedMm": 31851.9446410162,
-      "checkedSegments": 5177,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.45796056146517344,
+      "checkedMm": 31831.04249468048,
+      "checkedSegments": 5065,
+      "belowResolution": 112,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5151,10 +4931,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.32806361600726547,
-      "checkedMm": 4186.741537124954,
-      "checkedSegments": 1781,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.22903101320016442,
+      "checkedMm": 4010.2630387146846,
+      "checkedSegments": 1416,
+      "belowResolution": 365,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5219,10 +4999,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7375743758554439,
-      "checkedMm": 32197.32401008908,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5041229497504429,
+      "checkedMm": 32172.05262682051,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5288,9 +5068,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.8655834354416242,
-      "checkedMm": 32271.20102077476,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "checkedMm": 32245.89783491518,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5355,10 +5135,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5422,10 +5202,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 39048.37294377835,
-      "checkedSegments": 1977,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39008.42988001276,
+      "checkedSegments": 1763,
+      "belowResolution": 216,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5489,10 +5269,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 39048.37294377835,
-      "checkedSegments": 1977,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39008.42988001276,
+      "checkedSegments": 1763,
+      "belowResolution": 216,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5556,10 +5336,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 87570.428773637,
-      "checkedSegments": 4132,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.11423861857246219,
+      "checkedMm": 87542.05943258156,
+      "checkedSegments": 3922,
+      "belowResolution": 212,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5622,13 +5402,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 1777,
+    "failureCount": 1269,
     "metrics": {
       "maxRelErrPct": 64.20294631928488,
-      "checkedMm": 167684.09334497785,
-      "checkedSegments": 3849,
-      "belowResolution": 0,
-      "failureCount": 1777
+      "checkedMm": 167587.69909450732,
+      "checkedSegments": 3335,
+      "belowResolution": 514,
+      "failureCount": 1269
     },
     "firstFailures": [
       {
@@ -5682,8 +5462,8 @@
         "worstPct": 64.20294631928488
       },
       "internal solid infill": {
-        "count": 509,
-        "worstPct": 64.18710177715697
+        "count": 1,
+        "worstPct": 56.23441534729034
       },
       "sparse infill": {
         "count": 1008,
@@ -5749,13 +5529,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 3849,
+    "failureCount": 3335,
     "metrics": {
-      "maxRelErrPct": 72.29568250685875,
-      "checkedMm": 167684.09334497785,
-      "checkedSegments": 3849,
-      "belowResolution": 0,
-      "failureCount": 3849
+      "maxRelErrPct": 72.22432274351003,
+      "checkedMm": 167587.69909450732,
+      "checkedSegments": 3335,
+      "belowResolution": 514,
+      "failureCount": 3335
     },
     "firstFailures": [
       {
@@ -5813,8 +5593,8 @@
         "worstPct": 64.88420539760106
       },
       "internal solid infill": {
-        "count": 2042,
-        "worstPct": 72.29568250685875
+        "count": 1528,
+        "worstPct": 71.88704797602415
       },
       "sparse infill": {
         "count": 1024,
@@ -5886,10 +5666,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5587353382810107,
-      "checkedMm": 362897.16579642403,
-      "checkedSegments": 7671,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.126259715835214,
+      "checkedMm": 362833.41534619674,
+      "checkedSegments": 7195,
+      "belowResolution": 476,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6128,10 +5908,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8131028813279108,
-      "checkedMm": 50570.388087418854,
-      "checkedSegments": 57274,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.442525902310548,
+      "checkedMm": 50558.87281689782,
+      "checkedSegments": 57202,
+      "belowResolution": 72,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6195,10 +5975,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.7390150086933989,
-      "checkedMm": 125486.42679535256,
-      "checkedSegments": 39720,
-      "belowResolution": 3,
+      "maxRelErrPct": 0.3639107332543716,
+      "checkedMm": 125200.76324026518,
+      "checkedSegments": 37629,
+      "belowResolution": 2094,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6268,10 +6048,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 105795.48470224057,
-      "checkedSegments": 3758,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.22426009204242142,
+      "checkedMm": 105742.06982938659,
+      "checkedSegments": 3474,
+      "belowResolution": 284,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6335,10 +6115,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.4213465958409028,
-      "checkedMm": 320728.02389697824,
-      "checkedSegments": 60390,
-      "belowResolution": 1487,
+      "maxRelErrPct": 0.6048063142999293,
+      "checkedMm": 258757.16957066447,
+      "checkedSegments": 37357,
+      "belowResolution": 24520,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6402,10 +6182,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 34948.02003216071,
-      "checkedSegments": 2564,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 34922.81590741879,
+      "checkedSegments": 2430,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6469,10 +6249,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 34948.02003216071,
-      "checkedSegments": 2564,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 34922.81590741879,
+      "checkedSegments": 2430,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6536,10 +6316,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4893.625994740099,
-      "checkedSegments": 1082,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4892.449369056203,
+      "checkedSegments": 1074,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6603,10 +6383,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 35378.58967132644,
-      "checkedSegments": 4231,
-      "belowResolution": 590,
+      "maxRelErrPct": 0.35961698773628203,
+      "checkedMm": 35300.86529822063,
+      "checkedSegments": 3793,
+      "belowResolution": 1028,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6670,10 +6450,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 34628.5024608894,
-      "checkedSegments": 2922,
-      "belowResolution": 266,
+      "maxRelErrPct": 0.35961698773628203,
+      "checkedMm": 34588.56222021431,
+      "checkedSegments": 2708,
+      "belowResolution": 480,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6743,10 +6523,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 75063.8211197488,
-      "checkedSegments": 3600,
-      "belowResolution": 11,
+      "maxRelErrPct": 0.18839659688771265,
+      "checkedMm": 75037.57450202666,
+      "checkedSegments": 3404,
+      "belowResolution": 207,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6810,10 +6590,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32887.75418608534,
-      "checkedSegments": 6156,
-      "belowResolution": 792,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32862.55006134341,
+      "checkedSegments": 6022,
+      "belowResolution": 926,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6918,10 +6698,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 34185.89707922311,
-      "checkedSegments": 12591,
-      "belowResolution": 1782,
+      "maxRelErrPct": 0.26591208020868207,
+      "checkedMm": 34160.692954481194,
+      "checkedSegments": 12457,
+      "belowResolution": 1916,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6985,10 +6765,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4338.206185426985,
-      "checkedSegments": 1346,
-      "belowResolution": 144,
+      "maxRelErrPct": 0.13234801404667565,
+      "checkedMm": 4337.029559743091,
+      "checkedSegments": 1338,
+      "belowResolution": 152,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7051,76 +6831,28 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 9659,
+    "failureCount": 1,
     "metrics": {
-      "maxRelErrPct": 5.921387624221251,
-      "checkedMm": 55915.521931048905,
-      "checkedSegments": 22809,
-      "belowResolution": 6,
-      "failureCount": 9659
+      "maxRelErrPct": 3.0155164719701997,
+      "checkedMm": 55865.972498998395,
+      "checkedSegments": 22426,
+      "belowResolution": 389,
+      "failureCount": 1
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 8884,
-        "layer": 30,
-        "message": "dE 0.01652 vs expected 0.01686 (2.02 %), dL3D=0.6480 [outer wall]",
-        "actual": 0.01652,
-        "expected": 0.0168602505614529
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 8885,
-        "layer": 30,
-        "message": "dE 0.00826 vs expected 0.00845 (2.23 %), dL3D=0.3248 [outer wall]",
-        "actual": 0.00826,
-        "expected": 0.008448119515660683
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 8887,
-        "layer": 30,
-        "message": "dE 0.03310 vs expected 0.03381 (2.11 %), dL3D=1.2975 [outer wall]",
-        "actual": 0.0331,
-        "expected": 0.03381245040560147
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 8888,
-        "layer": 30,
-        "message": "dE 0.03304 vs expected 0.03373 (2.05 %), dL3D=1.2960 [outer wall]",
-        "actual": 0.03304,
-        "expected": 0.033730105607156696
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 8891,
-        "layer": 30,
-        "message": "dE 0.01651 vs expected 0.01690 (2.31 %), dL3D=0.6500 [outer wall]",
-        "actual": 0.01651,
-        "expected": 0.01689990378104554
+        "line": 25196,
+        "layer": 56,
+        "message": "dE 0.05052 vs expected 0.04904 (3.02 %), dL3D=1.5261 [internal solid infill]",
+        "actual": 0.05052,
+        "expected": 0.0490411558667923
       }
     ],
     "byFeature": {
-      "inner wall": {
-        "count": 2296,
-        "worstPct": 5.393009746152241
-      },
-      "outer wall": {
-        "count": 2395,
-        "worstPct": 5.278170534424284
-      },
       "internal solid infill": {
-        "count": 3417,
-        "worstPct": 5.921387624221251
-      },
-      "sparse infill": {
-        "count": 1370,
-        "worstPct": 4.732330365784949
-      },
-      "top surface": {
-        "count": 181,
-        "worstPct": 2.5619120505124946
+        "count": 1,
+        "worstPct": 3.0155164719701997
       }
     }
   },
@@ -7181,71 +6913,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 212,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 5.472037140773307,
-      "checkedMm": 53271.41385292535,
-      "checkedSegments": 19146,
-      "belowResolution": 1,
-      "failureCount": 212
+      "maxRelErrPct": 0.45236147619729095,
+      "checkedMm": 53240.9956603076,
+      "checkedSegments": 18910,
+      "belowResolution": 237,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 980,
-        "layer": 2,
-        "message": "dE 0.79003 vs expected 0.75848 (4.16 %), dL3D=19.0332 [internal solid infill]",
-        "actual": 0.79003,
-        "expected": 0.7584833768093409
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 983,
-        "layer": 2,
-        "message": "dE 0.79002 vs expected 0.75848 (4.16 %), dL3D=19.0332 [internal solid infill]",
-        "actual": 0.79002,
-        "expected": 0.7584834470767647
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 986,
-        "layer": 2,
-        "message": "dE 0.78850 vs expected 0.75709 (4.15 %), dL3D=19.0084 [internal solid infill]",
-        "actual": 0.7885,
-        "expected": 0.7570948279554389
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 989,
-        "layer": 2,
-        "message": "dE 0.78698 vs expected 0.75571 (4.14 %), dL3D=18.9837 [internal solid infill]",
-        "actual": 0.78698,
-        "expected": 0.7557075814377555
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 992,
-        "layer": 2,
-        "message": "dE 0.78546 vs expected 0.75432 (4.13 %), dL3D=18.9590 [internal solid infill]",
-        "actual": 0.78546,
-        "expected": 0.7543217044647055
-      }
-    ],
-    "byFeature": {
-      "internal solid infill": {
-        "count": 14,
-        "worstPct": 4.159171335219518
-      },
-      "sparse infill": {
-        "count": 197,
-        "worstPct": 5.472037140773307
-      },
-      "top surface": {
-        "count": 1,
-        "worstPct": 2.088352009135699
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/harmonic_dome",
@@ -7304,79 +6981,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 9395,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 5.993453340078683,
-      "checkedMm": 128509.59399029207,
-      "checkedSegments": 53863,
-      "belowResolution": 143,
-      "failureCount": 9395
+      "maxRelErrPct": 1.8715806205795393,
+      "checkedMm": 128473.44491549191,
+      "checkedSegments": 53594,
+      "belowResolution": 412,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 21540,
-        "layer": 87,
-        "message": "dE 0.01090 vs expected 0.01112 (2.00 %), dL3D=1.3007 [outer wall]",
-        "actual": 0.0109,
-        "expected": 0.011122951118225236
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 21765,
-        "layer": 88,
-        "message": "dE 0.00247 vs expected 0.00252 (2.14 %), dL3D=0.3246 [outer wall]",
-        "actual": 0.00247,
-        "expected": 0.0025240096824157387
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 21770,
-        "layer": 88,
-        "message": "dE 0.00712 vs expected 0.00727 (2.04 %), dL3D=0.6491 [outer wall]",
-        "actual": 0.00712,
-        "expected": 0.007268057629693194
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 21781,
-        "layer": 88,
-        "message": "dE 0.00498 vs expected 0.00508 (2.05 %), dL3D=0.6491 [outer wall]",
-        "actual": 0.00498,
-        "expected": 0.005084230410004015
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 21786,
-        "layer": 88,
-        "message": "dE 0.00270 vs expected 0.00276 (2.11 %), dL3D=0.3246 [outer wall]",
-        "actual": 0.0027,
-        "expected": 0.002758277623352842
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 2665,
-        "worstPct": 2.9787758513026104
-      },
-      "outer wall": {
-        "count": 3488,
-        "worstPct": 5.119635096316388
-      },
-      "internal solid infill": {
-        "count": 1961,
-        "worstPct": 3.5625442833889425
-      },
-      "sparse infill": {
-        "count": 1270,
-        "worstPct": 3.247576715988967
-      },
-      "top surface": {
-        "count": 11,
-        "worstPct": 5.993453340078683
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/harmonic_dome",
@@ -7479,10 +7093,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8762575428667606,
-      "checkedMm": 49562.48589421893,
-      "checkedSegments": 8964,
-      "belowResolution": 9404,
+      "maxRelErrPct": 0.4423412879846221,
+      "checkedMm": 49507.051990468404,
+      "checkedSegments": 8561,
+      "belowResolution": 9807,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7544,63 +7158,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 621,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.3270920066280794,
-      "checkedMm": 50457.42618064045,
-      "checkedSegments": 9976,
-      "belowResolution": 0,
-      "failureCount": 621
+      "maxRelErrPct": 0.4423412879846221,
+      "checkedMm": 50401.99227688992,
+      "checkedSegments": 9573,
+      "belowResolution": 403,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 16821,
-        "layer": 51,
-        "message": "dE 0.00235 vs expected 0.00230 (2.02 %), dL3D=0.8330 [ironing]",
-        "actual": 0.00235,
-        "expected": 0.0023034911808178502
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 16833,
-        "layer": 51,
-        "message": "dE 0.00253 vs expected 0.00248 (2.09 %), dL3D=0.8961 [ironing]",
-        "actual": 0.00253,
-        "expected": 0.0024781586246514975
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 16836,
-        "layer": 51,
-        "message": "dE 0.00238 vs expected 0.00233 (2.11 %), dL3D=0.8428 [ironing]",
-        "actual": 0.00238,
-        "expected": 0.002330761677154444
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 16857,
-        "layer": 51,
-        "message": "dE 0.00253 vs expected 0.00248 (2.09 %), dL3D=0.8961 [ironing]",
-        "actual": 0.00253,
-        "expected": 0.0024781416513480264
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 16864,
-        "layer": 51,
-        "message": "dE 0.00239 vs expected 0.00234 (2.13 %), dL3D=0.8462 [ironing]",
-        "actual": 0.00239,
-        "expected": 0.002340042137428264
-      }
-    ],
-    "byFeature": {
-      "ironing": {
-        "count": 621,
-        "worstPct": 2.3270920066280794
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_ironing",
@@ -7662,10 +7229,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.5256626311819164,
-      "checkedMm": 110186.16580769973,
-      "checkedSegments": 19297,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.41007283121340954,
+      "checkedMm": 110135.72431002656,
+      "checkedSegments": 19004,
+      "belowResolution": 293,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7731,9 +7298,9 @@
     "failureCount": 30,
     "metrics": {
       "maxRelErrPct": 18.85019564734621,
-      "checkedMm": 32097.310985122982,
-      "checkedSegments": 14740,
-      "belowResolution": 0,
+      "checkedMm": 32072.106860381034,
+      "checkedSegments": 14606,
+      "belowResolution": 134,
       "failureCount": 30
     },
     "firstFailures": [
@@ -7846,9 +7413,9 @@
     "failureCount": 30,
     "metrics": {
       "maxRelErrPct": 18.85019564734621,
-      "checkedMm": 32097.43207515415,
-      "checkedSegments": 14740,
-      "belowResolution": 0,
+      "checkedMm": 32072.2279504122,
+      "checkedSegments": 14606,
+      "belowResolution": 134,
       "failureCount": 30
     },
     "firstFailures": [
@@ -7961,9 +7528,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.8723085845632543,
-      "checkedMm": 4266.314031333114,
-      "checkedSegments": 3470,
-      "belowResolution": 0,
+      "checkedMm": 4265.13740564922,
+      "checkedSegments": 3462,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8027,10 +7594,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8094,10 +7661,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8161,10 +7728,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8228,10 +7795,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5371767479528566,
-      "checkedMm": 32010.114451500845,
-      "checkedSegments": 2083,
-      "belowResolution": 1,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 31984.67931127383,
+      "checkedSegments": 1946,
+      "belowResolution": 138,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8295,10 +7862,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.2533015366255165,
-      "checkedMm": 29087.31701782679,
-      "checkedSegments": 1929,
-      "belowResolution": 1,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 29061.726622234302,
+      "checkedSegments": 1791,
+      "belowResolution": 139,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8362,10 +7929,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4099.318700935019,
-      "checkedSegments": 858,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4098.142075251126,
+      "checkedSegments": 850,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8426,67 +7993,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1556,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.692818274393164,
-      "checkedMm": 2678.4368913764506,
-      "checkedSegments": 6624,
-      "belowResolution": 0,
-      "failureCount": 1556
+      "maxRelErrPct": 0.2916134527112024,
+      "checkedMm": 2670.307991819929,
+      "checkedSegments": 6556,
+      "belowResolution": 68,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 42,
-        "layer": 0,
-        "message": "dE 0.01360 vs expected 0.01331 (2.17 %), dL3D=0.4332 [outer wall]",
-        "actual": 0.0136,
-        "expected": 0.013310877919357231
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 44,
-        "layer": 0,
-        "message": "dE 0.01562 vs expected 0.01530 (2.08 %), dL3D=0.4980 [outer wall]",
-        "actual": 0.01562,
-        "expected": 0.015302275041247131
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 45,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 46,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 47,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 576,
-        "worstPct": 2.172073715906555
-      },
-      "internal solid infill": {
-        "count": 980,
-        "worstPct": 2.692818274393164
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/metric_morph",
@@ -8544,67 +8060,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 3501,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.692818274393164,
-      "checkedMm": 6026.483005598942,
-      "checkedSegments": 14904,
-      "belowResolution": 0,
-      "failureCount": 3501
+      "maxRelErrPct": 0.2916134527112024,
+      "checkedMm": 6008.192981596753,
+      "checkedSegments": 14751,
+      "belowResolution": 153,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 42,
-        "layer": 0,
-        "message": "dE 0.01360 vs expected 0.01331 (2.17 %), dL3D=0.4332 [outer wall]",
-        "actual": 0.0136,
-        "expected": 0.013310877919357231
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 44,
-        "layer": 0,
-        "message": "dE 0.01562 vs expected 0.01530 (2.08 %), dL3D=0.4980 [outer wall]",
-        "actual": 0.01562,
-        "expected": 0.015302275041247131
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 45,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 46,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 47,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 1296,
-        "worstPct": 2.172073715906555
-      },
-      "internal solid infill": {
-        "count": 2205,
-        "worstPct": 2.692818274393164
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/metric_morph",
@@ -8662,67 +8127,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 126,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.8789479499401125,
-      "checkedMm": 174.00835095504473,
-      "checkedSegments": 432,
-      "belowResolution": 4,
-      "failureCount": 126
+      "maxRelErrPct": 0.5013156273376973,
+      "checkedMm": 172.76949987440594,
+      "checkedSegments": 422,
+      "belowResolution": 14,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 42,
-        "layer": 0,
-        "message": "dE 0.01360 vs expected 0.01331 (2.17 %), dL3D=0.4332 [outer wall]",
-        "actual": 0.0136,
-        "expected": 0.013310877919357231
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 44,
-        "layer": 0,
-        "message": "dE 0.01562 vs expected 0.01530 (2.08 %), dL3D=0.4980 [outer wall]",
-        "actual": 0.01562,
-        "expected": 0.015302275041247131
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 45,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 46,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 47,
-        "layer": 0,
-        "message": "dE 0.01568 vs expected 0.01536 (2.06 %), dL3D=0.5000 [outer wall]",
-        "actual": 0.01568,
-        "expected": 0.015363606063540383
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 64,
-        "worstPct": 2.172073715906555
-      },
-      "internal solid infill": {
-        "count": 62,
-        "worstPct": 2.8789479499401125
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/metric_morph",
@@ -8783,10 +8197,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.0057653084577762,
-      "checkedMm": 51658.0794292463,
-      "checkedSegments": 2879,
-      "belowResolution": 4,
+      "maxRelErrPct": 0.4071272893207202,
+      "checkedMm": 51602.257832666815,
+      "checkedSegments": 2577,
+      "belowResolution": 306,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8850,10 +8264,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.9965247380405675,
-      "checkedMm": 51283.316865048335,
-      "checkedSegments": 2743,
-      "belowResolution": 5,
+      "maxRelErrPct": 0.37578814780506975,
+      "checkedMm": 51224.09623635662,
+      "checkedSegments": 2411,
+      "belowResolution": 337,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8914,30 +8328,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 3.3203153813286215,
-      "checkedMm": 109910.75126963768,
-      "checkedSegments": 7899,
-      "belowResolution": 29,
-      "failureCount": 1
+      "maxRelErrPct": 0.5230285113876308,
+      "checkedMm": 109844.18244485256,
+      "checkedSegments": 7400,
+      "belowResolution": 528,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 9526,
-        "message": "run dE 0.00099 vs expected 0.00102 (3.32 %) [bridge|67|0.4000000059604645|0.4000000059604645]",
-        "actual": 0.00099,
-        "expected": 0.0010240000305181023
-      }
-    ],
-    "byFeature": {
-      "bridge": {
-        "count": 1,
-        "worstPct": 3.3203153813286215
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/monge_ampere",
@@ -8999,10 +8399,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9067,10 +8467,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9135,10 +8535,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9203,10 +8603,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9271,10 +8671,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 32095.719833702264,
-      "checkedSegments": 2196,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1893408873735773,
+      "checkedMm": 32070.515708960338,
+      "checkedSegments": 2062,
+      "belowResolution": 134,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9339,10 +8739,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4266.184587586545,
-      "checkedSegments": 914,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.1282816329950514,
+      "checkedMm": 4265.007961902651,
+      "checkedSegments": 906,
+      "belowResolution": 8,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9407,10 +8807,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 38862.73443297971,
-      "checkedSegments": 13163,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 38822.79136921414,
+      "checkedSegments": 12949,
+      "belowResolution": 216,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9475,10 +8875,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6792336023402723,
-      "checkedMm": 39701.810979598275,
-      "checkedSegments": 13737,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39661.792749350796,
+      "checkedSegments": 13522,
+      "belowResolution": 217,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9543,10 +8943,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 86092.08907277453,
-      "checkedSegments": 33582,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3108731666673528,
+      "checkedMm": 86063.71973171912,
+      "checkedSegments": 33372,
+      "belowResolution": 212,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9610,10 +9010,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 222172.41873024093,
-      "checkedSegments": 168816,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 220181.77119931698,
+      "checkedSegments": 166998,
+      "belowResolution": 1818,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9683,10 +9083,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3854364583493202,
-      "checkedMm": 140855.03115014164,
-      "checkedSegments": 3672,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 140773.7746469396,
+      "checkedSegments": 3240,
+      "belowResolution": 432,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9750,10 +9150,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 257859.57055122487,
-      "checkedSegments": 68722,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.23099373736779044,
+      "checkedMm": 257657.83258703622,
+      "checkedSegments": 68209,
+      "belowResolution": 513,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9817,10 +9217,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.4186575628840232,
-      "checkedMm": 56570.84221818968,
-      "checkedSegments": 76724,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.5801117022010296,
+      "checkedMm": 37200.76214193073,
+      "checkedSegments": 42036,
+      "belowResolution": 34690,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9884,10 +9284,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.44788231058466565,
-      "checkedMm": 94937.54689105132,
-      "checkedSegments": 242212,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.35207029703006965,
+      "checkedMm": 55380.80679629147,
+      "checkedSegments": 121494,
+      "belowResolution": 120718,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9952,10 +9352,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8039103728539829,
-      "checkedMm": 4388.453318745262,
-      "checkedSegments": 1446,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.3476038518979151,
+      "checkedMm": 4384.109412194036,
+      "checkedSegments": 1418,
+      "belowResolution": 30,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10010,9 +9410,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5091178044866971,
-      "checkedMm": 26331.45519076268,
-      "checkedSegments": 49090,
-      "belowResolution": 0,
+      "checkedMm": 24140.440688414663,
+      "checkedSegments": 46189,
+      "belowResolution": 2901,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10080,10 +9480,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.8141975560124297,
-      "checkedMm": 51796.94069643336,
-      "checkedSegments": 54192,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.32343853333754496,
+      "checkedMm": 51297.63510656932,
+      "checkedSegments": 50396,
+      "belowResolution": 3796,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10152,9 +9552,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.316910631094801,
-      "checkedMm": 4976.094158241377,
-      "checkedSegments": 3749,
-      "belowResolution": 0,
+      "checkedMm": 3358.799621679062,
+      "checkedSegments": 3577,
+      "belowResolution": 172,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10220,22 +9620,15 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 3564,
+    "failureCount": 3407,
     "metrics": {
-      "maxRelErrPct": 43.93868722352989,
-      "checkedMm": 18109.5151994871,
-      "checkedSegments": 5546,
-      "belowResolution": 0,
-      "failureCount": 3564
+      "maxRelErrPct": 43.84790847012774,
+      "checkedMm": 18064.097484973372,
+      "checkedSegments": 5383,
+      "belowResolution": 163,
+      "failureCount": 3407
     },
     "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.00510 vs expected 0.00906 (43.71 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.0051,
-        "expected": 0.00906012632657822
-      },
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 3283,
@@ -10243,13 +9636,6 @@
         "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
         "actual": 0.00459,
         "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.02157 vs expected 0.03823 (43.57 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.021570000000000002,
-        "expected": 0.03822731046036383
       },
       {
         "assertion": "volumetric-extrusion-conservation",
@@ -10261,16 +9647,33 @@
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.01128 vs expected 0.02001 (43.64 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.011279999999999998,
-        "expected": 0.020013692928845365
+        "line": 3297,
+        "layer": 50,
+        "message": "dE 0.00434 vs expected 0.00770 (43.63 %), dL3D=0.2321 [wave overhang]",
+        "actual": 0.00434,
+        "expected": 0.007699438788396743
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 3306,
+        "layer": 50,
+        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
+        "actual": 0.00459,
+        "expected": 0.008140897485529904
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 3309,
+        "layer": 50,
+        "message": "dE 0.00616 vs expected 0.01093 (43.66 %), dL3D=0.3296 [wave overhang]",
+        "actual": 0.00616,
+        "expected": 0.010934484535274186
       }
     ],
     "byFeature": {
       "wave overhang": {
-        "count": 3564,
-        "worstPct": 43.93868722352989
+        "count": 3407,
+        "worstPct": 43.84790847012774
       }
     }
   },
@@ -10321,22 +9724,15 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 3564,
+    "failureCount": 3407,
     "metrics": {
-      "maxRelErrPct": 43.93868722352989,
-      "checkedMm": 18109.5151994871,
-      "checkedSegments": 5546,
-      "belowResolution": 0,
-      "failureCount": 3564
+      "maxRelErrPct": 43.84790847012774,
+      "checkedMm": 18064.097484973372,
+      "checkedSegments": 5383,
+      "belowResolution": 163,
+      "failureCount": 3407
     },
     "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.00510 vs expected 0.00906 (43.71 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.0051,
-        "expected": 0.00906012632657822
-      },
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 3283,
@@ -10344,13 +9740,6 @@
         "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
         "actual": 0.00459,
         "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.02157 vs expected 0.03823 (43.57 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.021570000000000002,
-        "expected": 0.03822731046036383
       },
       {
         "assertion": "volumetric-extrusion-conservation",
@@ -10362,16 +9751,33 @@
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 3281,
-        "message": "run dE 0.01128 vs expected 0.02001 (43.64 %) [wave overhang|50|0.44999998807907104|0.20000000298023224]",
-        "actual": 0.011279999999999998,
-        "expected": 0.020013692928845365
+        "line": 3297,
+        "layer": 50,
+        "message": "dE 0.00434 vs expected 0.00770 (43.63 %), dL3D=0.2321 [wave overhang]",
+        "actual": 0.00434,
+        "expected": 0.007699438788396743
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 3306,
+        "layer": 50,
+        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
+        "actual": 0.00459,
+        "expected": 0.008140897485529904
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 3309,
+        "layer": 50,
+        "message": "dE 0.00616 vs expected 0.01093 (43.66 %), dL3D=0.3296 [wave overhang]",
+        "actual": 0.00616,
+        "expected": 0.010934484535274186
       }
     ],
     "byFeature": {
       "wave overhang": {
-        "count": 3564,
-        "worstPct": 43.93868722352989
+        "count": 3407,
+        "worstPct": 43.84790847012774
       }
     }
   },
@@ -10424,10 +9830,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4447.9716149933665,
-      "checkedSegments": 1022,
-      "belowResolution": 2,
+      "maxRelErrPct": 0.19562933784773484,
+      "checkedMm": 4446.732763912728,
+      "checkedSegments": 1014,
+      "belowResolution": 10,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10479,13 +9885,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 100,
+    "failureCount": 98,
     "metrics": {
-      "maxRelErrPct": 21.410225882915032,
-      "checkedMm": 46600.544646507406,
-      "checkedSegments": 4845,
-      "belowResolution": 0,
-      "failureCount": 100
+      "maxRelErrPct": 21.357822899728426,
+      "checkedMm": 46600.42160992748,
+      "checkedSegments": 4842,
+      "belowResolution": 3,
+      "failureCount": 98
     },
     "firstFailures": [
       {
@@ -10539,8 +9945,8 @@
         "worstPct": 21.216224503706364
       },
       "bottom surface": {
-        "count": 84,
-        "worstPct": 21.410225882915032
+        "count": 82,
+        "worstPct": 21.357822899728426
       }
     }
   },
@@ -10617,13 +10023,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 400,
+    "failureCount": 392,
     "metrics": {
-      "maxRelErrPct": 21.410225882915032,
-      "checkedMm": 139801.6339395302,
-      "checkedSegments": 14535,
-      "belowResolution": 0,
-      "failureCount": 400
+      "maxRelErrPct": 21.357822899728426,
+      "checkedMm": 139801.26482979042,
+      "checkedSegments": 14526,
+      "belowResolution": 9,
+      "failureCount": 392
     },
     "firstFailures": [
       {
@@ -10677,8 +10083,8 @@
         "worstPct": 21.216224503706364
       },
       "bottom surface": {
-        "count": 336,
-        "worstPct": 21.410225882915032
+        "count": 328,
+        "worstPct": 21.357822899728426
       }
     }
   },
@@ -10757,10 +10163,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6502172828115305,
-      "checkedMm": 4577.020234793355,
-      "checkedSegments": 1135,
-      "belowResolution": 6,
+      "maxRelErrPct": 0.2267018792853429,
+      "checkedMm": 4576.356968632601,
+      "checkedSegments": 1128,
+      "belowResolution": 13,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10811,37 +10217,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.268075732879044,
-      "checkedMm": 16216.619671851706,
-      "checkedSegments": 6524,
-      "belowResolution": 4,
-      "failureCount": 2
+      "maxRelErrPct": 0.5138197629585367,
+      "checkedMm": 15770.362648067628,
+      "checkedSegments": 6133,
+      "belowResolution": 395,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00119,
-        "expected": 0.001163608478474008
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00119,
-        "expected": 0.001163608478474008
-      }
-    ],
-    "byFeature": {
-      "brim": {
-        "count": 2,
-        "worstPct": 2.268075732879044
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "plugin/patternex",
@@ -10889,37 +10274,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.268075732879044,
-      "checkedMm": 15856.296460673395,
-      "checkedSegments": 3765,
-      "belowResolution": 2,
-      "failureCount": 2
+      "maxRelErrPct": 0.3529064042886785,
+      "checkedMm": 15433.565234685084,
+      "checkedSegments": 3532,
+      "belowResolution": 235,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00119,
-        "expected": 0.001163608478474008
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00119,
-        "expected": 0.001163608478474008
-      }
-    ],
-    "byFeature": {
-      "brim": {
-        "count": 2,
-        "worstPct": 2.268075732879044
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "plugin/patternex",
@@ -10970,10 +10334,10 @@
     "pass": false,
     "failureCount": 3760,
     "metrics": {
-      "maxRelErrPct": 0.5310290152413683,
-      "checkedMm": 19582.957177338325,
-      "checkedSegments": 4810,
-      "belowResolution": 10,
+      "maxRelErrPct": 0.4395163218745988,
+      "checkedMm": 16726.61647626342,
+      "checkedSegments": 3670,
+      "belowResolution": 1150,
       "failureCount": 3760
     },
     "firstFailures": [
@@ -11011,11 +10375,11 @@
     "byFeature": {
       "outer wall": {
         "count": 2640,
-        "worstPct": 0.1623187707021631
+        "worstPct": 0.06769854302884418
       },
       "prime tower": {
         "count": 1040,
-        "worstPct": 0.5310290152413683
+        "worstPct": 0.0704300519680542
       },
       "gap infill": {
         "count": 72,
@@ -11088,9 +10452,9 @@
     "failureCount": 92,
     "metrics": {
       "maxRelErrPct": 279.19161558990015,
-      "checkedMm": 24242.732447143324,
-      "checkedSegments": 33566,
-      "belowResolution": 0,
+      "checkedMm": 24231.96812192799,
+      "checkedSegments": 33494,
+      "belowResolution": 72,
       "failureCount": 92
     },
     "firstFailures": [
@@ -11258,10 +10622,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7784249654994009,
-      "checkedMm": 24891.77505843433,
-      "checkedSegments": 16947,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.32201503307426654,
+      "checkedMm": 24881.010733219005,
+      "checkedSegments": 16875,
+      "belowResolution": 72,
       "failureCount": 0
     },
     "firstFailures": []
@@ -11341,10 +10705,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.45216094215173,
-      "checkedMm": 4996.502925318584,
-      "checkedSegments": 14931,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.4791307294879423,
+      "checkedMm": 3955.1412653582947,
+      "checkedSegments": 6127,
+      "belowResolution": 8804,
       "failureCount": 0
     },
     "firstFailures": []
