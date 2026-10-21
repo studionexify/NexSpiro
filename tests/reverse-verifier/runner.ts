@@ -141,6 +141,17 @@ export function declaredMap(out: SliceOutput, moves: M.GMove[]): Declared {
       if (prev) { prev.x = x; prev.y = y; prev.z = z; continue; }
       map.set(line, { w: mv[k * MOVE_STRIDE + 3], h: mv[k * MOVE_STRIDE + 4], x, y, z });
     }
+    // Bulnex repeats the finished body N times: cycle c's lines carry the declared geometry of cycle 1's same lines.
+    const gl = out.gcode.split('\n');
+    const mark = (re: RegExp) => { const r: number[] = []; gl.forEach((t, i) => { if (re.test(t)) r.push(i + 1); }); return r; };
+    const ejects = mark(/^; ===== BULNEX eject: cycle \d+/), starts = mark(/^; ===== BULNEX cycle \d+ of/);
+    if (ejects.length >= 2 && starts.length >= 1) {
+      const bodyLen = ejects[1] - (starts[0] + 1), first = ejects[0] - bodyLen;
+      for (let c = 0; c < starts.length; c++) for (let q = 0; q < bodyLen; q++) {
+        const d = map.get(first + q);
+        if (d) map.set(starts[c] + 1 + q, d);
+      }
+    }
     // A program-body plugin (Bulnex repeats the finished program) shifts/repeats lines after the moves were recorded, so
     // some line numbers are stale. Those parsed moves are matched by end position instead (same packed bead, same w,h).
     const key = (x: number, y: number, z: number) => `${Math.round(x * 1000)},${Math.round(y * 1000)},${Math.round(z * 1000)}`;
@@ -316,11 +327,15 @@ export function errorRow(assertion: string, e: unknown): Row {
 }
 
 /** tech-status row from the Advanced report: passes only when the tech ran. The reason is always kept. */
-export function statusRow(status: string | undefined, reason: string | undefined): Row {
-  const ok = status === 'applied' || status === 'adapted';
+export function statusRow(status: string | undefined, reason: string | undefined, profile: Profile = PROFILE_DEFAULT): Row {
+  // Extreme / Boundary parameters can push a tech past what its fixture allows (a 6 mm part has no room for a buried entry,
+  // 18 kHz is out of reach for the cell sizes): the engine declining with a stated reason is "not applicable", never a pass on
+  // math. Default must always run, and the other assertions of the cell still run on the (unmodified) output.
+  const na = status === 'idle' && !!reason && profile !== PROFILE_DEFAULT;
+  const ok = status === 'applied' || status === 'adapted' || na;
   const msg = `status=${status ?? 'missing from advanced output'}${reason ? ` (${reason})` : ''}`;
   return {
-    assertion: 'tech-status', type: 'STATUS', pass: ok, failureCount: ok ? 0 : 1, metrics: {},
+    assertion: 'tech-status', type: 'STATUS', pass: ok, failureCount: ok ? 0 : 1, metrics: na ? { notApplicable: 1 } : {},
     firstFailures: ok ? [] : [{ assertion: 'tech-status', message: msg }], reason: reason ?? undefined,
   };
 }

@@ -468,51 +468,72 @@ export function checkRampAngle(moves: GMove[], thetaMaxDeg: number, plunge?: Plu
   let worst = 0, minZ = Infinity, plunges = 0, plungeMinClear = Infinity;
   const hash = new Map<number, number[]>();
   const tanA = plunge ? Math.tan((plunge.coneAngleDeg * Math.PI) / 180) : 0;
+  let moveId = 0;
   const insert = (x: number, y: number, z: number) => {
     const k = cellKey(Math.floor(x / CELL), Math.floor(y / CELL));
     const a = hash.get(k);
-    if (a) a.push(x, y, z); else hash.set(k, [x, y, z]);
+    if (a) a.push(x, y, z, moveId); else hash.set(k, [x, y, z, moveId]);
   };
-  const isPlunge = (m: GMove, st: Pos) => Math.hypot(m.x - st.x, m.y - st.y) < 1e-6 && Math.abs(m.z - st.z) > 1e-6;
+  // strands that start or end exactly where a draw begins are the ones the head is joined to: they are not obstacles to it
+  const pk = (x: number, y: number, z: number) => `${Math.round(x * 1000)},${Math.round(y * 1000)},${Math.round(z * 1000)}`;
+  const touching = new Map<string, Set<number>>();
+  const touch = (x: number, y: number, z: number) => { const k = pk(x, y, z); (touching.get(k) ?? touching.set(k, new Set()).get(k)!).add(moveId); };
   const deposit = (m: GMove, st: Pos) => {
     if (!plunge || !m.isExtruding || !Number.isFinite(st.x)) return;
     const L = Math.hypot(m.x - st.x, m.y - st.y, m.z - st.z), n = Math.max(1, Math.ceil(L / SAMPLE));
+    moveId++; touch(st.x, st.y, st.z); touch(m.x, m.y, m.z);
     for (let i = 1; i <= n; i++) { const t = i / n; insert(st.x + (m.x - st.x) * t, st.y + (m.y - st.y) * t, st.z + (m.z - st.z) * t); }
+  };
+  // The strand the nozzle is continuing (the previous move) joins the hash one move late: the head came from it.
+  let pending: { m: GMove; st: Pos } | null = null;
+  let worstAt = '';
+  /** Smallest margin (mm, negative = plastic inside the cone) of the nozzle cone along a steep move; Infinity if clear of everything. */
+  const coneClear = (m: GMove, st: Pos, o: PlungeOptions): number => {
+    const L = Math.hypot(m.x - st.x, m.y - st.y, m.z - st.z), n = Math.max(1, Math.ceil(L / SAMPLE));
+    const reach = o.tipRadius + o.tipLen * tanA + o.margin + o.beadHalfWidth + CELL;
+    let clear = Infinity;
+    const j0 = touching.get(pk(st.x, st.y, st.z)), j1 = touching.get(pk(m.x, m.y, m.z));
+    const joined = { has: (id: number) => !!(j0?.has(id) || j1?.has(id)) };
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, nx = st.x + (m.x - st.x) * t, ny = st.y + (m.y - st.y) * t, nz = st.z + (m.z - st.z) * t;
+      const c0x = Math.floor((nx - reach) / CELL), c1x = Math.floor((nx + reach) / CELL), c0y = Math.floor((ny - reach) / CELL), c1y = Math.floor((ny + reach) / CELL);
+      for (let ix = c0x; ix <= c1x; ix++) for (let iy = c0y; iy <= c1y; iy++) {
+        const a = hash.get(cellKey(ix, iy));
+        if (!a) continue;
+        for (let q = 0; q < a.length; q += 4) {
+          const dz = a[q + 2] - nz;
+          // plastic at the tip's own level is the surface the head rests on (a base layer, a node), not a cone obstacle
+          if (dz < 0.05 || dz > o.tipLen || joined.has(a[q + 3])) continue;
+          const c = Math.hypot(a[q] - nx, a[q + 1] - ny) - (o.tipRadius + dz * tanA + o.margin + o.beadHalfWidth);
+          if (c < clear) { clear = c; worstAt = `nozzle (${nx.toFixed(2)}, ${ny.toFixed(2)}, ${nz.toFixed(2)}) vs plastic (${a[q].toFixed(2)}, ${a[q + 1].toFixed(2)}, ${a[q + 2].toFixed(2)})`; }
+        }
+      }
+    }
+    return clear;
   };
   for (const { m, start } of withStart(moves)) {
     try {
     if (!m.isExtruding || !Number.isFinite(start.x)) continue;
+    if (pending) { deposit(pending.m, pending.st); pending = null; }
     minZ = Math.min(minZ, m.z);
     if (m.z < 0) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `Z=${m.z} below bed`, actual: m.z, expected: 0 });
-    if (plunge && isPlunge(m, start)) {
+    const theta = Math.atan2(Math.abs(m.z - start.z), Math.hypot(m.x - start.x, m.y - start.y));
+    if (plunge && theta > thetaMax + TOL.angle) {
+      // a draw steeper than the slope limit (a plunge is the vertical case) is allowed only through a void the nozzle cone clears
       plunges++;
-      const zLow = Math.min(start.z, m.z), zHigh = Math.max(start.z, m.z);
-      const depth = zHigh - zLow;
-      let clear = Infinity;
+      const depth = Math.abs(m.z - start.z);
       if (depth > plunge.tipLen - plunge.margin + 1e-6) {
         failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `plunge ${depth.toFixed(2)} mm deeper than the tip allows (${(plunge.tipLen - plunge.margin).toFixed(2)} mm)`, actual: depth, expected: plunge.tipLen - plunge.margin });
         continue;
       }
-      const reach = plunge.tipRadius + plunge.tipLen * tanA + plunge.margin + plunge.beadHalfWidth + CELL;
-      const c0x = Math.floor((m.x - reach) / CELL), c1x = Math.floor((m.x + reach) / CELL), c0y = Math.floor((m.y - reach) / CELL), c1y = Math.floor((m.y + reach) / CELL);
-      for (let ix = c0x; ix <= c1x; ix++) for (let iy = c0y; iy <= c1y; iy++) {
-        const a = hash.get(cellKey(ix, iy));
-        if (!a) continue;
-        for (let q = 0; q < a.length; q += 3) {
-          const dz = a[q + 2] - zLow;
-          if (dz < 0 || dz > plunge.tipLen) continue; // below the tip or above the cone region (head volumes are checked by the engine's own clearance pass)
-          const allowed = plunge.tipRadius + dz * tanA + plunge.margin + plunge.beadHalfWidth;
-          clear = Math.min(clear, Math.hypot(a[q] - m.x, a[q + 1] - m.y) - allowed);
-        }
-      }
+      const clear = coneClear(m, start, plunge);
       plungeMinClear = Math.min(plungeMinClear, clear);
-      if (clear < 0) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `vertical plunge into a void that is not clear: plastic ${(-clear).toFixed(3)} mm inside the nozzle cone`, actual: clear, expected: 0 });
+      if (clear < 0) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `steep draw into a void that is not clear: plastic ${(-clear).toFixed(3)} mm inside the nozzle cone [${worstAt}]`, actual: clear, expected: 0 });
       continue;
     }
-    const theta = Math.atan2(Math.abs(m.z - start.z), Math.hypot(m.x - start.x, m.y - start.y));
     if (theta > worst) worst = theta;
     if (theta > thetaMax + TOL.angle) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `ramp ${(theta * 180 / Math.PI).toFixed(2)} deg > limit ${thetaMaxDeg} deg`, actual: (theta * 180) / Math.PI, expected: thetaMaxDeg });
-    } finally { deposit(m, start); }
+    } finally { if (m.isExtruding) pending = { m, st: start }; }
   }
   return result(name, failures, { maxThetaDeg: (worst * 180) / Math.PI, minExtrusionZ: Number.isFinite(minZ) ? minZ : 0, plunges, plungeMinClearanceMm: Number.isFinite(plungeMinClear) ? plungeMinClear : 0 });
 }

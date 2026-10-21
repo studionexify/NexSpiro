@@ -170,7 +170,7 @@ function advRun(tech: TechDef) {
     const t = rep.get(tech.id);
     const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(c.printer, cfg), plungeFor(c.printer, cfg));
     if (tech.id === 'z_weave') results.push(zWeaveCheck(moves, cfg, profile));
-    return [statusRow(t?.status, t?.reason), ...finish(results, moves, ctx)];
+    return [statusRow(t?.status, t?.reason, profile), ...finish(results, moves, ctx)];
   };
 }
 
@@ -276,7 +276,7 @@ function weaveRun(profile: Profile, pins = false): Row[] {
   const t = rep.get('z_weave');
   const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(PRINTER, cfg), plungeFor(PRINTER, cfg));
   results.push(zWeaveCheck(moves, cfg, profile));
-  return [statusRow(t?.status, t?.reason), ...finish(results, moves, ctx)];
+  return [statusRow(t?.status, t?.reason, profile), ...finish(results, moves, ctx)];
 }
 
 // ---------------------------------------------------------------------------------------------------------

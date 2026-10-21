@@ -107,4 +107,9 @@ describe('vertical plunges', () => {
     expect(checkRampAngle([...wall(3, 1.2), { type: 'G0', x: 0, y: 0, z: 0.5, e: 0, f: 1, isExtruding: false, layerIndex: 1, line: 500 }, { ...bead(0, 0, 3.4), line: 501, layerIndex: 1 }], 10, P).pass).toBe(false);
     expect(checkRampAngle(plunge(), 10).pass).toBe(false); // without plunge options the 90 deg rule still applies
   });
+  it('treats a steep diagonal like a plunge: exempt only through a clear cone, and joined strands do not count', () => {
+    const diag = (): GMove[] => [{ type: 'G0', x: 0, y: 0, z: 1.8, e: 0, f: 1, isExtruding: false, layerIndex: 1, line: 500 }, { ...bead(2.6, 0, 0.0 + 0.2), line: 501, layerIndex: 1 }];
+    expect(checkRampAngle([...wall(6, 1.2), ...diag()], 10, P).pass).toBe(true);
+    expect(checkRampAngle([...wall(1.2, 1.9), ...diag()], 10, P).pass).toBe(false);
+  });
 });

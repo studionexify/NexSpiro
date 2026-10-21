@@ -15,7 +15,9 @@ export const spatialLattice: TechModule = {
     const base = 3;
     const tip = s.caps.toolhead.nozzle.tip_len;
     const cell = Math.max(1, Math.min(s.pnum('spatial_lattice', 'cell'), tip - 0.4));
-    const pitch = Math.max(cell, s.caps.toolhead.nozzle.tip_len); // horizontal node pitch
+    // node pitch: the next node's post top (one cell above the nozzle) must lie outside the nozzle cone
+    const nz = s.caps.toolhead.nozzle, wBead = s.num('line_width') || s.caps.nozzle * 1.05;
+    const pitch = Math.max(cell, nz.tip_len, nz.tip_diameter / 2 + cell * Math.tan((nz.cone_angle_deg * Math.PI) / 180) + s.caps.toolhead.margin + wBead + 0.1);
     const flowK = s.pnum('spatial_lattice', 'flow'), v = s.pnum('spatial_lattice', 'speed'), dwell = s.pnum('spatial_lattice', 'dwell');
     const w = s.num('line_width') || s.caps.nozzle * 1.05;
     const fd = s.filaments[0]?.diameter ?? 1.75;

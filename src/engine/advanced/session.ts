@@ -216,7 +216,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
     setLayers(z, h) { ctx.layerZ = z; ctx.layerH = h; },
     post(layers, c) {
       // curved layers back to real space first, then every geometry pass, then the head-clearance check
-      if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
+      if (warp) { const n = unwarpLayers(layers, warp, 0.01, 0.3, caps.maxSlopeDeg); if (n) ctx.nonPlanar = true; }
       for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
       if (ctx.nonPlanar) {
         const lengths = snapshotLengths(layers);
