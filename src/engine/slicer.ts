@@ -1201,7 +1201,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       curObj = o;
       const rg = regions[i][o];
       const sw = olw(o, i, 'internal_solid_infill_line_width'), twid = olw(o, i, 'top_surface_line_width'), spw = olw(o, i, 'sparse_infill_line_width');
-      const w0 = lw0('initial_layer_line_width'), wb = lw0('initial_layer_infill_line_width') || w0;
+      const w0 = lw0('initial_layer_line_width'), wb = (Number(cfg.initial_layer_infill_line_width) || w0);
       const overlap = onum(o, i, 'infill_wall_overlap') / 100;
       const solidAngle = solidDir + (i % 2 ? 90 : 0);
       const jobs: IslandJob[] = objIslands.map((isl) => ({ isl, fills: [], wallFil: featFil(o, i, 'wall', isl.fil), gapFil: featFil(o, i, 'wall', isl.fil) }));

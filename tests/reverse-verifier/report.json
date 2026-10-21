@@ -1,0 +1,7795 @@
+[
+  {
+    "target": "core/cube",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.509547690213907,
+      "checkedMm": 33607.484492179814,
+      "checkedSegments": 2900,
+      "failureCount": 66
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 65,
+        "layer": 0,
+        "message": "dE 0.75038 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75038,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 69,
+        "layer": 0,
+        "message": "dE 0.75039 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75039,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 73,
+        "layer": 0,
+        "message": "dE 0.72721 vs expected 0.88150 (17.50 %), dL3D=23.6669 [bottom surface]",
+        "actual": 0.72721,
+        "expected": 0.88150073112296
+      }
+    ]
+  },
+  {
+    "target": "core/cube",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 20,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.8195227335269404,
+      "checkedMm": 5964.857211956373,
+      "checkedSegments": 606,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 19.64,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 8.33456889239156,
+      "checkedMm": 13288.416227941643,
+      "checkedSegments": 2489,
+      "failureCount": 21
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1253,
+        "message": "run dE 0.00004 vs expected 0.00004 (4.76 %) [internal solid infill|1|0.1|0.08]",
+        "actual": 0.00004,
+        "expected": 0.00003818233283486929
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1846,
+        "message": "run dE 0.00039 vs expected 0.00038 (2.14 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00039,
+        "expected": 0.00038182332834847595
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1846,
+        "message": "run dE 0.00039 vs expected 0.00038 (2.14 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00039,
+        "expected": 0.00038182332834847595
+      }
+    ]
+  },
+  {
+    "target": "core/cube",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cube",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 5.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.5103848223603,
+      "checkedMm": 27014.14934868267,
+      "checkedSegments": 16522,
+      "failureCount": 46
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 180,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65229 (17.50 %), dL3D=17.5129 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6522894719306315
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 184,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65232 (17.50 %), dL3D=17.5136 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6523158084390044
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 188,
+        "layer": 0,
+        "message": "dE 0.53700 vs expected 0.65095 (17.50 %), dL3D=17.4769 [bottom surface]",
+        "actual": 0.537,
+        "expected": 0.650946282355395
+      }
+    ]
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 9.79012277757537,
+      "zMax": 20,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.12986717276622312,
+      "checkedMm": 4732.085572504122,
+      "checkedSegments": 4144,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 9.099306621935549,
+      "zMax": 19.64,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.7936025818200503,
+      "checkedMm": 10429.228821605864,
+      "checkedSegments": 15960,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 2.950471996138929,
+      "zMax": 5.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.50741348979472,
+      "checkedMm": 17425.300508511453,
+      "checkedSegments": 2065,
+      "failureCount": 30
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 65,
+        "layer": 0,
+        "message": "dE 0.31583 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31583,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 69,
+        "layer": 0,
+        "message": "dE 0.31584 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31584,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 73,
+        "layer": 0,
+        "message": "dE 0.29267 vs expected 0.35476 (17.50 %), dL3D=9.5247 [bottom surface]",
+        "actual": 0.29267,
+        "expected": 0.3547599297348752
+      }
+    ]
+  },
+  {
+    "target": "core/tee",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 14,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.33972007831073575,
+      "checkedMm": 1908.6453127604655,
+      "checkedSegments": 272,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 13.88,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 30.95061586782597,
+      "checkedMm": 92950.19564858047,
+      "checkedSegments": 8607,
+      "failureCount": 10
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1037,
+        "message": "run dE 0.00002 vs expected 0.00002 (30.95 %) [internal solid infill|1|0.1|0.08]",
+        "actual": 0.00002,
+        "expected": 0.00001527293313395857
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2042,
+        "message": "run dE 0.00001 vs expected 0.00001 (2.73 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00001,
+        "expected": 0.000009734623009962947
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2042,
+        "message": "run dE 0.00001 vs expected 0.00001 (2.73 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00001,
+        "expected": 0.000009734623009962947
+      }
+    ]
+  },
+  {
+    "target": "core/tee",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/tee",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 13.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 21.221043901074207,
+      "checkedMm": 20473.29932678624,
+      "checkedSegments": 9890,
+      "failureCount": 138
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 112,
+        "layer": 0,
+        "message": "dE 0.87353 vs expected 1.05885 (17.50 %), dL3D=28.4285 [bottom surface]",
+        "actual": 0.87353,
+        "expected": 1.0588543589503285
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 116,
+        "layer": 0,
+        "message": "dE 0.87354 vs expected 1.05885 (17.50 %), dL3D=28.4285 [bottom surface]",
+        "actual": 0.87354,
+        "expected": 1.0588543589503285
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 120,
+        "layer": 0,
+        "message": "dE 0.87240 vs expected 1.05748 (17.50 %), dL3D=28.3918 [bottom surface]",
+        "actual": 0.8724,
+        "expected": 1.0574848328667197
+      }
+    ]
+  },
+  {
+    "target": "core/vase",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.15785770863484141,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 14.790359022011597,
+      "zMax": 30,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Default",
+    "assertion": "c0-continuity",
+    "pass": false,
+    "metrics": {
+      "maxGapMm": 165.00238643122714,
+      "extrusionsChecked": 9408,
+      "failureCount": 2
+    },
+    "firstFailures": [
+      {
+        "assertion": "c0-continuity",
+        "line": 13009,
+        "layer": 149,
+        "message": "travel jump 2.000 mm inside continuous span",
+        "actual": 2,
+        "expected": 0.5
+      },
+      {
+        "assertion": "c0-continuity",
+        "line": 13011,
+        "layer": 149,
+        "message": "travel jump 165.002 mm inside continuous span",
+        "actual": 165.00238643122714,
+        "expected": 0.5
+      }
+    ]
+  },
+  {
+    "target": "core/vase",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.06794330112740245,
+      "checkedMm": 4885.692423429143,
+      "checkedSegments": 2748,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.4970519571066308,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 14.099183132366216,
+      "zMax": 29.72,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Extreme Modulation",
+    "assertion": "c0-continuity",
+    "pass": false,
+    "metrics": {
+      "maxGapMm": 164.4132778153881,
+      "extrusionsChecked": 2496,
+      "failureCount": 2
+    },
+    "firstFailures": [
+      {
+        "assertion": "c0-continuity",
+        "line": 3759,
+        "layer": 41,
+        "message": "travel jump 2.000 mm inside continuous span",
+        "actual": 2,
+        "expected": 0.5
+      },
+      {
+        "assertion": "c0-continuity",
+        "line": 3761,
+        "layer": 41,
+        "message": "travel jump 164.413 mm inside continuous span",
+        "actual": 164.4132778153881,
+        "expected": 0.5
+      }
+    ]
+  },
+  {
+    "target": "core/vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.7896692343090249,
+      "checkedMm": 5782.284479687663,
+      "checkedSegments": 10572,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.39724451395096416,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 2.950471996138929,
+      "zMax": 5.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "c0-continuity",
+    "pass": false,
+    "metrics": {
+      "maxGapMm": 155.42642967011759,
+      "extrusionsChecked": 4480,
+      "failureCount": 2
+    },
+    "firstFailures": [
+      {
+        "assertion": "c0-continuity",
+        "line": 12942,
+        "layer": 72,
+        "message": "travel jump 2.000 mm inside continuous span",
+        "actual": 2,
+        "expected": 0.5
+      },
+      {
+        "assertion": "c0-continuity",
+        "line": 12944,
+        "layer": 72,
+        "message": "travel jump 155.426 mm inside continuous span",
+        "actual": 155.42642967011759,
+        "expected": 0.5
+      }
+    ]
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 66.64375998978429,
+      "checkedMm": 17384.760508511445,
+      "checkedSegments": 2060,
+      "failureCount": 100
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 65,
+        "layer": 0,
+        "message": "dE 0.31583 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31583,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 69,
+        "layer": 0,
+        "message": "dE 0.31584 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31584,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 73,
+        "layer": 0,
+        "message": "dE 0.29267 vs expected 0.35476 (17.50 %), dL3D=9.5247 [bottom surface]",
+        "actual": 0.29267,
+        "expected": 0.3547599297348752
+      }
+    ]
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 14,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 89.39467780713524,
+      "checkedMm": 2033.973312760463,
+      "checkedSegments": 314,
+      "failureCount": 56
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 830,
+        "layer": 15,
+        "message": "dE 0.15276 vs expected 1.44041 (89.39 %), dL3D=2.9840 [bridge]",
+        "actual": 0.15276,
+        "expected": 1.4404088553082959
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 834,
+        "layer": 15,
+        "message": "dE 0.15276 vs expected 1.44041 (89.39 %), dL3D=2.9840 [bridge]",
+        "actual": 0.15276,
+        "expected": 1.4404088553082959
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 838,
+        "layer": 15,
+        "message": "dE 0.15276 vs expected 1.44041 (89.39 %), dL3D=2.9840 [bridge]",
+        "actual": 0.15276,
+        "expected": 1.4404088553082959
+      }
+    ]
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 13.88,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 1796.3026691910309,
+      "checkedMm": 90307.29164857953,
+      "checkedSegments": 8325,
+      "failureCount": 82
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1037,
+        "message": "run dE 0.00002 vs expected 0.00002 (30.95 %) [internal solid infill|1|0.1|0.08]",
+        "actual": 0.00002,
+        "expected": 0.00001527293313395857
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2042,
+        "message": "run dE 0.00001 vs expected 0.00001 (2.73 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00001,
+        "expected": 0.000009734623009962947
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2042,
+        "message": "run dE 0.00001 vs expected 0.00001 (2.73 %) [internal solid infill|2|0.1|0.08]",
+        "actual": 0.00001,
+        "expected": 0.000009734623009962947
+      }
+    ]
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/thick-bridge",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "zMax": 13.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.5103848223603,
+      "checkedMm": 26866.490373729623,
+      "checkedSegments": 16522,
+      "failureCount": 46
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 180,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65229 (17.50 %), dL3D=17.5129 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6522894719306315
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 184,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65232 (17.50 %), dL3D=17.5136 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6523158084390044
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 188,
+        "layer": 0,
+        "message": "dE 0.53700 vs expected 0.65095 (17.50 %), dL3D=17.4769 [bottom surface]",
+        "actual": 0.537,
+        "expected": 0.650946282355395
+      }
+    ]
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Default",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 9.85038242912426,
+      "zMax": 20,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.16164923304186493,
+      "checkedMm": 7184.891891268308,
+      "checkedSegments": 4655,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Extreme Modulation",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 9.85038242912426,
+      "zMax": 19.64,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5869951318689283,
+      "checkedMm": 17776.734101743667,
+      "checkedSegments": 16355,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "core/width-mix",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "bounding-envelope",
+    "pass": true,
+    "metrics": {
+      "rMax": 2.850082454947569,
+      "zMax": 5.96,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.3990899917537696,
+      "checkedMm": 32125.74351051231,
+      "checkedSegments": 12175,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 31851.92216025702,
+      "checkedSegments": 11874,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4337.619505848583,
+      "checkedSegments": 1032,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/fea_stress",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sdf_frep",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 34948.013798779204,
+      "checkedSegments": 2564,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 34948.013798779204,
+      "checkedSegments": 2564,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4893.62270093501,
+      "checkedSegments": 1082,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eulerian_spiral",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No sloped top skins.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.72005938302,
+      "checkedSegments": 3611,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No sloped top skins.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.72005938302,
+      "checkedSegments": 3611,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No sloped top skins.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184598588826,
+      "checkedSegments": 974,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/hot_on_hot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/kinematic_extrusion",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 6246.926348884958,
+      "checkedMm": 31440.334041221737,
+      "checkedSegments": 34877,
+      "failureCount": 29009
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 625,
+        "layer": 3,
+        "message": "dE 0.01976 vs expected 0.01647 (19.95 %), dL3D=0.4966 [inner wall]",
+        "actual": 0.01976,
+        "expected": 0.016473581002359825
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 626,
+        "layer": 3,
+        "message": "dE 0.01841 vs expected 0.01640 (12.29 %), dL3D=0.4943 [inner wall]",
+        "actual": 0.01841,
+        "expected": 0.016395478239384483
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 627,
+        "layer": 3,
+        "message": "dE 0.01599 vs expected 0.01645 (2.80 %), dL3D=0.4959 [inner wall]",
+        "actual": 0.01599,
+        "expected": 0.01645018576494868
+      }
+    ]
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 90,
+      "minExtrusionZ": 0.2,
+      "failureCount": 92
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6975,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6981,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6987,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 80.36713599516867,
+      "checkedMm": 32097.3709205681,
+      "checkedSegments": 9347,
+      "failureCount": 8000
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 625,
+        "layer": 3,
+        "message": "dE 0.08359 vs expected 0.06931 (20.60 %), dL3D=2.0894 [inner wall]",
+        "actual": 0.08359,
+        "expected": 0.0693093037997878
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 626,
+        "layer": 3,
+        "message": "dE 0.08270 vs expected 0.06926 (19.40 %), dL3D=2.0880 [inner wall]",
+        "actual": 0.0827,
+        "expected": 0.06926281848429094
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 627,
+        "layer": 3,
+        "message": "dE 0.07501 vs expected 0.06927 (8.29 %), dL3D=2.0881 [inner wall]",
+        "actual": 0.07501,
+        "expected": 0.06926663123193627
+      }
+    ]
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 1.849834131302228,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 2.256796225633318,
+      "checkedMm": 4266.301815337269,
+      "checkedSegments": 704,
+      "failureCount": 55
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 881,
+        "message": "run dE 0.04115 vs expected 0.04204 (2.12 %) [sparse infill|5|0.45|0.08]",
+        "actual": 0.041150000000000006,
+        "expected": 0.0420415574359118
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1082,
+        "message": "run dE 0.04299 vs expected 0.04204 (2.26 %) [sparse infill|6|0.45|0.08]",
+        "actual": 0.04299,
+        "expected": 0.0420415574359118
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1283,
+        "message": "run dE 0.04115 vs expected 0.04204 (2.12 %) [sparse infill|7|0.45|0.08]",
+        "actual": 0.041150000000000006,
+        "expected": 0.042041668859848454
+      }
+    ]
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/z_weave",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 1.3748347805694574,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No walls under shallow slopes.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833707582,
+      "checkedSegments": 14992,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No walls under shallow slopes.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833707582,
+      "checkedSegments": 14992,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No walls under shallow slopes.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.18458758654,
+      "checkedSegments": 3538,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 25943.88638543173,
+      "checkedSegments": 5140,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 22118.069798779397,
+      "checkedSegments": 1460,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4121.731157471523,
+      "checkedSegments": 1026,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/turing_infill",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No outer-wall corners sharper than the threshold.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 40.0657442439895,
+      "checkedMm": 32120.667833702126,
+      "checkedSegments": 2496,
+      "failureCount": 300
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 54,
+        "message": "run dE 0.00221 vs expected 0.00369 (40.07 %) [outer wall|0|0.5|0.2]",
+        "actual": 0.00221,
+        "expected": 0.003687373726632737
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 54,
+        "message": "run dE 0.00221 vs expected 0.00369 (40.07 %) [outer wall|0|0.5|0.2]",
+        "actual": 0.00221,
+        "expected": 0.003687373726632737
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 54,
+        "message": "run dE 0.00221 vs expected 0.00369 (40.07 %) [outer wall|0|0.5|0.2]",
+        "actual": 0.00221,
+        "expected": 0.003687373726632737
+      }
+    ]
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No outer-wall corners sharper than the threshold.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/corner_overshoot",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 47.59845056087532,
+      "checkedMm": 9534.386596944367,
+      "checkedSegments": 3183,
+      "failureCount": 2970
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 666,
+        "layer": 11,
+        "message": "dE 0.08813 vs expected 0.05971 (47.60 %), dL3D=1.8000 [inner wall]",
+        "actual": 0.08813,
+        "expected": 0.05970929888837269
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 668,
+        "layer": 11,
+        "message": "dE 0.13917 vs expected 0.09429 (47.59 %), dL3D=2.8425 [inner wall]",
+        "actual": 0.13917,
+        "expected": 0.0942920650141788
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 669,
+        "layer": 11,
+        "message": "dE 0.08813 vs expected 0.05971 (47.60 %), dL3D=1.8000 [inner wall]",
+        "actual": 0.08813,
+        "expected": 0.05970929888837269
+      }
+    ]
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 90,
+      "minExtrusionZ": 0.2,
+      "failureCount": 1530
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 666,
+        "layer": 11,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 668,
+        "layer": 11,
+        "message": "ramp 39.29 deg > limit 10.6553060508032 deg",
+        "actual": 39.289406862500314,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 669,
+        "layer": 11,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 87.53588757708489,
+      "checkedMm": 9534.386596944367,
+      "checkedSegments": 3183,
+      "failureCount": 2970
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 666,
+        "layer": 11,
+        "message": "dE 0.11197 vs expected 0.05971 (87.53 %), dL3D=1.8000 [inner wall]",
+        "actual": 0.11197,
+        "expected": 0.05970929888837269
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 668,
+        "layer": 11,
+        "message": "dE 0.17683 vs expected 0.09429 (87.53 %), dL3D=2.8425 [inner wall]",
+        "actual": 0.17683,
+        "expected": 0.0942920650141788
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 669,
+        "layer": 11,
+        "message": "dE 0.11197 vs expected 0.05971 (87.53 %), dL3D=1.8000 [inner wall]",
+        "actual": 0.11197,
+        "expected": 0.05970929888837269
+      }
+    ]
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 90,
+      "minExtrusionZ": 0.2,
+      "failureCount": 1530
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 666,
+        "layer": 11,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 668,
+        "layer": 11,
+        "message": "ramp 39.29 deg > limit 10.6553060508032 deg",
+        "actual": 39.289406862500314,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 669,
+        "layer": 11,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 104.13768708366456,
+      "checkedMm": 693.2922266345764,
+      "checkedSegments": 123,
+      "failureCount": 21
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 416,
+        "layer": 24,
+        "message": "dE 0.06336 vs expected 0.03104 (104.14 %), dL3D=2.2000 [inner wall]",
+        "actual": 0.06336,
+        "expected": 0.03103787492900926
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 421,
+        "layer": 24,
+        "message": "dE 0.06336 vs expected 0.03104 (104.14 %), dL3D=2.2000 [inner wall]",
+        "actual": 0.06336,
+        "expected": 0.03103787492900926
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 422,
+        "layer": 24,
+        "message": "dE 0.06336 vs expected 0.03104 (104.14 %), dL3D=2.2000 [inner wall]",
+        "actual": 0.06336,
+        "expected": 0.03103787492900926
+      }
+    ]
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spatial_lattice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 90,
+      "minExtrusionZ": 0.2,
+      "failureCount": 9
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 565,
+        "layer": 47,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 567,
+        "layer": 47,
+        "message": "ramp 39.29 deg > limit 10.6553060508032 deg",
+        "actual": 39.289406862500314,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 568,
+        "layer": 47,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 27.675807905643314,
+      "checkedMm": 36711.665001503476,
+      "checkedSegments": 13696,
+      "failureCount": 11694
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 912,
+        "layer": 3,
+        "message": "dE 0.04343 vs expected 0.03440 (26.27 %), dL3D=1.0369 [sparse infill]",
+        "actual": 0.04343,
+        "expected": 0.03439549568299266
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 913,
+        "layer": 3,
+        "message": "dE 0.04336 vs expected 0.03440 (26.06 %), dL3D=1.0369 [sparse infill]",
+        "actual": 0.04336,
+        "expected": 0.03439549568299242
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 914,
+        "layer": 3,
+        "message": "dE 0.04336 vs expected 0.03437 (26.17 %), dL3D=1.0360 [sparse infill]",
+        "actual": 0.04336,
+        "expected": 0.03436712333622894
+      }
+    ]
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 30.9630467035179,
+      "checkedMm": 25687.01997878792,
+      "checkedSegments": 4036,
+      "failureCount": 2576
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 912,
+        "layer": 3,
+        "message": "dE 0.05745 vs expected 0.04387 (30.95 %), dL3D=1.3226 [sparse infill]",
+        "actual": 0.05745,
+        "expected": 0.04387318182289394
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 913,
+        "layer": 3,
+        "message": "dE 0.05742 vs expected 0.04390 (30.81 %), dL3D=1.3233 [sparse infill]",
+        "actual": 0.05742,
+        "expected": 0.0438964756173795
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 914,
+        "layer": 3,
+        "message": "dE 0.05742 vs expected 0.04391 (30.78 %), dL3D=1.3236 [sparse infill]",
+        "actual": 0.05742,
+        "expected": 0.04390518567452794
+      }
+    ]
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 22.132102223600832,
+      "checkedMm": 5466.452634696047,
+      "checkedSegments": 2314,
+      "failureCount": 1336
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 384,
+        "layer": 4,
+        "message": "dE 0.01306 vs expected 0.01070 (22.05 %), dL3D=0.7585 [sparse infill]",
+        "actual": 0.01306,
+        "expected": 0.010700712858290449
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 385,
+        "layer": 4,
+        "message": "dE 0.01306 vs expected 0.01071 (21.97 %), dL3D=0.7590 [sparse infill]",
+        "actual": 0.01306,
+        "expected": 0.010707769441899228
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 387,
+        "layer": 4,
+        "message": "dE 0.01131 vs expected 0.00927 (22.02 %), dL3D=0.6570 [sparse infill]",
+        "actual": 0.01131,
+        "expected": 0.00926903810379972
+      }
+    ]
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metamaterial",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No overhangs to optimise.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No overhangs to optimise.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No overhangs to optimise.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.7590433040452603,
+      "checkedMm": 31973.77690742456,
+      "checkedSegments": 3488,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.6335719152869265,
+      "checkedMm": 31851.9446410162,
+      "checkedSegments": 5177,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.3280586992424096,
+      "checkedMm": 4186.741537124954,
+      "checkedSegments": 1781,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/eikonal_offsets",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.7375765169599823,
+      "checkedMm": 32197.32401008908,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.8655855737849867,
+      "checkedMm": 32271.20102077476,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/inverse_warp",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (Paint matte or gloss areas with the Advanced paint tool.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (Paint matte or gloss areas with the Advanced paint tool.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (Paint matte or gloss areas with the Advanced paint tool.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (PLA does not foam: choose a foaming filament (LW-PLA).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (PLA does not foam: choose a foaming filament (LW-PLA).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (PLA does not foam: choose a foaming filament (LW-PLA).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Needs at least 3 walls (the outer wall is never braided).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Needs at least 3 walls (the outer wall is never braided).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Needs at least 3 walls (the outer wall is never braided).)"
+      }
+    ]
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 67.11192635808517,
+      "checkedMm": 43030.8362385816,
+      "checkedSegments": 14557,
+      "failureCount": 121
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1255,
+        "message": "run dE 0.00119 vs expected 0.00122 (2.44 %) [sparse infill|4|0.45|0.2]",
+        "actual": 0.00119,
+        "expected": 0.0012197134486009692
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 1255,
+        "message": "run dE 0.00119 vs expected 0.00122 (2.44 %) [sparse infill|4|0.45|0.2]",
+        "actual": 0.00119,
+        "expected": 0.0012197134486009692
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 2775,
+        "message": "run dE 0.00022 vs expected 0.00024 (8.33 %) [internal solid infill|9|0.42|0.2]",
+        "actual": 0.00022,
+        "expected": 0.00023998720373352142
+      }
+    ]
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (The part is too thin for a cavity inside its shell.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (The part is too thin for a cavity inside its shell.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 8.299066912238285,
+      "checkedMm": 34948.02003216071,
+      "checkedSegments": 2564,
+      "failureCount": 1
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 937,
+        "layer": 4,
+        "message": "dE 0.65157 vs expected 0.60164 (8.30 %), dL3D=19.5800 [outer wall]",
+        "actual": 0.65157,
+        "expected": 0.6016395326175886
+      }
+    ]
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.08778713178448488,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 8.299066912238285,
+      "checkedMm": 34948.02003216071,
+      "checkedSegments": 2564,
+      "failureCount": 1
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 937,
+        "layer": 4,
+        "message": "dE 0.65157 vs expected 0.60164 (8.30 %), dL3D=19.5800 [outer wall]",
+        "actual": 0.65157,
+        "expected": 0.6016395326175886
+      }
+    ]
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.08778713178448488,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 27.504496127590727,
+      "checkedMm": 4893.625994740099,
+      "checkedSegments": 1082,
+      "failureCount": 3
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 362,
+        "layer": 4,
+        "message": "dE 0.09342 vs expected 0.07327 (27.50 %), dL3D=5.5801 [outer wall]",
+        "actual": 0.09342,
+        "expected": 0.07326800453100636
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 363,
+        "layer": 4,
+        "message": "dE 0.08600 vs expected 0.07327 (17.38 %), dL3D=5.5800 [outer wall]",
+        "actual": 0.086,
+        "expected": 0.07326694564535187
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 364,
+        "layer": 4,
+        "message": "dE 0.07867 vs expected 0.07327 (7.37 %), dL3D=5.5800 [outer wall]",
+        "actual": 0.07867,
+        "expected": 0.07326694564535187
+      }
+    ]
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/thick_vase",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.308038857399861,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 99.84646024413148,
+      "checkedMm": 37083.267078745004,
+      "checkedSegments": 10374,
+      "failureCount": 8178
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 632,
+        "message": "run dE 0.01937 vs expected 0.08261 (76.55 %) [inner wall|3|0.45|0.2]",
+        "actual": 0.019370000000000005,
+        "expected": 0.08260748170455255
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 655,
+        "layer": 3,
+        "message": "dE 0.00255 vs expected 0.00689 (62.96 %), dL3D=0.2076 [inner wall]",
+        "actual": 0.00255,
+        "expected": 0.006885213233147064
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 656,
+        "layer": 3,
+        "message": "dE 0.00726 vs expected 0.01954 (62.84 %), dL3D=0.5890 [inner wall]",
+        "actual": 0.00726,
+        "expected": 0.01953823762901436
+      }
+    ]
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 97.39770250160811,
+      "checkedMm": 33993.8729147877,
+      "checkedSegments": 5844,
+      "failureCount": 3648
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 464,
+        "message": "run dE 0.00174 vs expected 0.02943 (94.09 %) [inner wall|2|0.45|0.2]",
+        "actual": 0.0017400000000000002,
+        "expected": 0.029434250880961185
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 470,
+        "layer": 2,
+        "message": "dE 0.00079 vs expected 0.00733 (89.22 %), dL3D=0.2210 [inner wall]",
+        "actual": 0.00079,
+        "expected": 0.007330975030183259
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 471,
+        "layer": 2,
+        "message": "dE 0.00101 vs expected 0.00818 (87.66 %), dL3D=0.2467 [inner wall]",
+        "actual": 0.00101,
+        "expected": 0.008184574152595617
+      }
+    ]
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No outer loop with room for a buried entry.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/tangent_entry",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 99.87215730261481,
+      "checkedMm": 33284.663955946686,
+      "checkedSegments": 6948,
+      "failureCount": 4356
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 303,
+        "layer": 1,
+        "message": "dE 0.00002 vs expected 0.01564 (99.87 %), dL3D=0.5091 [outer wall]",
+        "actual": 0.00002,
+        "expected": 0.015644225606205975
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 304,
+        "layer": 1,
+        "message": "dE 0.00017 vs expected 0.01536 (98.89 %), dL3D=0.5000 [outer wall]",
+        "actual": 0.00017,
+        "expected": 0.01536409802247427
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 305,
+        "layer": 1,
+        "message": "dE 0.00047 vs expected 0.01536 (96.94 %), dL3D=0.5000 [outer wall]",
+        "actual": 0.00047,
+        "expected": 0.015364374556051741
+      }
+    ]
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 10.868525340168716,
+      "minExtrusionZ": 0.2,
+      "failureCount": 99
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 303,
+        "layer": 1,
+        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
+        "actual": 10.868525340168711,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 516,
+        "layer": 2,
+        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
+        "actual": 10.868525340168704,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 735,
+        "layer": 3,
+        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
+        "actual": 10.868525340168716,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 99.80394953874875,
+      "checkedMm": 35072.147468089795,
+      "checkedSegments": 14373,
+      "failureCount": 11286
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 304,
+        "layer": 1,
+        "message": "dE 0.00003 vs expected 0.01530 (99.80 %), dL3D=0.4980 [outer wall]",
+        "actual": 0.00003,
+        "expected": 0.015302182819940101
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 305,
+        "layer": 1,
+        "message": "dE 0.00007 vs expected 0.01527 (99.54 %), dL3D=0.4970 [outer wall]",
+        "actual": 0.00007,
+        "expected": 0.015271548406821036
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 306,
+        "layer": 1,
+        "message": "dE 0.00014 vs expected 0.01527 (99.08 %), dL3D=0.4970 [outer wall]",
+        "actual": 0.00014,
+        "expected": 0.015271455669223569
+      }
+    ]
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.31621884076817725,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 95.74270433462603,
+      "checkedMm": 4410.270927211725,
+      "checkedSegments": 1490,
+      "failureCount": 576
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 202,
+        "layer": 1,
+        "message": "dE 0.00028 vs expected 0.00658 (95.74 %), dL3D=0.5009 [outer wall]",
+        "actual": 0.00028,
+        "expected": 0.0065769451315616755
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 203,
+        "layer": 1,
+        "message": "dE 0.00208 vs expected 0.00657 (68.32 %), dL3D=0.5001 [outer wall]",
+        "actual": 0.00208,
+        "expected": 0.006566451395110649
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 204,
+        "layer": 1,
+        "message": "dE 0.00449 vs expected 0.00657 (31.62 %), dL3D=0.5001 [outer wall]",
+        "actual": 0.00449,
+        "expected": 0.006566451395110649
+      }
+    ]
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/scarf_splice",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 3.4336303624505504,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No dome or shallow top surfaces on this part.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No dome or shallow top surfaces on this part.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No dome or shallow top surfaces on this part.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No up-facing slopes within 11° to burnish.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No up-facing slopes within 11° to burnish.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No up-facing slopes within 11° to burnish.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 50.099577340586364,
+      "checkedMm": 32097.310985122982,
+      "checkedSegments": 14740,
+      "failureCount": 271
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17443,
+        "layer": 97,
+        "message": "dE 0.02675 vs expected 0.01913 (39.84 %), dL3D=0.6226 [outer wall]",
+        "actual": 0.02675,
+        "expected": 0.019129287956813762
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17444,
+        "layer": 97,
+        "message": "dE 0.02678 vs expected 0.01868 (43.35 %), dL3D=0.6080 [outer wall]",
+        "actual": 0.02678,
+        "expected": 0.018682195914352325
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17445,
+        "layer": 97,
+        "message": "dE 0.02678 vs expected 0.01822 (46.97 %), dL3D=0.5930 [outer wall]",
+        "actual": 0.02678,
+        "expected": 0.01822123718439323
+      }
+    ]
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 9.384158538725789,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 50.099577340586364,
+      "checkedMm": 32097.43207515415,
+      "checkedSegments": 14740,
+      "failureCount": 271
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17443,
+        "layer": 97,
+        "message": "dE 0.02735 vs expected 0.01916 (42.73 %), dL3D=0.6236 [outer wall]",
+        "actual": 0.02735,
+        "expected": 0.019162599512179503
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17444,
+        "layer": 97,
+        "message": "dE 0.02735 vs expected 0.01868 (46.40 %), dL3D=0.6080 [outer wall]",
+        "actual": 0.02735,
+        "expected": 0.018682170645314126
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 17445,
+        "layer": 97,
+        "message": "dE 0.02735 vs expected 0.01822 (50.10 %), dL3D=0.5930 [outer wall]",
+        "actual": 0.02735,
+        "expected": 0.01822123718439323
+      }
+    ]
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 9.384158538725789,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 10.00868029922382,
+      "checkedMm": 4266.314031333114,
+      "checkedSegments": 3470,
+      "failureCount": 80
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4989,
+        "layer": 69,
+        "message": "dE 0.00784 vs expected 0.00733 (6.92 %), dL3D=0.5585 [outer wall]",
+        "actual": 0.00784,
+        "expected": 0.00733281006248525
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4990,
+        "layer": 69,
+        "message": "dE 0.00784 vs expected 0.00733 (7.01 %), dL3D=0.5580 [outer wall]",
+        "actual": 0.00784,
+        "expected": 0.007326694564535075
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4991,
+        "layer": 69,
+        "message": "dE 0.00784 vs expected 0.00733 (7.01 %), dL3D=0.5580 [outer wall]",
+        "actual": 0.00784,
+        "expected": 0.0073266945645352605
+      }
+    ]
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/perimeter_feathering",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0.821229059955047,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/iso_gloss",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 1.5228765122077115,
+      "checkedMm": 32010.129451500845,
+      "checkedSegments": 2084,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 1.2533031120266491,
+      "checkedMm": 29087.333142342286,
+      "checkedSegments": 1930,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4099.318700935019,
+      "checkedSegments": 858,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/quasicrystal",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 14.486668884011147,
+      "checkedMm": 2678.4368913764506,
+      "checkedSegments": 6624,
+      "failureCount": 6624
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 42,
+        "layer": 0,
+        "message": "dE 0.01515 vs expected 0.01613 (6.10 %), dL3D=0.4332 [outer wall]",
+        "actual": 0.01515,
+        "expected": 0.016134871241980597
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 43,
+        "layer": 0,
+        "message": "dE 0.01686 vs expected 0.01800 (6.34 %), dL3D=0.4833 [outer wall]",
+        "actual": 0.01686,
+        "expected": 0.018001053807245156
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 44,
+        "layer": 0,
+        "message": "dE 0.01739 vs expected 0.01855 (6.25 %), dL3D=0.4980 [outer wall]",
+        "actual": 0.01739,
+        "expected": 0.018548756813466318
+      }
+    ]
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 14.486668884011147,
+      "checkedMm": 6026.483005598942,
+      "checkedSegments": 14904,
+      "failureCount": 14904
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 42,
+        "layer": 0,
+        "message": "dE 0.01515 vs expected 0.01613 (6.10 %), dL3D=0.4332 [outer wall]",
+        "actual": 0.01515,
+        "expected": 0.016134871241980597
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 43,
+        "layer": 0,
+        "message": "dE 0.01686 vs expected 0.01800 (6.34 %), dL3D=0.4833 [outer wall]",
+        "actual": 0.01686,
+        "expected": 0.018001053807245156
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 44,
+        "layer": 0,
+        "message": "dE 0.01739 vs expected 0.01855 (6.25 %), dL3D=0.4980 [outer wall]",
+        "actual": 0.01739,
+        "expected": 0.018548756813466318
+      }
+    ]
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 14.486668884011147,
+      "checkedMm": 174.217654562276,
+      "checkedSegments": 436,
+      "failureCount": 436
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 42,
+        "layer": 0,
+        "message": "dE 0.01515 vs expected 0.01613 (6.10 %), dL3D=0.4332 [outer wall]",
+        "actual": 0.01515,
+        "expected": 0.016134871241980597
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 43,
+        "layer": 0,
+        "message": "dE 0.01686 vs expected 0.01800 (6.34 %), dL3D=0.4833 [outer wall]",
+        "actual": 0.01686,
+        "expected": 0.018001053807245156
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 44,
+        "layer": 0,
+        "message": "dE 0.01739 vs expected 0.01855 (6.25 %), dL3D=0.4980 [outer wall]",
+        "actual": 0.01739,
+        "expected": 0.018548756813466318
+      }
+    ]
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/metric_morph",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Load a target image in the Optical intent card.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Load a target image in the Optical intent card.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=unavailable (Load a target image in the Optical intent card.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/symplectic_shaper",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/morse_router",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No stress field to smooth: turn on FEA stress-aligned paths or Turing infill.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No stress field to smooth: turn on FEA stress-aligned paths or Turing infill.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No stress field to smooth: turn on FEA stress-aligned paths or Turing infill.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4266.184587586545,
+      "checkedSegments": 914,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 35685.727340791454,
+      "checkedSegments": 13972,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": false,
+    "metrics": {},
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle (No resonator cell up to 40 mm reaches 18000 Hz with 0.45 mm lines.)"
+      }
+    ]
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.38543429302129023,
+      "checkedMm": 32095.719833702264,
+      "checkedSegments": 2196,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.5787993665315757,
+      "checkedMm": 4099.318700935019,
+      "checkedSegments": 858,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 4.07583015985848,
+      "checkedMm": 56570.85918875243,
+      "checkedSegments": 76726,
+      "failureCount": 1
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 118992,
+        "message": "run dE 0.00018 vs expected 0.00019 (4.08 %) [sparse infill|64|0.45|0.2]",
+        "actual": 0.00018,
+        "expected": 0.0001876482228618414
+      }
+    ]
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.44788389883543384,
+      "checkedMm": 94937.54689105132,
+      "checkedSegments": 242212,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.80390543276934,
+      "checkedMm": 4388.583915904892,
+      "checkedSegments": 1448,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/homogenization",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.5103848223603,
+      "checkedMm": 26446.16346707111,
+      "checkedSegments": 49098,
+      "failureCount": 46
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 183,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65229 (17.50 %), dL3D=17.5129 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6522894719306315
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 187,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65232 (17.50 %), dL3D=17.5136 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6523158084390044
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 191,
+        "layer": 0,
+        "message": "dE 0.53700 vs expected 0.65095 (17.50 %), dL3D=17.4769 [bottom surface]",
+        "actual": 0.537,
+        "expected": 0.650946282355395
+      }
+    ]
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "spirographic-signature",
+    "pass": true,
+    "metrics": {
+      "layersAnalysed": 91,
+      "worstAmplitudeErrMm": 0.00459313582091847,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.5103848223603,
+      "checkedMm": 51911.64897274178,
+      "checkedSegments": 54200,
+      "failureCount": 46
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 183,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65229 (17.50 %), dL3D=17.5129 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6522894719306315
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 187,
+        "layer": 0,
+        "message": "dE 0.53814 vs expected 0.65232 (17.50 %), dL3D=17.5136 [bottom surface]",
+        "actual": 0.53814,
+        "expected": 0.6523158084390044
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 191,
+        "layer": 0,
+        "message": "dE 0.53700 vs expected 0.65095 (17.50 %), dL3D=17.4769 [bottom surface]",
+        "actual": 0.537,
+        "expected": 0.650946282355395
+      }
+    ]
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "spirographic-signature",
+    "pass": true,
+    "metrics": {
+      "layersAnalysed": 91,
+      "worstAmplitudeErrMm": 0.0642389620567756,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.58550201009226,
+      "checkedMm": 4981.183912852359,
+      "checkedSegments": 3751,
+      "failureCount": 10
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 834,
+        "layer": 0,
+        "message": "dE 0.07192 vs expected 0.08718 (17.50 %), dL3D=2.3405 [bottom surface]",
+        "actual": 0.07192,
+        "expected": 0.08717560262972811
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 838,
+        "layer": 0,
+        "message": "dE 0.09165 vs expected 0.11109 (17.50 %), dL3D=2.9826 [bottom surface]",
+        "actual": 0.09165,
+        "expected": 0.11108963501274757
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 842,
+        "layer": 0,
+        "message": "dE 0.10269 vs expected 0.12452 (17.53 %), dL3D=3.3432 [bottom surface]",
+        "actual": 0.10269,
+        "expected": 0.12452152544814275
+      }
+    ]
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "spirographic-signature",
+    "pass": true,
+    "metrics": {
+      "layersAnalysed": 50,
+      "worstAmplitudeErrMm": 0.0008659892669715119,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 39.47851787614014,
+      "checkedMm": 18137.86098907454,
+      "checkedSegments": 5550,
+      "failureCount": 3592
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 70,
+        "layer": 0,
+        "message": "dE 0.31583 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31583,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 74,
+        "layer": 0,
+        "message": "dE 0.31584 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31584,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 78,
+        "layer": 0,
+        "message": "dE 0.29267 vs expected 0.35476 (17.50 %), dL3D=9.5247 [bottom surface]",
+        "actual": 0.29267,
+        "expected": 0.3547599297348752
+      }
+    ]
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 39.47851787614014,
+      "checkedMm": 18137.86098907454,
+      "checkedSegments": 5550,
+      "failureCount": 3592
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 70,
+        "layer": 0,
+        "message": "dE 0.31583 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31583,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 74,
+        "layer": 0,
+        "message": "dE 0.31584 vs expected 0.38284 (17.50 %), dL3D=10.2785 [bottom surface]",
+        "actual": 0.31584,
+        "expected": 0.38283521444886015
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 78,
+        "layer": 0,
+        "message": "dE 0.29267 vs expected 0.35476 (17.50 %), dL3D=9.5247 [bottom surface]",
+        "actual": 0.29267,
+        "expected": 0.3547599297348752
+      }
+    ]
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.508661155495854,
+      "checkedMm": 4454.776810655505,
+      "checkedSegments": 1028,
+      "failureCount": 14
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 147,
+        "layer": 0,
+        "message": "dE 0.14202 vs expected 0.17214 (17.50 %), dL3D=4.6216 [bottom surface]",
+        "actual": 0.14202,
+        "expected": 0.17213889389362616
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 151,
+        "layer": 0,
+        "message": "dE 0.14201 vs expected 0.17214 (17.50 %), dL3D=4.6216 [bottom surface]",
+        "actual": 0.14201,
+        "expected": 0.17213889389362616
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 155,
+        "layer": 0,
+        "message": "dE 0.11884 vs expected 0.14401 (17.48 %), dL3D=3.8665 [bottom surface]",
+        "actual": 0.11884,
+        "expected": 0.14401093509950214
+      }
+    ]
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/hanex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 21.216224503706364,
+      "checkedMm": 46866.09364895135,
+      "checkedSegments": 4872,
+      "failureCount": 67
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 69,
+        "layer": 0,
+        "message": "dE 0.58788 vs expected 0.71257 (17.50 %), dL3D=19.1315 [bottom surface]",
+        "actual": 0.58788,
+        "expected": 0.7125749561178012
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 73,
+        "layer": 0,
+        "message": "dE 0.56525 vs expected 0.68513 (17.50 %), dL3D=18.3947 [bottom surface]",
+        "actual": 0.56525,
+        "expected": 0.6851317603654818
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 77,
+        "layer": 0,
+        "message": "dE 0.54208 vs expected 0.65706 (17.50 %), dL3D=17.6409 [bottom surface]",
+        "actual": 0.54208,
+        "expected": 0.6570564756514968
+      }
+    ]
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 21.216224503706364,
+      "checkedMm": 140598.2809468616,
+      "checkedSegments": 14616,
+      "failureCount": 115
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 69,
+        "layer": 0,
+        "message": "dE 0.58788 vs expected 0.71257 (17.50 %), dL3D=19.1315 [bottom surface]",
+        "actual": 0.58788,
+        "expected": 0.7125749561178012
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 73,
+        "layer": 0,
+        "message": "dE 0.56525 vs expected 0.68513 (17.50 %), dL3D=18.3947 [bottom surface]",
+        "actual": 0.56525,
+        "expected": 0.6851317603654818
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 77,
+        "layer": 0,
+        "message": "dE 0.54208 vs expected 0.65706 (17.50 %), dL3D=17.6409 [bottom surface]",
+        "actual": 0.54208,
+        "expected": 0.6570564756514968
+      }
+    ]
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.50837521804049,
+      "checkedMm": 4583.833915735875,
+      "checkedSegments": 1143,
+      "failureCount": 19
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 146,
+        "layer": 0,
+        "message": "dE 0.15333 vs expected 0.18583 (17.49 %), dL3D=4.9893 [bottom surface]",
+        "actual": 0.15333,
+        "expected": 0.1858341547297161
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 150,
+        "layer": 0,
+        "message": "dE 0.13071 vs expected 0.15842 (17.49 %), dL3D=4.2532 [bottom surface]",
+        "actual": 0.13071,
+        "expected": 0.1584172982067464
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 154,
+        "layer": 0,
+        "message": "dE 0.10753 vs expected 0.13032 (17.48 %), dL3D=3.4988 [bottom surface]",
+        "actual": 0.10753,
+        "expected": 0.13031567426341192
+      }
+    ]
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 58.27312436586737,
+      "checkedMm": 16363.6193243694,
+      "checkedSegments": 6540,
+      "failureCount": 200
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 85,
+        "layer": 0,
+        "message": "dE 0.75038 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75038,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 89,
+        "layer": 0,
+        "message": "dE 0.75039 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75039,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 93,
+        "layer": 0,
+        "message": "dE 0.72721 vs expected 0.88150 (17.50 %), dL3D=23.6669 [bottom surface]",
+        "actual": 0.72721,
+        "expected": 0.8815007311229605
+      }
+    ]
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 17.50370371946032,
+      "checkedMm": 16003.290456336836,
+      "checkedSegments": 3779,
+      "failureCount": 70
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 85,
+        "layer": 0,
+        "message": "dE 0.75038 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75038,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 89,
+        "layer": 0,
+        "message": "dE 0.75039 vs expected 0.90958 (17.50 %), dL3D=24.4206 [bottom surface]",
+        "actual": 0.75039,
+        "expected": 0.9095760158369453
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 93,
+        "layer": 0,
+        "message": "dE 0.72721 vs expected 0.88150 (17.50 %), dL3D=23.6669 [bottom surface]",
+        "actual": 0.72721,
+        "expected": 0.8815007311229605
+      }
+    ]
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 54.61569184792771,
+      "checkedMm": 19589.75813035978,
+      "checkedSegments": 4824,
+      "failureCount": 3866
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 162,
+        "layer": 0,
+        "message": "dE 0.14202 vs expected 0.17214 (17.50 %), dL3D=4.6216 [bottom surface]",
+        "actual": 0.14202,
+        "expected": 0.17213889389362616
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 166,
+        "layer": 0,
+        "message": "dE 0.14201 vs expected 0.17214 (17.50 %), dL3D=4.6216 [bottom surface]",
+        "actual": 0.14201,
+        "expected": 0.17213889389362616
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 170,
+        "layer": 0,
+        "message": "dE 0.11884 vs expected 0.14401 (17.48 %), dL3D=3.8665 [bottom surface]",
+        "actual": 0.11884,
+        "expected": 0.14401093509950236
+      }
+    ]
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/patternex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Default",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 6246.926348884958,
+      "checkedMm": 24242.732447143324,
+      "checkedSegments": 33566,
+      "failureCount": 22027
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 867,
+        "layer": 3,
+        "message": "dE 0.01693 vs expected 0.01533 (10.44 %), dL3D=0.4621 [inner wall]",
+        "actual": 0.01693,
+        "expected": 0.015329945368664511
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 868,
+        "layer": 3,
+        "message": "dE 0.01497 vs expected 0.01534 (2.40 %), dL3D=0.4624 [inner wall]",
+        "actual": 0.01497,
+        "expected": 0.015338377100280317
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 869,
+        "layer": 3,
+        "message": "dE 0.01374 vs expected 0.01529 (10.12 %), dL3D=0.4609 [inner wall]",
+        "actual": 0.01374,
+        "expected": 0.015287680965896817
+      }
+    ]
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": false,
+    "metrics": {
+      "maxThetaDeg": 90,
+      "minExtrusionZ": 0.2,
+      "failureCount": 92
+    },
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6861,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6867,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      },
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 6873,
+        "layer": 17,
+        "message": "ramp 90.00 deg > limit 10.6553060508032 deg",
+        "actual": 90,
+        "expected": 10.6553060508032
+      }
+    ]
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Default",
+    "assertion": "weave-phase-alternation",
+    "pass": false,
+    "metrics": {
+      "minCrossings": 0,
+      "minAdjacentRms": 0,
+      "maxPeriod2Rms": 0.0013682438872887242,
+      "failureCount": 189
+    },
+    "firstFailures": [
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 3,
+        "message": "layers 3/4 RMS difference 0.0004 < 0.0250",
+        "actual": 0.00042827788526460687,
+        "expected": 0.025
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 4,
+        "message": "layers 4/5 RMS difference 0.0015 < 0.0250",
+        "actual": 0.0014701716774577866,
+        "expected": 0.025
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 5,
+        "message": "layers 5/6 RMS difference 0.0014 < 0.0250",
+        "actual": 0.0013682438872887242,
+        "expected": 0.025
+      }
+    ]
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": false,
+    "metrics": {
+      "maxRelErrPct": 74.2029478235921,
+      "checkedMm": 24891.77505843433,
+      "checkedSegments": 16947,
+      "failureCount": 9213
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 867,
+        "layer": 3,
+        "message": "dE 0.04065 vs expected 0.03070 (32.39 %), dL3D=0.9256 [inner wall]",
+        "actual": 0.04065,
+        "expected": 0.03070402110132088
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 868,
+        "layer": 3,
+        "message": "dE 0.03902 vs expected 0.03053 (27.79 %), dL3D=0.9205 [inner wall]",
+        "actual": 0.03902,
+        "expected": 0.03053425308471193
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 869,
+        "layer": 3,
+        "message": "dE 0.03702 vs expected 0.03060 (20.99 %), dL3D=0.9224 [inner wall]",
+        "actual": 0.03702,
+        "expected": 0.030598368111901135
+      }
+    ]
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 4.030414441345757,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Extreme Modulation",
+    "assertion": "weave-phase-alternation",
+    "pass": false,
+    "metrics": {
+      "minCrossings": 0,
+      "minAdjacentRms": 0,
+      "maxPeriod2Rms": 0.0009617840097029481,
+      "failureCount": 189
+    },
+    "firstFailures": [
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 3,
+        "message": "layers 3/4 RMS difference 0.0003 < 0.0405",
+        "actual": 0.00032964300444303753,
+        "expected": 0.04050000000000001
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 4,
+        "message": "layers 4/5 RMS difference 0.0010 < 0.0405",
+        "actual": 0.0009623208696892655,
+        "expected": 0.04050000000000001
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 5,
+        "message": "layers 5/6 RMS difference 0.0010 < 0.0405",
+        "actual": 0.0009617840097029481,
+        "expected": 0.04050000000000001
+      }
+    ]
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "tech-status",
+    "pass": true,
+    "metrics": {},
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "pass": true,
+    "metrics": {
+      "maxRelErrPct": 0.4791253085144564,
+      "checkedMm": 4996.5029253185885,
+      "checkedSegments": 6197,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "pass": true,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "pass": true,
+    "metrics": {
+      "maxThetaDeg": 2.7661808315915106,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "weave/z_weave-cylinder",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "weave-phase-alternation",
+    "pass": false,
+    "metrics": {
+      "minCrossings": 0,
+      "minAdjacentRms": 0,
+      "maxPeriod2Rms": 0.004296281823310999,
+      "failureCount": 127
+    },
+    "firstFailures": [
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 3,
+        "message": "layers 3/5 should repeat (period-2 alternation) but RMS=0.0028",
+        "actual": 0.0028179999454989242,
+        "expected": 0
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 4,
+        "message": "layers 4/6 should repeat (period-2 alternation) but RMS=0.0043",
+        "actual": 0.004296281823310999,
+        "expected": 0
+      },
+      {
+        "assertion": "weave-phase-alternation",
+        "layer": 5,
+        "message": "layers 5/7 should repeat (period-2 alternation) but RMS=0.0041",
+        "actual": 0.0040597058565723055,
+        "expected": 0
+      }
+    ]
+  }
+]

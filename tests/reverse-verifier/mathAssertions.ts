@@ -29,6 +29,14 @@ export const TOL = Object.freeze({
   envelope: 0.05,
   /** Numerical slack on angle comparisons (rad). */
   angle: 1e-9,
+  /**
+   * Measurement floor, not a tolerance: G-code prints E with 5 decimals (quantum 1e-5, so +/-5e-6). A segment
+   * whose expected E is below 5e-6 / 0.02 = 2.5e-4 mm cannot resolve 2 % in the file itself. Such runs are
+   * counted in metrics.belowResolution (never silently dropped) and are not judged.
+   */
+  eResolution: 2.5e-4,
+  /** Z-weave: Pearson correlation of adjacent-layer Z offsets must be at most this (anti-phase). */
+  zWeaveCorrelation: -0.8,
 });
 
 // ---------------------------------------------------------------------------------------------------------
@@ -121,29 +129,32 @@ export interface VolumetricOptions {
    * Cross-section model for the extruded bead.
    *  'rect'    : A = W * h                           (spec formula)
    *  'stadium' : A = (W - h) * h + pi * (h/2)^2      (rounded-edge bead used by Orca/Prusa-style slicers, W > h)
+   *  'circle'  : A = pi * (W/2)^2                    (thick bridge: round bead of diameter W)
    * The model is a property of the module under test and is declared by the runner, never tuned to a result.
    */
-  crossSection: 'rect' | 'stadium';
+  crossSection: 'rect' | 'stadium' | 'circle';
 }
 
-export function beadArea(model: 'rect' | 'stadium', W: number, h: number): number {
+export function beadArea(model: 'rect' | 'stadium' | 'circle', W: number, h: number): number {
+  if (model === 'circle') return Math.PI * (W / 2) ** 2;
   if (model === 'rect' || W <= h) return W * h;
   return (W - h) * h + Math.PI * (h / 2) ** 2;
 }
 
 /** dE_expected = dL * A(W, h_local) * flow / (pi (d/2)^2), dL being the true 3-D length. */
-export function expectedE(dL: number, W: number, h: number, flow: number, model: 'rect' | 'stadium', d: number): number {
+export function expectedE(dL: number, W: number, h: number, flow: number, model: 'rect' | 'stadium' | 'circle', d: number): number {
   return (dL * beadArea(model, W, h) * flow) / (Math.PI * (d / 2) ** 2);
 }
 
 export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions): AssertionResult {
   const name = 'volumetric-extrusion-conservation';
   const failures: Failure[] = [];
-  let maxRel = 0, checkedMm = 0, checkedSeg = 0;
+  let maxRel = 0, checkedMm = 0, checkedSeg = 0, belowRes = 0;
   let debt = 0; // filament currently retracted (mm)
   let accA = 0, accE = 0, accKey = '', accLine = 0, accLen = 0; // run accumulator for sub-minSegmentLen segments
   const flush = () => {
-    if (accLen > 0 && accE > 0) {
+    if (accLen > 0 && accE > 0 && accE < TOL.eResolution) belowRes++;
+    else if (accLen > 0 && accE > 0) {
       const rel = Math.abs(accA - accE) / accE;
       maxRel = Math.max(maxRel, rel);
       checkedMm += accLen; checkedSeg++;
@@ -176,7 +187,8 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
     if (!(h > 0) || !(W > 0)) { failures.push({ assertion: name, line: m.line, message: `unknown geometry W=${W} h=${h}` }); continue; }
     const eExp = expectedE(dL, W, h, flow, o.crossSection, o.filamentDiameter);
 
-    if (dL >= TOL.minSegmentLen) {
+    if (dL >= TOL.minSegmentLen && eExp < TOL.eResolution) { flush(); belowRes++; }
+    else if (dL >= TOL.minSegmentLen) {
       flush();
       const rel = Math.abs(m.e - eExp) / eExp;
       maxRel = Math.max(maxRel, rel); checkedMm += dL; checkedSeg++;
@@ -189,7 +201,7 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
     void k;
   }
   flush();
-  return result(name, failures, { maxRelErrPct: maxRel * 100, checkedMm, checkedSegments: checkedSeg });
+  return result(name, failures, { maxRelErrPct: maxRel * 100, checkedMm, checkedSegments: checkedSeg, belowResolution: belowRes });
 }
 
 /** Any NaN / Infinity / negative-Z token or un-retracted negative extrusion state over the whole program. */
@@ -437,4 +449,44 @@ export function checkRampAngle(moves: GMove[], thetaMaxDeg: number): AssertionRe
     if (theta > thetaMax + TOL.angle) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `ramp ${(theta * 180 / Math.PI).toFixed(2)} deg > limit ${thetaMaxDeg} deg`, actual: (theta * 180) / Math.PI, expected: thetaMaxDeg });
   }
   return result(name, failures, { maxThetaDeg: (worst * 180) / Math.PI, minExtrusionZ: Number.isFinite(minZ) ? minZ : 0 });
+}
+
+/**
+ * Z-modulated (egg-crate) weave: the signal lives in Z, not XY. For each pair of adjacent layers (from `fromLayer`),
+ * the Z offsets of the beads about their layer's own mean Z, sampled on a common XY grid, must be anti-correlated
+ * (Pearson r <= TOL.zWeaveCorrelation) and non-trivial (std >= minAmplitude), i.e. neighbouring beads interlock.
+ */
+export function checkZWeaveAntiPhase(pts: Pt3[], o: { fromLayer: number; cell: number; minAmplitude: number }): AssertionResult {
+  const name = 'z-weave-antiphase';
+  const failures: Failure[] = [];
+  const byLayer = new Map<number, Pt3[]>();
+  for (const p of pts) if (p.layer >= o.fromLayer) (byLayer.get(p.layer) ?? byLayer.set(p.layer, []).get(p.layer)!).push(p);
+  const grids = new Map<number, Map<string, number>>();
+  for (const [l, lp] of byLayer) {
+    const base = lp.map((p) => p.z).sort((a, b) => a - b)[Math.floor(lp.length / 2)];
+    const g = new Map<string, { s: number; n: number }>();
+    for (const p of lp) { const k = `${Math.round(p.x / o.cell)},${Math.round(p.y / o.cell)}`; const c = g.get(k) ?? { s: 0, n: 0 }; c.s += p.z - base; c.n++; g.set(k, c); }
+    grids.set(l, new Map([...g].map(([k, c]) => [k, c.s / c.n])));
+  }
+  const layers = [...grids.keys()].sort((a, b) => a - b);
+  let worstR = -1, minStd = Infinity, pairs = 0;
+  for (let a = 0; a + 1 < layers.length; a++) {
+    if (layers[a + 1] !== layers[a] + 1) continue;
+    const A = grids.get(layers[a])!, B = grids.get(layers[a + 1])!;
+    const xs: number[] = [], ys: number[] = [];
+    for (const [k, v] of A) { const w = B.get(k); if (w !== undefined) { xs.push(v); ys.push(w); } }
+    if (xs.length < 30) continue;
+    pairs++;
+    const mean = (v: number[]) => v.reduce((s, q) => s + q, 0) / v.length;
+    const mx = mean(xs), my = mean(ys);
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; }
+    const std = Math.sqrt(sxx / xs.length);
+    minStd = Math.min(minStd, std);
+    const r = sxy / Math.sqrt(Math.max(sxx * syy, 1e-30));
+    worstR = Math.max(worstR, r);
+    if (std < o.minAmplitude || r > TOL.zWeaveCorrelation) failures.push({ assertion: name, layer: layers[a], message: `layers ${layers[a]}/${layers[a + 1]}: Z-offset correlation ${r.toFixed(3)} (need <= ${TOL.zWeaveCorrelation}), std ${std.toFixed(4)} (need >= ${o.minAmplitude})`, actual: r, expected: TOL.zWeaveCorrelation });
+  }
+  if (!pairs) failures.push({ assertion: name, message: 'no adjacent layer pairs with shared XY cells' });
+  return result(name, failures, { pairs, worstCorrelation: worstR, minOffsetStd: Number.isFinite(minStd) ? minStd : 0 });
 }

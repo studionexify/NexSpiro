@@ -76,3 +76,18 @@ describe('continuity & ramp', () => {
     expect(checkRampAngle(m, 45).pass).toBe(true);
   });
 });
+
+import { checkZWeaveAntiPhase, beadArea } from './mathAssertions';
+describe('z-weave & models', () => {
+  const mk = (flip: boolean) => {
+    const pts = [];
+    for (let l = 3; l < 8; l++) for (let x = 0; x < 20; x += 0.5) for (let y = 0; y < 20; y += 0.5) pts.push({ x, y, z: 0.2 * l + (flip && l % 2 ? -1 : 1) * 0.1 * Math.sin(x) * Math.sin(y), layer: l });
+    return pts;
+  };
+  it('anti-phase passes, same-phase fails', () => {
+    const o = { fromLayer: 3, cell: 0.5, minAmplitude: 0.02 };
+    expect(checkZWeaveAntiPhase(mk(true), o).pass).toBe(true);
+    expect(checkZWeaveAntiPhase(mk(false), o).pass).toBe(false);
+  });
+  it('circle bead area', () => { expect(beadArea('circle', 0.4, 0.2)).toBeCloseTo(Math.PI * 0.04, 9); });
+});
