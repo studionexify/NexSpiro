@@ -176,10 +176,10 @@ function alignedMap(out: SliceOutput, moves: M.GMove[]): Declared {
   return map;
 }
 
-export interface VolCtx { cfg: Config; decl: Declared; d: number }
+export interface VolCtx { cfg: Config; decl: Declared; d: number; /** bridges are round beads: core thick_bridges, and always in the Advanced (classic) engine */ circleBridges: boolean }
 
 export function makeCtx(out: SliceOutput, cfg: Config, moves: M.GMove[]): VolCtx {
-  return { cfg, decl: declaredMap(out, moves), d: Number(cfg.filament_diameter) };
+  return { cfg, decl: declaredMap(out, moves), d: Number(cfg.filament_diameter), circleBridges: cfg.thick_bridges === true || out.advanced !== undefined };
 }
 
 /**
@@ -232,7 +232,7 @@ function mergeResults(name: string, rs: M.AssertionResult[]): M.AssertionResult 
  */
 export function volumetric(moves: M.GMove[], ctx: VolCtx): M.AssertionResult {
   const name = 'volumetric-extrusion-conservation';
-  if (ctx.cfg.thick_bridges !== true) return M.checkVolumetricConservation(moves, volOpts(ctx, 'stadium'));
+  if (!ctx.circleBridges) return M.checkVolumetricConservation(moves, volOpts(ctx, 'stadium'));
   const isBridge = (m: M.GMove) => featName(m.feature) === 'bridge';
   const a = M.checkVolumetricConservation(maskExtrusion(moves, isBridge), volOpts(ctx, 'circle'));
   const b = M.checkVolumetricConservation(maskExtrusion(moves, (m) => !isBridge(m)), volOpts(ctx, 'stadium'));
