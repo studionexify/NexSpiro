@@ -5,7 +5,7 @@ import type { Stage } from '../../engine/advanced/techs';
 import type { TechId } from '../../engine/advanced/types';
 import { Modal } from '../Modals';
 import { useResolved } from './hooks';
-import { TechDetail, useLastReport } from './TechList';
+import { TechDetail, useLastReport } from './ToolList';
 
 const FIELD_NAMES: Record<string, string> = {
   sdf: 'Signed distance f', stress: 'Stress tensor σ', regions: 'Layer regions', heightmap: 'Surface height map', layer_times: 'Layer times',

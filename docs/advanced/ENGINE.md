@@ -3,7 +3,37 @@
 The header's centre toggle switches the slicing engine:
 
 - **BASIC (Classic Engine)** — the classic heuristic slicer, unchanged. `tests/advanced/basic-golden.test.ts` pins its G-code byte for byte.
-- **ADVANCED (NexSpiro Physics Core)** — every part is analysed, split into zones, and compiled with the subset of the 35 technologies that the selected **intent** and **machine** call for.
+- **ADVANCED (NexSpiro Physics Core)** — every part is analysed, split into zones, and compiled with the subset of the 35 technologies that the selected **intent**, the **tools** switched on and the **machine** call for.
+
+## Tools
+
+The sidebar does not list the 35 technologies one by one. They are grouped into **15 tools** by what they
+do to the print (`src/engine/advanced/tools.ts`): technologies that do the same job sit behind one toggle.
+Each tool says what happens when it is on, and lists its technologies as ticks (an exclusive tool runs
+exactly one, as a mode). Switching a tool overrides the intent for its technologies; with no switch, the
+intent decides as before. The distance field (#2) and the topology router (#32) change no toolpath and
+are always on.
+
+| Tool | Technologies (plain name — compendium #) |
+| --- | --- |
+| Smooth curved surfaces | Sloped-wall smoothing #8, Rounded-side shingling #26, Curved top skins #4, Curved-surface ironing #25 |
+| Curved layers | Dome-following layers #24, Overhang-reducing layers #14 |
+| Hide seams | Spiral seam entry #22, Scarf seam joint #23 |
+| Continuous spiral printing | Helical layers #21, Spiral infill #3 |
+| Even inner walls | Smooth wall offsets #15 |
+| Gloss control | Even sheen #27, Painted matte / gloss #17 |
+| Strength infill | Stress-line infill #1, Stress-line smoothing #33, Isotropic core infill #28, Organic rib infill #9 |
+| Layer bonding | Hot layer welds #5, Z-wave interlock #7, Braided inner walls #19 |
+| Stiffness targeting | Stiffness-matched cells #35 |
+| Warp compensation | Shrinkage pre-distortion #16 |
+| Multi-material interlock | Material finger joint #13 |
+| Vibration-damping infill | Band-gap lattice #34, Auxetic cell infill #12 |
+| Motion compensation | Corner flow control #6, Sharp-corner overshoot #10, Anti-ringing timing #31 |
+| Foaming filament control | Foam temperature control #18 |
+| Special print mode (one at a time) | Wire truss #11, Casting shell #20, Heat-morph sheet #29, Caustic lens / lampshade #30 |
+
+The compendium names used below (e.g. "Harmonic scalar field dome slicing") are kept as each technology's
+`technique` and shown in its tooltip and in the node graph.
 
 ## Pipeline
 

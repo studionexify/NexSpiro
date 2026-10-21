@@ -1,14 +1,15 @@
 // Advanced-mode sidebar (progressive disclosure): Intent Cards, the Zone Inspector, the inputs each
-// intent needs, the machine capability card, the technology list and the last engine report.
+// intent needs, the machine capability card, the tool list and the last engine report.
 import { useMemo, useState } from 'react';
-import { INTENTS } from '../../engine/advanced/techs';
+import { INTENTS, TECH_BY_ID } from '../../engine/advanced/techs';
+import { TOOL_OF_TECH } from '../../engine/advanced/tools';
 import { FIELD_IDS, ZONE_KINDS, type FieldId, type IntentId } from '../../engine/advanced/types';
 import { useAdvanced } from '../../state/advanced';
 import { useStore } from '../../state/store';
 import { Icon } from '../icons';
 import { FIELD_LABELS, FIELD_UNITS, legendGradient, ZONE_COLORS, ZONE_LABELS } from './colors';
 import { useCaps } from './hooks';
-import { TechList, techName } from './TechList';
+import { techLabel, ToolList } from './ToolList';
 import { TechGraph } from './TechGraph';
 
 const INTENT_ICON: Record<IntentId, string> = { structural: 'shield', aesthetic: 'sparkle', optical: 'lamp', acoustic: 'wave', morph4d: 'morph' };
@@ -30,7 +31,7 @@ export function AdvancedPanel() {
         <ZoneInspector />
         <IntentInputs />
         <MachineCard />
-        <TechList />
+        <ToolList />
         <EngineReport />
       </div>
       {a.graphOpen && <TechGraph onClose={() => a.set({ graphOpen: false })} />}
@@ -175,7 +176,7 @@ function IntentInputs() {
     return (
       <section className="adv-section">
         <div className="adv-section-head"><span className="adv-h"><Icon name="wave" size={14} />Vibration target</span></div>
-        <div className="muted adv-note">Set the frequency to block in Topological band-gap infill (34); grading and foam follow the zones.</div>
+        <div className="muted adv-note">Set the frequency to block in Vibration-damping infill › Band-gap lattice; the cell grading and foam follow the zones.</div>
       </section>
     );
   }
@@ -223,7 +224,7 @@ function OpticalInputs({ onPaint, painting }: { onPaint: (v: 3 | 4) => void; pai
           <span className="muted">mm throw</span>
         </div>
       )}
-      <div className="muted adv-note">Gloss paint (17): paint matte or glossy areas of the outer wall.</div>
+      <div className="muted adv-note">Gloss control › Painted matte / gloss: paint matte or glossy areas of the outer wall.</div>
       <div className="row">
         <button className={`btn-secondary btn-small ${painting && useAdvanced.getState().paintValue === 3 ? 'on' : ''}`} onClick={() => onPaint(3)}><span className="zone-dot" style={{ background: '#8A99A6' }} />Matte</button>
         <button className={`btn-secondary btn-small ${painting && useAdvanced.getState().paintValue === 4 ? 'on' : ''}`} onClick={() => onPaint(4)}><span className="zone-dot" style={{ background: '#FFFFFF' }} />Gloss</button>
@@ -310,6 +311,7 @@ function EngineReport() {
   const rep = sl.status === 'done' ? sl.result?.advanced : undefined;
   if (!rep) return null;
   const applied = rep.techs.filter((t) => t.status === 'applied' || t.status === 'adapted');
+  const ranTools = new Set(applied.map((t) => TOOL_OF_TECH[t.id]?.id).filter(Boolean));
   return (
     <section className="adv-section">
       <div className="adv-section-head">
@@ -317,10 +319,10 @@ function EngineReport() {
         {sl.dirty && <span className="badge" title="Settings or scene changed since this slice">outdated</span>}
         <span className="spacer" /><span className="muted">{rep.ms} ms</span>
       </div>
-      <div className="adv-facts"><span>{applied.length} technologies ran</span><span>{rep.techs.filter((t) => t.status === 'unavailable').length} unavailable on this machine</span>
+      <div className="adv-facts"><span>{ranTools.size} tool{ranTools.size === 1 ? '' : 's'} ran</span><span>{rep.techs.filter((t) => t.status === 'unavailable').length} unavailable on this machine</span>
         {rep.clearance && <span title="Non-planar moves checked against the nozzle cone, heater block and fan duct">clearance: {rep.clearance.checked} checked, {rep.clearance.raised} lifted, {rep.clearance.unresolved} unresolved</span>}</div>
       <ul className="adv-notes">
-        {applied.map((t) => <li key={t.id}><b>{techName(t.id)}</b>{t.stats && Object.keys(t.stats).length ? ` — ${Object.entries(t.stats).slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')} ${typeof v === 'number' ? +v.toFixed(2) : v}`).join(', ')}` : ''}</li>)}
+        {applied.map((t) => <li key={t.id}><b>{techLabel(TECH_BY_ID[t.id])}</b>{t.stats && Object.keys(t.stats).length ? ` — ${Object.entries(t.stats).slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')} ${typeof v === 'number' ? +v.toFixed(2) : v}`).join(', ')}` : ''}</li>)}
         {rep.warnings.map((w) => <li key={w} className="warn-line">{w}</li>)}
       </ul>
     </section>

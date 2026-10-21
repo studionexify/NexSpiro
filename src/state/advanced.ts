@@ -1,7 +1,8 @@
-// Advanced-mode state (engine mode, intent, technology overrides, machine overrides, Zone Inspector)
+// Advanced-mode state (engine mode, intent, tool switches, technology overrides, machine overrides, Zone Inspector)
 // and the bridge to the analysis worker. Kept apart from the main store so Basic mode is untouched.
 import { create } from 'zustand';
-import type { AdvancedConfig, CausticTarget, EngineMode, FieldId, IntentId, MachineOverrides, ObjectAnalysis, ParamValue, TechId, TechOverride } from '../engine/advanced/types';
+import type { AdvancedConfig, CausticTarget, EngineMode, FieldId, IntentId, MachineOverrides, ObjectAnalysis, ParamValue, TechId, TechOverride, ToolId, ToolOverride } from '../engine/advanced/types';
+import { TOOL_BY_ID } from '../engine/advanced/tools';
 import { RESOLUTION_CELLS } from '../engine/advanced/analysis';
 import { transformVertices } from '../engine/mesh';
 import { objectMatrix, useStore } from './store';
@@ -11,6 +12,7 @@ export interface AdvancedState {
   engineMode: EngineMode;
   intent: IntentId;
   techs: Partial<Record<TechId, TechOverride>>;
+  tools: Partial<Record<ToolId, ToolOverride>>;
   machine: MachineOverrides;
   resolution: 'draft' | 'normal' | 'fine';
   load: { dir: [number, number, number]; newtons: number };
@@ -26,8 +28,8 @@ export interface AdvancedState {
   analysisVersion: number;
   analysing: boolean;
   analysisError: string | null;
-  /** Expanded technology rows and the node-graph modal. */
-  expanded: TechId | null;
+  /** Expanded tool row and the node-graph modal. */
+  expanded: ToolId | null;
   graphOpen: boolean;
   set: (p: Partial<AdvancedState>) => void;
 }
@@ -39,6 +41,7 @@ export const useAdvanced = create<AdvancedState>((set) => ({
   engineMode: prefs.engineMode === 'advanced' ? 'advanced' : 'basic',
   intent: prefs.intent ?? 'aesthetic',
   techs: prefs.techs ?? {},
+  tools: prefs.tools ?? {},
   machine: prefs.machine ?? {},
   resolution: prefs.resolution ?? 'normal',
   load: prefs.load ?? { dir: [0, 0, -1], newtons: 50 },
@@ -58,10 +61,10 @@ export const useAdvanced = create<AdvancedState>((set) => ({
 
 useAdvanced.subscribe((s, prev) => {
   try {
-    localStorage.setItem(LS, JSON.stringify({ engineMode: s.engineMode, intent: s.intent, techs: s.techs, machine: s.machine, resolution: s.resolution, load: s.load, field: s.field, heatmap: s.heatmap, showVoxels: s.showVoxels }));
+    localStorage.setItem(LS, JSON.stringify({ engineMode: s.engineMode, intent: s.intent, techs: s.techs, tools: s.tools, machine: s.machine, resolution: s.resolution, load: s.load, field: s.field, heatmap: s.heatmap, showVoxels: s.showVoxels }));
   } catch { /* storage unavailable */ }
   // anything that changes the G-code marks the slice dirty
-  if (s.engineMode !== prev.engineMode || s.intent !== prev.intent || s.techs !== prev.techs || s.machine !== prev.machine || s.resolution !== prev.resolution || s.load !== prev.load || s.caustic !== prev.caustic) {
+  if (s.engineMode !== prev.engineMode || s.intent !== prev.intent || s.techs !== prev.techs || s.tools !== prev.tools || s.machine !== prev.machine || s.resolution !== prev.resolution || s.load !== prev.load || s.caustic !== prev.caustic) {
     useStore.getState().markDirty();
   }
 });
@@ -73,7 +76,7 @@ export function advancedSliceConfig(): AdvancedConfig | undefined {
   const a = useAdvanced.getState();
   if (a.engineMode !== 'advanced') return undefined;
   return {
-    intent: a.intent, printerId: useStore.getState().printerId, techs: a.techs, machine: a.machine, resolution: a.resolution,
+    intent: a.intent, printerId: useStore.getState().printerId, techs: a.techs, tools: a.tools, machine: a.machine, resolution: a.resolution,
     load: a.load, ...(a.caustic ? { caustic: a.caustic } : {}),
   };
 }
@@ -92,6 +95,26 @@ export function resetTech(id: TechId) {
   const t = { ...a.techs };
   delete t[id];
   a.set({ techs: t });
+}
+
+/** Switch a tool on or off, or choose the technologies it runs. */
+export function setTool(id: ToolId, ov: ToolOverride) {
+  const a = useAdvanced.getState();
+  a.set({ tools: { ...a.tools, [id]: ov } });
+}
+
+/** A tool back to its intent default: its switch and its technologies' switches and settings. */
+export function resetTool(id: ToolId) {
+  const a = useAdvanced.getState();
+  const tools = { ...a.tools }, techs = { ...a.techs };
+  delete tools[id];
+  for (const t of TOOL_BY_ID[id].techs) delete techs[t];
+  a.set({ tools, techs });
+}
+
+/** Every tool back to the intent defaults. */
+export function resetAllTools() {
+  useAdvanced.getState().set({ tools: {}, techs: {} });
 }
 
 // ---------------- analysis worker (Zone Inspector)

@@ -8630,7 +8630,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "A negative Poisson ratio needs the re-entrant metamaterial cells (#12)."
+    "reason": "A negative Poisson ratio needs Auxetic cell infill (Vibration-damping infill)."
   },
   {
     "target": "adv/homogenization",
