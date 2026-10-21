@@ -47,11 +47,11 @@ export const perimeterFeathering: TechModule = {
     layers.forEach((L, li) => {
       if (li < 2 || s.helicalLayers.has(li)) return;
       const out: Op[] = [];
-      let px = NaN, py = NaN, pz = NaN;
+      let px = NaN, py = NaN, pz = NaN, qx = NaN, qy = NaN;
       for (const op of L.ops) {
         if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; }
         if (op.k !== 'move' || op.travel || op.e <= 0 || op.feature !== 'outer_wall' || Number.isNaN(px)) {
-          if (op.k === 'move') { px = op.x; py = op.y; pz = op.z; }
+          if (op.k === 'move') { px = op.x; py = op.y; pz = op.z; qx = op.x; qy = op.y; }
           out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
@@ -75,9 +75,9 @@ export const perimeterFeathering: TechModule = {
             if (dz > 1e-4) moved++;
           }
           // volume conserved on the sloped bead: E follows the true 3-D length and the declared (thicker) height
-          const seg3 = Math.hypot(len / n, z - (Number.isNaN(pz) ? op.z : pz));
+          const seg3 = Math.hypot(x + ox - qx, y + oy - qy, z - (Number.isNaN(pz) ? op.z : pz)); // from where the previous piece really ended (shingling shifts x, y)
           out.push(moveLike(op, x + ox, y + oy, z, rescaleE(dens * seg3, op.w, op.h, hNew), { dev: prior + (z - op.z), h: hNew }));
-          pz = z;
+          pz = z; qx = x + ox; qy = y + oy;
         }
         px = op.x; py = op.y; pz = op.z;
       }

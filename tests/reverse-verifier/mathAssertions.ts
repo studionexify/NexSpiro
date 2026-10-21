@@ -62,6 +62,8 @@ export interface GMove {
   feature?: string;
   /** `;HEIGHT:` comment in force (mm). */
   layerHeight?: number;
+  /** First move after a filament swap (T<n>): freshly loaded filament, so retraction debt starts again at zero. */
+  toolReset?: boolean;
   /** 1-based source line, for diagnostics. */
   line: number;
 }
@@ -171,6 +173,7 @@ export function checkVolumetricConservation(moves: GMove[], o: VolumetricOptions
     for (const [key, v] of [['x', m.x], ['y', m.y], ['z', m.z], ['e', m.e], ['f', m.f]] as const) {
       if (!Number.isFinite(v)) failures.push({ assertion: name, line: m.line, message: `non-finite ${key}=${v}` });
     }
+    if (m.toolReset) debt = 0;
     const hasXYZ = Number.isFinite(start.x) && (m.x !== start.x || m.y !== start.y || m.z !== start.z);
     if (m.e < 0) {
       debt -= m.e;

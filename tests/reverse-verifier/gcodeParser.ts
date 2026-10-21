@@ -40,6 +40,8 @@ export function parseGcode(text: string): ParsedGcode {
   let layer = -1;
   let feature: string | undefined;
   let layerHeight: number | undefined;
+  // a filament swap (T<n>) loads fresh filament: the next move carries toolReset so retraction debt does not cross it
+  let toolReset = false;
 
   // Start-G-code skipping: only when the marker is present in the text.
   let emitting = !text.includes(START_END_MARKER_BODY);
@@ -55,6 +57,7 @@ export function parseGcode(text: string): ParsedGcode {
     pos = nl + 1;
     lineNo++;
 
+    if (/^\s*T\d+\b/.test(raw)) toolReset = true;
     // Split off the comment. Comment directives apply to this line's move too.
     let code = raw;
     const semi = raw.indexOf(';');
@@ -171,6 +174,7 @@ export function parseGcode(text: string): ParsedGcode {
     }
     if (feature !== undefined) move.feature = feature;
     if (layerHeight !== undefined) move.layerHeight = layerHeight;
+    if (toolReset) { move.toolReset = true; toolReset = false; }
     moves.push(move);
   }
 

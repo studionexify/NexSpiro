@@ -6846,63 +6846,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 30,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 18.85019564734621,
+      "maxRelErrPct": 1.0675345408003052,
       "checkedMm": 32072.106860381034,
       "checkedSegments": 14606,
       "belowResolution": 134,
-      "failureCount": 30
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17443,
-        "layer": 97,
-        "message": "dE 0.02564 vs expected 0.02657 (3.50 %), dL3D=0.6226 [outer wall]",
-        "actual": 0.02564,
-        "expected": 0.02657078416154846
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17444,
-        "layer": 97,
-        "message": "dE 0.02535 vs expected 0.02598 (2.42 %), dL3D=0.6080 [outer wall]",
-        "actual": 0.02535,
-        "expected": 0.025978376968886874
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17474,
-        "layer": 97,
-        "message": "dE 0.02532 vs expected 0.02595 (2.43 %), dL3D=0.6080 [outer wall]",
-        "actual": 0.02532,
-        "expected": 0.025949768565599038
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17475,
-        "layer": 97,
-        "message": "dE 0.01846 vs expected 0.01913 (3.50 %), dL3D=0.6226 [outer wall]",
-        "actual": 0.01846,
-        "expected": 0.019129287544192318
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17476,
-        "layer": 97,
-        "message": "dE 0.02564 vs expected 0.02657 (3.50 %), dL3D=0.6226 [outer wall]",
-        "actual": 0.02564,
-        "expected": 0.02657078416154846
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 30,
-        "worstPct": 18.85019564734621
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/perimeter_feathering",
@@ -6961,63 +6914,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 30,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 18.85019564734621,
+      "maxRelErrPct": 1.0675345408003052,
       "checkedMm": 32072.2279504122,
       "checkedSegments": 14606,
       "belowResolution": 134,
-      "failureCount": 30
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17443,
-        "layer": 97,
-        "message": "dE 0.02615 vs expected 0.02711 (3.53 %), dL3D=0.6236 [outer wall]",
-        "actual": 0.02615,
-        "expected": 0.027108039496958263
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17444,
-        "layer": 97,
-        "message": "dE 0.02579 vs expected 0.02643 (2.42 %), dL3D=0.6080 [outer wall]",
-        "actual": 0.02579,
-        "expected": 0.026428409121643685
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17474,
-        "layer": 97,
-        "message": "dE 0.02579 vs expected 0.02643 (2.42 %), dL3D=0.6080 [outer wall]",
-        "actual": 0.02579,
-        "expected": 0.026428409121643685
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17475,
-        "layer": 97,
-        "message": "dE 0.01849 vs expected 0.01916 (3.51 %), dL3D=0.6236 [outer wall]",
-        "actual": 0.01849,
-        "expected": 0.019162599098839522
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 17476,
-        "layer": 97,
-        "message": "dE 0.02615 vs expected 0.02711 (3.53 %), dL3D=0.6236 [outer wall]",
-        "actual": 0.02615,
-        "expected": 0.027108039496958263
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 30,
-        "worstPct": 18.85019564734621
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/perimeter_feathering",
@@ -7079,7 +6985,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.8723085845632543,
+      "maxRelErrPct": 0.1282816329950514,
       "checkedMm": 4265.13740564922,
       "checkedSegments": 3462,
       "belowResolution": 8,
@@ -9343,212 +9249,58 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 98,
+    "failureCount": 4,
     "metrics": {
-      "maxRelErrPct": 21.357822899728426,
+      "maxRelErrPct": 21.25085185220135,
       "checkedMm": 46600.42160992748,
       "checkedSegments": 4842,
       "belowResolution": 3,
-      "failureCount": 98
-    },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4958,
-        "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4959,
-        "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4960,
-        "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4961,
-        "layer": 60,
-        "message": "dE 0.52986 vs expected 0.47190 (12.28 %), dL3D=14.2260 [inner wall]",
-        "actual": 0.52986,
-        "expected": 0.4719024922144389
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4966,
-        "layer": 60,
-        "message": "dE 0.56614 vs expected 0.46705 (21.22 %), dL3D=15.2000 [outer wall]",
-        "actual": 0.56614,
-        "expected": 0.46705363440604025
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 8,
-        "worstPct": 12.281670205552633
-      },
-      "outer wall": {
-        "count": 8,
-        "worstPct": 21.216224503706364
-      },
-      "bottom surface": {
-        "count": 82,
-        "worstPct": 21.357822899728426
-      }
-    }
-  },
-  {
-    "target": "plugin/bulnex",
-    "profile": "Default",
-    "assertion": "finite-and-bed-safe",
-    "type": "SAFETY",
-    "pass": true,
-    "failureCount": 0,
-    "metrics": {
-      "minExtrusionZ": 0.2,
-      "failureCount": 0
-    },
-    "firstFailures": []
-  },
-  {
-    "target": "plugin/bulnex",
-    "profile": "Default",
-    "assertion": "nonplanar-ramp-angle",
-    "type": "RAMP",
-    "pass": true,
-    "failureCount": 0,
-    "metrics": {
-      "maxThetaDeg": 0,
-      "minExtrusionZ": 0.2,
-      "failureCount": 0
-    },
-    "firstFailures": []
-  },
-  {
-    "target": "plugin/bulnex",
-    "profile": "Default",
-    "assertion": "declared-geometry-map",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 3230,
-    "metrics": {
-      "declaredHits": 1615,
-      "maxPosErrMm": 0.0005061035156188609,
-      "failureCount": 3230
-    },
-    "firstFailures": [
-      {
-        "assertion": "declared-geometry-map",
-        "line": 4958,
-        "message": "no declared move on G-code line 4958"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 4959,
-        "message": "no declared move on G-code line 4959"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 4960,
-        "message": "no declared move on G-code line 4960"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 4961,
-        "message": "no declared move on G-code line 4961"
-      },
-      {
-        "assertion": "declared-geometry-map",
-        "line": 4966,
-        "message": "no declared move on G-code line 4966"
-      }
-    ]
-  },
-  {
-    "target": "plugin/bulnex",
-    "profile": "Extreme Modulation",
-    "assertion": "volumetric-extrusion-conservation",
-    "type": "VOLUME",
-    "pass": false,
-    "failureCount": 392,
-    "metrics": {
-      "maxRelErrPct": 21.357822899728426,
-      "checkedMm": 139801.26482979042,
-      "checkedSegments": 14526,
-      "belowResolution": 9,
-      "failureCount": 392
+      "failureCount": 4
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 4983,
         "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
+        "message": "dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface]",
+        "actual": 0.68255,
+        "expected": 0.5630661034717741
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4984,
+        "line": 5047,
         "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
+        "message": "dE 0.13773 vs expected 0.11359 (21.25 %), dL3D=3.6968 [bottom surface]",
+        "actual": 0.13773,
+        "expected": 0.11359095453439444
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4985,
-        "layer": 60,
-        "message": "dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall]",
-        "actual": 0.53209,
-        "expected": 0.47389280217738466
+        "line": 9893,
+        "layer": 120,
+        "message": "dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface]",
+        "actual": 0.68255,
+        "expected": 0.5630661034717741
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4986,
-        "layer": 60,
-        "message": "dE 0.52986 vs expected 0.47190 (12.28 %), dL3D=14.2260 [inner wall]",
-        "actual": 0.52986,
-        "expected": 0.4719024922144389
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4991,
-        "layer": 60,
-        "message": "dE 0.56614 vs expected 0.46705 (21.22 %), dL3D=15.2000 [outer wall]",
-        "actual": 0.56614,
-        "expected": 0.46705363440604025
+        "line": 9957,
+        "layer": 120,
+        "message": "dE 0.13773 vs expected 0.11359 (21.25 %), dL3D=3.6968 [bottom surface]",
+        "actual": 0.13773,
+        "expected": 0.11359095453439444
       }
     ],
     "byFeature": {
-      "inner wall": {
-        "count": 32,
-        "worstPct": 12.281670205552633
-      },
-      "outer wall": {
-        "count": 32,
-        "worstPct": 21.216224503706364
-      },
       "bottom surface": {
-        "count": 328,
-        "worstPct": 21.357822899728426
+        "count": 4,
+        "worstPct": 21.25085185220135
       }
     }
   },
   {
     "target": "plugin/bulnex",
-    "profile": "Extreme Modulation",
+    "profile": "Default",
     "assertion": "finite-and-bed-safe",
     "type": "SAFETY",
     "pass": true,
@@ -9561,7 +9313,7 @@
   },
   {
     "target": "plugin/bulnex",
-    "profile": "Extreme Modulation",
+    "profile": "Default",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
     "pass": true,
@@ -9575,15 +9327,15 @@
   },
   {
     "target": "plugin/bulnex",
-    "profile": "Extreme Modulation",
+    "profile": "Default",
     "assertion": "declared-geometry-map",
     "type": "HARNESS",
     "pass": false,
-    "failureCount": 12920,
+    "failureCount": 158,
     "metrics": {
-      "declaredHits": 1615,
+      "declaredHits": 4687,
       "maxPosErrMm": 0.0005061035156188609,
-      "failureCount": 12920
+      "failureCount": 158
     },
     "firstFailures": [
       {
@@ -9593,23 +9345,153 @@
       },
       {
         "assertion": "declared-geometry-map",
-        "line": 4984,
-        "message": "no declared move on G-code line 4984"
+        "line": 5047,
+        "message": "no declared move on G-code line 5047"
       },
       {
         "assertion": "declared-geometry-map",
-        "line": 4985,
-        "message": "no declared move on G-code line 4985"
+        "line": 5225,
+        "message": "no declared move on G-code line 5225"
       },
       {
         "assertion": "declared-geometry-map",
-        "line": 4986,
-        "message": "no declared move on G-code line 4986"
+        "line": 5301,
+        "message": "no declared move on G-code line 5301"
       },
       {
         "assertion": "declared-geometry-map",
-        "line": 4991,
-        "message": "no declared move on G-code line 4991"
+        "line": 5309,
+        "message": "no declared move on G-code line 5309"
+      }
+    ]
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": false,
+    "failureCount": 16,
+    "metrics": {
+      "maxRelErrPct": 21.25085185220135,
+      "checkedMm": 139801.26482979042,
+      "checkedSegments": 14526,
+      "belowResolution": 9,
+      "failureCount": 16
+    },
+    "firstFailures": [
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 5008,
+        "layer": 60,
+        "message": "dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface]",
+        "actual": 0.68255,
+        "expected": 0.5630661034717741
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 5072,
+        "layer": 60,
+        "message": "dE 0.13773 vs expected 0.11359 (21.25 %), dL3D=3.6968 [bottom surface]",
+        "actual": 0.13773,
+        "expected": 0.11359095453439444
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 9943,
+        "layer": 120,
+        "message": "dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface]",
+        "actual": 0.68255,
+        "expected": 0.5630661034717741
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 10007,
+        "layer": 120,
+        "message": "dE 0.13773 vs expected 0.11359 (21.25 %), dL3D=3.6968 [bottom surface]",
+        "actual": 0.13773,
+        "expected": 0.11359095453439444
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 14878,
+        "layer": 180,
+        "message": "dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface]",
+        "actual": 0.68255,
+        "expected": 0.5630661034717741
+      }
+    ],
+    "byFeature": {
+      "bottom surface": {
+        "count": 16,
+        "worstPct": 21.25085185220135
+      }
+    }
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/bulnex",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": false,
+    "failureCount": 632,
+    "metrics": {
+      "declaredHits": 13903,
+      "maxPosErrMm": 0.0005061035156188609,
+      "failureCount": 632
+    },
+    "firstFailures": [
+      {
+        "assertion": "declared-geometry-map",
+        "line": 5008,
+        "message": "no declared move on G-code line 5008"
+      },
+      {
+        "assertion": "declared-geometry-map",
+        "line": 5072,
+        "message": "no declared move on G-code line 5072"
+      },
+      {
+        "assertion": "declared-geometry-map",
+        "line": 5250,
+        "message": "no declared move on G-code line 5250"
+      },
+      {
+        "assertion": "declared-geometry-map",
+        "line": 5326,
+        "message": "no declared move on G-code line 5326"
+      },
+      {
+        "assertion": "declared-geometry-map",
+        "line": 5334,
+        "message": "no declared move on G-code line 5334"
       }
     ]
   },
@@ -9789,65 +9671,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 3760,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.4395163218745988,
       "checkedMm": 16726.61647626342,
       "checkedSegments": 3670,
       "belowResolution": 1150,
-      "failureCount": 3760
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25797,
-        "layer": 68,
-        "message": "extrusion with 2.000 mm of filament still retracted"
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25798,
-        "layer": 68,
-        "message": "extrusion with 2.000 mm of filament still retracted"
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25799,
-        "layer": 68,
-        "message": "extrusion with 2.000 mm of filament still retracted"
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25800,
-        "layer": 68,
-        "message": "extrusion with 2.000 mm of filament still retracted"
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25801,
-        "layer": 68,
-        "message": "extrusion with 2.000 mm of filament still retracted"
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 2640,
-        "worstPct": 0.06769854302884418
-      },
-      "prime tower": {
-        "count": 1040,
-        "worstPct": 0.0704300519680542
-      },
-      "gap infill": {
-        "count": 72,
-        "worstPct": 0.23484529941386967
-      },
-      "(unattributed)": {
-        "count": 8,
-        "worstPct": 0
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "plugin/patternex",
@@ -10080,7 +9913,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.32201503307426654,
+      "maxRelErrPct": 0.32984102886167005,
       "checkedMm": 24881.010733219005,
       "checkedSegments": 16875,
       "belowResolution": 72,

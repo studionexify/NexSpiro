@@ -1,6 +1,6 @@
 # Batch reverse-verifier summary
 
-Rows: 690, (target, profile) cells: 138, failing cells: 19, failing (target, assertion) pairs: 23
+Rows: 690, (target, profile) cells: 138, failing cells: 16, failing (target, assertion) pairs: 20
 
 ## Pass / fail grid
 
@@ -37,7 +37,7 @@ Rows: 690, (target, profile) cells: 138, failing cells: 19, failing (target, ass
 | adv/scarf_splice | PASS | PASS | PASS |
 | adv/harmonic_dome | PASS | FAIL [RAMP] nonplanar-ramp-angle | FAIL [RAMP] nonplanar-ramp-angle |
 | adv/conformal_ironing | PASS | PASS | PASS |
-| adv/perimeter_feathering | FAIL [VOLUME] volumetric-extrusion-conservation | FAIL [VOLUME] volumetric-extrusion-conservation | PASS |
+| adv/perimeter_feathering | PASS | PASS | PASS |
 | adv/iso_gloss | PASS | PASS | PASS |
 | adv/quasicrystal | PASS | PASS | PASS |
 | adv/metric_morph | PASS | PASS | PASS |
@@ -50,7 +50,7 @@ Rows: 690, (target, profile) cells: 138, failing cells: 19, failing (target, ass
 | plugin/motionex | PASS | PASS | PASS |
 | plugin/hanex | PASS | PASS | PASS |
 | plugin/bulnex | FAIL [VOLUME] volumetric-extrusion-conservation, [HARNESS] declared-geometry-map | FAIL [VOLUME] volumetric-extrusion-conservation, [HARNESS] declared-geometry-map | PASS |
-| plugin/patternex | PASS | PASS | FAIL [VOLUME] volumetric-extrusion-conservation |
+| plugin/patternex | PASS | PASS | PASS |
 | weave/z_weave-cylinder | FAIL [VOLUME] volumetric-extrusion-conservation, [RAMP] nonplanar-ramp-angle | PASS | PASS |
 
 ## Failing assertions
@@ -72,14 +72,11 @@ Type tags: VOLUME volumetric conservation, SAFETY finite/bed, RAMP non-planar an
 | adv/tangent_entry | Boundary Edge-Cases | STATUS | tech-status | 1 | not run | - | STATUS: No outer loop with room for a buried entry. |
 | adv/harmonic_dome | Extreme Modulation | RAMP | nonplanar-ramp-angle | 1 | max ramp 24.09 deg | - | ramp 24.09 deg > limit 10.6553060508032 deg |
 | adv/harmonic_dome | Boundary Edge-Cases | RAMP | nonplanar-ramp-angle | 5 | max ramp 90.00 deg | - | ramp 14.96 deg > limit 10.6553060508032 deg |
-| adv/perimeter_feathering | Default | VOLUME | volumetric-extrusion-conservation | 30 | worst 18.85 % | outer wall: 30 (18.85 %) | dE 0.02564 vs expected 0.02657 (3.50 %), dL3D=0.6226 [outer wall] |
-| adv/perimeter_feathering | Extreme Modulation | VOLUME | volumetric-extrusion-conservation | 30 | worst 18.85 % | outer wall: 30 (18.85 %) | dE 0.02615 vs expected 0.02711 (3.53 %), dL3D=0.6236 [outer wall] |
 | adv/band_gap | Extreme Modulation | STATUS | tech-status | 1 | not run | - | STATUS: No resonator cell up to 40 mm reaches 18000 Hz with 0.45 mm lines. |
-| plugin/bulnex | Default | VOLUME | volumetric-extrusion-conservation | 98 | worst 21.36 % | inner wall: 8 (12.28 %); outer wall: 8 (21.22 %); bottom surface: 82 (21.36 %) | dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall] |
-| plugin/bulnex | Default | HARNESS | declared-geometry-map | 3230 | max pos err 0.0005 mm, fallback 0 | - | no declared move on G-code line 4958 |
-| plugin/bulnex | Extreme Modulation | VOLUME | volumetric-extrusion-conservation | 392 | worst 21.36 % | inner wall: 32 (12.28 %); outer wall: 32 (21.22 %); bottom surface: 328 (21.36 %) | dE 0.53209 vs expected 0.47389 (12.28 %), dL3D=14.2860 [inner wall] |
-| plugin/bulnex | Extreme Modulation | HARNESS | declared-geometry-map | 12920 | max pos err 0.0005 mm, fallback 0 | - | no declared move on G-code line 4983 |
-| plugin/patternex | Boundary Edge-Cases | VOLUME | volumetric-extrusion-conservation | 3760 | worst 0.44 % | outer wall: 2640 (0.07 %); prime tower: 1040 (0.07 %); gap infill: 72 (0.23 %); (unattributed): 8 (0.00 %) | extrusion with 2.000 mm of filament still retracted |
+| plugin/bulnex | Default | VOLUME | volumetric-extrusion-conservation | 4 | worst 21.25 % | bottom surface: 4 (21.25 %) | dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface] |
+| plugin/bulnex | Default | HARNESS | declared-geometry-map | 158 | max pos err 0.0005 mm, fallback 0 | - | no declared move on G-code line 4983 |
+| plugin/bulnex | Extreme Modulation | VOLUME | volumetric-extrusion-conservation | 16 | worst 21.25 % | bottom surface: 16 (21.25 %) | dE 0.68255 vs expected 0.56307 (21.22 %), dL3D=18.3247 [bottom surface] |
+| plugin/bulnex | Extreme Modulation | HARNESS | declared-geometry-map | 632 | max pos err 0.0005 mm, fallback 0 | - | no declared move on G-code line 5008 |
 | weave/z_weave-cylinder | Default | VOLUME | volumetric-extrusion-conservation | 92 | worst 279.19 % | sparse infill: 92 (279.19 %) | dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill] |
 | weave/z_weave-cylinder | Default | RAMP | nonplanar-ramp-angle | 92 | max ramp 90.00 deg | - | ramp 90.00 deg > limit 10.6553060508032 deg |
 
