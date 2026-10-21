@@ -2,9 +2,13 @@
 // on the model, holes drawn out into points by the same printability rule the slicer uses.
 import { LaceTracker, solidAt } from './core';
 import type { LaceSettings } from './model';
+import type { Config } from '../../../profiles/settings';
+import { laceLimits } from './plan';
 import { previewRows, type PreviewObject } from '../wall/preview';
 
-export function buildLacePreview(objs: PreviewObject[], l: LaceSettings, layerHeight: number, colour: [number, number, number]): { positions: Float32Array; colors: Float32Array } | null {
+export function buildLacePreview(objs: PreviewObject[], lace: LaceSettings, layerHeight: number, colour: [number, number, number], cfg?: Config): { positions: Float32Array; colors: Float32Array } | null {
+  // strands and holes as the nozzle in use will print them
+  const l = cfg ? { ...lace, ...laceLimits(lace, cfg) } : lace;
   const pos: number[] = [], col: number[] = [];
   for (const rows of previewRows(objs, l.objects, l.z_start, l.z_end, l.follow_curve, layerHeight, 260, l.rim_mm)) {
     const t = new LaceTracker(l, { total: rows[0]?.total ?? 0 });

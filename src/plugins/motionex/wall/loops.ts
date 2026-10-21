@@ -23,10 +23,13 @@ export interface WallRun {
   closed: boolean;
 }
 
-/** Runs of printing moves with a feature in `features`, between travels. */
-export function wallRuns(L: LayerOps, features: Set<Move['feature']>): WallRun[] {
+/**
+ * Runs of printing moves with a feature in `features`, between travels. `from`: where the head stands
+ * when the layer starts (spiral vase layers print straight on from the previous layer, no travel first).
+ */
+export function wallRuns(L: LayerOps, features: Set<Move['feature']>, from: Pt | null = null): WallRun[] {
   const out: WallRun[] = [];
-  let last: Pt | null = null;
+  let last: Pt | null = from ? { ...from } : null;
   let i = 0;
   const ops = L.ops;
   while (i < ops.length) {
@@ -177,6 +180,12 @@ export function wallHeights(layerZ: number[], perimeters: number[], zStart: numb
     last = i;
   }
   return { s, total: acc, first, last };
+}
+
+/** Where the head ends a layer (its last move), or null when the layer has no move. */
+export function layerEnd(L: LayerOps): (Pt & { z: number }) | null {
+  for (let k = L.ops.length - 1; k >= 0; k--) { const op = L.ops[k]; if (op.k === 'raw' && op.resetPos) return null; if (op.k === 'move') return { x: op.x, y: op.y, z: op.z }; }
+  return null;
 }
 
 /** Largest closed outer loop length per layer (NaN when the layer has none). */

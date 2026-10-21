@@ -77,7 +77,7 @@ export function motionexPreview(): PreviewLines | null {
   const extra = [
     weaveOn ? buildWeavePreview(objs, mx.weave, lh, weaveColours().map((c) => [c[0] / 255, c[1] / 255, c[2] / 255])) : null,
     paintOn && !weaveOn ? buildPaintPreview(objs, mx.paint, lh) : null,
-    laceOn && !weaveOn && !paintOn ? buildLacePreview(objs, mx.lace, lh, filamentRgb(0)) : null,
+    laceOn && !weaveOn && !paintOn ? buildLacePreview(objs, mx.lace, lh, filamentRgb(0), currentConfig()) : null,
   ].filter((x): x is NonNullable<typeof x> => !!x);
   if (!extra.length) return lastPreview;
   const cat = (a: Float32Array, b: Float32Array) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };

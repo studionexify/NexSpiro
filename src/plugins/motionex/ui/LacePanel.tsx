@@ -190,7 +190,7 @@ export function LaceCard() {
       </details>
 
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
-        <button className="btn-secondary btn-small" title="Two walls (one for outer-only lace), no infill or top skin, solid floor, spiral vase off, no Z hop" onClick={() => { const s = useStore.getState(); for (const [k, v] of Object.entries(lacePrintSettings(l))) s.setOverride(k, v); }}>Set up print settings</button>
+        <button className="btn-secondary btn-small" title="Two walls (one for outer-only lace), no infill or top skin, solid floor, spiral vase off, no Z hop" onClick={() => { const s = useStore.getState(); for (const [k, v] of Object.entries(lacePrintSettings(l, currentConfig()))) s.setOverride(k, v); }}>Set up print settings</button>
         <button className="btn-secondary btn-small" title="A Ø50 × 40 mm cylinder with the lace on it" onClick={addTestTube}>Add test cylinder</button>
         <button className="btn-secondary btn-small" title="Vase shapes to lace" onClick={() => useStore.getState().set({ dock: { ...useStore.getState().dock, open: true, tab: 'plantex' } })}>Vase shapes →</button>
       </div>

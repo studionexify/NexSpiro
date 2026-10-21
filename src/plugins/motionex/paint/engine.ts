@@ -9,7 +9,7 @@ import type { Paths } from '../../../engine/types';
 import { pointIn } from '../../../engine/clipper';
 import { pixelAt } from '../weave/image';
 import type { WeaveImage } from '../weave/model';
-import { bandRows, LoopLocator, loopFractions, OUTER, perimeter, round4, round5, signedArea, wallHeights, wallRuns, type Move, type Pt, type WallRun } from '../wall/loops';
+import { bandRows, layerEnd, LoopLocator, loopFractions, OUTER, perimeter, round4, round5, signedArea, wallHeights, wallRuns, type Move, type Pt, type WallRun } from '../wall/loops';
 import { paintLevels, speedLadder, type PaintSettings } from './model';
 import { paintAccel, paintSpeeds, paintStepMm, rampMm, recommendedPaintAccel, recommendedPixelMm } from './plan';
 import { flavourOf, maxAccelOf, outerLineWidth } from '../wall/machine';
@@ -86,7 +86,8 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
 
   const idx = (li: number) => layers[li].layer ?? li;
   const keep = (li: number, q: Pt) => { const m = maskAt?.(idx(li)); return !m || pointIn(q.x, q.y, m); };
-  const runs = layers.map((L, li) => (li === 0 ? [] : wallRuns(L, OUTER).filter((r) => keep(li, r.pts[0]))));
+  // spiral vase layers print on from where the layer below ended: their first move belongs to the run
+  const runs = layers.map((L, li) => (li === 0 ? [] : wallRuns(L, OUTER, spiral ? layerEnd(layers[li - 1]) : null).filter((r) => keep(li, r.pts[0]))));
   const per = runs.map((rs) => { const c = rs.filter((r) => r.closed); return c.length ? Math.max(...c.map((r) => perimeter(r.pts.slice(0, -1)))) : NaN; });
   const band = wallHeights(layers.map((L) => L.z), per, p.z_start, p.z_end, p.follow_curve);
   if (band.first < 0) { warn('Velocity paint: no outer wall inside the painted band. Check the heights.'); return rep; }
@@ -111,7 +112,11 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
   let carry = Math.min(num(cfg, 'default_acceleration', 5000), maxAccel);
   const accelBefore = (ops: Op[], at: number) => { let a = carry; for (let k = 0; k < at; k++) { const op = ops[k]; if (op.k === 'accel') a = op.a; } return Math.min(a, maxAccel); };
   // spiral vase: moves climb, so pieces of a move take their share of its rise
-  const zBefore = (ops: Op[], at: number, z: number) => { for (let k = at - 1; k >= 0; k--) { const op = ops[k]; if (op.k === 'raw' && op.resetPos) break; if (op.k === 'move') return op.z; } return z; };
+  const zBefore = (li: number, at: number, z: number) => {
+    const ops = layers[li].ops;
+    for (let k = at - 1; k >= 0; k--) { const op = ops[k]; if (op.k === 'raw' && op.resetPos) return z; if (op.k === 'move') return op.z; }
+    return (li > 0 ? layerEnd(layers[li - 1])?.z : undefined) ?? z;
+  };
 
   for (let li = 1; li < layers.length; li++) {
     const ops = layers[li].ops;
@@ -129,7 +134,7 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
         const a = r.pts[k - 1], b = r.pts[k];
         const len = Math.hypot(b.x - a.x, b.y - a.y);
         const orig = ops[r.start + k - 1] as Move;
-        const za = spiral ? zBefore(ops, r.start + k - 1, orig.z) : orig.z;
+        const za = spiral ? zBefore(li, r.start + k - 1, orig.z) : orig.z;
         if (len < 1e-6) { out.push(orig); continue; }
         // front: only the side that faces the viewer is painted
         if (p.projection === 'front') {

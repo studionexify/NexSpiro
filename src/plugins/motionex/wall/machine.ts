@@ -12,8 +12,10 @@ const BED_SLINGERS = new Set([
   'bbl-a1', 'bbl-a1mini', 'creality-ender3v3ke', 'creality-ender3v3', 'creality-ender3v3se', 'creality-ender3s1', 'creality-ender3v2', 'creality-cr10se',
   'elegoo-neptune4', 'elegoo-neptune4pro', 'elegoo-neptune4plus', 'elegoo-neptune4max', 'elegoo-neptune3pro',
   'prusa-mk4s', 'prusa-mk3s', 'prusa-mini', 'anycubic-kobra2neo', 'anycubic-kobra2max', 'anycubic-kobra3',
-  'sovol-sv06', 'sovol-sv07', 'artillery-x4plus', 'generic-marlin',
+  'sovol-sv06', 'sovol-sv07', 'artillery-x4plus', 'creality-hi', 'generic-marlin',
 ]);
+/** In a set by id, or by the printer it was built on (a combo with a filament unit: "prusa-mk4s-mmu3"). */
+const known = (set: Set<string>, id = '') => set.has(id) || [...set].some((b) => id.startsWith(`${b}-`));
 
 export const flavourOf = (cfg: Config): GcodeFlavor => { const f = String(cfg.gcode_flavor ?? 'marlin'); return f === 'klipper' || f === 'bbl' ? f : 'marlin'; };
 
@@ -30,9 +32,9 @@ export function printerIdOf(cfg: Config): string | undefined {
 }
 
 /** Bowden extruder: a known Bowden printer, or a retraction of 2 mm or more (no direct drive needs that much). */
-export const isBowden = (cfg: Config, printerId = printerIdOf(cfg)) => num(cfg, 'retraction_length', 0) >= 2 || BOWDEN.has(printerId ?? '');
+export const isBowden = (cfg: Config, printerId = printerIdOf(cfg)) => num(cfg, 'retraction_length', 0) >= 2 || known(BOWDEN, printerId);
 
-export const isBedSlinger = (cfg: Config, printerId = printerIdOf(cfg)) => BED_SLINGERS.has(printerId ?? '');
+export const isBedSlinger = (cfg: Config, printerId = printerIdOf(cfg)) => known(BED_SLINGERS, printerId);
 
 /**
  * Shortest move (mm) the firmware takes at speed v (mm/s) without starving its planner: Marlin wants

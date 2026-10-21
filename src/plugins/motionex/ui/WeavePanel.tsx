@@ -361,7 +361,7 @@ export function WeaveCard() {
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
         <button className="btn-secondary btn-small" title="1 wall, no infill or top skin, solid floor, spiral vase off, aligned seam, outer wall 80 mm/s, no prime tower when bleeding" onClick={() => {
           const s = useStore.getState();
-          for (const [k, v] of Object.entries(weavePrintSettings(w))) s.setOverride(k, v);
+          for (const [k, v] of Object.entries(weavePrintSettings(w, currentConfig()))) s.setOverride(k, v);
         }}>Set up print settings</button>
         <button className="btn-secondary btn-small" title="A Ø50 × 22 mm ring with a depth ladder (0.5× to 1.5×, bottom to top) to find the best depth for your filaments" onClick={addCalibrationRing}>Add calibration ring</button>
         <button className="btn-secondary btn-small" title="Weave vase shapes: amphora, flared, twisted ovoid, saucer base" onClick={() => set({ dock: { ...useStore.getState().dock, open: true, tab: 'plantex' } })}>Vase shapes →</button>

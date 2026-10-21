@@ -37,5 +37,5 @@ describe('project file', () => {
     expect(mx.applications).toHaveLength(1);
     expect(mx.applications[0].target).toEqual({ type: 'faces', walls: 'outer', faces: ['2'] });
     expect(mx.applications[0].brush_id).toBe(brush.id);
-  });
+  }, 30000); // loads the whole store and panels (cold transform takes several seconds)
 });
