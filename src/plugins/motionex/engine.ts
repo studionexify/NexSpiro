@@ -181,7 +181,7 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     const weave = config.weave?.enabled ? applyWeave(layerOps, config.weave, ctx.cfg, session?.weave ? (session as WeaveSession) : undefined, ctx.warn) : undefined;
     // velocity paint sets the outer wall speeds on whole loops, then lace cuts the walls (its pieces keep their speed)
     const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
-    const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn) : undefined;
+    const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn, config.printerId) : undefined;
     const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
     if (!apps.length) return { check, movedPaths: 0, weave, paint, lace };
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);

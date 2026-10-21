@@ -28,3 +28,18 @@ Prints a picture into the outer wall with one filament and no filament changes. 
 ## Print settings
 
 *Set up print settings*: aligned seam (at the back, out of the picture), no scarf seam, pressure equalizer off. Wall count, infill and the rest stay as you have them.
+
+## Per printer
+
+The card shows the printer's maximum acceleration, its firmware and the melt limit for the current line (max volumetric speed ÷ (line width × layer height)). *Use recommended* sets the painting acceleration to the printer's limit (at most 10 000 mm/s²) and the smallest pixel the speed change fits in at that acceleration.
+
+| Printer | What to expect |
+| --- | --- |
+| Bambu, Klipper CoreXY (10 000–20 000 mm/s²) | Speed changes take under a millimetre: 1.5–3 mm pixels are sharp. |
+| Klipper bedslingers, Prusa MK4S / CORE One (4 000–8 000 mm/s²) | 2–4 mm pixels. |
+| Marlin bedslingers (Ender-3, MK3S+, 1 000–1 500 mm/s²) | The head needs several mm to change speed: *Use recommended* picks 8–15 mm pixels. Or bring the light and dark speeds closer. |
+
+- **Marlin:** every speed step is kept at least ~1 mm long (and a few ms), so the planner buffer keeps up instead of stuttering. Klipper and Bambu firmware take finer steps.
+- **Nozzle size:** the line widens with the nozzle (0.2 → 0.21 mm, 0.6 → 0.63 mm, 1.0 → 1.05 mm), so the melt limit drops on big nozzles: a 0.8 mm nozzle at 0.4 mm layers melts out around 45 mm/s with a 15 mm³/s PLA. Keep the dark speed under the limit or use a high-flow hot end. Small nozzles have high limits but the effect is subtler.
+- **Bowden or direct drive** makes no difference: painting never retracts.
+- Pressure advance / linear advance should be tuned: without it, speed also changes the line width (stronger effect, rougher wall).

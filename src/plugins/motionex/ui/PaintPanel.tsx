@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../../../state/store';
 import { currentConfig } from '../../../state/slicing';
+import type { Config } from '../../../profiles/settings';
 import { centreOnBed } from '../../../state/ops';
 import { objectFromWorld } from '../../../state/tools';
 import { weld } from '../../../engine/mesh';
@@ -10,11 +11,16 @@ import { changed, mx, useMx } from './MotionexPanel';
 import { loadPicture, partSize, solidCylinder } from './WeavePanel';
 import type { MotionexReport } from '../engine';
 import { defaultPaint, PAINT_LEVELS_MAX, paintLevels, speedLadder, speedOfLevel, type PaintSettings } from '../paint/model';
-import { meanPaintSpeed, paintPrintSettings, rampMm } from '../paint/plan';
+import { meanPaintSpeed, paintPrintSettings, rampMm, recommendedPaintAccel, recommendedPixelMm } from '../paint/plan';
 import { greyLevels, gridFor, resampleRGB, type Dither } from '../weave/image';
 import { MOTIFS, motifImage } from '../weave/motifs';
 
 let source: { rgba: Uint8ClampedArray; w: number; h: number; name: string } | null = null;
+
+/** Pixel size for this machine at its recommended acceleration, rounded up to 0.5 mm (bigger on slow, low-accel machines). */
+function recPixel(cfg: Config, p: PaintSettings): number {
+  return Math.min(20, Math.max(1, Math.ceil(recommendedPixelMm(cfg, { ...p, accel: recommendedPaintAccel(cfg) }) * 2) / 2));
+}
 
 /** Redraw the picture at its grid size from its source, as grey levels (0 = light). */
 function rebuild(p: PaintSettings) {
@@ -78,10 +84,16 @@ export function PaintCard() {
   }
   const cfg = currentConfig();
   const lw = Number(cfg.outer_wall_line_width) || Number(cfg.line_width) || 0.42, lh = Number(cfg.layer_height) || 0.2;
-  const flowCap = (Number(cfg.filament_max_volumetric_speed) || 15) / (lw * lh);
-  const accel = p.accel || Number(cfg.outer_wall_acceleration) || Number(cfg.default_acceleration) || 5000;
-  const ramp = rampMm(p.speed_light, Math.min(p.speed_dark, flowCap), Math.min(accel, Number(cfg.max_acceleration) || 1e9));
+  const mvs = Number(cfg.filament_max_volumetric_speed) || 15;
+  const flowCap = mvs / (lw * lh);
+  const maxAccel = Number(cfg.max_acceleration) || 0;
+  const accel = Math.min(p.accel || Number(cfg.outer_wall_acceleration) || Number(cfg.default_acceleration) || 5000, maxAccel || 1e9);
+  const ramp = rampMm(p.speed_light, Math.min(p.speed_dark, flowCap), accel);
   const px = p.picture?.pixel_mm ?? 3;
+  const flavor = String(cfg.gcode_flavor), marlin = flavor === 'marlin';
+  const nozzle = Number(cfg.nozzle_diameter) || 0.4;
+  const rA = recommendedPaintAccel(cfg), rPx = recPixel(cfg, p);
+  const isRec = p.accel === rA && Math.abs(px - rPx) < 1e-6;
   return (
     <section className="mx-card">
       <div className="mx-card-title">Velocity paint<span className="spacer" />
@@ -129,8 +141,17 @@ export function PaintCard() {
           return <span key={k} className="badge" style={{ background: greyCss(k, levels), color: k > levels / 2 ? '#fff' : '#111' }} title={`Level ${k + 1}`}>{Math.round(Math.min(v, flowCap))}</span>;
         })}
       </div>
-      {Math.max(p.speed_light, p.speed_dark) > flowCap && <p className="mx-muted bad" style={{ margin: 0 }}>Above {flowCap.toFixed(0)} mm/s this filament can't melt fast enough for a {lw.toFixed(2)} × {lh.toFixed(2)} mm line: those levels print at {flowCap.toFixed(0)}.</p>}
+      <div className="mx-check"><span className={Math.max(p.speed_light, p.speed_dark) > flowCap ? 'bad' : 'ok'}>◔</span>Melt limit {flowCap.toFixed(0)} mm/s: {mvs} mm³/s ÷ ({lw.toFixed(2)} mm line × {lh.toFixed(2)} mm layer, {nozzle} mm nozzle)</div>
+      {Math.max(p.speed_light, p.speed_dark) > flowCap && <p className="mx-muted bad" style={{ margin: 0 }}>Above {flowCap.toFixed(0)} mm/s this filament can't melt fast enough for a {lw.toFixed(2)} × {lh.toFixed(2)} mm line: those levels print at {flowCap.toFixed(0)}.{nozzle >= 0.6 ? ' A wide nozzle moves a lot of plastic per mm: keep the dark speed low or use a high-flow hot end.' : ''}</p>}
       <p className={`mx-muted${ramp > 0.6 * px ? ' bad' : ''}`} style={{ margin: 0 }}>The head needs {ramp.toFixed(1)} mm to change speed at {Math.round(accel)} mm/s² — {ramp > 0.6 * px ? 'more than a pixel: use bigger pixels, closer speeds or more acceleration' : `well inside a ${px} mm pixel`}. Average wall speed {meanPaintSpeed(p).toFixed(0)} mm/s.</p>
+      <div className="mx-card" style={{ padding: 8, gap: 4 }}>
+        <div className="mx-check"><span className="ok">⚙</span>This printer: {maxAccel ? `max ${Math.round(maxAccel)} mm/s²` : 'no acceleration limit set'} · {flavor === 'bbl' ? 'Bambu firmware' : marlin ? 'Marlin' : flavor === 'klipper' ? 'Klipper' : flavor}</div>
+        <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="btn-secondary btn-small" disabled={isRec} title="Painting acceleration from the printer's limit (at most 10 000 mm/s²) and a pixel size the speed change fits in" onClick={() => upd(() => { p.accel = rA; p.picture = { ...(p.picture ?? { kind: 'motif' }), pixel_mm: rPx }; fit(p); })}>Use recommended</button>
+          <span className="mx-muted" style={{ margin: 0 }}>{rA} mm/s² · {rPx} mm pixels{rPx >= 4 ? ' (low acceleration: bigger pixels keep the picture sharp)' : ''}</span>
+        </div>
+        {marlin && <p className="mx-muted" style={{ margin: 0 }}>Marlin: speed steps are kept at least ~1 mm long so its planner doesn't stall on short moves (stutter and blobs). Fine detail needs bigger pixels than on Klipper.</p>}
+      </div>
 
       <details className="mx-more">
         <summary className="mx-label" style={{ cursor: 'pointer' }}>Placement</summary>
@@ -160,6 +181,7 @@ export function PaintCard() {
           <label className="mx-field">Painting accel (mm/s²)<input className="input" type="number" min={0} max={50000} step={500} value={p.accel || ''} placeholder="print's own" onChange={(e) => upd(() => { p.accel = Math.max(0, +e.target.value || 0); })} /></label>
           <label className="mx-field">Finest step (mm)<input className="input" type="number" min={0.1} max={5} step={0.1} value={p.resolution_mm} onChange={(e) => upd(() => { p.resolution_mm = Math.max(0.1, +e.target.value || 0.6); })} /></label>
         </div>
+        {marlin && p.resolution_mm < 1 && <p className="mx-muted" style={{ margin: 0 }}>On Marlin steps shorter than ~1 mm are merged so the planner keeps up.</p>}
         <label className="row" style={{ gap: 8, margin: 0, fontSize: 12 }}>
           <input type="checkbox" checked={p.follow_curve} onChange={(e) => upd(() => { p.follow_curve = e.target.checked; })} /> Measure rows along the curve
         </label>

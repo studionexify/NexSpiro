@@ -26,6 +26,21 @@ Weaves a picture into the wall of a part, the way jacquard-style woven vases are
 
 The panel estimates the number of changes, the extra time (the printer's `filament_change_time` plus flush time) and the purged grams before you slice.
 
+## Per printer
+
+The card reads how the printer changes filament (Printer settings → Multi-material) and words its advice for it:
+
+| Printer | Colours | At each change |
+| --- | --- | --- |
+| Bambu AMS (A1, P1, X1, H2D) | One per slot (4 per unit) | Cut, unload, load (`filament_change_time`, 60–95 s) and flush out through the purge chute: nothing on the plate. *Small purge* or *Bleed* cut waste and time. |
+| Prusa MMU3, Creality CFS, Anycubic ACE, ERCF / BoxTurtle | One per slot (MMU3 5, others 4; set *Filament slots*) | Unload and load, then purge into the chute when the unit has one (*Purge into*), else into a prime tower beside the part: leave room on the plate. *Bleed* needs no tower. |
+| Tool changers and IDEX (Prusa XL, Snapmaker U1, Klipper changers) | One per head | A head swap of a few seconds with a small prime and no purge; prime tower optional. |
+| Manual (single nozzle, M600 / PAUSE) | — | Every change stops the print for a spool swap. The card turns on in *Mono relief* on these printers and offers *Switch to Mono relief*. |
+
+- The estimate uses the printer's `filament_change_time` (60 s if unset, 8 s for a tool changer) plus the flush.
+- **Marlin vs Klipper:** no difference for the weave; the change G-code comes from the printer profile (M600 on Marlin, the unit's macros on Klipper).
+- **Nozzle size:** *Stand out* is a share of the line: the slice report flags steps over 60% of the line width. Bigger nozzles take deeper relief and bigger pixels (pixel width ≥ 3 line widths reads best).
+
 ## Print settings
 
 *Set up print settings* sets the following, giving one woven skin over a solid floor:

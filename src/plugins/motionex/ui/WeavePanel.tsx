@@ -14,13 +14,31 @@ import { colourCount, cycleLayers, defaultWeave, type ChangeMode, type WeaveSett
 import { clampPalette, greyLevels, gridFor, parseHex, quantize, resampleRGB, suggestPalette, type Dither, type RGB } from '../weave/image';
 import { MOTIFS, motifImage } from '../weave/motifs';
 import { estimateWeave, formatDuration, weavePrintSettings } from '../weave/plan';
-import { changerOf, toolheadCount } from '../../../profiles/changer';
+import { changerOf, purgeTarget, slotCount, toolheadCount } from '../../../profiles/changer';
+import type { Config } from '../../../profiles/settings';
 
 /** The last imported picture, kept at up to 640 px so it can be re-matched to new colours or sizes. */
 let source: { rgba: Uint8ClampedArray; w: number; h: number; name: string } | null = null;
 
-/** Colours a weave can take turns with: an AMS unit holds 4; a tool changer has one per head. */
-const maxColours = () => { const c = currentConfig(); return changerOf(c) === 'toolchanger' ? toolheadCount(c) : 4; };
+/** Name of the printer's filament unit, for the panel text (Bambu AMS, Prusa MMU3, Creality CFS, Anycubic ACE). */
+function unitName(cfg: Config): string {
+  const m = String(cfg.printer_model ?? '').toLowerCase();
+  if (String(cfg.gcode_flavor) === 'bbl' || m.startsWith('bambu')) return 'AMS';
+  if (m.includes('prusa')) return 'MMU3';
+  if (m.includes('creality')) return 'CFS';
+  if (m.includes('anycubic')) return 'ACE';
+  return 'filament unit';
+}
+
+/** Filament slots the printer can feed: heads on a tool changer, the unit's slots (when not set: MMU3 5, AMS/CFS/ACE 4), 1 by hand. */
+function slotsOf(cfg: Config): number {
+  const n = slotCount(cfg);
+  if (n > 0 || changerOf(cfg) !== 'ams') return Math.max(1, n);
+  return unitName(cfg) === 'MMU3' ? 5 : 4;
+}
+
+/** Colours a weave can take turns with: one per slot of the unit or head of the tool changer (2–4 by hand, if at all). */
+const maxColours = () => { const c = currentConfig(); return changerOf(c) === 'manual' ? 4 : Math.max(2, slotsOf(c)); };
 const greys = (n: number): RGB[] => Array.from({ length: n }, (_, i) => { const v = Math.round(235 - (i / Math.max(1, n - 1)) * 200); return [v, v, v]; });
 
 /** Colours shown for each palette index: the slots' filament colours (colour) or greys (mono). */
@@ -128,9 +146,12 @@ export function WeaveCard() {
   void objects;
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const changer = changerOf(currentConfig());
+  const cfg = currentConfig();
+  const changer = changerOf(cfg);
   const ams = changer !== 'manual';
   const MAX_COLOURS = maxColours();
+  const unit = unitName(cfg), purge = purgeTarget(cfg);
+  const changeS = Number(cfg.filament_change_time) || (changer === 'toolchanger' ? 8 : 60);
   const colours = weaveColours(w);
   const nCol = w.mode === 'colour' ? colourCount(w) : Math.max(2, w.picture?.levels ?? 2);
   const regen = (f: () => void) => upd(() => { f(); rebuildPicture(w); });
@@ -150,9 +171,10 @@ export function WeaveCard() {
     return (
       <section className="mx-card">
         <div className="mx-card-title">Weave a picture<span className="spacer" />
-          <button className="btn-primary btn-small" onClick={() => upd(() => { w.enabled = true; if (filaments.length < 2) w.mode = 'mono'; fitToPart(w); })}>Turn on</button>
+          <button className="btn-primary btn-small" onClick={() => upd(() => { w.enabled = true; if (filaments.length < 2 || !ams) w.mode = 'mono'; fitToPart(w); })}>Turn on</button>
         </div>
         <p className="mx-muted" style={{ margin: 0 }}>Weave a picture or motif into the wall: every layer is one colour and each line steps out where the picture shows its colour, like a woven vase. Or use one filament for relief only.</p>
+        <p className="mx-muted" style={{ margin: 0 }}>{changer === 'toolchanger' ? `This printer: ${toolheadCount(cfg)} toolheads, up to ${MAX_COLOURS} colours with quick head swaps.` : ams ? `This printer: ${unit}, up to ${MAX_COLOURS} colours, purging ${purge === 'chute' ? 'into the chute' : 'into a prime tower'} at every change.` : 'This printer changes filament by hand, so it starts in Mono relief (one filament, no changes).'}</p>
       </section>
     );
   }
@@ -165,8 +187,15 @@ export function WeaveCard() {
         <button className={w.mode === 'colour' ? 'on' : ''} title="One filament per layer, the colours take turns (AMS)" onClick={() => regen(() => { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; })}>Colour weave</button>
         <button className={w.mode === 'mono' ? 'on' : ''} title="One filament: the picture is relief only, no filament changes" onClick={() => regen(() => { w.mode = 'mono'; })}>Mono relief</button>
       </div>
-      {w.mode === 'colour' && !ams && <p className="mx-muted bad" style={{ margin: 0 }}>This printer changes filament by hand: each layer would be a manual change. Pick a printer with an AMS or a tool changer, or use Mono relief.</p>}
-      {w.mode === 'colour' && changer === 'toolchanger' && <p className="mx-muted" style={{ margin: 0 }}>Tool changer: each colour has its own head, so a change is a quick head swap with no purge. Up to {MAX_COLOURS} colours.</p>}
+      {w.mode === 'colour' && !ams && (
+        <div className="mx-card" style={{ padding: 8, gap: 6 }}>
+          <p className="mx-muted bad" style={{ margin: 0 }}>This printer changes filament by hand (M600 / pause): colour weave would stop the print for a spool swap every {w.layers_per_colour === 1 ? 'layer' : `${w.layers_per_colour} layers`}, hundreds of times. Use Mono relief, which weaves the picture with one filament and no changes, or pick a printer with a filament unit (AMS, MMU3, CFS, ACE) or a tool changer.</p>
+          <button className="btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => regen(() => { w.mode = 'mono'; })}>Switch to Mono relief</button>
+        </div>
+      )}
+      {w.mode === 'colour' && changer === 'toolchanger' && <p className="mx-muted" style={{ margin: 0 }}>Tool changer ({toolheadCount(cfg)} heads): each colour has its own head, so a change is a ~{Math.round(changeS)} s head swap with a small prime and no purge. Up to {MAX_COLOURS} colours, one per head.</p>}
+      {w.mode === 'colour' && changer === 'ams' && purge === 'chute' && <p className="mx-muted" style={{ margin: 0 }}>{unit}: each change cuts, unloads and loads the filament (~{Math.round(changeS)} s) and flushes the old colour out through the purge chute, so nothing lands on the plate. Small purge or Bleed cut the waste and time. Up to {MAX_COLOURS} colours, one per slot.</p>}
+      {w.mode === 'colour' && changer === 'ams' && purge === 'tower' && <p className="mx-muted" style={{ margin: 0 }}>{unit}: each change unloads and loads the filament (~{Math.round(changeS)} s) and purges into a prime tower printed next to the part, so leave room on the plate. Bleed needs no tower (Set up print settings turns it off). Up to {MAX_COLOURS} colours, one per slot.</p>}
 
       <div className="mx-label">Picture</div>
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
@@ -224,6 +253,7 @@ export function WeaveCard() {
             </div>
           ))}
           {w.slots.length < Math.min(MAX_COLOURS, filaments.length) && <button className="btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => regen(() => { w.slots.push(filaments.findIndex((_, k) => !w.slots.includes(k))); })}>+ Colour</button>}
+          {ams && w.slots.length > MAX_COLOURS && <p className="mx-muted bad" style={{ margin: 0 }}>This printer feeds {MAX_COLOURS} filaments at once ({changer === 'toolchanger' ? 'one per head' : `${unit} slots`}): remove {w.slots.length - MAX_COLOURS} colour{w.slots.length - MAX_COLOURS > 1 ? 's' : ''}.</p>}
           {filaments.length < 2 && <p className="mx-muted bad" style={{ margin: 0 }}>Add a second filament in the filament list for colour weave.</p>}
           <label className="mx-field">Layers per colour: {w.layers_per_colour} {w.layers_per_colour === 1 ? '(swap every layer)' : `(half the swaps per ${w.layers_per_colour}, taller pixels)`}
             <input type="range" min={1} max={4} step={1} value={w.layers_per_colour} onChange={(e) => upd(() => { w.layers_per_colour = +e.target.value; })} />
@@ -383,11 +413,16 @@ function Estimate({ w }: { w: WeaveSettings }) {
     return estimateWeave(ww, { bandMm: band, layerHeight: Number(cfg.layer_height) || 0.2, changeTime: Number(cfg.filament_change_time) || (tc ? 8 : 60), flushMm3: n ? flush / n : 0, filamentDensity: Number(cfg.filament_density) || 1.24 });
   }, [w, filaments, flushMatrix, flushMultiplier, objects, printerId, w.change.mode, w.change.volume_mm3, w.layers_per_colour, w.slots.join(), w.z_start, w.z_end]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!est) return <p className="mx-muted" style={{ margin: 0 }}>Put a part on the plate to see the estimate.</p>;
+  const cfg = currentConfig(), kind = changerOf(cfg);
+  const changeS = Number(cfg.filament_change_time) || (kind === 'toolchanger' ? 8 : 60);
+  const what = kind === 'toolchanger' ? 'head swaps' : kind === 'manual' ? 'manual spool swaps' : `${unitName(cfg)} changes`;
+  const where = kind === 'toolchanger' ? 'primed' : purgeTarget(cfg) === 'chute' ? 'purged into the chute' : 'purged into the prime tower';
   return (
     <div className="mx-card" style={{ padding: 8, gap: 2 }}>
       <div className="mx-check"><span className="ok">≡</span>{est.wovenLayers} woven layers · {est.rows} picture rows of {est.rowMm.toFixed(2)} mm (picture has {w.image.h})</div>
-      {w.mode === 'colour' && <div className="mx-check"><span className={est.changes > 300 ? 'bad' : 'ok'}>⇄</span>{est.changes} filament changes · +{formatDuration(est.changeSeconds)}</div>}
-      {w.mode === 'colour' && <div className="mx-check"><span className={est.purgeGrams > 100 ? 'bad' : 'ok'}>◔</span>{w.change.mode === 'bleed' ? 'No purge waste (bleed)' : `${est.purgeGrams.toFixed(0)} g purged`}</div>}
+      {w.mode === 'colour' && <div className="mx-check"><span className={est.changes > 300 ? 'bad' : 'ok'}>⇄</span>{est.changes} {what} at ~{Math.round(changeS)} s each{kind === 'manual' ? '' : ' plus purge'} · +{formatDuration(est.changeSeconds)}</div>}
+      {w.mode === 'colour' && kind === 'manual' && est.changes > 0 && <div className="mx-check"><span className="bad">!</span>Someone must swap the spool {est.changes} times: use Mono relief on this printer</div>}
+      {w.mode === 'colour' && <div className="mx-check"><span className={est.purgeGrams > 100 ? 'bad' : 'ok'}>◔</span>{w.change.mode === 'bleed' ? 'No purge waste (bleed)' : `${est.purgeGrams.toFixed(0)} g ${where}`}</div>}
       {w.mode === 'mono' && <div className="mx-check"><span className="ok">✓</span>No filament changes</div>}
     </div>
   );

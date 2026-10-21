@@ -3,6 +3,7 @@
 // twist, printability limits and the last slice's checks.
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../../../state/store';
+import { currentConfig } from '../../../state/slicing';
 import { centreOnBed } from '../../../state/ops';
 import { objectFromWorld } from '../../../state/tools';
 import { weld } from '../../../engine/mesh';
@@ -67,6 +68,18 @@ export function LaceCard() {
     );
   }
   const pat = lacePattern(l.pattern);
+  const cfg = currentConfig();
+  const nozzle = Number(cfg.nozzle_diameter) || 0.4;
+  const lw = Number(cfg.outer_wall_line_width) || Number(cfg.line_width) || nozzle * 1.05;
+  const strand = l.source === 'pattern' ? l.strand_mm : Math.max(l.min_strand_mm, l.picture?.pixel_mm ?? 2);
+  const thin = strand < 2 * lw;
+  const rLen = Number(cfg.retraction_length) || 0, bowden = rLen >= 2;
+  const { around } = partSize(l);
+  const cellW = l.source === 'pattern' ? l.cell_w : 2 * (l.picture?.pixel_mm ?? 2);
+  const walls = l.walls === 'all' ? Math.max(1, Math.round(Number(cfg.wall_loops) || 2)) : 1;
+  const perLayer = around ? Math.max(1, Math.round(around / Math.max(1, cellW))) * walls : 0;
+  const busyRetract = l.retract && rLen > 0 && perLayer > (bowden ? 60 : 120);
+  const bowdenCell = Math.min(80, Math.ceil(Math.max(cellW, (around * walls) / 60) * 2) / 2);
   return (
     <section className="mx-card">
       <div className="mx-card-title">Lace walls<span className="spacer" />
@@ -123,6 +136,22 @@ export function LaceCard() {
           <p className="mx-muted" style={{ margin: 0 }}>Dark is open. Silhouettes and line art work best; the printability rule draws every flat top into a point.</p>
         </>
       )}
+
+      <div className="mx-card" style={{ padding: 8, gap: 2 }}>
+        <div className="mx-check"><span className={thin ? 'bad' : 'ok'}>{thin ? '!' : '✓'}</span>Strand {strand.toFixed(1)} mm = {(strand / lw).toFixed(1)} line widths ({lw.toFixed(2)} mm line, {nozzle} mm nozzle){thin ? ` — under 2 lines the strands print as single threads and snap: use ${(2 * lw).toFixed(1)} mm or more` : ''}</div>
+        {around > 0 && <div className="mx-check"><span className={busyRetract ? 'bad' : 'ok'}>⇄</span>≈ {perLayer} hole crossings per layer ({Math.round(around)} mm round ÷ {cellW.toFixed(1)} mm cells × {walls} wall{walls > 1 ? 's' : ''}){l.retract && rLen > 0 ? `, each a ${rLen} mm retraction` : ', no retraction'}</div>}
+        {!around && <div className="mx-check"><span className="ok">⇄</span>Put a part on the plate to see the retractions per layer</div>}
+        {bowden && (
+          <>
+            <p className="mx-muted" style={{ margin: 0 }}>Bowden extruder ({rLen} mm retraction): every hole pulls the filament back a long way, which is slow and can grind it after a few thousand crossings. Use bigger cells{l.source === 'pattern' && bowdenCell > l.cell_w ? ` (≈ ${bowdenCell} mm)` : ''} or turn retraction across holes off for PLA, which hardly strings over short gaps.</p>
+            <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
+              {l.source === 'pattern' && bowdenCell > l.cell_w && <button className="btn-secondary btn-small" onClick={() => upd(() => { const k = bowdenCell / l.cell_w; l.cell_w = bowdenCell; l.cell_h = Math.min(80, Math.round(l.cell_h * k * 2) / 2); })}>Cells to {bowdenCell} mm</button>}
+              {l.retract && <button className="btn-secondary btn-small" onClick={() => upd(() => { l.retract = false; })}>Retraction off</button>}
+            </div>
+          </>
+        )}
+        {!bowden && busyRetract && <p className="mx-muted bad" style={{ margin: 0 }}>Many retractions per layer: use bigger cells, or turn retraction across holes off for small holes.</p>}
+      </div>
 
       <details className="mx-more">
         <summary className="mx-label" style={{ cursor: 'pointer' }}>Band, walls and printability</summary>

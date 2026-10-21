@@ -25,3 +25,26 @@ export function changerLabel(cfg: Config | undefined): string {
   const k = changerOf(cfg);
   return k === 'toolchanger' ? `${toolheadCount(cfg)} toolheads` : k === 'ams' ? 'AMS' : 'Manual';
 }
+
+export type PurgeTarget = 'chute' | 'tower';
+
+/** Where a filament unit flushes the old colour: a purge chute behind the bed (Bambu, CFS, ACE) or the prime tower
+ *  (MMU3, ERCF / Happy Hare, BoxTurtle and any unit without a chute). Unset: chute on Bambu printers, tower otherwise. */
+export function purgeTarget(cfg: Config | undefined): PurgeTarget {
+  const t = String(cfg?.purge_target ?? '');
+  if (t === 'chute' || t === 'tower') return t;
+  const flavor = cfg?.gcode_flavor;
+  return flavor === 'bbl' || (flavor === undefined && cfg?.has_ams === true) ? 'chute' : 'tower';
+}
+
+/** A filament unit that flushes into the prime tower: the flush is printed there and [flush_length] is 0. */
+export const flushesIntoTower = (cfg: Config | undefined) => changerOf(cfg) === 'ams' && purgeTarget(cfg) === 'tower';
+
+/** Filament slots the printer can feed without a manual swap: heads on a tool changer, the unit's slots on a
+ *  filament unit (0 = not set, no limit checked), 1 for manual changes. */
+export function slotCount(cfg: Config | undefined): number {
+  const k = changerOf(cfg);
+  if (k === 'toolchanger') return toolheadCount(cfg);
+  if (k === 'manual') return 1;
+  return Math.max(0, Math.round(Number(cfg?.filament_slots) || 0));
+}

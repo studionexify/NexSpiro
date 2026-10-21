@@ -41,3 +41,13 @@ The test suite checks the G-code itself: every printed outer wall point of the l
 ## Retractions
 
 Each hole is a retraction per wall per layer. The report counts them; above ~120 per layer, use bigger cells or turn *Retract across holes* off for tiny holes.
+
+## Per printer
+
+The card checks the lace against the printer and nozzle before you slice:
+
+- **Strand vs line width:** the strand is shown in line widths of the current nozzle. Under 2 line widths (0.84 mm on a 0.4 nozzle, 1.26 mm on 0.6, 2.1 mm on 1.0) a strand is a single thread and snaps; the card flags it. Small nozzles (0.2–0.25) allow fine lace with 0.5 mm strands and small holes; big nozzles want bigger cells and strands.
+- **Retractions per layer:** estimated as cells round the part (circumference ÷ cell width) × walls with holes, before slicing. The report gives the real count after slicing.
+- **Bowden extruders** (retraction length 2 mm or more, e.g. Ender-3, Neptune 3, Kobra 2): each hole is a long, slow retraction and the filament can grind after a few thousand. The card suggests a cell width that keeps it to about 60 crossings per layer, and a one-click *Retraction off* (PLA hardly strings over short gaps). Direct drive (Bambu, Prusa MK4S, Klipper CoreXY) is fine up to ~120 per layer.
+- **Marlin vs Klipper:** no difference for lace; travel speed and retraction come from the printer profile.
+- **Filament units and tool changers:** lace is one filament; it works the same on every printer.

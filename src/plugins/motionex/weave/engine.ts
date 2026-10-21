@@ -12,6 +12,7 @@ import { pointIn } from '../../../engine/clipper';
 import { objectMask } from '../wall/targets';
 import type { PluginSession, PrepareContext, RegionContribution, TransitionPlan } from '../../api';
 import { cycleLayers, type WeaveSettings } from './model';
+import { minMoveMm, outerLineWidth } from '../wall/machine';
 import { filamentAt, inBand, offsetAt, planLayers, signedArea, weaveLoop, type Pt, type WovenPoint } from './core';
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -122,7 +123,7 @@ const perimeter = (p: Pt[]) => p.reduce((s, q, i) => s + Math.hypot(p[(i + 1) % 
 
 /** The weave pass over the finished move list. Edits layers in place. */
 export function applyWeave(layers: LayerOps[], w: WeaveSettings, cfg: Config, session: WeaveSession | undefined, warn: (m: string) => void): WeaveReport {
-  const lw = num(cfg, 'outer_wall_line_width', 0) || num(cfg, 'line_width', 0.42);
+  const lw = outerLineWidth(cfg);
   const rep: WeaveReport = { wovenLayers: 0, loops: 0, changes: 0, seamsTucked: 0, columns: w.image.w * Math.max(1, w.tiles_around), rows: w.image.h, swing: 0, lineWidth: lw };
   if (cfg.spiral_mode === true || cfg.spiral_mode === 'true') { warn('Weave: spiral vase is on. Turn it off: weave needs one closed loop per layer (and a filament change between layers).'); return rep; }
   if (num(cfg, 'wall_loops', 2) > 1) warn('Weave: works best with 1 wall. More walls sit behind the woven line and squash it where it pulls in (use "Set up print settings").');
@@ -133,7 +134,8 @@ export function applyWeave(layers: LayerOps[], w: WeaveSettings, cfg: Config, se
   const zs = layers.map((L) => L.z);
   const per = found.map((ls) => (ls.length ? Math.max(...ls.map((l) => perimeter(l.pts))) : NaN));
   const plan = planLayers(w, zs, per);
-  const step = Math.max(0.08, Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6));
+  // woven points: ~6 per picture column, but no closer than the firmware streams at the wall speed
+  const step = Math.max(0.08, Math.min(0.5, minMoveMm(cfg, num(cfg, 'outer_wall_speed', 80))), Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6));
   const tuck = Math.max(0, w.seam.tuck_mm);
   let prevColour = -1;
   for (let li = 1; li < layers.length; li++) {

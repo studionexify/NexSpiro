@@ -1,9 +1,11 @@
 // Printer (machine) settings, laid out in printer settings pages.
 import type { Config, ParamDef } from './settings';
+import { changerOf } from './changer';
 
 const opts = (...pairs: [string, string][]) => pairs.map(([value, label]) => ({ value, label }));
 const noWipe = (c: Config) => !c.wipe;
 const noHop = (c: Config) => !(Number(c.z_hop) > 0);
+const notUnit = (c: Config) => changerOf(c) !== 'ams';
 
 export const MACHINE_PAGES = ['Basic information', 'Machine G-code', 'Motion ability', 'Extruder', 'Notes'] as const;
 
@@ -18,6 +20,11 @@ export const MACHINE_PARAMS: ParamDef[] = [
     options: opts(['', 'From printer'], ['ams', 'Filament unit, one nozzle (AMS, MMU, CFS)'], ['toolchanger', 'Tool changer / IDEX, one nozzle per filament'], ['manual', 'Manual (pause and swap)']),
     tip: 'How this printer changes filament. A filament unit purges on every change; a tool changer picks up the next head already loaded, so it only primes; manual pauses for you to swap the spool.' },
   { key: 'filament_change_time', label: 'Time per change', tab: 'Basic information', group: 'Multi-material', type: 'float', unit: 's', min: 0, max: 600, def: 0, tip: 'Seconds one filament change takes (cut, unload, load, heat; or a head swap), without the purge. Used for the time estimate.' },
+  { key: 'purge_target', label: 'Purge into', tab: 'Basic information', group: 'Multi-material', type: 'enum', def: '', disabledWhen: notUnit,
+    options: opts(['', 'From printer'], ['chute', 'Purge chute (Bambu, CFS, ACE)'], ['tower', 'Prime tower (MMU3, ERCF, BoxTurtle)']),
+    tip: 'Where a filament unit flushes the old colour. With a purge chute the change G-code flushes it ([flush_length]); without one the flush is printed on the prime tower, which grows to hold it, and [flush_length] is 0. From printer: chute on Bambu printers, tower on the rest.' },
+  { key: 'filament_slots', label: 'Filament slots', tab: 'Basic information', group: 'Multi-material', type: 'int', min: 0, max: 32, def: 0, disabledWhen: notUnit,
+    tip: 'Spools the filament unit holds (0 = not set). The slicer warns when a print uses more filaments than this.' },
   { key: 'toolhead_count', label: 'Toolheads', tab: 'Basic information', group: 'Multi-material', type: 'int', min: 1, max: 16, def: 1, disabledWhen: (c) => c.changer_type !== 'toolchanger', tip: 'Heads on the tool changer. Filament slot n prints with head n (T0, T1, …).' },
   { key: 'tool_prime_volume', label: 'Prime after pick-up', tab: 'Basic information', group: 'Multi-material', type: 'float', unit: 'mm³', min: 0, max: 100, def: 3, disabledWhen: (c) => c.changer_type !== 'toolchanger', tip: 'Plastic pushed through a head after it is picked up, to replace what oozed while it was parked ([flush_length] in the change G-code, or the prime tower).' },
   { key: 'standby_temperature_delta', label: 'Parked head temperature', tab: 'Basic information', group: 'Multi-material', type: 'float', unit: '°C', min: -200, max: 0, def: -40, disabledWhen: (c) => c.changer_type !== 'toolchanger', tip: 'A parked head waits this much below its print temperature, so it oozes less (0 = keep it at print temperature).' },
@@ -30,7 +37,7 @@ export const MACHINE_PARAMS: ParamDef[] = [
   { key: 'before_layer_change_gcode', label: 'Before layer change G-code', tab: 'Machine G-code', group: 'Before layer change G-code', type: 'text', def: '', tip: 'Inserted before moving up to the next layer. Placeholders: [layer_num], [layer_z].' },
   { key: 'layer_change_gcode', label: 'Layer change G-code', tab: 'Machine G-code', group: 'Layer change G-code', type: 'text', def: '', tip: 'Inserted after moving up to a new layer. Placeholders: [layer_num], [layer_z].' },
   { key: 'time_lapse_gcode', label: 'Time lapse G-code', tab: 'Machine G-code', group: 'Time lapse G-code', type: 'text', def: '', tip: 'Inserted at every layer change to take a timelapse snapshot.' },
-  { key: 'change_filament_gcode', label: 'Change filament G-code', tab: 'Machine G-code', group: 'Change filament G-code', type: 'text', def: '', tip: 'Run for every filament change. Placeholders: [previous_extruder], [next_extruder], [flush_length], [new_filament_temp], [toolchange_z].' },
+  { key: 'change_filament_gcode', label: 'Change filament G-code', tab: 'Machine G-code', group: 'Change filament G-code', type: 'text', def: '', tip: 'Run for every filament change. Placeholders: [previous_extruder], [next_extruder], [flush_length], [new_filament_temp], [toolchange_z], [wipe_tower_x] / [wipe_tower_y] (prime tower centre).' },
   { key: 'machine_pause_gcode', label: 'Pause G-code', tab: 'Machine G-code', group: 'Pause G-code', type: 'text', def: 'M601', tip: 'Inserted for a pause added on the layer slider.' },
 
   // ---------------- Motion ability

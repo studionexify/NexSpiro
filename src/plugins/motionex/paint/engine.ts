@@ -10,7 +10,9 @@ import { pointIn } from '../../../engine/clipper';
 import { pixelAt } from '../weave/image';
 import type { WeaveImage } from '../weave/model';
 import { bandRows, LoopLocator, loopFractions, OUTER, perimeter, round4, round5, signedArea, wallHeights, wallRuns, type Move, type Pt, type WallRun } from '../wall/loops';
-import { paintLevels, speedLadder, speedOfLevel, type PaintSettings } from './model';
+import { paintLevels, speedLadder, type PaintSettings } from './model';
+import { paintAccel, paintSpeeds, paintStepMm, rampMm, recommendedPaintAccel, recommendedPixelMm } from './plan';
+import { flavourOf, maxAccelOf, outerLineWidth } from '../wall/machine';
 
 export interface PaintReport {
   paintedLayers: number;
@@ -28,6 +30,10 @@ export interface PaintReport {
   pixelMm: number;
   /** Shortest painted layer (s, whole layer): painted lines are not slowed down for cooling. */
   shortestLayer: number;
+  /** Longest piece of line with one speed as printed (mm): resolution_mm, raised so the firmware keeps up. */
+  stepMm: number;
+  /** Acceleration painted walls print at (mm/s²), within the machine's limit. */
+  accel: number;
 }
 
 const num = (cfg: Config, k: string, d: number) => { const v = parseFloat(String(cfg[k] ?? '')); return Number.isFinite(v) ? v : d; };
@@ -65,16 +71,18 @@ const du = (u0: number, u1: number) => { let d = u1 - u0; if (d > 0.5) d -= 1; e
 export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, maskAt: ((layer: number) => Paths | null) | null, warn: (m: string) => void): PaintReport {
   const levels = paintLevels(p);
   const img = p.calibration ? speedLadder(levels) : p.image;
-  const lw = num(cfg, 'outer_wall_line_width', 0) || num(cfg, 'line_width', 0.42);
+  const lw = outerLineWidth(cfg);
   const lh = num(cfg, 'layer_height', 0.2);
-  const flowLimit = num(cfg, 'filament_max_volumetric_speed', 15) / Math.max(1e-3, lw * lh);
-  const xyLimit = num(cfg, 'max_speed_xy', 500);
-  const raw = Array.from({ length: levels }, (_, k) => speedOfLevel(p, k, levels));
-  const speeds = raw.map((v) => Math.max(2, Math.min(v, flowLimit, xyLimit)));
-  const rep: PaintReport = { paintedLayers: 0, runs: 0, moves: 0, speeds, flowLimit, rampMm: 0, pixelMm: 0, shortestLayer: Infinity };
-  if (raw.some((v, k) => v > speeds[k] + 1e-6)) warn(`Velocity paint: ${Math.max(...raw).toFixed(0)} mm/s is more than this filament can melt in a ${lw.toFixed(2)} × ${lh.toFixed(2)} mm line (${flowLimit.toFixed(0)} mm/s at ${num(cfg, 'filament_max_volumetric_speed', 15)} mm³/s); it prints at ${Math.min(flowLimit, xyLimit).toFixed(0)} mm/s, so the darkest levels merge.`);
+  const { raw, speeds, flowLimit, xyLimit } = paintSpeeds(p, cfg);
+  const maxAccel = maxAccelOf(cfg);
+  const accel = paintAccel(p, cfg);
+  const res = paintStepMm(p, cfg);
+  const rep: PaintReport = { paintedLayers: 0, runs: 0, moves: 0, speeds, flowLimit, rampMm: 0, pixelMm: 0, shortestLayer: Infinity, stepMm: res, accel };
+  if (raw.some((v, k) => v > speeds[k] + 1e-6)) warn(`Velocity paint: ${Math.max(...raw).toFixed(0)} mm/s is more than this filament can melt in a ${lw.toFixed(2)} × ${lh.toFixed(2)} mm line (${flowLimit.toFixed(0)} mm/s at ${num(cfg, 'filament_max_volumetric_speed', 15)} mm³/s)${xyLimit < flowLimit ? ` or the printer can move (${xyLimit.toFixed(0)} mm/s)` : ''}; it prints at ${Math.min(flowLimit, xyLimit).toFixed(0)} mm/s, so the darkest levels merge.`);
   if (num(cfg, 'max_volumetric_extrusion_rate_slope_positive', 0) > 0 || num(cfg, 'max_volumetric_extrusion_rate_slope_negative', 0) > 0) warn('Velocity paint: the pressure equalizer (max volumetric slope) is on and smooths the speed steps, which blurs the picture. Turn it off for painting.');
-  if (cfg.spiral_mode === true || cfg.spiral_mode === 'true') warn('Velocity paint: works in spiral vase too, but the picture follows the spiral; for sharp rows turn spiral vase off.');
+  if (p.accel > maxAccel) warn(`Velocity paint: the painting acceleration ${p.accel} mm/s² is above this printer's ${maxAccel} mm/s² limit; painted walls print at ${maxAccel} mm/s².`);
+  const spiral = cfg.spiral_mode === true || cfg.spiral_mode === 'true';
+  if (spiral) warn('Velocity paint: works in spiral vase too, but the picture follows the spiral; for sharp rows turn spiral vase off.');
 
   const idx = (li: number) => layers[li].layer ?? li;
   const keep = (li: number, q: Pt) => { const m = maskAt?.(idx(li)); return !m || pointIn(q.x, q.y, m); };
@@ -93,16 +101,17 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
   // `across` points to the viewer's right, so the picture reads left to right
   const frontU = (q: Pt) => Math.max(0, Math.min(1 - 1e-9, (q.x * across.x + q.y * across.y - eMin) / Math.max(1e-6, eMax - eMin)));
 
-  const res = Math.max(0.1, p.resolution_mm);
-  const accel = p.accel > 0 ? p.accel : num(cfg, 'outer_wall_acceleration', 0) || num(cfg, 'default_acceleration', 5000);
   const vs = [Math.min(...speeds), Math.max(...speeds)];
-  rep.rampMm = Math.abs(vs[1] ** 2 - vs[0] ** 2) / (2 * Math.max(1, Math.min(accel, num(cfg, 'max_acceleration', 1e9))));
+  // the ramp at the acceleration the firmware will really use (it clamps to its own limit)
+  rep.rampMm = rampMm(vs[0], vs[1], accel);
   const bandPer = per.filter((v, li) => Number.isFinite(v) && Number.isFinite(band.s[li])).sort((a, b) => a - b);
   const midPer = bandPer[Math.floor(bandPer.length / 2)] ?? 0;
   rep.pixelMm = p.projection === 'wrap' ? midPer / Math.max(1, img.w * Math.max(1, p.tiles_around)) : (eMax - eMin) / Math.max(1, img.w);
   // acceleration in force at the end of the previous layer (restored after each painted run)
-  let carry = num(cfg, 'default_acceleration', 5000);
-  const accelBefore = (ops: Op[], at: number) => { let a = carry; for (let k = 0; k < at; k++) { const op = ops[k]; if (op.k === 'accel') a = op.a; } return a; };
+  let carry = Math.min(num(cfg, 'default_acceleration', 5000), maxAccel);
+  const accelBefore = (ops: Op[], at: number) => { let a = carry; for (let k = 0; k < at; k++) { const op = ops[k]; if (op.k === 'accel') a = op.a; } return Math.min(a, maxAccel); };
+  // spiral vase: moves climb, so pieces of a move take their share of its rise
+  const zBefore = (ops: Op[], at: number, z: number) => { for (let k = at - 1; k >= 0; k--) { const op = ops[k]; if (op.k === 'raw' && op.resetPos) break; if (op.k === 'move') return op.z; } return z; };
 
   for (let li = 1; li < layers.length; li++) {
     const ops = layers[li].ops;
@@ -120,6 +129,7 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
         const a = r.pts[k - 1], b = r.pts[k];
         const len = Math.hypot(b.x - a.x, b.y - a.y);
         const orig = ops[r.start + k - 1] as Move;
+        const za = spiral ? zBefore(ops, r.start + k - 1, orig.z) : orig.z;
         if (len < 1e-6) { out.push(orig); continue; }
         // front: only the side that faces the viewer is painted
         if (p.projection === 'front') {
@@ -133,7 +143,7 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
         const flush = (t1: number) => {
           if (t1 <= t0 || lvl < 0) return;
           const x = a.x + (b.x - a.x) * t1, y = a.y + (b.y - a.y) * t1;
-          out.push({ ...orig, x: round4(x), y: round4(y), e: round5(orig.e * (t1 - t0)), f: speeds[lvl], noArc: true, noSlow: true });
+          out.push({ ...orig, x: round4(x), y: round4(y), z: round4(za + (orig.z - za) * t1), e: round5(orig.e * (t1 - t0)), f: speeds[lvl], noArc: true, noSlow: true });
           layerTime += (len * (t1 - t0)) / speeds[lvl];
           t0 = t1;
         };
@@ -147,9 +157,9 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
         flush(1);
         // the last piece ends exactly on the original point
         const last = out[out.length - 1] as Move;
-        last.x = orig.x; last.y = orig.y;
+        last.x = orig.x; last.y = orig.y; last.z = orig.z;
       }
-      if (p.accel > 0) { const before = accelBefore(ops, r.start); out.unshift({ k: 'accel', a: p.accel }); out.push({ k: 'accel', a: before }); }
+      if (p.accel > 0) { const before = accelBefore(ops, r.start); out.unshift({ k: 'accel', a: accel }); out.push({ k: 'accel', a: before }); }
       ops.splice(r.start, r.end - r.start, ...out);
       rep.moves += out.length;
       rep.runs++;
@@ -170,7 +180,12 @@ export function applyPaint(layers: LayerOps[], p: PaintSettings, cfg: Config, ma
     carry = accelBefore(ops, ops.length);
   }
   if (!Number.isFinite(rep.shortestLayer)) rep.shortestLayer = 0;
-  if (rep.pixelMm > 0 && rep.rampMm > 0.6 * rep.pixelMm) warn(`Velocity paint: the head needs ${rep.rampMm.toFixed(1)} mm to change between ${vs[0].toFixed(0)} and ${vs[1].toFixed(0)} mm/s at ${accel.toFixed(0)} mm/s², but a pixel is ${rep.pixelMm.toFixed(1)} mm wide, so the picture blurs. Use bigger pixels, closer speeds or a higher painting acceleration.`);
+  if (rep.pixelMm > 0 && rep.rampMm > 0.6 * rep.pixelMm) {
+    const best = recommendedPaintAccel(cfg), tip = best > accel * 1.2 ? `, or a painting acceleration of ${best} mm/s² (this printer's limit allows it)` : '';
+    warn(`Velocity paint: the head needs ${rep.rampMm.toFixed(1)} mm to change between ${vs[0].toFixed(0)} and ${vs[1].toFixed(0)} mm/s at ${accel.toFixed(0)} mm/s², but a pixel is ${rep.pixelMm.toFixed(1)} mm wide, so the picture blurs. Use pixels of ${recommendedPixelMm(cfg, p).toFixed(1)} mm or more, closer speeds${tip}.`);
+  }
+  // pieces raised for the firmware: only worth a word when pixel edges move by a third of a pixel
+  if (res > p.resolution_mm + 1e-6 && rep.pixelMm > 0 && res > rep.pixelMm / 3) warn(`Velocity paint: ${flavourOf(cfg) === 'marlin' ? 'Marlin' : 'the firmware'} needs pieces of line of ${res.toFixed(1)} mm or more to keep up, which is coarse for ${rep.pixelMm.toFixed(1)} mm pixels. Use pixels of ${recommendedPixelMm(cfg, p).toFixed(1)} mm or more.`);
   const minLayer = num(cfg, 'slow_down_layer_time', 0);
   if (rep.paintedLayers && minLayer > 0 && rep.shortestLayer < minLayer) warn(`Velocity paint: painted layers take ${rep.shortestLayer.toFixed(1)} s, under the ${minLayer} s minimum layer time, and are not slowed down (that would squeeze the speeds together). Print two parts at once or lower both speeds if the top softens.`);
   return rep;
