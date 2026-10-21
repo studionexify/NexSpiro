@@ -11,7 +11,7 @@ import { resolveTechs, type ResolvedTech } from './techs';
 import type { AdvancedConfig, AdvancedReport, TechId, TechReport, ParamValue } from './types';
 import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
-import { clearancePass, type ClearanceReport } from './clearance';
+import { clearancePass, limitRamp, restoreLengths, snapshotLengths, type ClearanceReport } from './clearance';
 import { difference } from '../clipper';
 import { pushAll } from '../util';
 
@@ -219,7 +219,10 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
       if (warp) { const n = unwarpLayers(layers, warp); if (n) ctx.nonPlanar = true; }
       for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
       if (ctx.nonPlanar) {
+        const lengths = snapshotLengths(layers);
         clearance = clearancePass(layers, caps.toolhead, caps.bed, true, 3, debugCollision);
+        limitRamp(layers, caps.maxSlopeDeg);
+        restoreLengths(layers, lengths);
         if (clearance.raised) ctx.warn(`Head clearance: lifted ${clearance.raised} non-planar points so the ${caps.toolhead.name} clears the print.`);
         if (clearance.unresolved) ctx.warn(`Head clearance: ${clearance.unresolved} non-planar points may touch the print with the ${caps.toolhead.name} (worst ${clearance.worstLeft.toFixed(2)} mm). Check the toolhead shape in Machine capabilities.`);
       }

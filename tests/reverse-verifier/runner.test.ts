@@ -95,7 +95,9 @@ function coreRun(kind: CoreKind) {
       lineWidth: outerWallWidth(cfg),
       ...(g.radius !== undefined ? { radius: g.radius, center: { x: 100, y: 100 } } : {}),
     }));
-    if (kind === 'vase') results.push(M.checkContinuity(moves, { maxJump: VASE_MAX_JUMP_MM, zMode: 'monotonic', fromLayer: VASE_BASE_LAYERS }));
+    // the span is the print itself: end G-code (lift, park) after the last bead is not part of the spiral
+    const lastBead = Math.max(0, ...moves.filter((m) => m.isExtruding).map((m) => m.line));
+    if (kind === 'vase') results.push(M.checkContinuity(moves.filter((m) => m.line <= lastBead), { maxJump: VASE_MAX_JUMP_MM, zMode: 'monotonic', fromLayer: VASE_BASE_LAYERS }));
     return finish(results, moves, ctx);
   };
 }
