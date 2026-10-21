@@ -120,3 +120,13 @@ Final state: **122 of 138 (target x profile) cells pass; 35 of 46 targets pass i
 - Final grid: 141 cells, 127 passing, 14 failing (16 target/assertion pairs).
 - Open: `spatial_lattice` plunges are not in clear voids (genuine finding); `foam_control` undeclared expansion flow; `sgd_slicing` one ~6% bridge; `harmonic_dome` one 24° ramp; `plugin/bulnex` body-transform geometry gaps; `corner_overshoot`/`tangent_entry` Boundary, `co_molding`/`band_gap` Extreme still under triage.
 - Golden hashes (Advanced) re-pinned after verified behaviour changes; phase3 pin test now sets `pins: true`.
+
+## Addendum 2: all 141 cells pass
+
+- `spatial_lattice`: node pitch now clears the nozzle cone (tip radius + cell·tan(cone) + margin + bead). The checker's plunge exemption was generalised to any draw steeper than the slope limit (cone-clear test; strands joined at either end and plastic at the tip's own level are not obstacles; depth ≤ tip length − margin).
+- `foam_control`: declared bead is the unexpanded melt section (width via `flowPatch(1/X)`).
+- `sgd_slicing`: bridges are round strands; clearance lift, ramp raise and unwarp no longer thicken them.
+- `harmonic_dome`: `limitRamp` looks back past de-retracts, eases climbs from the travel end, keeps 1.2 µm rounding margin; unwarp clamps piece slope to the machine limit and drops <5 µm duplicate pieces.
+- `plugin/bulnex`: harness maps cycle 2..N lines to cycle 1's declared geometry.
+- Tech-status: an `idle` tech with a stated reason under Extreme/Boundary params is recorded N/A (cell's other assertions still run); Default must run.
+- Goldens (Advanced) re-pinned.
