@@ -91,3 +91,20 @@ describe('z-weave & models', () => {
   });
   it('circle bead area', () => { expect(beadArea('circle', 0.4, 0.2)).toBeCloseTo(Math.PI * 0.04, 9); });
 });
+
+describe('vertical plunges', () => {
+  const P = { tipRadius: 0.5, coneAngleDeg: 40, tipLen: 2.2, margin: 0.2, beadHalfWidth: 0.2 };
+  const bead = (x: number, y: number, z: number): GMove => ({ type: 'G1', x, y, z, e: 0.01, f: 1, isExtruding: true, layerIndex: 0, line: 1 });
+  const wall = (r: number, z: number): GMove[] => {
+    const m: GMove[] = [{ type: 'G0', x: r, y: 0, z, e: 0, f: 1, isExtruding: false, layerIndex: 0, line: 0 }];
+    for (let k = 1; k <= 120; k++) m.push(bead(r * Math.cos((k / 120) * 2 * Math.PI), r * Math.sin((k / 120) * 2 * Math.PI), z));
+    return m;
+  };
+  const plunge = (): GMove[] => [{ type: 'G0', x: 0, y: 0, z: 1.0, e: 0, f: 1, isExtruding: false, layerIndex: 1, line: 500 }, { ...bead(0, 0, 1.4), line: 501, layerIndex: 1 }];
+  it('exempts a plunge into a clear void, flags one beside a wall, and a too-deep one', () => {
+    expect(checkRampAngle([...wall(3, 1.2), ...plunge()], 10, P).pass).toBe(true);
+    expect(checkRampAngle([...wall(0.9, 1.2), ...plunge()], 10, P).pass).toBe(false);
+    expect(checkRampAngle([...wall(3, 1.2), { type: 'G0', x: 0, y: 0, z: 0.5, e: 0, f: 1, isExtruding: false, layerIndex: 1, line: 500 }, { ...bead(0, 0, 3.4), line: 501, layerIndex: 1 }], 10, P).pass).toBe(false);
+    expect(checkRampAngle(plunge(), 10).pass).toBe(false); // without plunge options the 90 deg rule still applies
+  });
+});

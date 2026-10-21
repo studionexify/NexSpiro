@@ -123,7 +123,7 @@ export const TECHS: TechDef[] = [
     params: [
       { key: 'amp', label: 'Amplitude (× layer h)', type: 'number', def: 0.25, min: 0.05, max: 0.45, step: 0.01 },
       { key: 'wavelength', label: 'Wavelength', type: 'number', def: 4, min: 1, max: 20, step: 0.5, unit: 'mm' },
-      { key: 'pins', label: 'Z-pins', type: 'bool', def: true },
+      { key: 'pins', label: 'Z-pins', type: 'bool', def: false, tip: 'Opt-in. Dives the nozzle into stacked voids and fills them with a vertical column of plastic.' },
       { key: 'pinPitch', label: 'Pin pitch', type: 'number', def: 8, min: 3, max: 30, step: 0.5, unit: 'mm' },
     ],
     mould: (c) => (c.caps.maxAccelZ < 50 || c.caps.maxSpeedZ < 3 ? { status: 'unavailable', reason: 'Z axis too slow for weaving.' }

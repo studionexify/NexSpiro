@@ -337,7 +337,7 @@ export function trimPrePosition(moves: M.GMove[]): { moves: M.GMove[]; dropped: 
 }
 
 /** The three checks every (target, profile) gets, plus the declared-geometry harness check. */
-export function standardRows(out: SliceOutput, cfg: Config, thetaMaxDeg: number): { moves: M.GMove[]; ctx: VolCtx; results: M.AssertionResult[] } {
+export function standardRows(out: SliceOutput, cfg: Config, thetaMaxDeg: number, plunge?: M.PlungeOptions): { moves: M.GMove[]; ctx: VolCtx; results: M.AssertionResult[] } {
   // machine start G-code (purge lines, priming) is not toolpath: judge only what follows the first layer change
   const lines = out.gcode.split('\n');
   const firstLayer = lines.findIndex((l) => l.startsWith(';LAYER_CHANGE')) + 1;
@@ -346,7 +346,7 @@ export function standardRows(out: SliceOutput, cfg: Config, thetaMaxDeg: number)
   const results = [
     volumetric(moves, ctx),
     M.checkFiniteAndSafe(moves, out.gcode),
-    M.checkRampAngle(moves, thetaMaxDeg),
+    M.checkRampAngle(moves, thetaMaxDeg, plunge),
     checkDeclaredMap(moves, ctx.decl),
   ];
   return { moves, ctx, results };
@@ -386,3 +386,12 @@ export function specParams(
 }
 
 export { M };
+
+/** Nozzle-cone geometry for the clear-void exemption of vertical plunges (same cone the engine's clearance pass uses). */
+export function plungeFor(printerId: string, cfg: Config): M.PlungeOptions {
+  const head = machineCaps(printerId, cfg).toolhead;
+  return {
+    tipRadius: head.nozzle.tip_diameter / 2, coneAngleDeg: head.nozzle.cone_angle_deg, tipLen: head.nozzle.tip_len,
+    margin: head.margin, beadHalfWidth: outerWallWidth(cfg) / 2,
+  };
+}

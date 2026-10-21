@@ -18,7 +18,7 @@ import { box, cylinder, tee } from '../fixtures';
 import type { Config } from '../../src/profiles/settings';
 import {
   LINE_WIDTH_KEYS, PLANAR_THETA_MAX_DEG, PRINTER, PROFILE_BOUNDARY, PROFILE_DEFAULT, PROFILE_EXTREME, PROFILES,
-  advRampLimit, cfgWith, errorRow, M, meshOf, outerWallWidth, pointsOf, REPORT_FIRST_FAILURES,
+  advRampLimit, plungeFor, cfgWith, errorRow, M, meshOf, outerWallWidth, pointsOf, REPORT_FIRST_FAILURES,
   specParams, standardRows, statusRow, toRows, type Profile, type Row, type VolCtx,
 } from './runner';
 
@@ -168,7 +168,7 @@ function advRun(tech: TechDef) {
     });
     const cfg = cfgWith(c.printer, c.ov, c.filamentId);
     const t = rep.get(tech.id);
-    const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(c.printer, cfg));
+    const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(c.printer, cfg), plungeFor(c.printer, cfg));
     if (tech.id === 'z_weave') results.push(zWeaveCheck(moves, cfg, profile));
     return [statusRow(t?.status, t?.reason), ...finish(results, moves, ctx)];
   };
@@ -264,17 +264,17 @@ function zWeaveCheck(moves: M.GMove[], cfg: Config, profile: Profile): M.Asserti
   });
 }
 
-function weaveRun(profile: Profile): Row[] {
+function weaveRun(profile: Profile, pins = false): Row[] {
   const tiny = profile === PROFILE_BOUNDARY;
   const R = tiny ? 3 : 10, H = tiny ? 6 : 20;
   const ov = boundaryOv(profile);
   const p = specParams(ZW.params, profile);
   const { out, rep } = adv([meshOf(cylinder(100, 100, R, H))] as any, PRINTER, ['z_weave'], 'structural', {
-    overrides: ov, ...(p ? { params: { z_weave: p } } : {}),
+    overrides: ov, ...(p || pins ? { params: { z_weave: { ...(p ?? {}), ...(pins ? { pins: true } : {}) } } } : {}),
   });
   const cfg = cfgWith(PRINTER, ov);
   const t = rep.get('z_weave');
-  const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(PRINTER, cfg));
+  const { moves, ctx, results } = standardRows(out, cfg, advRampLimit(PRINTER, cfg), plungeFor(PRINTER, cfg));
   results.push(zWeaveCheck(moves, cfg, profile));
   return [statusRow(t?.status, t?.reason), ...finish(results, moves, ctx)];
 }
@@ -287,7 +287,9 @@ const TARGETS: Target[] = [
   { id: 'plugin/hanex', run: hanexRun },
   { id: 'plugin/bulnex', run: bulnexRun },
   { id: 'plugin/patternex', run: patternexRun },
-  { id: 'weave/z_weave-cylinder', run: weaveRun },
+  { id: 'weave/z_weave-cylinder', run: (p: Profile) => weaveRun(p) },
+  // Z-pins are opt-in: with them on, every vertical plunge must pass the clear-void check
+  { id: 'weave/z_weave-pins-cylinder', run: (p: Profile) => weaveRun(p, true) },
 ];
 
 const report: ReportRow[] = [];

@@ -98,7 +98,13 @@ export function Legend() {
         </div>
       )}
       <div className="summary">
-        <span className="k">Estimated time</span><span className="v">{fmtTime(st.timeSeconds)}</span>
+        <span className="k">{st.repeat ? 'One print' : 'Estimated time'}</span><span className="v">{fmtTime(st.timeSeconds)}</span>
+        {st.repeat && <>
+          <span className="k">Printed</span><span className="v">{st.repeat.cycles}× · {st.repeat.cycles * st.repeat.partsPerCycle} parts (preview shows one print)</span>
+          <span className="k">Cool, push, re-heat</span><span className="v">{fmtTime(st.repeat.coolSeconds + st.repeat.pushSeconds)} + {fmtTime(st.repeat.reheatSeconds)} per cycle</span>
+          <span className="k">Whole job</span><span className="v">{fmtTime(st.repeat.totalSeconds)}</span>
+          <span className="k">Job filament</span><span className="v">{(st.repeat.totalMm / 1000).toFixed(2)} m · {st.repeat.totalGrams.toFixed(1)} g</span>
+        </>}
         <span className="k">Filament</span><span className="v">{(st.filamentMm / 1000).toFixed(2)} m · {st.filamentGrams.toFixed(2)} g</span>
         <span className="k">Cost</span><span className="v">{st.filamentCost.toFixed(2)}</span>
         <span className="k">Layers</span><span className="v">{st.layerCount}</span>

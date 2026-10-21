@@ -86,10 +86,15 @@ export const zWeave: TechModule = {
         const len = Math.hypot(op.x - px, op.y - py);
         const dens = op.e / Math.max(Math.hypot(len, op.z - (Number.isNaN(pz) ? op.z : pz)), 1e-9); // E per mm of the incoming bead's true 3-D length
         const n = Math.max(1, Math.ceil(len / (lambda / 8)));
+        let lx = px, ly = py; // end of the previous piece
+        const inVoid = (x: number, y: number) => sites.some(([sx, sy]) => (sx - x) ** 2 + (sy - y) ** 2 < (rv + w / 2) ** 2);
         for (let q = 1; q <= n; q++) {
           const t = q / n, x = px + (op.x - px) * t, y = py + (op.y - py) * t;
-          // pins: no infill inside the void circles of this stack
-          if (op.feature === 'sparse_infill' && sites.length && sites.some(([sx, sy]) => (sx - x) ** 2 + (sy - y) ** 2 < (rv + w / 2) ** 2)) {
+          // pins: no infill inside the void circles of this stack. A piece is a bead from the previous piece's end to
+          // its own end, so both ends must be outside the void - otherwise the bead would start inside it.
+          const bx = lx, by = ly;
+          lx = x; ly = y;
+          if (op.feature === 'sparse_infill' && sites.length && (inVoid(x, y) || inVoid(bx, by))) {
             out.push({ ...op, x, y, e: 0, travel: true, feature: 'travel', t: undefined });
             continue;
           }
@@ -120,7 +125,10 @@ export const zWeave: TechModule = {
           out.push({ k: 'move', x, y, z: +(zl + 0.4).toFixed(4), e: 0, f: s.num('travel_speed') || 200, feature: 'travel', w: 0, h: L.h, travel: true });
           out.push({ k: 'move', x, y, z: +(zl - dive).toFixed(4), e: 0, f: 5, feature: 'travel', w: 0, h: L.h, travel: true, fixed: true });
           out.push({ k: 'retract', len: -retract, speed: rs });
-          const pin: Move = { k: 'move', x, y, z: +zl.toFixed(4), e: vol / filA, f: Math.max(0.5, Math.min(2, (s.caps.maxFlow * 0.3) / (Math.PI * rv * rv))), feature: 'sparse_infill', w: 2 * rv, h: N * L.h, travel: false, fixed: true, noArc: true };
+          // the column is a volume dump: pi rv^2 over the filled stack, laid down while the tip rises `dive`. Declared as the round
+          // bead of that average cross-section so the preview and the E check agree (the plunge itself is judged by the clear-void rule)
+          const dBead = 2 * Math.sqrt(vol / (Math.PI * Math.max(dive, 1e-6)));
+          const pin: Move = { k: 'move', x, y, z: +zl.toFixed(4), e: (vol / filA) * (s.filaments[0]?.flowRatio || 1), f: Math.max(0.5, Math.min(2, (s.caps.maxFlow * 0.3) / (Math.PI * rv * rv))), feature: 'sparse_infill', w: dBead, h: dBead * 0.9999, travel: false, fixed: true, noArc: true };
           out.push(pin);
           out.push({ k: 'raw', text: 'G4 P300 ; let the pin settle', time: 0.3 });
           pinCount++;

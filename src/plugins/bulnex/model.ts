@@ -102,6 +102,10 @@ export interface BulnexReport {
   cycles: number;
   /** Seconds added to every cycle by cool-down, push and re-heat (estimate). */
   cycleOverheadS: number;
+  /** The three parts of that overhead (s): cool-down wait, push strokes, re-heat (the last cycle does not re-heat). */
+  coolS: number; pushS: number; reheatS: number;
+  /** Whether this file is the calibration ladder (cycles do not apply). */
+  calibration: boolean;
 }
 
 export const pushZFor = (height: number, pct: number) => Math.max(MIN_PUSH_Z, Math.min(height - 1, height * pct));
@@ -150,8 +154,12 @@ export function checkParts(parts: PartGeometry[], cfg: BulnexConfig, filamentTyp
 }
 
 /** Cycle overhead (cool-down wait + push strokes + re-heat), seconds. */
+export function cycleParts(cfg: BulnexConfig, row: PushRow | null, bedTemp: number): { coolS: number; pushS: number; reheatS: number } {
+  const pushS = row ? cfg.passes * (2 * (row.startY - PUSH_END_Y) / Math.max(1, cfg.pushSpeed) + 6) : 0;
+  const reheatS = Math.max(0, bedTemp - cfg.releaseBedTemp) * 3; // ~3 s/°C on the A1 heater
+  return { coolS: cfg.coolWaitMin * 60, pushS, reheatS };
+}
 export function cycleOverhead(cfg: BulnexConfig, row: PushRow | null, bedTemp: number): number {
-  const strokes = row ? cfg.passes * (2 * (row.startY - PUSH_END_Y) / Math.max(1, cfg.pushSpeed) + 6) : 0;
-  const reheat = Math.max(0, bedTemp - cfg.releaseBedTemp) * 3; // ~3 s/°C on the A1 heater
-  return cfg.coolWaitMin * 60 + strokes + reheat;
+  const p = cycleParts(cfg, row, bedTemp);
+  return p.coolS + p.pushS + p.reheatS;
 }

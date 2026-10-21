@@ -441,21 +441,80 @@ export function checkContinuity(moves: GMove[], c: ContinuityExpect): AssertionR
 // ---------------------------------------------------------------------------------------------------------
 // 3. Non-planar nozzle clearance & bed safety
 // ---------------------------------------------------------------------------------------------------------
-/** theta = atan2(|dZ|, hypot(dX, dY)) <= thetaMax on every extrusion; Z >= 0 on every extrusion. */
-export function checkRampAngle(moves: GMove[], thetaMaxDeg: number): AssertionResult {
+/**
+ * A pure-vertical extrusion (XY fixed, Z changes) is a plunge, not a ramp: theta = 90 deg by construction. It is
+ * exempt from the slope limit ONLY if the void it enters is clear: no previously printed plastic lies inside the
+ * nozzle cone over the plunge height (radius at height d above the tip = tipRadius + d * tan(coneAngle) + margin
+ * + half a bead), and the dive is no deeper than the tip length less the margin.
+ */
+export interface PlungeOptions {
+  tipRadius: number;
+  /** Cone angle from vertical (deg), as in ToolheadProfile.nozzle.cone_angle_deg. */
+  coneAngleDeg: number;
+  tipLen: number;
+  margin: number;
+  /** Half the bead width of the plastic around the void (mm). */
+  beadHalfWidth: number;
+}
+
+const SAMPLE = 0.3, CELL = 1;
+const cellKey = (ix: number, iy: number) => ix * 100003 + iy;
+
+/** theta = atan2(|dZ|, hypot(dX, dY)) <= thetaMax on every extrusion; Z >= 0 on every extrusion; clear-void plunges exempt. */
+export function checkRampAngle(moves: GMove[], thetaMaxDeg: number, plunge?: PlungeOptions): AssertionResult {
   const name = 'nonplanar-ramp-angle';
   const failures: Failure[] = [];
   const thetaMax = (thetaMaxDeg * Math.PI) / 180;
-  let worst = 0, minZ = Infinity;
+  let worst = 0, minZ = Infinity, plunges = 0, plungeMinClear = Infinity;
+  const hash = new Map<number, number[]>();
+  const tanA = plunge ? Math.tan((plunge.coneAngleDeg * Math.PI) / 180) : 0;
+  const insert = (x: number, y: number, z: number) => {
+    const k = cellKey(Math.floor(x / CELL), Math.floor(y / CELL));
+    const a = hash.get(k);
+    if (a) a.push(x, y, z); else hash.set(k, [x, y, z]);
+  };
+  const isPlunge = (m: GMove, st: Pos) => Math.hypot(m.x - st.x, m.y - st.y) < 1e-6 && Math.abs(m.z - st.z) > 1e-6;
+  const deposit = (m: GMove, st: Pos) => {
+    if (!plunge || !m.isExtruding || !Number.isFinite(st.x)) return;
+    const L = Math.hypot(m.x - st.x, m.y - st.y, m.z - st.z), n = Math.max(1, Math.ceil(L / SAMPLE));
+    for (let i = 1; i <= n; i++) { const t = i / n; insert(st.x + (m.x - st.x) * t, st.y + (m.y - st.y) * t, st.z + (m.z - st.z) * t); }
+  };
   for (const { m, start } of withStart(moves)) {
+    try {
     if (!m.isExtruding || !Number.isFinite(start.x)) continue;
     minZ = Math.min(minZ, m.z);
     if (m.z < 0) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `Z=${m.z} below bed`, actual: m.z, expected: 0 });
+    if (plunge && isPlunge(m, start)) {
+      plunges++;
+      const zLow = Math.min(start.z, m.z), zHigh = Math.max(start.z, m.z);
+      const depth = zHigh - zLow;
+      let clear = Infinity;
+      if (depth > plunge.tipLen - plunge.margin + 1e-6) {
+        failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `plunge ${depth.toFixed(2)} mm deeper than the tip allows (${(plunge.tipLen - plunge.margin).toFixed(2)} mm)`, actual: depth, expected: plunge.tipLen - plunge.margin });
+        continue;
+      }
+      const reach = plunge.tipRadius + plunge.tipLen * tanA + plunge.margin + plunge.beadHalfWidth + CELL;
+      const c0x = Math.floor((m.x - reach) / CELL), c1x = Math.floor((m.x + reach) / CELL), c0y = Math.floor((m.y - reach) / CELL), c1y = Math.floor((m.y + reach) / CELL);
+      for (let ix = c0x; ix <= c1x; ix++) for (let iy = c0y; iy <= c1y; iy++) {
+        const a = hash.get(cellKey(ix, iy));
+        if (!a) continue;
+        for (let q = 0; q < a.length; q += 3) {
+          const dz = a[q + 2] - zLow;
+          if (dz < 0 || dz > plunge.tipLen) continue; // below the tip or above the cone region (head volumes are checked by the engine's own clearance pass)
+          const allowed = plunge.tipRadius + dz * tanA + plunge.margin + plunge.beadHalfWidth;
+          clear = Math.min(clear, Math.hypot(a[q] - m.x, a[q + 1] - m.y) - allowed);
+        }
+      }
+      plungeMinClear = Math.min(plungeMinClear, clear);
+      if (clear < 0) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `vertical plunge into a void that is not clear: plastic ${(-clear).toFixed(3)} mm inside the nozzle cone`, actual: clear, expected: 0 });
+      continue;
+    }
     const theta = Math.atan2(Math.abs(m.z - start.z), Math.hypot(m.x - start.x, m.y - start.y));
     if (theta > worst) worst = theta;
     if (theta > thetaMax + TOL.angle) failures.push({ assertion: name, line: m.line, layer: m.layerIndex, message: `ramp ${(theta * 180 / Math.PI).toFixed(2)} deg > limit ${thetaMaxDeg} deg`, actual: (theta * 180) / Math.PI, expected: thetaMaxDeg });
+    } finally { deposit(m, start); }
   }
-  return result(name, failures, { maxThetaDeg: (worst * 180) / Math.PI, minExtrusionZ: Number.isFinite(minZ) ? minZ : 0 });
+  return result(name, failures, { maxThetaDeg: (worst * 180) / Math.PI, minExtrusionZ: Number.isFinite(minZ) ? minZ : 0, plunges, plungeMinClearanceMm: Number.isFinite(plungeMinClear) ? plungeMinClear : 0 });
 }
 
 /**

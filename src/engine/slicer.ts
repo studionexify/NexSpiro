@@ -24,6 +24,7 @@ import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
+import type { BulnexReport } from '../plugins/bulnex/model';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
@@ -1808,6 +1809,17 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   progress('Done', 1);
+  // a program that repeats the print (Bulnex) is longer than the single print the preview and stats describe: say so
+  const bx1 = pluginRun.reports.bulnex as BulnexReport | undefined;
+  if (bx1 && !bx1.calibration && bx1.cycles >= 1 && bx1.row) {
+    const st = res.stats, n = bx1.cycles;
+    st.repeat = {
+      cycles: n, partsPerCycle: bx1.row.parts, perCycleSeconds: st.timeSeconds,
+      coolSeconds: bx1.coolS, pushSeconds: bx1.pushS, reheatSeconds: bx1.reheatS,
+      totalSeconds: n * (st.timeSeconds + bx1.coolS + bx1.pushS) + (n - 1) * bx1.reheatS,
+      totalGrams: st.filamentGrams * n, totalMm: st.filamentMm * n, totalCost: st.filamentCost * n,
+    };
+  }
   return { ...res, warnings, pluginReports: pluginRun.reports };
 }
 
