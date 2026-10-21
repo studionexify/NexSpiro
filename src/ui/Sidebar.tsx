@@ -450,7 +450,7 @@ function RangeInput({ value, onCommit }: { value: number; onCommit: (v: number) 
     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />;
 }
 
-const PART_DOT: Record<string, string> = { part: '#00AE42',  negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
+const PART_DOT: Record<string, string> = { part: '#10B981',  negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
 export const PART_HELP: Record<string, string> = {
   part: 'An extra solid volume printed as part of the object.',
   negative: 'Material inside this volume is removed (holes, cut-outs).',

@@ -49,8 +49,8 @@ export const viewApi: { current: ViewApi | null; cameraListeners: Set<(m: ArrayL
 
 // neutral viewport background
 const THEMES = {
-  dark: { zenith: '#2F3236', nadir: '#1F2124' },
-  light: { zenith: '#EDEDEE', nadir: '#D9DADC' },
+  dark: { zenith: '#202024', nadir: '#131315' },
+  light: { zenith: '#F3F4F6', nadir: '#E5E7EB' },
 };
 
 const PART_COLORS: Record<string, string> = { negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
@@ -242,11 +242,11 @@ export function Viewport() {
     const paintButtons = { LEFT: -1 as unknown as THREE.MOUSE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
     controls.mouseButtons = { ...normalButtons };
 
-    scene.add(new THREE.HemisphereLight('#ffffff', '#334455', 1.4));
+    scene.add(new THREE.HemisphereLight('#ffffff', '#52525B', 1.4));
     const sun = new THREE.DirectionalLight('#ffffff', 1.6);
     sun.position.set(-150, -250, 400);
     scene.add(sun);
-    const fill = new THREE.DirectionalLight('#FFD9E6', 0.5);
+    const fill = new THREE.DirectionalLight('#E5E7EB', 0.5);
     fill.position.set(300, 300, 200);
     scene.add(fill);
 
@@ -299,7 +299,7 @@ export function Viewport() {
     scene.add(pxPrep);
     const pxPrev = new THREE.Group();
     scene.add(pxPrev);
-    const brush = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#FF5C8D', side: THREE.DoubleSide, depthTest: false, transparent: true }));
+    const brush = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48), new THREE.MeshBasicMaterial({ color: '#2563EB', side: THREE.DoubleSide, depthTest: false, transparent: true }));
     brush.renderOrder = 10;
     brush.visible = false;
     scene.add(brush);
@@ -310,8 +310,8 @@ export function Viewport() {
     overlay.appendChild(outline);
     el.appendChild(overlay);
     // Height band preview for the band tool.
-    const bandMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#FF5C8D', transparent: true, opacity: 0.22, depthWrite: false }));
-    bandMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: '#FF5C8D' })));
+    const bandMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#2563EB', transparent: true, opacity: 0.22, depthWrite: false }));
+    bandMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: '#2563EB' })));
     bandMesh.visible = false;
     bandMesh.renderOrder = 9;
     scene.add(bandMesh);
@@ -327,8 +327,8 @@ export function Viewport() {
     const invalidate = () => { needsRender = true; };
 
     // ---------------- cut plane & measure overlays
-    const cutPlaneMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#FF5C8D', transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
-    const cutEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), new THREE.LineBasicMaterial({ color: '#FF5C8D' }));
+    const cutPlaneMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#2563EB', transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+    const cutEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), new THREE.LineBasicMaterial({ color: '#2563EB' }));
     cutPlaneMesh.add(cutEdge);
     cutPlaneMesh.visible = false;
     scene.add(cutPlaneMesh);
@@ -342,7 +342,7 @@ export function Viewport() {
     const faceGroup = new THREE.Group();
     scene.add(faceGroup);
     const faceMat = new THREE.MeshBasicMaterial({ color: '#9aa4ad', transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-    const faceHot = new THREE.MeshBasicMaterial({ color: '#00AE42', transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const faceHot = new THREE.MeshBasicMaterial({ color: '#10B981', transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     let faceKey = '';
     const syncFaces = () => {
       const s = useStore.getState();
@@ -446,7 +446,7 @@ export function Viewport() {
         const bw = Number(s.overrides.brim_width ?? 5);
         for (const o of s.objects) for (const [x, y, z] of o.brimEars ?? []) {
           const w = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(objectMatrix(o));
-          const ear = new THREE.Mesh(new THREE.CircleGeometry(bw, 40), new THREE.MeshBasicMaterial({ color: '#00AE42', transparent: true, opacity: s.tool === 'brim_ears' ? 0.55 : 0.3, depthWrite: false }));
+          const ear = new THREE.Mesh(new THREE.CircleGeometry(bw, 40), new THREE.MeshBasicMaterial({ color: '#10B981', transparent: true, opacity: s.tool === 'brim_ears' ? 0.55 : 0.3, depthWrite: false }));
           ear.position.set(w.x, w.y, 0.06); ear.renderOrder = 6;
           measureGroup.add(ear);
         }
@@ -470,14 +470,14 @@ export function Viewport() {
       }
       if (s.workspace === 'prepare' && s.tool === 'text' && s.surfacePick) {
         const sp = s.surfacePick;
-        const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.8, 32), new THREE.MeshBasicMaterial({ color: '#00AE42', depthTest: false, side: THREE.DoubleSide }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.8, 32), new THREE.MeshBasicMaterial({ color: '#10B981', depthTest: false, side: THREE.DoubleSide }));
         ring.position.set(...sp.point); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...sp.normal)); ring.renderOrder = 11;
-        const arrow = new THREE.ArrowHelper(new THREE.Vector3(...sp.normal), new THREE.Vector3(...sp.point), 6, 0x00ae42, 1.5, 1);
+        const arrow = new THREE.ArrowHelper(new THREE.Vector3(...sp.normal), new THREE.Vector3(...sp.point), 6, 0x10b981, 1.5, 1);
         measureGroup.add(ring, arrow);
       }
       if (s.workspace === 'prepare' && s.tool === 'measure') {
-        const dotMat = new THREE.MeshBasicMaterial({ color: '#FF5C8D', depthTest: false });
-        const lineMat = new THREE.LineBasicMaterial({ color: '#FF5C8D', depthTest: false });
+        const dotMat = new THREE.MeshBasicMaterial({ color: '#2563EB', depthTest: false });
+        const lineMat = new THREE.LineBasicMaterial({ color: '#2563EB', depthTest: false });
         const addLine = (a: Vec3, b: Vec3, mat = lineMat) => {
           const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
           l.renderOrder = 10; measureGroup.add(l);
@@ -698,7 +698,7 @@ export function Viewport() {
         }
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-        selBoxes.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: s.theme === 'dark' ? '#FFFFFF' : '#FFFFFF' })));
+        selBoxes.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: s.theme === 'dark' ? '#F4F4F5' : '#2563EB' })));
       }
       applyHover();
       syncPatternex();
@@ -895,7 +895,7 @@ export function Viewport() {
         const lo = Math.min(band.z0, band.z1), hi = Math.max(band.z0, band.z1, lo + 0.2);
         bandMesh.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (lo + hi) / 2);
         bandMesh.scale.set(b.max[0] - b.min[0] + 4, b.max[1] - b.min[1] + 4, hi - lo);
-        (bandMesh.material as THREE.MeshBasicMaterial).color.set(band.value ? '#FF5C8D' : '#888888');
+        (bandMesh.material as THREE.MeshBasicMaterial).color.set(band.value ? '#2563EB' : '#888888');
       }
       invalidate();
     };

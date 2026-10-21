@@ -158,7 +158,7 @@ export function Viewer() {
       group.add(plate, grid);
       // edge of the printable area in the print view
       if (cx.view === 'print') {
-        const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(bed.x, bed.y)), new THREE.LineBasicMaterial({ color: 0xff5c8d }));
+        const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(bed.x, bed.y)), new THREE.LineBasicMaterial({ color: 0x2563eb }));
         edge.position.set(ctr.x, ctr.y, 0.1);
         group.add(edge);
       }
