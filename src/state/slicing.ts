@@ -5,8 +5,9 @@ import type { MeshInput, SliceOutput } from '../engine/types';
 import { filamentSlots, resolveConfig, slotOverrides } from '../profiles/resolve';
 import { effectiveFlush } from '../profiles/flush';
 import { faceSetsOf, pluginConfigs } from '../plugins/registry';
-import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore } from './store';
+import { objectMatrix, objectPlate, partWorldMatrix, plateOrigin, useStore, type SceneObject } from './store';
 import { advancedSliceConfig } from './advanced';
+import { startWorker, workerFailure } from '../workers';
 
 let worker: Worker | null = null;
 let seq = 0;
@@ -39,23 +40,12 @@ export function cancelSlice() {
   st.set({ slice: { ...st.slice, status: 'idle', stage: '', progress: 0, error: null, dirty: true }, toast: { kind: 'info', text: 'Slicing cancelled' } });
 }
 
-export function sliceNow(): Promise<SliceOutput | null> {
+/** The slicer's input for objects of a plate: world meshes moved into the plate's own coordinates, with parts and paint. */
+export function plateMeshes(objs: SceneObject[], plate = useStore.getState().activePlate): MeshInput[] {
   const s = useStore.getState();
-  const plate = s.activePlate;
-  const program = s.plates[plate]?.program;
-  const objs = program ? [] : plateObjects(plate).filter((o) => o.printable !== false);
-  if (!objs.length && !program) {
-    s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
-    return Promise.resolve(null);
-  }
-  worker?.terminate();
-  pending?.(null); // a slice that is replaced never finishes
-  const mine = new Worker(new URL('../engine/worker.ts', import.meta.url), { type: 'module' });
-  worker = mine;
-  const id = ++seq;
   const [ox, oy] = plateOrigin(plate, s.printerId);
   const toPlate = new THREE.Matrix4().makeTranslation(-ox, -oy, 0);
-  const meshes: MeshInput[] = objs.map((o) => ({
+  return objs.map((o) => ({
     id: o.id, name: o.name,
     vertices: transformVertices(o.mesh.vertices, toPlate.clone().multiply(objectMatrix(o)).elements),
     indices: o.mesh.indices,
@@ -74,6 +64,28 @@ export function sliceNow(): Promise<SliceOutput | null> {
       vertices: transformVertices(p.mesh.vertices, toPlate.clone().multiply(partWorldMatrix(o, p)).elements),
     })),
   }));
+}
+
+export function sliceNow(): Promise<SliceOutput | null> {
+  const s = useStore.getState();
+  const plate = s.activePlate;
+  const program = s.plates[plate]?.program;
+  const objs = program ? [] : plateObjects(plate).filter((o) => o.printable !== false);
+  if (!objs.length && !program) {
+    s.set({ toast: { kind: 'warn', text: `${s.plates[plate].name} is empty — add a model first.` } });
+    return Promise.resolve(null);
+  }
+  let meshes: MeshInput[];
+  try { meshes = plateMeshes(objs, plate); }
+  catch (e: any) {
+    s.set({ slice: { ...s.slice, status: 'error', error: e?.message ?? String(e), dirty: true }, toast: { kind: 'error', text: `Slicing failed: the plate could not be prepared (${e?.message ?? e})` } });
+    return Promise.resolve(null);
+  }
+  worker?.terminate();
+  pending?.(null); // a slice that is replaced never finishes
+  const mine = startWorker('slicer');
+  worker = mine;
+  const id = ++seq;
   s.set({ slice: { ...s.slice, status: 'slicing', stage: 'Preparing', progress: 0, error: null, plate, dirty: false } }); // edits during the slice mark it dirty again
   return new Promise((done) => {
     const resolve = (r: SliceOutput | null) => { if (pending === resolve) pending = null; if (worker === mine) { mine.terminate(); worker = null; } done(r); };
@@ -85,7 +97,8 @@ export function sliceNow(): Promise<SliceOutput | null> {
       st.set({ slice: { ...st.slice, status: 'error', error: message, dirty: true }, toast: { kind: 'error', text: `Slicing failed: ${message}` } });
       resolve(null);
     };
-    mine.onerror = (e) => { e.preventDefault?.(); fail(e.message || 'the slicer stopped unexpectedly'); };
+    // a script error carries a message; a script that could not be loaded (or a crash) does not
+    mine.onerror = (e) => { e.preventDefault?.(); if (e.message) fail(e.message); else void workerFailure('slicer', 'slicer').then(fail); };
     mine.onmessageerror = () => fail('the slicer sent back data that could not be read');
     mine.onmessage = (ev) => {
       const m = ev.data;
@@ -102,9 +115,14 @@ export function sliceNow(): Promise<SliceOutput | null> {
         resolve(out);
       } else fail(m.message);
     };
-    mine.postMessage({
-      id, meshes, cfg: currentConfig(plate),
-      opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
-    }, meshes.map((m) => m.vertices.buffer));
+    try {
+      mine.postMessage({
+        id, meshes, cfg: currentConfig(plate),
+        opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+      }, meshes.map((m) => m.vertices.buffer));
+    } catch (e: any) {
+      // settings or plugin data that cannot be sent to the worker: report it instead of staying at "Preparing"
+      fail(`the plate could not be sent to the slicer (${e?.message ?? e})`);
+    }
   });
 }

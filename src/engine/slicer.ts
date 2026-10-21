@@ -24,6 +24,7 @@ import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
+import { checkInputs } from './validate';
 import type { BulnexReport } from '../plugins/bulnex/model';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
@@ -181,6 +182,18 @@ export const paLine = (flavor: string, k: number) => (flavor === 'klipper' ? `SE
 
 export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = () => {}, opts: SliceOptions = {}): SliceOutput {
   if (opts.program) return calibProgram(cfg, opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)], opts.program);
+  // inputs an edit can break (NaN from a 0 % scale, a model under the bed, a bad layer profile) are repaired or
+  // explained first; valid input passes through untouched
+  const checked = checkInputs(meshes);
+  const out = sliceChecked(checked.meshes, cfg, progress, opts);
+  const extra = checked.warnings.filter((w) => !out.warnings.includes(w));
+  if (!out.stats.filamentMm && checked.meshes.some((m) => m.indices.length)) {
+    extra.push('Nothing will be printed: no layer has a printable line. The model may be thinner than a line width, smaller than a layer, not a closed solid, or cut away by a negative part.');
+  }
+  return extra.length ? { ...out, warnings: [...out.warnings, ...extra] } : out;
+}
+
+function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, opts: SliceOptions): SliceOutput {
   // drawn calibration programs need no slicing; otherwise Advanced mode is a separate engine (its own frozen
   // classic core plus the physics modules) and Basic mode is this one
   if (opts.advanced) return advancedSlice(meshes, legacyConfig(cfg), progress, opts);
@@ -867,18 +880,36 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       }
       return out;
     };
+    // the bed, less half a line: brim and skirt lines past it would be printed off the edge of the plate
+    const bedIn = [rectPath(w / 2, w / 2, num('bed_x') - w / 2, num('bed_y') - w / 2)];
+    const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > num('bed_x') - w / 2 + 1e-3 || l.pts[k + 1] > num('bed_y') - w / 2 + 1e-3) return true; return false; });
+    let clipped = false;
     for (let o = 0; o < meshes.length; o++) {
-      const b = brimFor(objSlices[o][objStart] ?? [], o);
+      let b = brimFor(objSlices[o][objStart] ?? [], o);
+      if (b.length && offBed(b)) {
+        // a brim wider than the room around the part: fill only the part of its area that is on the bed
+        const first = objSlices[o][objStart] ?? [];
+        const area = intersection(difference(offset(first, gap + bw + w / 2), offset(first, gap)), bedIn);
+        b = concentricFill(area, s, w / 2).map((p) => ({ ...p, feature: 'brim' as const, width: w, flow: 1 }));
+        clipped = true;
+      }
       if (b.length) { brimByObj.set(o, b); pushAll(brimLoops, b); }
     }
+    if (clipped) warn('The brim is cut at the edge of the plate: the part is too close to the edge for the full brim width.');
     if (brimType === 'auto_brim' && brimLoops.length) brimType = 'outer_only';
     const skirtN = Math.round(num('skirt_loops'));
     if (skirtN > 0) {
       let base = union([...layerSlices[objStart], ...(support ? [...support.base[0], ...support.iface[0]] : []), ...(useTower ? towerBody : [])]);
       if (brimLoops.length) base = union(base, offset(base, gap + bw));
+      let dropped = 0;
       for (let k = skirtN - 1; k >= 0; k--) {
-        for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) skirtLoops.push({ pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 });
+        for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) {
+          const loop: PathItem = { pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 };
+          // a skirt loop only primes the nozzle: one that leaves the plate is left out
+          if (offBed([loop])) dropped++; else skirtLoops.push(loop);
+        }
       }
+      if (dropped) warn(`${dropped} skirt loop${dropped === 1 ? '' : 's'} would leave the plate and ${dropped === 1 ? 'was' : 'were'} left out.`);
     }
   }
 
@@ -1103,7 +1134,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
       }
       travel(pts[0], pts[1], it.feature, startZ);
-      if (retracted) { ops.push({ k: 'retract', len: -(retractLen + restartExtra), speed: deretractSpeed }); retracted = false; }
+      if (retracted) { ops.push({ k: 'retract', len: -Math.max(0, retractLen + restartExtra), speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
       const a = Math.min(accelFor(it.feature, i), capH.a);
       if (a !== accelSet) { ops.push({ k: 'accel', a }); accelSet = a; }
       if (jerkOn) { const j = jerkFor(it.feature, i); if (j !== jerkSet) { ops.push({ k: 'jerk', j }); jerkSet = j; } }

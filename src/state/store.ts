@@ -315,13 +315,14 @@ export const useStore = create<State>((set, get) => ({
   checkpoint: () => set((s) => ({ undoStack: [...s.undoStack.slice(-49), s.objects], redoStack: [] })),
   addObjects: (o) => {
     get().checkpoint();
+    o = o.map(saneTransform);
     set((s) => ({ objects: [...s.objects, ...o], selected: o.map((x) => x.id), selectedPart: null }));
     get().markDirty();
   },
   updateObjects: (fn, ids, record = true) => {
     if (record) get().checkpoint();
     const sel = new Set(ids ?? get().selected);
-    set((s) => ({ objects: s.objects.map((o) => (sel.has(o.id) ? fn(o) : o)) }));
+    set((s) => ({ objects: s.objects.map((o) => (sel.has(o.id) ? saneTransform(fn(o)) : o)) }));
     get().markDirty();
   },
   removeSelected: () => {
@@ -436,9 +437,38 @@ export function worldBounds(o: SceneObject) {
   return { min, max };
 }
 
+/** Smallest scale an object or part keeps (0.1 %): a scale of 0 flattens the model, and the next uniform scale divides by it. */
+export const MIN_SCALE = 1e-3;
+const saneVec = (v: Vec3, fallback: number, scale: boolean): Vec3 | null => {
+  let out: Vec3 | null = null;
+  for (let k = 0; k < 3; k++) {
+    let x = v[k];
+    if (!Number.isFinite(x)) x = fallback;
+    else if (scale && Math.abs(x) < MIN_SCALE) x = x < 0 ? -MIN_SCALE : MIN_SCALE;
+    if (x !== v[k]) { out ??= [...v] as Vec3; out[k] = x; }
+  }
+  return out;
+};
+/**
+ * The object with a usable transform: non-finite position / rotation become 0, non-finite scale 1, and no scale
+ * reaches 0 (a gizmo dragged through its centre or a typed 0 % used to leave NaN geometry that could not be sliced).
+ * Returns the same object when nothing needed fixing.
+ */
+export function saneTransform<T extends { position: Vec3; rotation: Vec3; scale: Vec3; parts?: ScenePart[] }>(o: T): T {
+  const pos = saneVec(o.position, 0, false), rot = saneVec(o.rotation, 0, false), sc = saneVec(o.scale, 1, true);
+  let parts = o.parts;
+  if (parts?.length) {
+    const fixed = parts.map((p) => saneTransform(p));
+    if (fixed.some((p, k) => p !== parts![k])) parts = fixed;
+  }
+  if (!pos && !rot && !sc && parts === o.parts) return o;
+  return { ...o, ...(pos ? { position: pos } : {}), ...(rot ? { rotation: rot } : {}), ...(sc ? { scale: sc } : {}), ...(parts !== o.parts ? { parts } : {}) };
+}
+
 /** Shift z so the object rests on the bed. */
 export function dropToBed(o: SceneObject): SceneObject {
   const b = worldBounds(o);
+  if (!Number.isFinite(b.min[2])) return o; // no finite vertex: nothing to rest on the bed
   return { ...o, position: [o.position[0], o.position[1], o.position[2] - b.min[2]] };
 }
 

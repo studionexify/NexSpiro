@@ -132,8 +132,13 @@ export function TransformPanel() {
       <option value="object">{part ? 'Object coordinates' : 'Object origin'}</option>
     </select>
   );
+  // a scale or size of 0 (or less) flattens the model and breaks the next uniform scale: refuse it with a hint
+  const positive = (onSet: (v: number) => void) => (v: number) => {
+    if (v > 0) { onSet(v); return; }
+    useStore.getState().set({ toast: { kind: 'warn', text: 'Scale and size must be greater than 0. Use Mirror (right-click the object) to flip it.' } });
+  };
   const scaleOf = (v: Vec3, k: number, val: number, f: number): Vec3 => {
-    if (uniform) return v.map((x) => (x / v[k]) * f) as Vec3;
+    if (uniform) return v.map((x) => (x / (v[k] || 1)) * f) as Vec3;
     const t = [...v] as Vec3; t[k] = f; return t;
   };
 
@@ -166,12 +171,12 @@ export function TransformPanel() {
             <label className="row" style={{ fontWeight: 400, gap: 6, marginTop: 0 }}><Icon name="lock" size={14} />Uniform
               <button className={`toggle ${uniform ? 'on' : ''}`} onClick={() => setUniform(!uniform)} aria-label="Uniform scale" /></label>
           </div>
-          {[0, 1, 2].map((k) => field(k, part.scale[k] * 100, (v) => setPart((p) => ({ ...p, scale: scaleOf(p.scale, k, v, v / 100) })), '%'))}
+          {[0, 1, 2].map((k) => field(k, part.scale[k] * 100, positive((v) => setPart((p) => ({ ...p, scale: scaleOf(p.scale, k, v, v / 100) }))), '%'))}
           <h4 style={{ marginTop: 10 }}>Size</h4>
-          {[0, 1, 2].map((k) => field(k, size[k], (v) => setPart((p) => {
+          {[0, 1, 2].map((k) => field(k, size[k], positive((v) => setPart((p) => {
             const f = v / Math.max(1e-9, size[k]);
             return { ...p, scale: (uniform ? p.scale.map((x) => x * f) : p.scale.map((x, i) => (i === k ? x * f : x))) as Vec3 };
-          }), 'mm'))}
+          })), 'mm'))}
           <button className="btn-secondary btn-small" onClick={() => setPart((p) => ({ ...p, scale: [1 / o.scale[0], 1 / o.scale[1], 1 / o.scale[2]] }))}>Reset</button>
         </>}
       </div>
@@ -207,14 +212,14 @@ export function TransformPanel() {
           <label className="row" style={{ fontWeight: 400, gap: 6, marginTop: 0 }}><Icon name="lock" size={14} />Uniform
             <button className={`toggle ${uniform ? 'on' : ''}`} onClick={() => setUniform(!uniform)} aria-label="Uniform scale" /></label>
         </h4>
-        {[0, 1, 2].map((k) => field(k, o.scale[k] * 100, (v) => commit((x) => ({ ...x, scale: scaleOf(x.scale, k, v, v / 100) })), '%'))}
+        {[0, 1, 2].map((k) => field(k, o.scale[k] * 100, positive((v) => commit((x) => ({ ...x, scale: scaleOf(x.scale, k, v, v / 100) }))), '%'))}
         <h4 style={{ marginTop: 10 }}>Size</h4>
         {[0, 1, 2].map((k) => {
           const so = worldBounds(o); const sk = so.max[k] - so.min[k];
-          return field(k, sk, (v) => commit((x) => {
+          return field(k, sk, positive((v) => commit((x) => {
             const f = v / Math.max(1e-9, sk);
             return { ...x, scale: (uniform ? x.scale.map((s) => s * f) : x.scale.map((s, i) => (i === k ? s * f : s))) as Vec3 };
-          }), 'mm');
+          })), 'mm');
         })}
         <div className="row">
           <button className="btn-secondary btn-small" onClick={() => commit((x) => ({ ...x, scale: x.scale.map((s) => s * 25.4) as Vec3 }))}>From inches</button>
