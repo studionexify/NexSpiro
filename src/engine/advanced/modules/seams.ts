@@ -142,7 +142,9 @@ export const scarfSplice: TechModule = {
           const t = k / n1, tm = (k - 0.5) / n1;
           const a = along(p, t * Ls);
           const prior = devAt(t * Ls);
-          const drop = Math.max(0, Math.min(0.5 * h * (1 - t), 0.5 * h + prior));
+          // the wedge eases in no faster than the head clearance allows (a plunge steeper than the machine's slope limit would collide)
+          const ease = Math.tan((Math.min(s.caps.maxSlopeDeg, 80) * Math.PI) / 180) * 0.98 * t * Ls;
+          const drop = Math.max(0, Math.min(0.5 * h * (1 - t), 0.5 * h + prior, ease));
           ext(a.x, a.y, a.z - drop, smooth(tm), tmpl.f);
         }
         // the rest of the loop as printed

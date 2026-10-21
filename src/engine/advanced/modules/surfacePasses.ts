@@ -18,7 +18,7 @@ export const subvoxelAA: TechModule = {
     // the nozzle tip spans the neighbour, so raising inner beads would plough the next one over
     const moved = snapToSurface(layers, s.parts, {
       features: new Set(['outer_wall', 'overhang_wall']),
-      maxSlope: s.pnum('subvoxel_aa', 'maxSlope'), minH: s.pnum('subvoxel_aa', 'minH'), reach: 0.5, lowerOnly: true,
+      maxSlope: Math.min(s.pnum('subvoxel_aa', 'maxSlope'), s.caps.maxSlopeDeg), minH: s.pnum('subvoxel_aa', 'minH'), reach: 0.5, rampDeg: s.caps.maxSlopeDeg, lowerOnly: true,
     });
     if (!moved) { r.status = 'idle'; r.reason = 'No walls under shallow slopes.'; return; }
     s.nonPlanar = true;

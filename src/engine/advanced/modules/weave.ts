@@ -179,6 +179,12 @@ export const knotBraiding: TechModule = {
       for (let i = 0; i < n; i++) { const j = (i + 1) % n; area += P[i * 2] * P[j * 2 + 1] - P[j * 2] * P[i * 2 + 1]; }
       const left = area > 0 ? 1 : -1;
       const A: number[] = [], B: number[] = [], zA: number[] = [], zB: number[] = [];
+      // the over-crossing bump must not climb steeper than the head clearance allows: widen it, and if that is not
+      // enough (th would exceed the whole crossing), lower it. Max slope = liftH * om / th <= tanCap.
+      const tanCap = Math.tan((Math.min(s.caps.maxSlopeDeg, 80) * Math.PI) / 180) * 0.95;
+      let liftH = lift * h, th = 0.35;
+      th = Math.max(th, (liftH * om) / tanCap);
+      if (th > 1) { th = 1; liftH = tanCap / om; }
       for (let i = 0; i < n; i++) {
         const i0 = (i - 1 + n) % n, i1 = (i + 1) % n;
         const tx = P[i1 * 2] - P[i0 * 2], ty = P[i1 * 2 + 1] - P[i0 * 2 + 1], tl = Math.hypot(tx, ty) || 1;
@@ -188,8 +194,8 @@ export const knotBraiding: TechModule = {
         // strand A starts on ring 1, strand B on ring 2; they swap sides through each crossing
         A.push(mx - nx * (spacing / 2) * c, my - ny * (spacing / 2) * c);
         B.push(mx + nx * (spacing / 2) * c, my + ny * (spacing / 2) * c);
-        const bump = Math.max(0, 1 - Math.abs(c) / 0.35);
-        zA.push(bump * lift * h); zB.push(bump * lift * h);
+        const bump = Math.max(0, 1 - Math.abs(c) / th);
+        zA.push(bump * liftH); zB.push(bump * liftH);
       }
       // alternate which strand fills which slot every layer: a strand over on layer n is under on n+1
       const swap = layer % 2 === 1;

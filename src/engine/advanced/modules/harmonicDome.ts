@@ -30,7 +30,7 @@ export const harmonicDome: TechModule = {
     for (const a of s.parts) {
       const hr = harmonicField(a);
       if (!hr) continue;
-      const dw = domeWarp(a, hr, { maxSlopeDeg: s.caps.maxSlopeDeg, minRatio: s.pnum('harmonic_dome', 'minRatio'), maxRatio: s.pnum('harmonic_dome', 'maxRatio'), band: s.pnum('harmonic_dome', 'band') });
+      const dw = domeWarp(a, hr, { maxSlopeDeg: s.caps.maxSlopeDeg * 0.8, minRatio: s.pnum('harmonic_dome', 'minRatio'), maxRatio: s.pnum('harmonic_dome', 'maxRatio'), band: s.pnum('harmonic_dome', 'band') });
       if (!dw) continue;
       warps.push(dw.field);
       const st = dw.field.stats(dw.field.material);

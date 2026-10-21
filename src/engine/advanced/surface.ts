@@ -32,6 +32,8 @@ export interface SnapOptions {
   reach?: number;
   /** Split moves so the bead follows the surface at this spacing (mm). */
   step?: number;
+  /** Steepest climb or dive the nozzle may make between pieces (deg): the machine's head-clearance slope. */
+  rampDeg?: number;
   /** Only ever lower beads (anti-aliasing the outer edge), never raise them. */
   lowerOnly?: boolean;
 }
@@ -74,6 +76,12 @@ export function snapToSurface(layers: LayerOps[], parts: PartAnalysis[], o: Snap
           nhDecl = nh;
           dev = prior + (z - zl);
           if (Math.abs(z - zl) > 1e-4) moved++;
+        }
+        if (o.rampDeg !== undefined && !Number.isNaN(qz)) {
+          // never climb or dive faster than the head allows: a bead entering the surface eases in over several pieces
+          const lim = Math.tan((Math.min(o.rampDeg, 80) * Math.PI) / 180) * 0.95 * Math.hypot(len / n, 0);
+          const zc = Math.max(qz - lim, Math.min(qz + lim, z));
+          if (zc !== z) { nhDecl = Math.max(o.minH, nhDecl + (zc - z)); z = zc; }
         }
         const zr = +z.toFixed(4);
         const e = rescaleE(dens * Math.hypot(len / n, zr - qz), op.w, h, nhDecl);

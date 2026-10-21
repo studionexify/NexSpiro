@@ -2,7 +2,7 @@
 // viscoelastic corner-overshoot compensation: the passes that work from the planned motion.
 import type { LayerOps, Op } from '../classic/gcode';
 import { planLayer } from '../planner';
-import { moveLike, type Move } from '../runs';
+import { flowPatch, moveLike, type Move } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 
 /**
@@ -125,7 +125,7 @@ export const cornerOvershoot: TechModule = {
             const cx = px + pdx * d, cy = py + pdy * d;
             const ePer = op.e / Math.max(len, 1e-9);
             // out past the corner with a flow dip, back onto it dry, then on along the next edge
-            out.push(moveLike(prev, cx, cy, prev.z, d * ePer * 0.6), moveLike(prev, px, py, prev.z, 0));
+            out.push(moveLike(prev, cx, cy, prev.z, d * ePer * 0.6, flowPatch(prev, 0.6)), moveLike(prev, px, py, prev.z, 0));
             n++;
           }
         }

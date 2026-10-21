@@ -1986,10 +1986,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.131001621850424,
-      "checkedMm": 51958.644952289345,
-      "checkedSegments": 10208,
-      "belowResolution": 352,
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51956.03691419,
+      "checkedSegments": 10197,
+      "belowResolution": 363,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2012,55 +2012,14 @@
     "profile": "Default",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
-    "pass": false,
-    "failureCount": 103,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 28.635614238810653,
+      "maxThetaDeg": 10.27655997646857,
       "minExtrusionZ": 0.2,
-      "failureCount": 103
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16026,
-        "layer": 55,
-        "message": "ramp 11.06 deg > limit 10.6553060508032 deg",
-        "actual": 11.059530951032757,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16030,
-        "layer": 55,
-        "message": "ramp 11.66 deg > limit 10.6553060508032 deg",
-        "actual": 11.660211577198217,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16034,
-        "layer": 55,
-        "message": "ramp 13.78 deg > limit 10.6553060508032 deg",
-        "actual": 13.783745040797697,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16038,
-        "layer": 55,
-        "message": "ramp 13.78 deg > limit 10.6553060508032 deg",
-        "actual": 13.783745040797697,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16042,
-        "layer": 55,
-        "message": "ramp 15.62 deg > limit 10.6553060508032 deg",
-        "actual": 15.618539269062138,
-        "expected": 10.6553060508032
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_layers",
@@ -2095,10 +2054,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.131001621850424,
-      "checkedMm": 51958.644952289345,
-      "checkedSegments": 10208,
-      "belowResolution": 352,
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51956.03691419,
+      "checkedSegments": 10197,
+      "belowResolution": 363,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2121,55 +2080,14 @@
     "profile": "Extreme Modulation",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
-    "pass": false,
-    "failureCount": 103,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 28.635614238810653,
+      "maxThetaDeg": 10.27655997646857,
       "minExtrusionZ": 0.2,
-      "failureCount": 103
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16026,
-        "layer": 55,
-        "message": "ramp 11.06 deg > limit 10.6553060508032 deg",
-        "actual": 11.059530951032757,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16030,
-        "layer": 55,
-        "message": "ramp 11.66 deg > limit 10.6553060508032 deg",
-        "actual": 11.660211577198217,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16034,
-        "layer": 55,
-        "message": "ramp 13.78 deg > limit 10.6553060508032 deg",
-        "actual": 13.783745040797697,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16038,
-        "layer": 55,
-        "message": "ramp 13.78 deg > limit 10.6553060508032 deg",
-        "actual": 13.783745040797697,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 16042,
-        "layer": 55,
-        "message": "ramp 15.62 deg > limit 10.6553060508032 deg",
-        "actual": 15.618539269062138,
-        "expected": 10.6553060508032
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_layers",
@@ -3011,60 +2929,60 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 85,
+    "failureCount": 12,
     "metrics": {
-      "maxRelErrPct": 2.874347516001559,
-      "checkedMm": 51955.58686563497,
+      "maxRelErrPct": 2.17183880181898,
+      "checkedMm": 51955.567781404025,
       "checkedSegments": 19871,
       "belowResolution": 363,
-      "failureCount": 85
+      "failureCount": 12
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 27338,
-        "layer": 58,
-        "message": "dE 0.01054 vs expected 0.01027 (2.67 %), dL3D=0.3467 [outer wall]",
-        "actual": 0.01054,
-        "expected": 0.010266000254572877
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
         "line": 27339,
         "layer": 58,
-        "message": "dE 0.00670 vs expected 0.00685 (2.24 %), dL3D=0.3546 [outer wall]",
-        "actual": 0.0067,
+        "message": "dE 0.00671 vs expected 0.00685 (2.09 %), dL3D=0.3546 [outer wall]",
+        "actual": 0.00671,
         "expected": 0.006853298283389754
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 27341,
+        "line": 27355,
         "layer": 58,
-        "message": "dE 0.00670 vs expected 0.00684 (2.08 %), dL3D=0.3541 [outer wall]",
-        "actual": 0.0067,
-        "expected": 0.006842647871835761
+        "message": "dE 0.00671 vs expected 0.00686 (2.17 %), dL3D=0.3549 [outer wall]",
+        "actual": 0.00671,
+        "expected": 0.006858965677998211
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 27347,
+        "line": 27357,
         "layer": 58,
-        "message": "dE 0.00670 vs expected 0.00684 (2.05 %), dL3D=0.3539 [outer wall]",
+        "message": "dE 0.00670 vs expected 0.00684 (2.06 %), dL3D=0.3540 [outer wall]",
         "actual": 0.0067,
-        "expected": 0.006840216549101172
+        "expected": 0.0068409284935482114
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 27349,
+        "line": 27363,
         "layer": 58,
-        "message": "dE 0.00670 vs expected 0.00684 (2.11 %), dL3D=0.3542 [outer wall]",
-        "actual": 0.0067,
-        "expected": 0.00684471143011947
+        "message": "dE 0.00671 vs expected 0.00685 (2.09 %), dL3D=0.3546 [outer wall]",
+        "actual": 0.00671,
+        "expected": 0.006853298283389754
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 27379,
+        "layer": 58,
+        "message": "dE 0.00671 vs expected 0.00686 (2.17 %), dL3D=0.3549 [outer wall]",
+        "actual": 0.00671,
+        "expected": 0.006858965677998211
       }
     ],
     "byFeature": {
       "outer wall": {
-        "count": 85,
-        "worstPct": 2.874347516001559
+        "count": 12,
+        "worstPct": 2.17183880181898
       }
     }
   },
@@ -3169,7 +3087,7 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.47694196899831537,
-      "checkedMm": 51954.87354008966,
+      "checkedMm": 51954.868204264894,
       "checkedSegments": 19871,
       "belowResolution": 363,
       "failureCount": 0
@@ -3567,63 +3485,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 60,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 40.07671885173654,
+      "maxRelErrPct": 0.1893408873735773,
       "checkedMm": 7207.799988243137,
       "checkedSegments": 727,
       "belowResolution": 83,
-      "failureCount": 60
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 52,
-        "layer": 0,
-        "message": "dE 0.00754 vs expected 0.01257 (40.00 %), dL3D=0.3374 [outer wall]",
-        "actual": 0.00754,
-        "expected": 0.012566108280967514
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 55,
-        "layer": 0,
-        "message": "dE 0.00754 vs expected 0.01255 (39.91 %), dL3D=0.3369 [outer wall]",
-        "actual": 0.00754,
-        "expected": 0.012547492345975405
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 250,
-        "layer": 1,
-        "message": "dE 0.00523 vs expected 0.00870 (39.89 %), dL3D=0.2832 [outer wall]",
-        "actual": 0.00523,
-        "expected": 0.00870122817445991
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 253,
-        "layer": 1,
-        "message": "dE 0.00523 vs expected 0.00873 (40.08 %), dL3D=0.2840 [outer wall]",
-        "actual": 0.00523,
-        "expected": 0.008727826480428904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 487,
-        "layer": 2,
-        "message": "dE 0.00523 vs expected 0.00870 (39.89 %), dL3D=0.2832 [outer wall]",
-        "actual": 0.00523,
-        "expected": 0.00870122817445991
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 60,
-        "worstPct": 40.07671885173654
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/corner_overshoot",
@@ -4485,54 +4356,30 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 218,
+    "failureCount": 2,
     "metrics": {
-      "maxRelErrPct": 21.75372154058811,
+      "maxRelErrPct": 5.593218420841777,
       "checkedMm": 16720.951284735296,
       "checkedSegments": 7802,
       "belowResolution": 72,
-      "failureCount": 218
+      "failureCount": 2
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4800,
+        "line": 5080,
         "layer": 50,
-        "message": "dE 0.02046 vs expected 0.02606 (21.48 %), dL3D=0.5089 [bridge]",
-        "actual": 0.02046,
-        "expected": 0.026055972038410317
+        "message": "dE 0.03630 vs expected 0.03438 (5.59 %), dL3D=0.6714 [bridge]",
+        "actual": 0.0363,
+        "expected": 0.03437720768707546
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4801,
-        "layer": 50,
-        "message": "dE 0.02039 vs expected 0.02592 (21.34 %), dL3D=0.5063 [bridge]",
-        "actual": 0.02039,
-        "expected": 0.02592181799277942
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4803,
-        "layer": 50,
-        "message": "dE 0.02039 vs expected 0.02592 (21.35 %), dL3D=0.5063 [bridge]",
-        "actual": 0.02039,
-        "expected": 0.025923587684891367
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4809,
-        "layer": 50,
-        "message": "dE 0.08169 vs expected 0.10405 (21.49 %), dL3D=2.0323 [bridge]",
-        "actual": 0.08169,
-        "expected": 0.10405495611495563
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4815,
-        "layer": 50,
-        "message": "dE 0.04098 vs expected 0.05220 (21.49 %), dL3D=1.0195 [bridge]",
-        "actual": 0.04098,
-        "expected": 0.05219970100001755
+        "line": 6636,
+        "layer": 52,
+        "message": "dE 0.01103 vs expected 0.01146 (3.75 %), dL3D=0.3721 [internal solid infill]",
+        "actual": 0.01103,
+        "expected": 0.011459434681721536
       }
     ],
     "byFeature": {
@@ -4541,8 +4388,8 @@
         "worstPct": 3.747433391339186
       },
       "bridge": {
-        "count": 217,
-        "worstPct": 21.75372154058811
+        "count": 1,
+        "worstPct": 5.593218420841777
       }
     }
   },
@@ -4612,63 +4459,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 24,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 21.460673899608498,
+      "maxRelErrPct": 0.2714344843223313,
       "checkedMm": 16290.444716572254,
       "checkedSegments": 1781,
       "belowResolution": 68,
-      "failureCount": 24
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2198,
-        "layer": 50,
-        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
-        "actual": 0.32607,
-        "expected": 0.4151296123718265
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2200,
-        "layer": 50,
-        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
-        "actual": 0.32607,
-        "expected": 0.4151296123718265
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2202,
-        "layer": 50,
-        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
-        "actual": 0.32607,
-        "expected": 0.4151296123718265
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2204,
-        "layer": 50,
-        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
-        "actual": 0.32607,
-        "expected": 0.4151296123718265
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2206,
-        "layer": 50,
-        "message": "dE 0.32607 vs expected 0.41513 (21.45 %), dL3D=8.1080 [bridge]",
-        "actual": 0.32607,
-        "expected": 0.4151296123718265
-      }
-    ],
-    "byFeature": {
-      "bridge": {
-        "count": 24,
-        "worstPct": 21.460673899608498
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/sgd_slicing",
@@ -5734,7 +5534,7 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.43859652647427627,
-      "checkedMm": 21683.821001960227,
+      "checkedMm": 21680.38286178483,
       "checkedSegments": 19731,
       "belowResolution": 0,
       "failureCount": 0
@@ -5759,55 +5559,14 @@
     "profile": "Default",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
-    "pass": false,
-    "failureCount": 1216,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 16.848976174698247,
+      "maxThetaDeg": 10.13652448079334,
       "minExtrusionZ": 0.2,
-      "failureCount": 1216
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1099,
-        "layer": 2,
-        "message": "ramp 16.83 deg > limit 10.6553060508032 deg",
-        "actual": 16.827117767503772,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1100,
-        "layer": 2,
-        "message": "ramp 13.05 deg > limit 10.6553060508032 deg",
-        "actual": 13.045963251899558,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1109,
-        "layer": 2,
-        "message": "ramp 16.48 deg > limit 10.6553060508032 deg",
-        "actual": 16.481409072355596,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1110,
-        "layer": 2,
-        "message": "ramp 14.57 deg > limit 10.6553060508032 deg",
-        "actual": 14.571838378324083,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1119,
-        "layer": 2,
-        "message": "ramp 16.04 deg > limit 10.6553060508032 deg",
-        "actual": 16.039068455470282,
-        "expected": 10.6553060508032
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/knot_braiding",
@@ -6616,55 +6375,14 @@
     "profile": "Default",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
-    "pass": false,
-    "failureCount": 99,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 10.868525340168716,
+      "maxThetaDeg": 10.42580852588504,
       "minExtrusionZ": 0.2,
-      "failureCount": 99
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 303,
-        "layer": 1,
-        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
-        "actual": 10.868525340168711,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 516,
-        "layer": 2,
-        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
-        "actual": 10.868525340168704,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 735,
-        "layer": 3,
-        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
-        "actual": 10.868525340168716,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1103,
-        "layer": 4,
-        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
-        "actual": 10.868525340168704,
-        "expected": 10.6553060508032
-      },
-      {
-        "assertion": "nonplanar-ramp-angle",
-        "line": 1198,
-        "layer": 5,
-        "message": "ramp 10.87 deg > limit 10.6553060508032 deg",
-        "actual": 10.86852534016869,
-        "expected": 10.6553060508032
-      }
-    ]
+    "firstFailures": []
   },
   {
     "target": "adv/scarf_splice",
@@ -6727,7 +6445,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 0.31621884076817725,
+      "maxThetaDeg": 0.5752395019998991,
       "minExtrusionZ": 0.2,
       "failureCount": 0
     },
@@ -6830,31 +6548,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 3.0155164719701997,
-      "checkedMm": 55865.972498998395,
-      "checkedSegments": 22426,
-      "belowResolution": 389,
-      "failureCount": 1
+      "maxRelErrPct": 0.5399153098055873,
+      "checkedMm": 55579.75659039439,
+      "checkedSegments": 19024,
+      "belowResolution": 445,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 25196,
-        "layer": 56,
-        "message": "dE 0.05052 vs expected 0.04904 (3.02 %), dL3D=1.5261 [internal solid infill]",
-        "actual": 0.05052,
-        "expected": 0.0490411558667923
-      }
-    ],
-    "byFeature": {
-      "internal solid infill": {
-        "count": 1,
-        "worstPct": 3.0155164719701997
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/harmonic_dome",
@@ -6877,7 +6580,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxThetaDeg": 10.34743998880686,
+      "maxThetaDeg": 8.049466975527455,
       "minExtrusionZ": 0.2,
       "failureCount": 0
     },
@@ -6891,7 +6594,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 22815,
+      "declaredHits": 19469,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -6916,10 +6619,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.45236147619729095,
-      "checkedMm": 53240.9956603076,
-      "checkedSegments": 18910,
-      "belowResolution": 237,
+      "maxRelErrPct": 0.545253216510763,
+      "checkedMm": 53228.40581962588,
+      "checkedSegments": 17966,
+      "belowResolution": 238,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6942,14 +6645,23 @@
     "profile": "Extreme Modulation",
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
-    "pass": true,
-    "failureCount": 0,
+    "pass": false,
+    "failureCount": 1,
     "metrics": {
-      "maxThetaDeg": 5.603498724931923,
+      "maxThetaDeg": 24.094842552076564,
       "minExtrusionZ": 0.2,
-      "failureCount": 0
+      "failureCount": 1
     },
-    "firstFailures": []
+    "firstFailures": [
+      {
+        "assertion": "nonplanar-ramp-angle",
+        "line": 12306,
+        "layer": 37,
+        "message": "ramp 24.09 deg > limit 10.6553060508032 deg",
+        "actual": 24.094842552076564,
+        "expected": 10.6553060508032
+      }
+    ]
   },
   {
     "target": "adv/harmonic_dome",
@@ -6959,7 +6671,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 19147,
+      "declaredHits": 18204,
       "maxPosErrMm": 0.0005037231445328416,
       "failureCount": 0
     },
@@ -6984,10 +6696,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.8715806205795393,
-      "checkedMm": 128473.44491549191,
-      "checkedSegments": 53594,
-      "belowResolution": 412,
+      "maxRelErrPct": 1.2229229243771962,
+      "checkedMm": 127396.73771322513,
+      "checkedSegments": 43418,
+      "belowResolution": 365,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7011,51 +6723,51 @@
     "assertion": "nonplanar-ramp-angle",
     "type": "RAMP",
     "pass": false,
-    "failureCount": 20,
+    "failureCount": 5,
     "metrics": {
-      "maxThetaDeg": 23.197532166695627,
+      "maxThetaDeg": 20.025213235811375,
       "minExtrusionZ": 0.2,
-      "failureCount": 20
+      "failureCount": 5
     },
     "firstFailures": [
       {
         "assertion": "nonplanar-ramp-angle",
-        "line": 30513,
-        "layer": 112,
-        "message": "ramp 20.72 deg > limit 10.6553060508032 deg",
-        "actual": 20.71761581183242,
+        "line": 56467,
+        "layer": 150,
+        "message": "ramp 14.96 deg > limit 10.6553060508032 deg",
+        "actual": 14.956157640816334,
         "expected": 10.6553060508032
       },
       {
         "assertion": "nonplanar-ramp-angle",
-        "line": 31437,
-        "layer": 114,
-        "message": "ramp 22.99 deg > limit 10.6553060508032 deg",
-        "actual": 22.98976777361143,
+        "line": 56572,
+        "layer": 150,
+        "message": "ramp 20.03 deg > limit 10.6553060508032 deg",
+        "actual": 20.025213235811375,
         "expected": 10.6553060508032
       },
       {
         "assertion": "nonplanar-ramp-angle",
-        "line": 39344,
-        "layer": 123,
-        "message": "ramp 11.31 deg > limit 10.6553060508032 deg",
-        "actual": 11.313209289882572,
+        "line": 56745,
+        "layer": 150,
+        "message": "ramp 13.26 deg > limit 10.6553060508032 deg",
+        "actual": 13.262676008306265,
         "expected": 10.6553060508032
       },
       {
         "assertion": "nonplanar-ramp-angle",
-        "line": 39636,
-        "layer": 123,
-        "message": "ramp 11.15 deg > limit 10.6553060508032 deg",
-        "actual": 11.14957408576328,
+        "line": 57596,
+        "layer": 152,
+        "message": "ramp 10.84 deg > limit 10.6553060508032 deg",
+        "actual": 10.837761098754322,
         "expected": 10.6553060508032
       },
       {
         "assertion": "nonplanar-ramp-angle",
-        "line": 41494,
-        "layer": 125,
-        "message": "ramp 10.82 deg > limit 10.6553060508032 deg",
-        "actual": 10.82133066975646,
+        "line": 57636,
+        "layer": 152,
+        "message": "ramp 13.32 deg > limit 10.6553060508032 deg",
+        "actual": 13.315908198493009,
         "expected": 10.6553060508032
       }
     ]
@@ -7068,8 +6780,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 54033,
-      "maxPosErrMm": 0.0005037231445328416,
+      "declaredHits": 43806,
+      "maxPosErrMm": 0.0005037841796848852,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9619,63 +9331,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 3407,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 43.84790847012774,
+      "maxRelErrPct": 0.45093602048311004,
       "checkedMm": 18064.097484973372,
       "checkedSegments": 5383,
       "belowResolution": 163,
-      "failureCount": 3407
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3283,
-        "layer": 50,
-        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
-        "actual": 0.00459,
-        "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3292,
-        "layer": 50,
-        "message": "dE 0.00435 vs expected 0.00772 (43.69 %), dL3D=0.2329 [wave overhang]",
-        "actual": 0.00435,
-        "expected": 0.007724479767882958
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3297,
-        "layer": 50,
-        "message": "dE 0.00434 vs expected 0.00770 (43.63 %), dL3D=0.2321 [wave overhang]",
-        "actual": 0.00434,
-        "expected": 0.007699438788396743
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3306,
-        "layer": 50,
-        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
-        "actual": 0.00459,
-        "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3309,
-        "layer": 50,
-        "message": "dE 0.00616 vs expected 0.01093 (43.66 %), dL3D=0.3296 [wave overhang]",
-        "actual": 0.00616,
-        "expected": 0.010934484535274186
-      }
-    ],
-    "byFeature": {
-      "wave overhang": {
-        "count": 3407,
-        "worstPct": 43.84790847012774
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "plugin/hanex",
@@ -9723,63 +9388,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 3407,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 43.84790847012774,
+      "maxRelErrPct": 0.45093602048311004,
       "checkedMm": 18064.097484973372,
       "checkedSegments": 5383,
       "belowResolution": 163,
-      "failureCount": 3407
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3283,
-        "layer": 50,
-        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
-        "actual": 0.00459,
-        "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3292,
-        "layer": 50,
-        "message": "dE 0.00435 vs expected 0.00772 (43.69 %), dL3D=0.2329 [wave overhang]",
-        "actual": 0.00435,
-        "expected": 0.007724479767882958
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3297,
-        "layer": 50,
-        "message": "dE 0.00434 vs expected 0.00770 (43.63 %), dL3D=0.2321 [wave overhang]",
-        "actual": 0.00434,
-        "expected": 0.007699438788396743
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3306,
-        "layer": 50,
-        "message": "dE 0.00459 vs expected 0.00814 (43.62 %), dL3D=0.2454 [wave overhang]",
-        "actual": 0.00459,
-        "expected": 0.008140897485529904
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 3309,
-        "layer": 50,
-        "message": "dE 0.00616 vs expected 0.01093 (43.66 %), dL3D=0.3296 [wave overhang]",
-        "actual": 0.00616,
-        "expected": 0.010934484535274186
-      }
-    ],
-    "byFeature": {
-      "wave overhang": {
-        "count": 3407,
-        "worstPct": 43.84790847012774
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "plugin/hanex",
