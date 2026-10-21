@@ -127,12 +127,20 @@ export function eventPositions(b: MotionBrush, L: number, layer: number, fixedPe
 
 const ROUND_TAPS = 8;
 
+/**
+ * Shortest repeat a placement uses (mm). The controls reach 0.1 mm (0.4 mm spacing at 0.25× size); a 0 or invalid
+ * spacing from a project file or a size of 0 used to stall event placement (`s += 0`) until the array overflowed.
+ */
+export const MIN_PERIOD_MM = 0.05;
+
 /** The motion as one placement uses it: its size slider and corner rounding applied. */
 export function placedBrush(app: MotionApplication, found: MotionBrush): MotionBrush {
   const k = app.scale ?? 1;
   const round = app.round_mm ?? found.round_mm ?? 0;
-  if (k === 1 && round === (found.round_mm ?? 0)) return found;
-  return { ...found, amplitude: found.amplitude * k, period_mm: found.period_mm * k, z_amplitude: (found.z_amplitude ?? 0) * k, round_mm: round * k };
+  const period = found.period_mm * k;
+  const okPeriod = Number.isFinite(period) && period >= MIN_PERIOD_MM;
+  if (k === 1 && round === (found.round_mm ?? 0) && okPeriod) return found;
+  return { ...found, amplitude: found.amplitude * k, period_mm: okPeriod ? period : MIN_PERIOD_MM, z_amplitude: (found.z_amplitude ?? 0) * k, round_mm: round * k };
 }
 
 export type Weight = (x: number, y: number, z: number, slope: number) => number;

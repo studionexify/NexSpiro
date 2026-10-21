@@ -540,13 +540,33 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         for (let k = 0; k < count; k++) for (const p of offset(holes, -(gap + w / 2 + k * s))) brimLoops.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
       }
     }
+    // brim and skirt lines past the bed (less half a line) would be printed off the edge of the plate
+    const bx = num('bed_x'), by = num('bed_y');
+    const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > bx - w / 2 + 1e-3 || l.pts[k + 1] > by - w / 2 + 1e-3) return true; return false; });
+    if (brimLoops.length && offBed(brimLoops)) {
+      // a brim wider than the room around the part: fill only the part of its area that is on the bed
+      const outer = brimType === 'outer_only' || brimType === 'outer_and_inner', inner = brimType === 'inner_only' || brimType === 'outer_and_inner';
+      // inner loops are kept where they fit; the outer band is taken from the contours only (never the holes)
+      const keepInner = inner ? brimLoops.filter((l) => l.pts.length && !offBed([l]) && exs0.some((e) => pointInPaths(l.pts[0], l.pts[1], [e.contour]))) : [];
+      const contours = exs0.map((e) => e.contour);
+      const outerArea = outer ? intersection(difference(offset(contours, gap + bw + w / 2), offset(contours, gap)), [rectPath(w / 2, w / 2, bx - w / 2, by - w / 2)]) : [];
+      brimLoops.length = 0;
+      pushAll(brimLoops, keepInner);
+      for (const p of concentricFill(outerArea, s, w / 2)) brimLoops.push({ ...p, feature: 'brim', width: w, flow: 1 });
+      warnings.push('The brim is cut at the edge of the plate: the part is too close to the edge for the full brim width.');
+    }
     const skirtN = Math.round(num('skirt_loops'));
     if (skirtN > 0) {
       let base = union([...layerSlices[0], ...(support ? [...support.base[0], ...support.iface[0]] : []), ...(useTower ? [rectPath(tx, ty, tx + tw, ty + td)] : [])]);
       if (brimLoops.length) base = union(base, offset(base, gap + bw));
+      let dropped = 0;
       for (let k = skirtN - 1; k >= 0; k--) {
-        for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) skirtLoops.push({ pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 });
+        for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) {
+          const loop: PathItem = { pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 };
+          if (offBed([loop])) dropped++; else skirtLoops.push(loop);
+        }
       }
+      if (dropped) warnings.push(`${dropped} skirt loop${dropped === 1 ? '' : 's'} would leave the plate and ${dropped === 1 ? 'was' : 'were'} left out.`);
     }
   }
 

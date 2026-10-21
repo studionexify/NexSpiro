@@ -1,4 +1,5 @@
 // Fill bed with copies: packs copies of one object around the others on its plate (see engine/nest.ts).
+import { startWorker, workerFailure } from '../workers';
 import * as THREE from 'three';
 import { transformVertices } from '../engine/mesh';
 import type { Mirror, NestPlacement, NestRequest } from '../engine/nest';
@@ -102,11 +103,15 @@ export function fillBed(id: string, opt: FillBedOptions, onProgress?: (placed: n
   };
 
   cancelFillBed();
-  const w = new Worker(new URL('../engine/nestWorker.ts', import.meta.url), { type: 'module' });
+  const w = startWorker('nest');
   worker = w;
   return new Promise((done) => {
     const finish = (n: number) => { if (worker === w) { w.terminate(); worker = null; } done(n); };
-    w.onerror = (e) => { useStore.getState().set({ toast: { kind: 'error', text: `Fill bed failed: ${e.message}` } }); finish(0); };
+    w.onerror = (e) => {
+      e.preventDefault?.();
+      const report = (m: string) => { if (worker !== w) return; useStore.getState().set({ toast: { kind: 'error', text: `Fill bed failed: ${m}` } }); finish(0); };
+      if (e.message) report(e.message); else void workerFailure('nest', 'arranging worker').then(report);
+    };
     w.onmessage = (ev) => {
       const msg = ev.data;
       if (msg.type === 'progress') { onProgress?.(msg.placed); return; }

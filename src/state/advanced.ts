@@ -1,6 +1,7 @@
 // Advanced-mode state (engine mode, intent, technology overrides, machine overrides, Zone Inspector)
 // and the bridge to the analysis worker. Kept apart from the main store so Basic mode is untouched.
 import { create } from 'zustand';
+import { startWorker, workerFailure } from '../workers';
 import type { AdvancedConfig, CausticTarget, EngineMode, FieldId, IntentId, MachineOverrides, ObjectAnalysis, ParamValue, TechId, TechOverride } from '../engine/advanced/types';
 import { RESOLUTION_CELLS } from '../engine/advanced/analysis';
 import { transformVertices } from '../engine/mesh';
@@ -112,8 +113,15 @@ export function runAnalysis() {
   const objs = s.objects.filter((o) => o.printable !== false);
   if (!objs.length) { a.set({ analysis: {}, analysing: false, analysisVersion: a.analysisVersion + 1 }); return; }
   worker?.terminate();
-  worker = new Worker(new URL('../engine/advanced/analysisWorker.ts', import.meta.url), { type: 'module' });
+  const w = startWorker('analysis');
+  worker = w;
   const id = ++seq;
+  // a worker that cannot load or crashes used to leave "Analysing…" on screen for ever
+  w.onerror = (e) => {
+    e.preventDefault?.();
+    const fail = (m: string) => { if (worker === w && seq === id) useAdvanced.getState().set({ analysing: false, analysisError: m }); };
+    if (e.message) fail(e.message); else void workerFailure('analysis', 'part analysis').then(fail);
+  };
   const cfg = resolveConfig({ printerId: s.printerId, plate: s.plate, filamentId: s.filaments[0].presetId, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides });
   const num = (k: string, d: number) => (typeof cfg[k] === 'number' && cfg[k] ? (cfg[k] as number) : d);
   const lw = (k: string) => num(k, num('line_width', 0.42));
@@ -123,14 +131,14 @@ export function runAnalysis() {
   }));
   const refs = new Map(objects.map((o) => [o.id, o.meshRef]));
   a.set({ analysing: true, analysisError: null });
-  worker.onmessage = (ev) => {
+  w.onmessage = (ev) => {
     if (ev.data.id !== id) return;
     if (ev.data.type === 'error') { useAdvanced.getState().set({ analysing: false, analysisError: ev.data.message }); return; }
     const out: Record<string, ObjectAnalysis & { mesh: unknown }> = {};
     for (const r of ev.data.results as ObjectAnalysis[]) out[r.id] = { ...r, mesh: refs.get(r.id) };
     useAdvanced.getState().set({ analysis: out, analysing: false, analysisVersion: useAdvanced.getState().analysisVersion + 1 });
   };
-  worker.postMessage({
+  w.postMessage({
     id,
     objects: objects.map(({ meshRef: _m, ...o }) => o),
     params: {
