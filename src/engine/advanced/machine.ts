@@ -3,6 +3,7 @@
 // it runs as designed, runs in a reduced form, or reports why it cannot run on this machine.
 import { printerById } from '../../profiles/printers';
 import type { Config } from '../../profiles/settings';
+import { changerOf } from '../../profiles/changer';
 import { defaultToolhead, type ToolheadProfile } from '../../plugins/motionex/core/toolhead';
 import type { Kinematics, MachineOverrides } from './types';
 
@@ -152,7 +153,7 @@ export function machineCaps(printerId: string, cfg: Config, ov: MachineOverrides
     enclosed: spec.enclosed || heated,
     heatedChamber: heated,
     chamberTemp: heated ? (ov.chamberTemp ?? spec.chamberTemp ?? 50) : spec.enclosed ? 35 : 25,
-    multiMaterial: cfg.has_ams === true ? 'ams' : 'manual',
+    multiMaterial: changerOf(cfg),
     continuousFiber: ov.continuousFiber ?? false,
     fanLag: 0.12,
     heaterTau: p.vendor === 'Bambu Lab' ? 4 : 6,

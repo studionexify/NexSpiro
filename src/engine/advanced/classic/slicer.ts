@@ -14,6 +14,7 @@ import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMo
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from '../../paint';
 import { sliceMesh } from './slice';
 import { preparePlugins, runPlugins } from '../../../plugins/engine';
+import { changerOf, toolheadCount } from '../../../profiles/changer';
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../../../plugins/api';
 import { computeOverhangs, generateSupport, generateTreeSupport } from './support';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from '../../types';
@@ -143,7 +144,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const hN = num('layer_height');
   const vase = bool('spiral_mode');
   const flavor = str('gcode_flavor');
-  const hasAms = bool('has_ams');
+  const changer = changerOf(cfg);
+  const hasAms = changer !== 'manual';
+  const toolChanger = changer === 'toolchanger';
 
   // ---------- layer plan (variable layer height profile if any object has one)
   let maxZ = 0;
@@ -216,7 +219,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
-    filamentCount: filaments.length, hasAms: bool('has_ams'), warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); },
+    filamentCount: filaments.length, hasAms, changer, toolheads: toolheadCount(cfg), warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); },
   });
   if (adv) sessions.set('nexspiro-advanced', adv.plugin);
   // raised / recessed artwork changes the cross-sections themselves, before walls, surfaces and support
@@ -708,13 +711,13 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     // --- filament change
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || (usedFils.size <= 1 && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
+      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
-      let flushVol = opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      let flushVol = toolChanger ? num('tool_prime_volume') : opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
       let plan: TransitionPlan | undefined;
       for (const x of transitionPlugins) plan = x.transition!({ layer: i, from: prev, to: next, flushVolume: flushVol }) ?? plan;
-      if (plan?.flushVolume !== undefined) flushVol = plan.flushVolume;
+      if (plan?.flushVolume !== undefined) flushVol = toolChanger ? Math.min(flushVol, plan.flushVolume) : plan.flushVolume;
       if (plan) ops.push({ k: 'raw', text: `${TRANSITION_MARKER} ${prev}->${next} mode=${plan.skipTower ? 'none' : plan.flushVolume !== undefined ? 'reduced' : 'full'} shift=${(plan.shiftMm ?? 0).toFixed(3)}${plan.regionId ? ` region=${plan.regionId}` : ''}` });
       if (plan?.label && !hasAms) ops.push({ k: 'raw', text: `M117 Load ${plan.label.replace(/[;\n]/g, ' ')}` });
       const flushLen = (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
@@ -728,6 +731,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         }),
       });
       if (layerFan > 0) ops.push({ k: 'raw', text: `M106 S${Math.round((layerFan / 100) * 255)} ; restore part fan` });
+      if (toolChanger && curTool >= 0 && num('standby_temperature_delta') < 0)
+        ops.push({ k: 'raw', text: `M104 T${prev} S${Math.max(0, Math.round(filaments[prev].nozzleTemp + num('standby_temperature_delta')))} ; park T${prev} at standby` });
       if (fl.pressureAdvance !== undefined) ops.push({ k: 'raw', text: paLine(flavor, fl.pressureAdvance) });
       ops.push({ k: 'tool', tool: next });
       retracted = hasAms; // the AMS sequence ends with a retraction; M600 leaves the nozzle primed

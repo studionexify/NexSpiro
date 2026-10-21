@@ -40,7 +40,7 @@ const extrusionLen = (ms: GMove[], type: string) => ms.filter((m) => m.type === 
 const types = (gcode: string) => new Set(gcode.match(/;TYPE:[a-z ]+/g)?.map((t) => t.slice(6)));
 
 describe('settings are wired, not dummies', () => {
-  const engine = ['src/engine/slicer.ts', 'src/engine/gcode.ts', 'src/engine/walls.ts', 'src/engine/support.ts', 'src/profiles/resolve.ts']
+  const engine = ['src/engine/slicer.ts', 'src/engine/gcode.ts', 'src/engine/walls.ts', 'src/engine/support.ts', 'src/profiles/resolve.ts', 'src/profiles/changer.ts']
     .map((f) => fs.readFileSync(f, 'utf8')).join('\n');
   // keys that are stored and written into the G-code config block, rather than steering toolpaths
   const metadata = new Set(['process_notes', 'filament_notes', 'printer_notes', 'filament_vendor', 'filename_format', 'post_process']);

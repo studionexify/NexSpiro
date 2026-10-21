@@ -12,6 +12,7 @@ import { inkActions } from '../library/apply';
 import { printerById } from '../../../profiles/printers';
 import { px, changed } from './PatternexPanel';
 import { useStore } from '../../../state/store';
+import { autoChanges } from '../../../profiles/changer';
 
 const disposeGroup = (g: THREE.Group) => {
   for (const c of [...g.children]) {
@@ -128,7 +129,7 @@ function brushDown(o: { id: string }, local: THREE.Vector3, nLocal: THREE.Vector
     const pat = addPattern(px, brushPattern(`brush-${id}`, []));
     pl = { ...newPlacement(id, pat, `${o.id}:${faceIndex}`, local.toArray() as V3, nLocal.toArray() as V3), object_id: o.id, anchor_normal: nLocal.toArray() as V3, depth_mode: 'outer_wall' };
     px.placements.push(pl);
-    const ams = printerById(useStore.getState().printerId).machine.has_ams === true;
+    const ams = autoChanges(printerById(useStore.getState().printerId).machine);
     px.actions.push(...inkActions(id, { ...pat, shapes: [{ polygon_rings: [], fill_color: px.brush.color, fill_rule: 'nonzero' }] }, { [px.brush.color]: Math.min(1, useStore.getState().filaments.length - 1) }, ams));
     px.selected = id;
   }
@@ -145,7 +146,7 @@ function rebuildBrush() {
   addPattern(px, brushPattern(p.pattern_id, [...prev, strokeOf.stroke]));
   // a new colour group needs its region action (inked like the other strokes)
   if (!px.actions.some((a) => a.region_ref.placement_id === p.id && a.region_ref.color_group === strokeOf!.stroke.color)) {
-    const ams = printerById(useStore.getState().printerId).machine.has_ams === true;
+    const ams = autoChanges(printerById(useStore.getState().printerId).machine);
     const pat = px.patterns.find((x) => x.id === p.pattern_id)!;
     px.actions.push(...inkActions(p.id, pat, { [strokeOf.stroke.color]: Math.min(1, useStore.getState().filaments.length - 1) }, ams));
   }
@@ -181,7 +182,7 @@ export function placeDown(objectId: string, pointWorld: THREE.Vector3, normalWor
     px.placements.push(p);
     // patterns arrive uninked unless inks were chosen in the library; the user inks each region
     // inks picked in the library win; otherwise the inks saved for this pattern; otherwise uninked
-    px.actions.push(...inkActions(id, pat, px.armedInks ?? px.savedInks[patternInkKey(pat.id)] ?? {}, printerById(s.printerId).machine.has_ams === true));
+    px.actions.push(...inkActions(id, pat, px.armedInks ?? px.savedInks[patternInkKey(pat.id)] ?? {}, autoChanges(printerById(s.printerId).machine)));
     px.armedInks = undefined;
     // finish chosen in Create: relief on every group (base material unless the group is also inked)
     if (px.armedRelief) {

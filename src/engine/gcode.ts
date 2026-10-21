@@ -4,6 +4,7 @@ import type { Config } from '../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from './types';
 import { FEATURE_ORDER } from './types';
 import { fitArc } from './arc';
+import { changerOf } from '../profiles/changer';
 
 export type Op =
   | {
@@ -135,6 +136,44 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
   return Math.max(0, Math.min(100, Math.round(f)));
 }
 
+/**
+ * Tool changers: a parked head (cooled to standby by the change G-code) is heated back to print temperature
+ * `lead` seconds before it is picked up again, but never before it was parked. Needs the move times.
+ */
+export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[]) {
+  if (!(lead > 0)) return;
+  // time at the start of every op, and every pick-up (a tool op that changes the head)
+  const at: { li: number; oi: number; t: number }[] = [];
+  const picks: { tool: number; t: number; idx: number }[] = [];
+  const parkedAt = new Map<number, number>();
+  const parks: { tool: number; t: number; idx: number }[] = [];
+  let t = 0, tool = -1;
+  layers.forEach((L, li) => L.ops.forEach((op, oi) => {
+    at.push({ li, oi, t });
+    if (op.k === 'move') t += op.t ?? 0;
+    else if (op.k === 'raw' && op.time) t += op.time;
+    else if (op.k === 'retract') t += Math.abs(op.len) / Math.max(1, op.speed);
+    else if (op.k === 'tool') {
+      if (tool >= 0 && op.tool !== tool) { picks.push({ tool: op.tool, t, idx: at.length - 1 }); parks.push({ tool, t, idx: at.length - 1 }); }
+      tool = op.tool;
+    }
+  }));
+  const inserts: { li: number; oi: number; text: string }[] = [];
+  let p = 0;
+  for (const pk of picks) {
+    // the last time this head was parked before this pick-up
+    while (p < parks.length && parks[p].idx < pk.idx) { parkedAt.set(parks[p].tool, parks[p].idx); p++; }
+    const parked = parkedAt.get(pk.tool);
+    if (parked === undefined) continue; // never used yet: still at its start temperature
+    let k = pk.idx;
+    while (k > parked + 1 && at[k - 1].t > pk.t - lead) k--;
+    const temp = filaments[pk.tool]?.nozzleTemp;
+    if (temp && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(temp)} ; preheat T${pk.tool} for its pick-up` });
+  }
+  // from the end, so earlier positions stay valid
+  for (const ins of inserts.sort((a, b) => b.li - a.li || b.oi - a.oi)) layers[ins.li].ops.splice(ins.oi, 0, { k: 'raw', text: ins.text });
+}
+
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
 export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], bodyTransform }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
@@ -198,6 +237,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     }
     layerTimes.push(t);
   }
+  if (changerOf(cfg) === 'toolchanger') preheatParkedHeads(layers, num('tool_preheat_time'), filaments);
   const total = layerTimes.reduce((a, b) => a + b, 0);
 
   // 2) write

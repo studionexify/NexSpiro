@@ -14,11 +14,13 @@ import { colourCount, cycleLayers, defaultWeave, type ChangeMode, type WeaveSett
 import { clampPalette, greyLevels, gridFor, parseHex, quantize, resampleRGB, suggestPalette, type Dither, type RGB } from '../weave/image';
 import { MOTIFS, motifImage } from '../weave/motifs';
 import { estimateWeave, formatDuration, weavePrintSettings } from '../weave/plan';
+import { changerOf, toolheadCount } from '../../../profiles/changer';
 
 /** The last imported picture, kept at up to 640 px so it can be re-matched to new colours or sizes. */
 let source: { rgba: Uint8ClampedArray; w: number; h: number; name: string } | null = null;
 
-const MAX_COLOURS = 4;
+/** Colours a weave can take turns with: an AMS unit holds 4; a tool changer has one per head. */
+const maxColours = () => { const c = currentConfig(); return changerOf(c) === 'toolchanger' ? toolheadCount(c) : 4; };
 const greys = (n: number): RGB[] => Array.from({ length: n }, (_, i) => { const v = Math.round(235 - (i / Math.max(1, n - 1)) * 200); return [v, v, v]; });
 
 /** Colours shown for each palette index: the slots' filament colours (colour) or greys (mono). */
@@ -45,14 +47,14 @@ export function rebuildPicture(w: WeaveSettings = mx.weave) {
 }
 
 /** Objects the weave goes on (the chosen ones, or every printable object on the active plate). */
-function targetObjects(w: WeaveSettings): SceneObject[] {
+export function targetObjects(w: { objects?: string[] }): SceneObject[] {
   const all = plateObjects().filter((o) => o.printable !== false);
   const ids = new Set(w.objects ?? []);
   return ids.size ? all.filter((o) => ids.has(o.id)) : all;
 }
 
 /** Widest outline length and height of the target objects (mm), from their bounding boxes. */
-function partSize(w: WeaveSettings): { around: number; top: number } {
+export function partSize(w: { objects?: string[] }): { around: number; top: number } {
   let around = 0, top = 0;
   for (const o of targetObjects(w)) {
     const b = worldBounds(o);
@@ -77,7 +79,7 @@ function fitToPart(w: WeaveSettings) {
   rebuildPicture(w);
 }
 
-async function loadPicture(file: File): Promise<{ rgba: Uint8ClampedArray; w: number; h: number; name: string }> {
+export async function loadPicture(file: File): Promise<{ rgba: Uint8ClampedArray; w: number; h: number; name: string }> {
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
@@ -95,7 +97,7 @@ async function loadPicture(file: File): Promise<{ rgba: Uint8ClampedArray; w: nu
 }
 
 /** Closed solid cylinder (triangle soup) standing on z = 0. */
-function solidCylinder(r: number, h: number, seg = 160): Float32Array {
+export function solidCylinder(r: number, h: number, seg = 160): Float32Array {
   const out: number[] = [];
   for (let i = 0; i < seg; i++) {
     const a0 = (i / seg) * 2 * Math.PI, a1 = ((i + 1) / seg) * 2 * Math.PI;
@@ -126,7 +128,9 @@ export function WeaveCard() {
   void objects;
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const ams = Boolean(currentConfig().has_ams);
+  const changer = changerOf(currentConfig());
+  const ams = changer !== 'manual';
+  const MAX_COLOURS = maxColours();
   const colours = weaveColours(w);
   const nCol = w.mode === 'colour' ? colourCount(w) : Math.max(2, w.picture?.levels ?? 2);
   const regen = (f: () => void) => upd(() => { f(); rebuildPicture(w); });
@@ -161,7 +165,8 @@ export function WeaveCard() {
         <button className={w.mode === 'colour' ? 'on' : ''} title="One filament per layer, the colours take turns (AMS)" onClick={() => regen(() => { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; })}>Colour weave</button>
         <button className={w.mode === 'mono' ? 'on' : ''} title="One filament: the picture is relief only, no filament changes" onClick={() => regen(() => { w.mode = 'mono'; })}>Mono relief</button>
       </div>
-      {w.mode === 'colour' && !ams && <p className="mx-muted bad" style={{ margin: 0 }}>This printer has no AMS: each layer would be a manual change. Pick an A1 / P1S / X1 combo, or use Mono relief.</p>}
+      {w.mode === 'colour' && !ams && <p className="mx-muted bad" style={{ margin: 0 }}>This printer changes filament by hand: each layer would be a manual change. Pick a printer with an AMS or a tool changer, or use Mono relief.</p>}
+      {w.mode === 'colour' && changer === 'toolchanger' && <p className="mx-muted" style={{ margin: 0 }}>Tool changer: each colour has its own head, so a change is a quick head swap with no purge. Up to {MAX_COLOURS} colours.</p>}
 
       <div className="mx-label">Picture</div>
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
@@ -192,7 +197,7 @@ export function WeaveCard() {
           </label>
           {w.mode === 'colour' && source && (
             <button className="btn-secondary btn-small" style={{ alignSelf: 'end' }} title="Pick the loaded filaments closest to the picture's own colours" onClick={() => regen(() => {
-              const pal = suggestPalette(resampleRGB(source!.rgba, source!.w, source!.h, Math.min(source!.w, 160), Math.min(source!.h, 160)), Math.min(MAX_COLOURS, filaments.length));
+              const pal = suggestPalette(resampleRGB(source!.rgba, source!.w, source!.h, Math.min(source!.w, 160), Math.min(source!.h, 160)), Math.min(maxColours(), filaments.length));
               const used = new Set<number>();
               w.slots = pal.map((c) => {
                 let best = 0, bd = Infinity;
@@ -295,7 +300,16 @@ export function WeaveCard() {
         <label className="mx-field">Seam line: {Math.round(w.seam.angle_deg)}° {w.seam.angle_deg === 90 ? '(back)' : ''}
           <input type="range" min={0} max={359} step={1} value={w.seam.angle_deg} onChange={(e) => upd(() => { w.seam.angle_deg = +e.target.value; })} />
         </label>
-        {w.mode === 'colour' && (
+        {w.mode === 'colour' && changer === 'toolchanger' && (
+          <>
+            <div className="mx-label">At each head swap</div>
+            <div className="seg mx-seg">
+              <button className={w.change.mode !== 'bleed' ? 'on' : ''} title="The new head primes and wipes on the prime tower: cleanest start, slower" onClick={() => upd(() => { w.change.mode = 'purge'; })}>Prime tower</button>
+              <button className={w.change.mode === 'bleed' ? 'on' : ''} title="No tower: the new head starts printing straight away (its ooze is caught by the inside seam)" onClick={() => upd(() => { w.change.mode = 'bleed'; })}>No tower (fastest)</button>
+            </div>
+          </>
+        )}
+        {w.mode === 'colour' && changer !== 'toolchanger' && (
           <>
             <div className="mx-label">At each colour change</div>
             <div className="seg mx-seg">
@@ -363,7 +377,10 @@ function Estimate({ w }: { w: WeaveSettings }) {
     const fl = filaments.length > 1 ? effectiveFlush(filaments.map((f) => f.color), flushMatrix, flushMultiplier) : [[0]];
     let flush = 0, n = 0;
     w.slots.forEach((a, i) => { const b = w.slots[(i + 1) % w.slots.length]; if (a !== b) { flush += fl[a]?.[b] ?? 0; n++; } });
-    return estimateWeave(w, { bandMm: band, layerHeight: Number(cfg.layer_height) || 0.2, changeTime: Number(cfg.filament_change_time) || 60, flushMm3: n ? flush / n : 0, filamentDensity: Number(cfg.filament_density) || 1.24 });
+    // a tool changer swaps heads: no flush, only the small prime after the pick-up
+    const tc = changerOf(cfg) === 'toolchanger';
+    const ww = tc && w.change.mode !== 'bleed' ? { ...w, change: { mode: 'reduced' as const, volume_mm3: Number(cfg.tool_prime_volume) || 0 } } : w;
+    return estimateWeave(ww, { bandMm: band, layerHeight: Number(cfg.layer_height) || 0.2, changeTime: Number(cfg.filament_change_time) || (tc ? 8 : 60), flushMm3: n ? flush / n : 0, filamentDensity: Number(cfg.filament_density) || 1.24 });
   }, [w, filaments, flushMatrix, flushMultiplier, objects, printerId, w.change.mode, w.change.volume_mm3, w.layers_per_colour, w.slots.join(), w.z_start, w.z_end]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!est) return <p className="mx-muted" style={{ margin: 0 }}>Put a part on the plate to see the estimate.</p>;
   return (

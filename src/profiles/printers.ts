@@ -289,6 +289,24 @@ const K = (id: string, vendor: string, model: string, bed: [number, number, numb
 const M = (id: string, vendor: string, model: string, bed: [number, number, number], speed: Spec['speed'], accel: number, extra: Partial<Spec> = {}) =>
   make({ id, vendor, model, bed, flavor: 'marlin', connections: ['serial', 'octoprint'], accel, speed, start: marlinStart(`${vendor} ${model}`), end: marlinEnd(10, bed[1] - 10), ...extra });
 
+/** G-code for a head swap: heat the next head if it isn't yet, pick it up (the firmware applies its offsets), wait for it. */
+const TOOL_CHANGE = `; ===== NexSpiro tool change T[previous_extruder] -> T[next_extruder] =====
+M104 T[next_extruder] S[new_filament_temp] ; next head to print temperature (preheated already when there was time)
+T[next_extruder] ; park the head in use, pick up the next one
+M109 T[next_extruder] S[new_filament_temp]
+G92 E0
+; ===== end tool change =====`;
+
+/** A printer with one nozzle per filament: head swaps instead of filament swaps. */
+const toolchanger = (p: PrinterProfile, heads: number, swapSeconds: number): PrinterProfile => ({
+  ...p,
+  machine: {
+    ...p.machine, changer_type: 'toolchanger', toolhead_count: heads, has_ams: false, change_filament_gcode: TOOL_CHANGE, filament_change_time: swapSeconds,
+    retract_restart_extra_toolchange: 0.1,
+    tool_prime_volume: 3, standby_temperature_delta: -40, tool_preheat_time: 30,
+  },
+});
+
 const H2D: PrinterProfile = {
   id: 'bbl-h2d', printerModelId: 'O1D', cameraMode: 'rtsp', vendor: 'Bambu Lab', model: 'H2D', nozzle: 0.4, bed: { x: 350, y: 320, z: 325 },
   plates: BBL_PLATES, flavor: 'bbl', connections: ['bbl_lan'],
@@ -338,6 +356,14 @@ PRINTERS.push(
   K('sovol-sv07', 'Sovol', 'SV07', [220, 220, 250], 'PRINT_START BED_TEMP=[bed_temperature_initial_layer] EXTRUDER_TEMP=[nozzle_temperature_initial_layer]', 'fast', 8000, { end: 'PRINT_END' }),
   M('sovol-sv06', 'Sovol', 'SV06', [220, 220, 250], 'slow', 1500),
   K('artillery-x4plus', 'Artillery', 'Sidewinder X4 Plus', [300, 300, 400], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 7000),
+  // tool changers and IDEX: one nozzle per filament, no purge between colours
+  toolchanger(M('prusa-xl-5t', 'Prusa', 'XL (5 toolheads)', [360, 360, 360], 'medium', 5000, { connections: ['octoprint'], start: marlinStart('Prusa XL 5T', 5, 20, 200, 'G29 ; mesh bed levelling'),
+    note: 'Five heads, one filament each. Check the start G-code against PrusaSlicer\'s XL profile before the first print.' }), 5, 12),
+  toolchanger(K('snapmaker-u1', 'Snapmaker', 'U1', [270, 270, 270], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END', connections: [],
+    note: 'Four-head tool changer. Export the G-code; check the start macro against Snapmaker\'s own slicer profile before the first print.' }), 4, 6),
+  toolchanger(K('generic-toolchanger', 'Generic', 'Klipper tool changer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END',
+    note: 'StealthChanger, TapChanger, Jubilee and other Klipper tool changers: T0…Tn macros pick up the head and apply its offsets. Set the number of heads in Printer settings.' }), 4, 10),
+  toolchanger(M('generic-idex', 'Generic', 'IDEX printer', [300, 300, 300], 'medium', 4000, { note: 'Independent dual extruder (two heads, T0 / T1). The firmware parks the idle head and applies its offset.' }), 2, 6),
   // generic
   M('generic-marlin', 'Generic', 'Marlin printer', [220, 220, 250], 'slow', 1000, { note: 'Starting point for any Marlin printer — set the bed size and start G-code in Printer settings.' }),
   K('generic-klipper', 'Generic', 'Klipper printer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'medium', 5000, { end: 'PRINT_END', note: 'Expects PRINT_START / PRINT_END macros in printer.cfg.' }),

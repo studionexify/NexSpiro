@@ -13,6 +13,11 @@ import type { PrintProfiles, Firmware } from './core/profiles';
 import type { MotionApplication, MotionBrush } from './model';
 import type { WeaveSettings } from './weave/model';
 import { applyWeave, weaveSession, type WeaveReport, type WeaveSession } from './weave/engine';
+import type { PaintSettings } from './paint/model';
+import { applyPaint, type PaintReport } from './paint/engine';
+import type { LaceSettings } from './lace/model';
+import { applyLace, type LaceReport } from './lace/engine';
+import { objectMask, type ObjectMask } from './wall/targets';
 
 /** Everything the worker needs, as plain data. */
 export interface MotionexConfig {
@@ -25,13 +30,22 @@ export interface MotionexConfig {
   printerId: string;
   /** Weave mode: a picture woven into the wall, one colour per layer. */
   weave?: WeaveSettings;
+  /** Velocity painting: a picture printed into the outer wall as changes of speed (sheen). */
+  paint?: PaintSettings;
+  /** Lace: holes cut into the walls (openwork). */
+  lace?: LaceSettings;
 }
+
+/** What prepare() hands to postToolpath: the weave's hooks and the object masks of each wall-art mode. */
+export type MotionexSession = Partial<WeaveSession> & { masks?: { paint?: ObjectMask; lace?: ObjectMask } };
 
 export interface MotionexReport {
   check: PrintCheck;
   /** Moves changed by Motionex, for the preview. */
   movedPaths: number;
   weave?: WeaveReport;
+  paint?: PaintReport;
+  lace?: LaceReport;
 }
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -153,14 +167,23 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
   name: 'Motionex',
   version: '0.4.0',
   prepare(config, ctx) {
-    return config.weave?.enabled ? weaveSession(config.weave, ctx) : undefined;
+    const weave = config.weave?.enabled ? weaveSession(config.weave, ctx) : undefined;
+    const paint = config.paint?.enabled ? objectMask(config.paint.objects, ctx) : undefined;
+    const lace = config.lace?.enabled ? objectMask(config.lace.objects, ctx) : undefined;
+    if (!weave && !paint && !lace) return undefined;
+    const session: MotionexSession = { ...(weave ?? {}), masks: { paint, lace } };
+    return session;
   },
   postToolpath(layerOps, config, ctx: PluginContext) {
     const check = emptyCheck();
     // the weave goes first; motions then add on top of the woven wall
-    const weave = config.weave?.enabled ? applyWeave(layerOps, config.weave, ctx.cfg, ctx.session as WeaveSession | undefined, ctx.warn) : undefined;
+    const session = ctx.session as MotionexSession | undefined;
+    const weave = config.weave?.enabled ? applyWeave(layerOps, config.weave, ctx.cfg, session?.weave ? (session as WeaveSession) : undefined, ctx.warn) : undefined;
+    // velocity paint sets the outer wall speeds on whole loops, then lace cuts the walls (its pieces keep their speed)
+    const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
+    const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn) : undefined;
     const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
-    if (!apps.length) return { check, movedPaths: 0, weave };
+    if (!apps.length) return { check, movedPaths: 0, weave, paint, lace };
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);
     const regions = new RegionRegistry();
     for (const f of ctx.faceRegions) {
@@ -212,13 +235,16 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
       layerOps[r.layer].ops.splice(r.start, r.end - r.start, ...runToOps(r, originals[k], ctx.cfg));
       moved++;
     }
-    return { check, movedPaths: moved, weave };
+    return { check, movedPaths: moved, weave, paint, lace };
   },
   gcodeHeader(config) {
     const names = new Map(config.brushes.map((b) => [b.id, b]));
     const w = config.weave;
     const weave = w?.enabled ? [`; motionex weave: ${w.mode} ${w.image.name ?? 'picture'} ${w.image.w}x${w.image.h} x${w.tiles_around} round, slots ${w.slots.map((s) => s + 1).join('/')}, ${w.layers_per_colour} layer(s) per colour, depth ${w.depth_mm}mm, z ${w.z_start}-${w.z_end}, change ${w.change.mode}${w.change.mode === 'reduced' ? ` ${w.change.volume_mm3}mm3` : ''}, seam ${w.seam.inward ? `inside ${w.seam.tuck_mm}mm` : 'plain'} at ${w.seam.angle_deg}deg`] : [];
-    return [...weave, ...config.applications.filter((a) => a.enabled).map((a) => {
+    const p = config.paint, l = config.lace;
+    const paint = p?.enabled ? [`; motionex velocity paint: ${p.calibration ? 'speed ladder' : `${p.image.name ?? 'picture'} ${p.image.w}x${p.image.h}`} ${p.projection}${p.projection === 'front' ? ` from ${p.front_deg}deg` : ` x${p.tiles_around} round`}, ${p.speed_light}-${p.speed_dark}mm/s, z ${p.z_start}-${p.z_end}${p.accel ? `, accel ${p.accel}` : ''}`] : [];
+    const lace = l?.enabled ? [`; motionex lace: ${l.source === 'image' ? `picture ${l.image.w}x${l.image.h}` : `${l.pattern} ${l.cell_w}x${l.cell_h}mm strand ${l.strand_mm}mm open ${l.open}`}, ${l.walls} walls, overhang ${l.overhang_deg}deg, bridge ${l.bridge_mm}mm, z ${l.z_start}-${l.z_end} rim ${l.rim_mm}mm`] : [];
+    return [...weave, ...lace, ...paint, ...config.applications.filter((a) => a.enabled).map((a) => {
       const b = a.brush ?? names.get(a.brush_id);
       const where = a.target.type === 'faces' ? `${(a.target.faces ?? []).length} picked surface(s)` : 'whole body';
       return `; motionex: ${b?.name ?? a.brush_id} v${b?.version ?? '?'} on ${where}, ${a.target.walls} walls, z ${a.mask.z_start}-${a.mask.z_end}${a.scale && a.scale !== 1 ? ` size x${a.scale}` : ''}${a.blend === 'override' ? ' replace' : ''}${a.round_mm ? ` round ${a.round_mm}mm` : ''}${a.tip ? ` tip ${a.tip.mode} ${a.tip.share}` : ''}`;
