@@ -141,6 +141,25 @@ export function declaredMap(out: SliceOutput, moves: M.GMove[]): Declared {
       if (prev) { prev.x = x; prev.y = y; prev.z = z; continue; }
       map.set(line, { w: mv[k * MOVE_STRIDE + 3], h: mv[k * MOVE_STRIDE + 4], x, y, z });
     }
+    // A program-body plugin (Bulnex repeats the finished program) shifts/repeats lines after the moves were recorded, so
+    // some line numbers are stale. Those parsed moves are matched by end position instead (same packed bead, same w,h).
+    const key = (x: number, y: number, z: number) => `${Math.round(x * 1000)},${Math.round(y * 1000)},${Math.round(z * 1000)}`;
+    let byPos: Map<string, DeclaredLine> | null = null;
+    for (const m of moves) {
+      if (!m.isExtruding) continue;
+      const e = map.get(m.line);
+      if (e && Math.abs(e.x - m.x) <= DECL_POS_TOL && Math.abs(e.y - m.y) <= DECL_POS_TOL && Math.abs(e.z - m.z) <= DECL_POS_TOL) continue;
+      if (!byPos) {
+        byPos = new Map();
+        for (let k = 0; k < out.moveLines.length; k++) {
+          const x = mv[k * MOVE_STRIDE], y = mv[k * MOVE_STRIDE + 1], z = mv[k * MOVE_STRIDE + 2];
+          const kk = key(x, y, z);
+          if (!byPos.has(kk) && mv[k * MOVE_STRIDE + 3] > 0) byPos.set(kk, { w: mv[k * MOVE_STRIDE + 3], h: mv[k * MOVE_STRIDE + 4], x, y, z });
+        }
+      }
+      const d = byPos.get(key(m.x, m.y, m.z));
+      if (d) map.set(m.line, d);
+    }
     return map;
   }
   return alignedMap(out, moves);

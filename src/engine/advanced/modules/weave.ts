@@ -84,6 +84,7 @@ export const zWeave: TechModule = {
           px = op.x; py = op.y; pz = op.z; out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
+        const dens = op.e / Math.max(Math.hypot(len, op.z - (Number.isNaN(pz) ? op.z : pz)), 1e-9); // E per mm of the incoming bead's true 3-D length
         const n = Math.max(1, Math.ceil(len / (lambda / 8)));
         for (let q = 1; q <= n; q++) {
           const t = q / n, x = px + (op.x - px) * t, y = py + (op.y - py) * t;
@@ -100,7 +101,7 @@ export const zWeave: TechModule = {
           // volumetric conservation: the bead follows the sloped segment, so E scales with its true 3-D length
           const seg3 = Math.hypot(len / n, op.z + off - (Number.isNaN(pz) ? op.z : pz));
           // ...and the bead's declared height is the real local height (layer + off - below), so the preview and E agree
-          const m = moveLike(op, x, y, op.z + off, rescaleE((op.e / Math.max(len, 1e-9)) * seg3, op.w, op.h, height), { h: height });
+          const m = moveLike(op, x, y, op.z + off, rescaleE(dens * seg3, op.w, op.h, height), { h: height });
           pz = op.z + off;
           if (m.f > vMax) { m.f = vMax; slowed++; }
           out.push(m);

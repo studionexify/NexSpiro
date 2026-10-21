@@ -55,6 +55,7 @@ export const perimeterFeathering: TechModule = {
           out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
+        const dens = op.e / Math.max(Math.hypot(len, op.z - (Number.isNaN(pz) ? op.z : pz)), 1e-9); // E per mm of the incoming bead's true 3-D length
         const n = Math.max(1, Math.ceil(len / 0.6));
         for (let k = 1; k <= n; k++) {
           const t = k / n, x = px + (op.x - px) * t, y = py + (op.y - py) * t;
@@ -75,7 +76,7 @@ export const perimeterFeathering: TechModule = {
           }
           // volume conserved on the sloped bead: E follows the true 3-D length and the declared (thicker) height
           const seg3 = Math.hypot(len / n, z - (Number.isNaN(pz) ? op.z : pz));
-          out.push(moveLike(op, x + ox, y + oy, z, rescaleE((op.e / Math.max(len, 1e-9)) * seg3, op.w, op.h, hNew), { dev: prior + (z - op.z), h: hNew }));
+          out.push(moveLike(op, x + ox, y + oy, z, rescaleE(dens * seg3, op.w, op.h, hNew), { dev: prior + (z - op.z), h: hNew }));
           pz = z;
         }
         px = op.x; py = op.y; pz = op.z;
