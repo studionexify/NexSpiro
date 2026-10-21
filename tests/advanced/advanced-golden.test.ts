@@ -16,7 +16,7 @@ const CASES: { name: string; run: () => string; hash: string }[] = [
   { name: 'scarf splice', run: () => run(indexed(cylinder(100, 100, 12, 8), 'c'), cfgs.p1s, ['scarf_splice']), hash: 'f2a314cffb7b2f503600204a4452abab' },
   { name: 'helical thick-vase', run: () => run(indexed(tube(100, 100, 15, 3, 20), 'tube'), cfgs.x1c, ['thick_vase']), hash: '8d60534c847c019dcc0d45f63f2670c7' },
   { name: 'sub-voxel anti-aliasing', run: () => run(indexed(dome(100, 100, 20, 8, 4), 'd'), cfgs.x1c, ['subvoxel_aa']), hash: '3f4f1c185c63bb1cdcc147af7cb44d2f' },
-  { name: 'Eulerian spiral infill', run: () => run(indexed(box(90, 90, 0, 25, 25, 6), 'b'), cfgs.p1s, ['eulerian_spiral'], 'structural'), hash: '96427c217b4202883b279368e3e132ca' },
+  { name: 'Eulerian spiral infill', run: () => run(indexed(box(90, 90, 0, 25, 25, 6), 'b'), cfgs.p1s, ['eulerian_spiral'], 'structural'), hash: '4c4a413c8a935cc18a07e064fcdad15d' }, // re-pinned: z_weave E now follows the true 3-D segment length (was 2-D, ~1-28% under-extrusion on sloped beads),
 ];
 
 describe('Advanced mode is independent of the Basic engine', () => {

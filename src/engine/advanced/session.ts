@@ -118,6 +118,9 @@ export interface AdvancedSession {
   report(): AdvancedReport;
 }
 
+/** Tech parameters that no module reads yet (see AUDIT_WIRING.md). */
+const UNWIRED_PARAMS: [TechId, string][] = [['sdf_frep', 'tpms'], ['sdf_frep', 'cell'], ['sdf_frep', 'grade'], ['conformal_layers', 'layers']];
+
 export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: AdvancedConfig, filaments: FilamentSlot[], warn: (m: string) => void): AdvancedSession {
   const t0 = now();
   const num = (k: string) => Number(cfg[k] ?? 0);
@@ -155,8 +158,14 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
       return ctx.shared.get(key) as T;
     },
   };
+  // parameters with no reader in this engine build: say so when the user changed them, instead of ignoring them silently
+  for (const [id, key] of UNWIRED_PARAMS) {
+    const t = techs.get(id);
+    const spec = t?.def.params.find((p) => p.key === key);
+    if (t?.enabled && spec && t.params[key] !== spec.def) ctx.warn(`${t.def.name}: "${spec.label}" is not implemented in this engine build; the setting is ignored.`);
+  }
   const active = MODULES.filter((m) => ctx.on(m.id));
-  const timed = <T>(id: TechId, fn: () => T): T => {
+  const timed =<T>(id: TechId, fn: () => T): T => {
     const s = now();
     try { return fn(); } finally { const r = ctx.report(id); r.ms = (r.ms ?? 0) + (now() - s); }
   };

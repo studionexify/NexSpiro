@@ -1131,6 +1131,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         run += len;
         const idx = k / 2;
         const zz = it.spiral ? startZ + (h * run) / Math.max(totalLen, 1e-6) : it.depth ? zTop - (it.depth[idx] ?? 0) * h : zTop;
+        // volumetric conservation: E follows the true 3-D segment length (spiral / non-planar paths change Z along the move)
+        const len3 = Math.hypot(len, zz - curZ);
         const feat = it.feats?.[idx] ?? it.feature;
         const segFlow = it.flows?.[idx] ?? 1;
         let sv = v;
@@ -1140,9 +1142,9 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
         if (varW) {
           const sw = (varW[idx - 1] + varW[idx]) / 2, sxs = xsOf(sw);
           const vv = Math.min(sv * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
-          ops.push({ k: 'move', x, y, z: zz, e: len * (sxs / filArea) * flowMul * segFlow, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * (sxs / filArea) * flowMul * segFlow, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow });
         } else if (segFlow > 1e-6) {
-          ops.push({ k: 'move', x, y, z: zz, e: len * ePerMm * segFlow, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow, ...(it.depth ? { noArc: true } : {}) });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * ePerMm * segFlow, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow, ...(it.depth ? { noArc: true } : {}) });
         } else {
           ops.push({ k: 'move', x, y, z: zz, e: 0, f: sv, feature: 'travel', w: 0, h, travel: true });
         }

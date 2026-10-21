@@ -74,14 +74,14 @@ export const zWeave: TechModule = {
       const stackIdx = Math.floor((li - 3) / N);
       const sites = pins ? pinSitesCache(stackIdx, () => pinSites(layers[Math.min(layers.length - 1, 3 + stackIdx * N + N - 1)].z)) : [];
       const out: Op[] = [];
-      let px = NaN, py = NaN;
+      let px = NaN, py = NaN, pz = NaN;
       for (const op of L.ops) {
         if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; }
         if (op.k !== 'move') { out.push(op); continue; }
-        if (op.travel || op.e <= 0 || Number.isNaN(px)) { px = op.x; py = op.y; out.push(op); continue; }
+        if (op.travel || op.e <= 0 || Number.isNaN(px)) { px = op.x; py = op.y; pz = op.z; out.push(op); continue; }
         if (!WOVEN.has(op.feature)) {
           if (tops.has(op.feature) || op.feature === 'outer_wall') offs.set(op.x, op.y, 0);
-          px = op.x; py = op.y; out.push(op); continue;
+          px = op.x; py = op.y; pz = op.z; out.push(op); continue;
         }
         const len = Math.hypot(op.x - px, op.y - py);
         const n = Math.max(1, Math.ceil(len / (lambda / 8)));
@@ -97,12 +97,15 @@ export const zWeave: TechModule = {
           const below = offs.get(x, y);
           const height = Math.max(0.3 * L.h, L.h + off - below);
           offs.set(x, y, off);
-          const m = moveLike(op, x, y, op.z + off, (op.e / n) * (height / L.h));
+          // volumetric conservation: the bead follows the sloped segment, so E scales with its true 3-D length
+          const seg3 = Math.hypot(len / n, op.z + off - (Number.isNaN(pz) ? op.z : pz));
+          const m = moveLike(op, x, y, op.z + off, (op.e / Math.max(len, 1e-9)) * seg3 * (height / L.h));
+          pz = op.z + off;
           if (m.f > vMax) { m.f = vMax; slowed++; }
           out.push(m);
           woven++;
         }
-        px = op.x; py = op.y;
+        px = op.x; py = op.y; pz = op.z + (sign * amp * Math.sin(k * op.x) * Math.sin(k * op.y));
       }
       if (stackTop && sites.length) {
         // fill each void: dive into it, extrude while rising to the layer top
