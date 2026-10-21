@@ -60,13 +60,13 @@ in one Motionex input guard.
 | 5 | The analysis worker has `onerror`, and a stale error from a replaced run is ignored. | `advanced.ts` |
 | 7, 9 | `installErrorReporting()` turns every uncaught error or rejection into a toast (deduplicated, browser noise ignored), and turns `vite:preloadError` into the reload message. | `state/errors.ts`, `main.tsx` |
 | 8 | A root `ErrorBoundary` offers Try again / Save project / Reload. The scene lives in the store, so nothing is lost. | `ui/ErrorBoundary.tsx` |
-| 10 | The store enforces sane transforms on every add and update: non-finite values are reset, and \|scale\| ≥ 0.1 %. The panel refuses scale or size ≤ 0 with a hint to use Mirror instead. | `state/store.ts` (`saneTransform`), `ui/TransformPanel.tsx` |
+| 10 | The store enforces sane transforms on every add and update: non-finite values are reset, and \|scale\| ≥ 0.1 %. The panel refuses a scale of 0 % and a size ≤ 0. A negative scale stays allowed, since it is a mirror and 3MF imports carry them. | `state/store.ts` (`saneTransform`), `ui/TransformPanel.tsx` |
 | 11–15 | `checkInputs()` runs before both engines. It collapses triangles that use non-finite vertices, keeping triangle order so paint stays aligned. It cleans layer profiles, names any flat or sunk object, and warns when nothing would be printed. Valid input passes through untouched, so Basic output stays byte for byte (the golden hashes are unchanged). | `engine/validate.ts`, `engine/slicer.ts` |
-| 16 | A brim that would leave the bed is rebuilt as concentric fill of its area ∩ the bed, with a warning. Skirt loops off the bed are dropped, with a warning. A brim that fits is unchanged. | `engine/slicer.ts` |
+| 16 | A brim that would leave the bed is rebuilt for its own type, kept on the bed and flagged with a warning. Outer brims fill the contour band ∩ the bed, never the holes. Ears are clipped and stay ears. Inner loops are kept where they fit. Skirt loops off the bed are dropped, with a warning. A brim that fits is unchanged. | `engine/slicer.ts` |
 | 17 | The de-retraction length is clamped at ≥ 0, so a negative extra can at most cancel the prime. | `engine/slicer.ts` |
 | 18 | The worker appends the pipeline stage to the error ("… (while slicing mesh)") and logs the stack. | `engine/worker.ts` |
 | 19 | Restored `.empty` and `.empty .hint`. | `styles.css` |
-| 20 | The same conditional clip in the Advanced core: brims that fit are unchanged, so the Advanced golden hashes are unchanged. | `engine/advanced/classic/slicer.ts` |
+| 20 | The same conditional clip in the Advanced core. The inner brim is kept once, and the outer band comes from the contours only. Brims that fit are unchanged, so the Advanced golden hashes are unchanged. | `engine/advanced/classic/slicer.ts` |
 | 21 | `placedBrush()`, which every placement goes through, floors the repeat at 0.05 mm. The controls bottom out at 0.1 mm, so no reachable output changes. | `plugins/motionex/modifier.ts` |
 
 ## Test harness (`tests/stress/`)
@@ -86,3 +86,14 @@ Browser check (production build, headless Chromium):
 - Slice → simulated redeploy → slice again: now succeeds. Before the fix it showed "Slicing failed: the slicer stopped unexpectedly".
 - Worker file already gone: shows the reload message.
 - A throwing sync or async handler: shows a toast.
+
+## Independent review
+
+A second pass reviewed the first commit and found four problems, all fixed with regression tests that fail on the
+earlier code:
+- The cut brim was rebuilt from the whole first layer, so a part with holes got a brim inside the holes, ears turned
+  into a full ring, and Advanced "outer and inner" printed the inner brim twice.
+- Hosts that answer a missing file with their HTML page (single-page fallback) got the memory message instead of the
+  reload message.
+- A failed preload was never retried.
+- `AbortError` was filtered by message rather than by name.

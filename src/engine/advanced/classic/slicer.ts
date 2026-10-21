@@ -544,9 +544,11 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > bx - w / 2 + 1e-3 || l.pts[k + 1] > by - w / 2 + 1e-3) return true; return false; });
     if (brimLoops.length && offBed(brimLoops)) {
       // a brim wider than the room around the part: fill only the part of its area that is on the bed
-      const keepInner = brimType === 'inner_only' || brimType === 'outer_and_inner' ? brimLoops.filter((l) => !offBed([l])) : [];
-      const outerArea = brimType === 'outer_only' || brimType === 'outer_and_inner'
-        ? intersection(difference(offset(layerSlices[0], gap + bw + w / 2), offset(layerSlices[0], gap)), [rectPath(w / 2, w / 2, bx - w / 2, by - w / 2)]) : [];
+      const outer = brimType === 'outer_only' || brimType === 'outer_and_inner', inner = brimType === 'inner_only' || brimType === 'outer_and_inner';
+      // inner loops are kept where they fit; the outer band is taken from the contours only (never the holes)
+      const keepInner = inner ? brimLoops.filter((l) => l.pts.length && !offBed([l]) && exs0.some((e) => pointInPaths(l.pts[0], l.pts[1], [e.contour]))) : [];
+      const contours = exs0.map((e) => e.contour);
+      const outerArea = outer ? intersection(difference(offset(contours, gap + bw + w / 2), offset(contours, gap)), [rectPath(w / 2, w / 2, bx - w / 2, by - w / 2)]) : [];
       brimLoops.length = 0;
       pushAll(brimLoops, keepInner);
       for (const p of concentricFill(outerArea, s, w / 2)) brimLoops.push({ ...p, feature: 'brim', width: w, flow: 1 });

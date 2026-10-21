@@ -25,7 +25,7 @@ export function preloadWorker(name: WorkerName): Promise<void> {
   if (!p) {
     p = fetch(new URL(WORKERS[name], location.href))
       .then(async (r) => {
-        if (!r.ok) return;
+        if (!r.ok) { loading.delete(name); return; } // a passing server error: try again on the next worker start
         const code = await r.text();
         // a script that imports other chunks cannot run from a blob URL: keep using its real URL
         if (/^\s*import\s*[\w{*'"]/m.test(code)) return;
@@ -45,6 +45,7 @@ export function preloadWorkers() {
 }
 
 export function startWorker(name: WorkerName): Worker {
+  void preloadWorker(name); // retries a preload that failed earlier; this worker still starts from the URL if needed
   return new Worker(blobs.get(name) ?? new URL(WORKERS[name], location.href), { type: 'module' });
 }
 
@@ -55,10 +56,14 @@ export function startWorker(name: WorkerName): Worker {
  */
 export async function workerFailure(name: WorkerName, what: string): Promise<string> {
   if (!blobs.has(name)) {
+    const stale = `NexSpiro was updated while this page was open, so the ${what} could not be loaded. Save your project (Ctrl+S), then reload the page.`;
     try {
       const r = await fetch(new URL(WORKERS[name], location.href), { method: 'HEAD', cache: 'no-store' });
-      if (r.status === 404) return `NexSpiro was updated while this page was open, so the ${what} could not be loaded. Save your project (Ctrl+S), then reload the page.`;
-    } catch { /* offline: fall through */ }
+      // hosts with a single-page fallback answer a missing file with 200 and the app's HTML page
+      if (!r.ok || /text\/html/i.test(r.headers?.get?.('content-type') ?? '')) return stale;
+    } catch {
+      return `the ${what} could not be loaded (offline, or NexSpiro was updated). Check the connection, save your project (Ctrl+S) and reload the page.`;
+    }
   }
   return `the ${what} stopped unexpectedly (the browser may have run out of memory — try a coarser Resolution, a bigger layer height or fewer objects)`;
 }

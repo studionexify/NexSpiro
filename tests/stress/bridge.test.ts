@@ -12,6 +12,8 @@ import { reportError, STALE_PAGE } from '../../src/state/errors';
 type Mode = 'ok' | 'missing' | 'crash' | 'engine-error' | 'unclonable' | 'hang';
 let mode: Mode = 'ok';
 let serverHas = true;
+let spaFallback = false;
+let offline = false;
 const created: FakeWorker[] = [];
 
 class FakeWorker {
@@ -44,10 +46,13 @@ function plateWithBox() {
 }
 
 beforeEach(() => {
-  mode = 'ok'; serverHas = true; created.length = 0;
+  mode = 'ok'; serverHas = true; spaFallback = false; offline = false; created.length = 0;
   vi.stubGlobal('Worker', FakeWorker);
   vi.stubGlobal('location', { href: 'https://example.github.io/NexSpiro/' });
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: serverHas, status: serverHas ? 200 : 404 })));
+  vi.stubGlobal('fetch', vi.fn(async () => {
+    if (offline) throw new TypeError('Failed to fetch');
+    return { ok: serverHas || spaFallback, status: serverHas || spaFallback ? 200 : 404, headers: { get: () => (spaFallback ? 'text/html; charset=utf-8' : 'text/javascript') } };
+  }));
   plateWithBox();
 });
 afterEach(() => { cancelSlice(); vi.unstubAllGlobals(); });
@@ -64,6 +69,17 @@ describe('slice bridge', () => {
     expect(await sliceNow()).toBeNull();
     expect(S().slice.status).toBe('error');
     expect(S().toast?.text).toMatch(/updated while this page was open.*reload the page/i);
+  });
+  it('a host that answers a missing file with its HTML page (single-page fallback) still gets the reload message', async () => {
+    mode = 'missing'; serverHas = false; spaFallback = true;
+    expect(await sliceNow()).toBeNull();
+    expect(S().toast?.text).toMatch(/updated while this page was open/);
+  });
+  it('offline, the message says the slicer could not be loaded instead of blaming memory', async () => {
+    mode = 'missing'; offline = true;
+    expect(await sliceNow()).toBeNull();
+    expect(S().toast?.text).toMatch(/could not be loaded \(offline/);
+    expect(S().toast?.text).not.toMatch(/memory/);
   });
   it('a crash with the script still on the server points at memory', async () => {
     mode = 'crash';
@@ -126,6 +142,8 @@ describe('error reporting', () => {
     expect(S().toast).toEqual({ kind: 'error', text: 'Cut failed: cannot read x' });
     useStore.setState({ toast: null });
     reportError(new Error('cannot read x'), 'Cut failed'); // same message within 2 s
+    expect(S().toast).toBeNull();
+    reportError(new DOMException('The user aborted a request.', 'AbortError'));
     expect(S().toast).toBeNull();
     err.mockRestore();
   });

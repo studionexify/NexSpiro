@@ -837,7 +837,11 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const s = spacingOf(w, h0);
     let brimType = raftN ? 'no_brim' : str('brim_type');
     const bw = num('brim_width'), gap = num('brim_object_gap');
-    const brimFor = (paths: Paths, o: number) => {
+    // the bed, less half a line: brim and skirt lines past it would be printed off the edge of the plate
+    const bedIn = [rectPath(w / 2, w / 2, num('bed_x') - w / 2, num('bed_y') - w / 2)];
+    const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > num('bed_x') - w / 2 + 1e-3 || l.pts[k + 1] > num('bed_y') - w / 2 + 1e-3) return true; return false; });
+    /** Brim of one object; with `clip`, only the part of each kind of brim that lies in that region (the bed). */
+    const brimFor = (paths: Paths, o: number, clip?: Paths) => {
       let type = brimType;
       if (type === 'auto_brim') {
         const b = bounds(paths);
@@ -867,32 +871,32 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           }
         }
         if (!centers.length) return out;
-        const ears = difference(union(centers.map(([x, y]) => circlePath(x, y, bw))), offset(paths, gap + w / 2));
+        let ears = difference(union(centers.map(([x, y]) => circlePath(x, y, bw))), offset(paths, gap + w / 2));
+        if (clip) ears = intersection(ears, clip);
         for (const p of concentricFill(ears, s, w / 2)) out.push({ ...p, feature: 'brim', width: w, flow: 1 });
         return out;
       }
       if (type === 'outer_only' || type === 'outer_and_inner') {
-        for (let k = count - 1; k >= 0; k--) for (const p of offset(outers, gap + w / 2 + k * s)) out.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
+        if (clip) {
+          // the outer band (contours only, never the holes) on the bed, filled with loops that follow the cut
+          const band = intersection(difference(offset(outers, gap + bw + w / 2), offset(outers, gap)), clip);
+          for (const p of concentricFill(band, s, w / 2)) out.push({ ...p, feature: 'brim', width: w, flow: 1 });
+        } else for (let k = count - 1; k >= 0; k--) for (const p of offset(outers, gap + w / 2 + k * s)) out.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
       }
       if (type === 'inner_only' || type === 'outer_and_inner') {
         const holes = exs0.flatMap((e) => e.holes.map((h) => h.slice().reverse()));
-        for (let k = 0; k < count; k++) for (const p of offset(holes, -(gap + w / 2 + k * s))) out.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
+        for (let k = 0; k < count; k++) for (const p of offset(holes, -(gap + w / 2 + k * s))) {
+          const loop: PathItem = { pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 };
+          if (!clip || !offBed([loop])) out.push(loop);
+        }
       }
       return out;
     };
-    // the bed, less half a line: brim and skirt lines past it would be printed off the edge of the plate
-    const bedIn = [rectPath(w / 2, w / 2, num('bed_x') - w / 2, num('bed_y') - w / 2)];
-    const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > num('bed_x') - w / 2 + 1e-3 || l.pts[k + 1] > num('bed_y') - w / 2 + 1e-3) return true; return false; });
     let clipped = false;
     for (let o = 0; o < meshes.length; o++) {
       let b = brimFor(objSlices[o][objStart] ?? [], o);
-      if (b.length && offBed(b)) {
-        // a brim wider than the room around the part: fill only the part of its area that is on the bed
-        const first = objSlices[o][objStart] ?? [];
-        const area = intersection(difference(offset(first, gap + bw + w / 2), offset(first, gap)), bedIn);
-        b = concentricFill(area, s, w / 2).map((p) => ({ ...p, feature: 'brim' as const, width: w, flow: 1 }));
-        clipped = true;
-      }
+      // a brim wider than the room around the part: keep only what is on the bed, same brim type
+      if (b.length && offBed(b)) { b = brimFor(objSlices[o][objStart] ?? [], o, bedIn); clipped = true; }
       if (b.length) { brimByObj.set(o, b); pushAll(brimLoops, b); }
     }
     if (clipped) warn('The brim is cut at the edge of the plate: the part is too close to the edge for the full brim width.');

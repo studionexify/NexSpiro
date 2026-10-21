@@ -135,7 +135,12 @@ export function TransformPanel() {
   // a scale or size of 0 (or less) flattens the model and breaks the next uniform scale: refuse it with a hint
   const positive = (onSet: (v: number) => void) => (v: number) => {
     if (v > 0) { onSet(v); return; }
-    useStore.getState().set({ toast: { kind: 'warn', text: 'Scale and size must be greater than 0. Use Mirror (right-click the object) to flip it.' } });
+    useStore.getState().set({ toast: { kind: 'warn', text: 'The size must be greater than 0. Use Mirror (right-click the object) to flip it.' } });
+  };
+  // a negative scale is a mirror (3MF imports carry them) and stays allowed; only 0 is refused
+  const nonZero = (onSet: (v: number) => void) => (v: number) => {
+    if (v !== 0) { onSet(v); return; }
+    useStore.getState().set({ toast: { kind: 'warn', text: 'A scale of 0 % would flatten the model. Use a small value instead.' } });
   };
   const scaleOf = (v: Vec3, k: number, val: number, f: number): Vec3 => {
     if (uniform) return v.map((x) => (x / (v[k] || 1)) * f) as Vec3;
@@ -171,7 +176,7 @@ export function TransformPanel() {
             <label className="row" style={{ fontWeight: 400, gap: 6, marginTop: 0 }}><Icon name="lock" size={14} />Uniform
               <button className={`toggle ${uniform ? 'on' : ''}`} onClick={() => setUniform(!uniform)} aria-label="Uniform scale" /></label>
           </div>
-          {[0, 1, 2].map((k) => field(k, part.scale[k] * 100, positive((v) => setPart((p) => ({ ...p, scale: scaleOf(p.scale, k, v, v / 100) }))), '%'))}
+          {[0, 1, 2].map((k) => field(k, part.scale[k] * 100, nonZero((v) => setPart((p) => ({ ...p, scale: scaleOf(p.scale, k, v, v / 100) }))), '%'))}
           <h4 style={{ marginTop: 10 }}>Size</h4>
           {[0, 1, 2].map((k) => field(k, size[k], positive((v) => setPart((p) => {
             const f = v / Math.max(1e-9, size[k]);
@@ -212,7 +217,7 @@ export function TransformPanel() {
           <label className="row" style={{ fontWeight: 400, gap: 6, marginTop: 0 }}><Icon name="lock" size={14} />Uniform
             <button className={`toggle ${uniform ? 'on' : ''}`} onClick={() => setUniform(!uniform)} aria-label="Uniform scale" /></label>
         </h4>
-        {[0, 1, 2].map((k) => field(k, o.scale[k] * 100, positive((v) => commit((x) => ({ ...x, scale: scaleOf(x.scale, k, v, v / 100) }))), '%'))}
+        {[0, 1, 2].map((k) => field(k, o.scale[k] * 100, nonZero((v) => commit((x) => ({ ...x, scale: scaleOf(x.scale, k, v, v / 100) }))), '%'))}
         <h4 style={{ marginTop: 10 }}>Size</h4>
         {[0, 1, 2].map((k) => {
           const so = worldBounds(o); const sk = so.max[k] - so.min[k];

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { slice } from '../../src/engine/slicer';
 import { type Config } from '../../src/profiles/settings';
 import { cylinder, tee } from '../fixtures';
-import { cfgWith, mesh, PRINTER } from './helpers';
+import { brimFilament, cfgWith, mesh, PRINTER, tube } from './helpers';
 import { describeIssues, validateSlice } from './gcodeValidator';
 
 describe('Advanced engine intents', () => {
@@ -21,3 +21,23 @@ describe('Advanced engine intents', () => {
       });
 });
 
+describe('Advanced engine brim at the plate edge', () => {
+  const run = (cx: number, cy: number, type: string) => {
+    const cfg = cfgWith({ overrides: { brim_type: type, brim_width: 100 } });
+    const out = slice([mesh(tube(cx, cy, 10, 6, 5))], cfg, () => {}, { advanced: { intent: 'structural', printerId: PRINTER, techs: {}, resolution: 'draft' } as any });
+    expect(validateSlice(out, cfg, { allowZReset: true })).toEqual([]);
+    return out;
+  };
+  const inHole = (cx: number, cy: number) => (x: number, y: number) => Math.hypot(x - cx, y - cy) < 5.5;
+  it('a cut outer brim never spills into the holes', () => {
+    const out = run(14, 14, 'outer_only');
+    expect(out.warnings.join(' ')).toMatch(/brim is cut/);
+    expect(brimFilament(out.gcode, inHole(14, 14))).toBe(0);
+  });
+  it('outer and inner: the inner brim is printed once, as when nothing is cut', () => {
+    const free = brimFilament(run(128, 128, 'outer_and_inner').gcode, inHole(128, 128));
+    const cut = brimFilament(run(14, 14, 'outer_and_inner').gcode, inHole(14, 14));
+    expect(free).toBeGreaterThan(0);
+    expect(cut).toBeCloseTo(free, 1);
+  });
+});

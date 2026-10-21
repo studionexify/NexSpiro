@@ -3,7 +3,7 @@
 import { useStore } from './store';
 
 /** Browser noise that is not an app failure. */
-const IGNORED = [/ResizeObserver loop/i, /^Script error\.?$/i, /AbortError/i, /\bsuperseded\b/i];
+const IGNORED = [/ResizeObserver loop/i, /^Script error\.?$/i, /\bsuperseded\b/i];
 
 const messageOf = (e: unknown): string => {
   if (e instanceof Error) return e.message || e.name;
@@ -15,6 +15,7 @@ let last = { text: '', at: 0 };
 
 /** Show an unexpected error to the user (deduplicated: the same message within 2 s is shown once). */
 export function reportError(e: unknown, context = 'Something went wrong') {
+  if ((e as { name?: string } | null)?.name === 'AbortError') return; // a cancelled request is not a failure
   const msg = messageOf(e);
   if (!msg || IGNORED.some((r) => r.test(msg))) return;
   const text = `${context}: ${msg}`;

@@ -5,7 +5,7 @@ import { slice } from '../../src/engine/slicer';
 import { checkInputs, cleanProfile, finiteMesh } from '../../src/engine/validate';
 import type { MeshInput } from '../../src/engine/types';
 import { box, cone, cylinder, tee } from '../fixtures';
-import { cfgWith, mesh } from './helpers';
+import { brimFilament, cfgWith, mesh, tube } from './helpers';
 import { describeIssues, validateSlice } from './gcodeValidator';
 
 const cube = () => box(118, 118, 0, 20, 20, 20);
@@ -167,5 +167,34 @@ describe('brim and skirt stay on the plate', () => {
     const out = slice([mesh(box(2, 2, 0, 20, 20, 5))], cfg);
     expect(validateSlice(out, cfg)).toEqual([]);
     expect(out.warnings.join(' ')).toMatch(/skirt loop/);
+  });
+  it('a cut outer brim never spills into the part\'s holes', () => {
+    const cfg = cfgWith({ overrides: { brim_type: 'outer_only', brim_width: 100 } });
+    const out = slice([mesh(tube(14, 14, 10, 6, 5))], cfg);
+    expect(out.warnings.join(' ')).toMatch(/brim is cut/);
+    expect(validateSlice(out, cfg)).toEqual([]);
+    expect(brimFilament(out.gcode, (x, y) => Math.hypot(x - 14, y - 14) < 6)).toBe(0);
+  });
+  it('cut brim ears stay ears, not a full ring', () => {
+    const cfg = cfgWith({ overrides: { brim_type: 'brim_ears', brim_width: 10 } });
+    const out = slice([mesh(box(3, 3, 0, 20, 20, 5))], cfg);
+    expect(out.warnings.join(' ')).toMatch(/brim is cut/);
+    // just above the middle of the top side: more than 10 mm from every corner (outside every ear), but inside
+    // the 10 mm band a ring brim would fill
+    const midTop = (x: number, y: number) => x > 12 && x < 14 && y > 28.5 && y < 31;
+    expect(brimFilament(out.gcode, midTop)).toBe(0);
+    const ring = slice([mesh(box(3, 3, 0, 20, 20, 5))], cfgWith({ overrides: { brim_type: 'outer_only', brim_width: 10 } }));
+    expect(brimFilament(ring.gcode, midTop)).toBeGreaterThan(0); // the probe does see a ring brim
+    expect(brimFilament(out.gcode, () => true)).toBeGreaterThan(0);
+  });
+  it('an inner brim is the same whether or not the outer brim is cut', () => {
+    const inHole = (cx: number, cy: number) => (x: number, y: number) => Math.hypot(x - cx, y - cy) < 5.5;
+    const cfg = cfgWith({ overrides: { brim_type: 'outer_and_inner', brim_width: 100 } });
+    const free = slice([mesh(tube(128, 128, 10, 6, 5))], cfg);
+    const cut = slice([mesh(tube(14, 14, 10, 6, 5))], cfg);
+    expect(cut.warnings.join(' ')).toMatch(/brim is cut/);
+    const a = brimFilament(free.gcode, inHole(128, 128)), b = brimFilament(cut.gcode, inHole(14, 14));
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeCloseTo(a, 1);
   });
 });
