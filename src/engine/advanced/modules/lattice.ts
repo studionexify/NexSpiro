@@ -24,7 +24,7 @@ export const spatialLattice: TechModule = {
     const zTop = layers[layers.length - 1].z;
     const levels = Math.floor((zTop - z0) / cell);
     if (levels < 1) { r.status = 'idle'; r.reason = 'Part too short for a truss.'; return; }
-    const tmpl: Move = { k: 'move', x: 0, y: 0, z: 0, e: 0, f: v, feature: 'inner_wall', w, h: cell, travel: false, noClear: true, noArc: true };
+    const tmpl: Move = { k: 'move', x: 0, y: 0, z: 0, e: 0, f: v, feature: 'inner_wall', w, h: w * 0.9999 /* round strand: diameter w, so the declared bead (w,h) has area pi w^2/4 */, travel: false, noClear: true, noArc: true };
     let posts = 0, diagonals = 0, struts = 0;
     const inside = (x: number, y: number, z: number) => s.parts.some((a) => -a.sdf.sdf.sample(x, y, z) >= 0.5);
     const a0 = s.parts[0].sdf;

@@ -1,7 +1,7 @@
 // #7 Sinusoidal Z-weaving & Z-pinning and #19 topological knot braiding: interlocking between layers
 // and between neighbouring walls.
 import type { Op } from '../classic/gcode';
-import { moveLike, type Move } from '../runs';
+import { moveLike, rescaleE, type Move } from '../runs';
 import type { TechModule, WallLoop } from '../session';
 import type { PartAnalysis } from '../analysis';
 
@@ -99,7 +99,8 @@ export const zWeave: TechModule = {
           offs.set(x, y, off);
           // volumetric conservation: the bead follows the sloped segment, so E scales with its true 3-D length
           const seg3 = Math.hypot(len / n, op.z + off - (Number.isNaN(pz) ? op.z : pz));
-          const m = moveLike(op, x, y, op.z + off, (op.e / Math.max(len, 1e-9)) * seg3 * (height / L.h));
+          // ...and the bead's declared height is the real local height (layer + off - below), so the preview and E agree
+          const m = moveLike(op, x, y, op.z + off, rescaleE((op.e / Math.max(len, 1e-9)) * seg3, op.w, op.h, height), { h: height });
           pz = op.z + off;
           if (m.f > vMax) { m.f = vMax; slowed++; }
           out.push(m);

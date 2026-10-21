@@ -1,7 +1,7 @@
 // #22 Sub-surface tangential spiral entry and #23 3D volumetric scarf-wedge splice: the two ways the
 // Advanced engine hides the start and end of an outer-wall loop.
 import type { LayerOps, Op } from '../classic/gcode';
-import { along, moveLike, runPoints, runsOf, signedArea, type Move, type Run } from '../runs';
+import { along, flowPatch, moveLike, runPoints, runsOf, signedArea, type Move, type Run } from '../runs';
 import type { SessionCtx, TechModule } from '../session';
 import type { PartAnalysis } from '../analysis';
 
@@ -73,18 +73,18 @@ export const tangentEntry: TechModule = {
         const inside = (x: number, y: number) => depthAt(s.parts, x, y, tmpl.z - tmpl.h / 2) >= w * 0.5;
         if (![...spiral, ...approach.slice(0, -2), ...out.slice(2)].every((q) => inside(q.x, q.y))) { skipped++; continue; }
         const ops: Op[] = [{ k: 'raw', text: `${MARK} tangent entry` }];
-        let qx = spiral[0].x, qy = spiral[0].y;
+        let qx = spiral[0].x, qy = spiral[0].y, qz = tmpl.z;
         const ext = (x: number, y: number, z: number, flow: number, fs: number, feature: Move['feature'] = 'inner_wall') => {
-          const len = Math.hypot(x - qx, y - qy);
+          const len = Math.hypot(x - qx, y - qy, z - qz); // true 3-D length: the approach descends / rises
           if (len < 1e-5) return;
-          ops.push(moveLike(tmpl, x, y, z, len * ePerMm * flow, { f: tmpl.f * fs, feature }));
-          qx = x; qy = y;
+          ops.push(moveLike(tmpl, x, y, z, len * ePerMm * flow, { f: tmpl.f * fs, feature, ...flowPatch(tmpl, flow) }));
+          qx = x; qy = y; qz = z;
         };
         spiral.forEach((q, k) => ext(q.x, q.y, tmpl.z, 0.4 * (k / turns), 0.5));
         approach.forEach((q, k) => ext(q.x, q.y, q.z, 0.4 + 0.6 * smooth(k / steps), 0.8));
         // the loop itself, unchanged
         for (let i = run.start; i <= run.end; i++) ops.push(L.ops[i]);
-        qx = p.x[p.x.length - 1]; qy = p.y[p.y.length - 1];
+        qx = p.x[p.x.length - 1]; qy = p.y[p.y.length - 1]; qz = p.z[p.z.length - 1];
         out.forEach((q, k) => ext(q.x, q.y, q.z, 1 - smooth(k / steps), 0.8));
         // the travel that led to the seam now leads to the spiral's centre
         for (let i = run.start - 1; i >= 0; i--) {
@@ -122,13 +122,13 @@ export const scarfSplice: TechModule = {
         const ePerMm = p.e / Math.max(Ltot, 1e-9);
         const h = tmpl.h;
         const ops: Op[] = [{ k: 'raw', text: `${MARK} scarf` }];
-        let qx = p.x[0], qy = p.y[0];
+        let qx = p.x[0], qy = p.y[0], qz = p.z[0];
         const step = 0.5;
         const ext = (x: number, y: number, z: number, flow: number, f: number) => {
-          const len = Math.hypot(x - qx, y - qy);
+          const len = Math.hypot(x - qx, y - qy, z - qz); // true 3-D length of the sloped wedge bead
           if (len < 1e-5) return;
-          ops.push(moveLike(tmpl, x, y, z, len * ePerMm * flow, { f }));
-          qx = x; qy = y;
+          ops.push(moveLike(tmpl, x, y, z, len * ePerMm * flow, { f, ...flowPatch(tmpl, flow) }));
+          qx = x; qy = y; qz = z;
         };
         // wedge start: half a layer low, flow on the Hermite ramp E(s) = 3(s/L)² − 2(s/L)³; beads already
         // lowered by surface passes only drop what is left of the half-layer budget
@@ -155,7 +155,7 @@ export const scarfSplice: TechModule = {
             // this move starts inside the wedge: print only its part after the wedge
             ops.push(moveLike(m, m.x, m.y, m.z, m.e * ((sEnd - Ls) / Math.max(sEnd - sStart, 1e-9))));
           } else ops.push(m);
-          qx = m.x; qy = m.y;
+          qx = m.x; qy = m.y; qz = m.z;
         }
         // closure: over the wedge again at full height with the complementary flow, slower, fan off
         const vClose = tmpl.f * slow;
