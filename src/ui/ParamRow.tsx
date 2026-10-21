@@ -7,11 +7,15 @@ import { Icon } from './icons';
  * arrow when it was changed, then the control. `nullable` rows (filament setting overrides) get a checkbox:
  * unchecked means "use the printer's value".
  */
-export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onReset, resetLabel, nullable }: {
+export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onReset, resetLabel, nullable, pin, hint }: {
   def: ParamDef; value: Config[string] | undefined; baseValue: Config[string] | undefined; cfg: Config; modified: boolean;
   onCommit: (v: Config[string]) => void; onReset: () => void; resetLabel?: string;
   /** Value inherited when the override is off (shown greyed). */
   nullable?: { inherited: Config[string] | undefined };
+  /** Optional pin star (Inspector): pinned rows show at the top of the object view. */
+  pin?: { on: boolean; toggle: () => void };
+  /** Plain-language one-liner shown first in the tooltip. */
+  hint?: string;
 }) {
   const off = !!nullable && value === undefined;
   const shown = off ? nullable!.inherited : value;
@@ -43,7 +47,7 @@ export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onRes
     ? <button className="reset" title={resetLabel ? `${resetLabel} (${String(baseValue)})` : `Revert to the system value (${String(baseValue)})`} aria-label="Revert" onClick={onReset}><Icon name="reset" size={14} /></button>
     : <span className="lock" title="System value"><Icon name="lock" size={12} /></span>;
   return (
-    <div className={`prow ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''} ${def.type === 'text' ? 'wide' : ''}`}>
+    <div className={`prow ${pin ? 'has-pin' : ''} ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''} ${def.type === 'text' ? 'wide' : ''}`}>
       <span className="plabel"
         onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); setTip({ x: r.right + 8, y: r.top }); }}
         onMouseLeave={() => setTip(null)}>
@@ -55,9 +59,13 @@ export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onRes
       </span>
       {marker}
       {control}
+      {pin && (
+        <button className={`pinb ${pin.on ? 'on' : ''}`} aria-pressed={pin.on} aria-label={pin.on ? `Unpin ${def.label}` : `Pin ${def.label}`}
+          title={pin.on ? 'Pinned to the top of the inspector — click to unpin' : 'Pin to the top of the inspector'} onClick={pin.toggle}>{pin.on ? '★' : '☆'}</button>
+      )}
       {tip && (
         <div className="tooltip" style={{ left: Math.min(tip.x, window.innerWidth - 350), top: Math.min(tip.y, window.innerHeight - 160) }}>
-          <b>{def.label}</b>{def.tip}
+          <b>{def.label}</b>{hint && <div className="hint">{hint}</div>}{def.tip}
           <div className="key">Default: {String(baseValue ?? def.def)}{def.unit ? ` ${def.unit}` : ''} · Internal key: <span className="mono">{def.key}</span></div>
         </div>
       )}
