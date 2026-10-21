@@ -69,9 +69,17 @@ Physics Core. In Advanced mode you pick an **Intent Card** (Structural Armor, Se
 Optical / Caustic Lamp, Acoustic Damping, 4D Flat-Morph); the engine analyses each part (signed
 distance field, curvature, thickness, sections, topology), shows its zones in the **Zone Inspector**
 (domes, necks, bosses, helical bands, cores, stress, Morse–Smale branches) and routes every zone to the
-technologies made for it. Power users open the node graph and tune each technology's parameters.
+technologies made for it.
 
-All 35 technologies are implemented in TypeScript inside the slicing worker and are moulded to the
+The intent turns on a set of **tools**, each named for what it does and switched with one toggle:
+Smooth curved surfaces, Curved layers, Hide seams, Continuous spiral printing, Even inner walls, Gloss
+control, Strength infill, Layer bonding, Stiffness targeting, Warp compensation, Multi-material
+interlock, Vibration-damping infill, Motion compensation, Foaming filament control and Special print
+mode (wire truss, casting shell, heat-morph sheet or caustic lens). Each tool says what happens when it
+is on and lists the technologies it runs as ticks you can leave out. Power users open each technology's
+settings, or the node graph.
+
+The 15 tools run 35 technologies, all implemented in TypeScript inside the slicing worker and moulded to the
 selected machine (kinematics, firmware input shaping and pressure advance, toolhead clearance cone,
 Z limits, chamber, resonance, multi-material hardware): each reports *applied*, *adapted* (with the
 reason) or *unavailable*. Basic mode output is unchanged byte for byte. See

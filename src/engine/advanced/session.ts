@@ -7,7 +7,7 @@ import type { FilamentSlot, MeshInput, Paths, Polyline2, ExPolygon, FeatureType 
 import type { PluginSession } from '../../plugins/api';
 import { analyzePart, RESOLUTION_CELLS, type PartAnalysis } from './analysis';
 import { machineCaps, type MachineCaps } from './machine';
-import { resolveTechs, type ResolvedTech } from './techs';
+import { resolveTechs, TECHS, type ResolvedTech } from './techs';
 import type { AdvancedConfig, AdvancedReport, TechId, TechReport, ParamValue } from './types';
 import { MODULES } from './modules';
 import { unwarpLayers } from './warp';
@@ -119,7 +119,7 @@ export interface AdvancedSession {
 }
 
 /** Tech parameters that no module reads yet (see AUDIT_WIRING.md). */
-const UNWIRED_PARAMS: [TechId, string][] = [['sdf_frep', 'tpms'], ['sdf_frep', 'cell'], ['sdf_frep', 'grade'], ['conformal_layers', 'layers']];
+const UNWIRED_PARAMS: [TechId, string][] = TECHS.flatMap((t) => t.params.filter((p) => p.unwired).map((p): [TechId, string] => [t.id, p.key]));
 
 export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: AdvancedConfig, filaments: FilamentSlot[], warn: (m: string) => void): AdvancedSession {
   const t0 = now();

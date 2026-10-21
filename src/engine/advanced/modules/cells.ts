@@ -66,7 +66,7 @@ export const homogenization: TechModule = {
       C11_MPa: +d.C11.toFixed(0), C12_MPa: +d.C12.toFixed(0), C44_MPa: +d.C44.toFixed(0), zener_anisotropy: +d.zener.toFixed(2),
       ...(d.reentrantAngle ? { reentrant_angle_deg: d.reentrantAngle, poisson_homogenized: +d.nu!.toFixed(2) } : {}),
     };
-    if (tNu < 0 && !s.on('metamaterial')) r.reason = 'A negative Poisson ratio needs the re-entrant metamaterial cells (#12).';
+    if (tNu < 0 && !s.on('metamaterial')) r.reason = 'A negative Poisson ratio needs Auxetic cell infill (Vibration-damping infill).';
   },
   infill(s, o, region, c) {
     const d = s.shared.get('cellDesign') as CellDesign | undefined;

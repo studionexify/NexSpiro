@@ -20,7 +20,7 @@ export function ModeToggle() {
         <span className="mode-name">BASIC</span><span className="mode-sub">Classic Engine</span>
       </button>
       <button role="radio" aria-checked={adv} className={adv ? 'on' : ''} onClick={() => pick('advanced')}
-        title="Advanced: NexSpiro analyses each part and compiles it with 35 field, PDE and topology technologies">
+        title="Advanced: NexSpiro analyses each part and compiles it with 15 tools (35 field, PDE and topology technologies)">
         <Icon name="atom" size={15} />
         <span className="mode-name">ADVANCED</span><span className="mode-sub">NexSpiro Physics Core</span>
       </button>

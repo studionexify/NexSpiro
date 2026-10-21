@@ -32,6 +32,14 @@ export type TechId =
 export type ParamValue = number | boolean | string;
 export interface TechOverride { enabled?: boolean; params?: Record<string, ParamValue> }
 
+/** The user-facing tools: each groups the technologies that do the same job behind one toggle. */
+export type ToolId =
+  | 'surface_smoothing' | 'curved_layers' | 'seam_hiding' | 'spiral_printing' | 'even_walls' | 'gloss_control'
+  | 'strength_infill' | 'layer_bonding' | 'stiffness_target' | 'warp_compensation' | 'material_interlock'
+  | 'damping_infill' | 'motion_compensation' | 'foaming' | 'special_print';
+/** A tool switched by the user: on or off, and which of its technologies run (none listed: the intent's, else all). */
+export interface ToolOverride { enabled: boolean; parts?: TechId[] }
+
 /** Grayscale target image for the caustic lens (row-major, 0 = dark, 1 = bright). */
 export interface CausticTarget { width: number; height: number; pixels: number[]; throwMm: number; mode: 'lens' | 'lampshade' }
 
@@ -61,6 +69,8 @@ export interface AdvancedConfig {
   intent: IntentId;
   printerId: string;
   techs: Partial<Record<TechId, TechOverride>>;
+  /** Tool switches; they decide which technologies run and win over `techs[id].enabled`. */
+  tools?: Partial<Record<ToolId, ToolOverride>>;
   machine?: MachineOverrides;
   /** Inferred load case plus optional painted load faces: direction (unit) and total force (N). */
   load?: { dir: [number, number, number]; newtons: number };

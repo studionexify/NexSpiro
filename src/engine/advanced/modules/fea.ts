@@ -113,7 +113,7 @@ export const spinorFields: TechModule = {
   prepare(s) {
     if (!s.on('fea_stress') && !s.on('turing_infill')) {
       const r = s.report('spinor_fields');
-      r.status = 'idle'; r.reason = 'No stress field to smooth: turn on FEA stress-aligned paths or Turing infill.';
+      r.status = 'idle'; r.reason = 'No stress field to smooth: tick Stress-line infill or Organic rib infill in Strength infill.';
     }
   },
 };
