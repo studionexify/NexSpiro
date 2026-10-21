@@ -40,7 +40,7 @@ export function TechGraph({ onClose }: { onClose: () => void }) {
   const curve = (x0: number, y0: number, x1: number, y1: number) => `M${x0},${y0} C${(x0 + x1) / 2},${y0} ${(x0 + x1) / 2},${y1} ${x1},${y1}`;
   const selected = resolved.find((r) => r.def.id === sel);
   return (
-    <Modal title="Engine graph — fields → technologies → stages → G-code" onClose={onClose}>
+    <Modal title="Engine graph — part data → active tool parts → stages → G-code" onClose={onClose}>
       {!g.techs.length ? <div className="empty-hint">No technology is active for this intent and machine.</div> : (
         <svg className="tech-graph" viewBox={`0 0 760 ${g.height}`} width="100%" role="img" aria-label="Engine node graph">
           {g.techs.map((t) => t.def.reads.map((f) => (

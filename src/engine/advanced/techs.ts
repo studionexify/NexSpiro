@@ -100,7 +100,7 @@ export const TECHS: TechDef[] = [
     params: [
       { key: 'layers', label: 'Conformal layers', type: 'number', def: 3, unwired: true, min: 1, max: 8, step: 1 },
     ],
-    mould: slopeLimited('conformal layers'),
+    mould: slopeLimited('curved top skins'),
   },
   {
     id: 'hot_on_hot', n: 5, name: 'Hot layer welds', technique: 'Transient thermal "hot-on-hot" planning', part: 1, math: '∂T/∂t = α∇²T (1D bead stack), interface temperature', stage: 'rheology',
@@ -213,7 +213,7 @@ export const TECHS: TechDef[] = [
       { key: 'iters', label: 'Iterations', type: 'number', def: 200, min: 10, max: 2000, step: 10 },
       { key: 'ctrl', label: 'Control points', type: 'number', def: 8, min: 3, max: 24, step: 1 },
     ],
-    mould: slopeLimited('layer tilt'),
+    mould: slopeLimited('overhang-reducing layers'),
   },
   {
     id: 'eikonal_offsets', n: 15, name: 'Smooth wall offsets', technique: 'Eikonal wavefront & heat-method offsets', part: 3, math: '|∇φ| = 1/f (fast marching), ∂u/∂t = Δu (heat method)', stage: 'walls',
@@ -317,7 +317,7 @@ export const TECHS: TechDef[] = [
       { key: 'minRatio', label: 'Thinnest layer (× h)', type: 'number', def: 0.5, min: 0.2, max: 1, step: 0.05 },
       { key: 'maxRatio', label: 'Thickest layer (× h)', type: 'number', def: 1.5, min: 1, max: 2.5, step: 0.05 },
     ],
-    mould: slopeLimited('dome layers'),
+    mould: slopeLimited('dome-following layers'),
   },
   {
     id: 'conformal_ironing', n: 25, name: 'Curved-surface ironing', technique: '3D conformal ironing', part: 4, math: 'Normal-following XYZ spiral burnishing', stage: 'post',
@@ -328,7 +328,7 @@ export const TECHS: TechDef[] = [
       { key: 'spacing', label: 'Spacing', type: 'number', def: 0.15, min: 0.05, max: 0.5, step: 0.01, unit: 'mm' },
       { key: 'speed', label: 'Speed', type: 'number', def: 30, min: 5, max: 120, step: 1, unit: 'mm/s' },
     ],
-    mould: slopeLimited('conformal ironing'),
+    mould: slopeLimited('curved-surface ironing'),
   },
   {
     id: 'perimeter_feathering', n: 26, name: 'Rounded-side shingling', technique: 'Normal-aligned perimeter feathering', part: 4, math: 'Shingled outer ribbon following the surface normal', stage: 'post',
@@ -337,7 +337,7 @@ export const TECHS: TechDef[] = [
     params: [
       { key: 'depth', label: 'Max drop (× h)', type: 'number', def: 0.5, min: 0.1, max: 0.9, step: 0.05 },
     ],
-    mould: slopeLimited('feathering'),
+    mould: slopeLimited('rounded-side shingling'),
   },
   {
     id: 'iso_gloss', n: 27, name: 'Even sheen', technique: 'Iso-thermal velocity gloss mapping', part: 4, math: 'Invariant τ_w and Δt_cool on the outer wall', stage: 'rheology',
@@ -377,7 +377,7 @@ export const TECHS: TechDef[] = [
       { key: 'ior', label: 'Refractive index', type: 'number', def: 1.57, min: 1.3, max: 1.8, step: 0.01 },
       { key: 'iters', label: 'Transport iterations', type: 'number', def: 120, min: 20, max: 1000, step: 10 },
     ],
-    mould: (c) => (c.hasCaustic ? ok : { status: 'unavailable', reason: 'Load a target image in the Optical intent card.' }),
+    mould: (c) => (c.hasCaustic ? ok : { status: 'unavailable', reason: 'Load a target image under Caustic target (Optical / Caustic Lamp intent).' }),
   },
   {
     id: 'symplectic_shaper', n: 31, name: 'Anti-ringing timing', technique: 'Symplectic phase-space trajectory compilation', part: 5, math: 'H = p²/2m + k(q − q_cmd)²/2, Störmer–Verlet, SE(3) poses', stage: 'motion',
@@ -431,11 +431,11 @@ export const TECHS: TechDef[] = [
 export const TECH_BY_ID = Object.fromEntries(TECHS.map((t) => [t.id, t])) as Record<TechId, TechDef>;
 
 export const INTENTS: { id: IntentId; name: string; blurb: string }[] = [
-  { id: 'structural', name: 'Structural Armor', blurb: 'Stress-aligned paths, interlocked layers, quasicrystal cores and warp compensation.' },
-  { id: 'aesthetic', name: 'Seamless Aesthetic', blurb: 'Helical walls, hidden seams, dome-conformal layers and constant gloss.' },
-  { id: 'optical', name: 'Optical / Caustic Lamp', blurb: 'Caustic lenses and lampshades, clear helical walls, gloss control.' },
-  { id: 'acoustic', name: 'Acoustic Damping', blurb: 'Band-gap lattices, auxetic metamaterials, graded stiffness and foam cores.' },
-  { id: 'morph4d', name: '4D Flat-Morph', blurb: 'Flat sheets that buckle into curved shapes when heated.' },
+  { id: 'structural', name: 'Structural Armor', blurb: 'Strong functional parts: load-aware infill, layers that lock together, and warp compensation.' },
+  { id: 'aesthetic', name: 'Seamless Aesthetic', blurb: 'Clean visible surfaces: no seams, no stair-stepping on curves, even sheen.' },
+  { id: 'optical', name: 'Optical / Caustic Lamp', blurb: 'Lamps and lenses: project an image with light, clear seamless walls, gloss control.' },
+  { id: 'acoustic', name: 'Acoustic Damping', blurb: 'Parts that absorb vibration and sound: damping infill, tuned stiffness, foamed cores.' },
+  { id: 'morph4d', name: '4D Flat-Morph', blurb: 'Prints a flat sheet that curls into the model\'s shape when warmed.' },
 ];
 
 export interface ResolvedTech { def: TechDef; enabled: boolean; params: Record<string, ParamValue>; verdict: Verdict }
