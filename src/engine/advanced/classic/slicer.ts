@@ -371,7 +371,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const clean = (p: Paths) => opening(p, sw * 0.25);
       const above = i + 1 < N ? objSlices[o][i + 1] : [];
       const below = i > 0 ? objSlices[o][i - 1] : [];
-      let top = vase && i >= botLayers ? [] : clean(i + 1 < N ? difference(inner, above) : inner);
+      // no top shells at all (0 layers, 0 thickness) leaves the top open, as in Bambu Studio / Orca
+      let top = (vase && i >= botLayers) || topLayers === 0 ? [] : clean(i + 1 < N ? difference(inner, above) : inner);
       const bottomAll = clean(i > 0 ? difference(inner, below) : inner);
       const bottom = i === 0 ? bottomAll : [];
       let bridge = i === 0 ? [] : bottomAll;

@@ -488,7 +488,8 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       const sw = olw(o, i, 'internal_solid_infill_line_width');
       const clean = (p: Paths) => opening(p, sw * 0.25);
       const objFirst = i === objStart;
-      let top = vase && i >= objStart + botLayers ? [] : surf[i][o].top;
+      // no top shells at all (0 layers, 0 thickness) leaves the top open, as in Bambu Studio / Orca
+      let top = (vase && i >= objStart + botLayers) || topLayers === 0 ? [] : surf[i][o].top;
       const bottomAll = surf[i][o].bottomAll;
       // over a raft the first object layer bridges the contact gap
       const bottom = objFirst && !raftN ? bottomAll : [];

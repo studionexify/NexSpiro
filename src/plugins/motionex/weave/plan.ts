@@ -56,7 +56,7 @@ export function formatDuration(s: number): string {
  */
 export function weavePrintSettings(w: WeaveSettings): Record<string, string | number | boolean> {
   return {
-    spiral_mode: false, wall_loops: 1, sparse_infill_density: 0, top_shell_layers: 0, bottom_shell_layers: 4,
+    spiral_mode: false, wall_loops: 1, sparse_infill_density: 0, top_shell_layers: 0, top_shell_thickness: 0, bottom_shell_layers: 4,
     seam_position: 'aligned', seam_slope_type: 'none',
     // pixel-sized moves: slower outer wall places each bead where the picture wants it
     outer_wall_speed: 80, ...(w.mode === 'colour' && w.change.mode === 'bleed' ? { enable_prime_tower: false } : {}),

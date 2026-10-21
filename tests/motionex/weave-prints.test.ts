@@ -83,6 +83,9 @@ describe('weave test prints', () => {
       const xs = [...out.gcode.matchAll(/^G1 X([-\d.]+) Y([-\d.]+)/gm)].map((m) => [+m[1], +m[2]]);
       expect(xs.every(([x, y]) => x > -40 && x < printer.bed.x + 5 && y > -5 && y < printer.bed.y + 5)).toBe(true);
       expect(out.gcode).not.toMatch(/NaN|Infinity/);
+      // open top: nothing but the woven wall above the floor (no lid from a minimum top thickness)
+      const above = out.gcode.split(/^;Z:1\.2$/m)[1] ?? '';
+      expect(above).not.toMatch(/^;TYPE:(top surface|internal solid infill|sparse infill)/im);
       expect(out.warnings.filter((w) => /Weave/.test(w))).toEqual([]);
       if (!OUT) return;
       fs.mkdirSync(OUT, { recursive: true });
