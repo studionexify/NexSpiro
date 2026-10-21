@@ -47,7 +47,7 @@ function Seg<T extends string>({ value, options, set }: { value: T; options: [T,
 
 const SECTIONS: [SectionKind, string][] = [['circle', 'Circle / oval'], ['polygon', 'Polygon'], ['star', 'Star'], ['petal', 'Petal'], ['wave', 'Wave'], ['gear', 'Gear'], ['superellipse', 'Rounded square']];
 const MODES: [TextureMode, string][] = [['emboss', 'Emboss'], ['deboss', 'Deboss'], ['cut', 'Cut through']];
-const CATS: (PresetCategory | 'All' | 'Mine')[] = ['All', 'Planter', 'Bowl', 'Vase', 'Tall', 'Mine'];
+const CATS: (PresetCategory | 'All' | 'Mine')[] = ['All', 'Planter', 'Bowl', 'Vase', 'Tall', 'Weave', 'Mine'];
 
 function DesignLibrary() {
   const [cat, setCat] = useState<(typeof CATS)[number]>('All');

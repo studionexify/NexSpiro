@@ -1,0 +1,71 @@
+// Quick look at the woven picture on the model, without slicing: the part is cut once per picture row,
+// each outline is pushed out to the woven line, and every bit of it is coloured by the filament that
+// shows there from outside. Same geometry code as the slicer pass.
+import { sliceMesh } from '../../../engine/slice';
+import { SCALE } from '../../../engine/clipper';
+import type { IndexedMesh } from '../../../engine/mesh';
+import { cycleLayers, type WeaveSettings } from './model';
+import { offsetAt, planLayers, signedArea, visibleAt, weaveLoop, type Pt } from './core';
+
+/** Most outlines drawn; tall pictures show every n-th row. */
+const MAX_ROWS = 260;
+
+export interface WeavePreviewObject { id: string; mesh: IndexedMesh }
+
+/**
+ * Lines for the 3D view. `colours[i]` is the rgb (0..1) shown for palette index i (filament colours in
+ * colour mode, greys in mono). Returns null when the band misses every object.
+ */
+export function buildWeavePreview(objs: WeavePreviewObject[], w: WeaveSettings, layerHeight: number, colours: [number, number, number][]): { positions: Float32Array; colors: Float32Array } | null {
+  const pos: number[] = [], col: number[] = [];
+  const ids = new Set(w.objects ?? []);
+  const lh = Math.max(0.04, layerHeight);
+  for (const o of objs) {
+    if (ids.size && !ids.has(o.id)) continue;
+    const v = o.mesh.vertices;
+    let zMax = 0;
+    for (let i = 2; i < v.length; i += 3) zMax = Math.max(zMax, v[i]);
+    const zs: number[] = [];
+    for (let z = lh; z <= zMax + 1e-6; z += lh) zs.push(+z.toFixed(4));
+    if (!zs.length) continue;
+    // outline length per layer for "follow the curve": only sampled every few layers, filled in between
+    const cyc = cycleLayers(w);
+    const every = Math.max(1, Math.ceil(zs.length / 400));
+    const samplePlanes = zs.filter((_, i) => i % every === 0).map((z) => z - lh / 2);
+    const sampled = sliceMesh(o.mesh, samplePlanes);
+    const loopsAt = (paths: typeof sampled[number]): Pt[][] => {
+      const loops = paths.map((p) => p.map((q) => ({ x: q.X / SCALE, y: q.Y / SCALE })));
+      // the biggest outline and others that aren't inside it (holes of a tube are skipped)
+      return loops.filter((l) => l.length > 2 && signedArea(l) > 0);
+    };
+    const per = new Array<number>(zs.length).fill(NaN);
+    sampled.forEach((paths, k) => {
+      const ls = loopsAt(paths);
+      if (ls.length) per[k * every] = Math.max(...ls.map((l) => l.reduce((s, q, i) => s + Math.hypot(l[(i + 1) % l.length].x - q.x, l[(i + 1) % l.length].y - q.y), 0)));
+    });
+    const plan = planLayers(w, zs, per);
+    // one outline per picture row (its first layer), thinned to MAX_ROWS
+    const rowStarts: number[] = [];
+    plan.forEach((P, i) => { if (P && P.k % cyc === 0) rowStarts.push(i); });
+    const keep = rowStarts.filter((_, k) => k % Math.max(1, Math.ceil(rowStarts.length / MAX_ROWS)) === 0);
+    if (!keep.length) continue;
+    const cut = sliceMesh(o.mesh, keep.map((i) => zs[i] - lh / 2));
+    keep.forEach((i, n) => {
+      const P = plan[i]!;
+      for (const loop of loopsAt(cut[n])) {
+        const L = loop.reduce((s, q, k) => s + Math.hypot(loop[(k + 1) % loop.length].x - q.x, loop[(k + 1) % loop.length].y - q.y), 0);
+        const step = Math.max(0.15, L / (w.image.w * Math.max(1, w.tiles_around) * 3));
+        // the line as seen from outside: the showing colour, at its proud position
+        const woven = weaveLoop(loop, w.mode === 'colour' ? () => w.depth_mm : (u) => Math.max(0, offsetAt(w, P, u)), step, 0, w.seam.angle_deg);
+        for (let k = 1; k < woven.length; k++) {
+          const a = woven[k - 1], b = woven[k];
+          const c = colours[w.mode === 'colour' ? visibleAt(w, P, a.u) : Math.min(colours.length - 1, visibleAt(w, P, a.u))] ?? [0.6, 0.6, 0.6];
+          pos.push(a.x, a.y, zs[i], b.x, b.y, zs[i]);
+          col.push(...c, ...c);
+        }
+      }
+    });
+  }
+  if (!pos.length) return null;
+  return { positions: Float32Array.from(pos), colors: Float32Array.from(col) };
+}
