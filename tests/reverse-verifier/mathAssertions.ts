@@ -30,11 +30,12 @@ export const TOL = Object.freeze({
   /** Numerical slack on angle comparisons (rad). */
   angle: 1e-9,
   /**
-   * Measurement floor, not a tolerance: G-code prints E with 5 decimals (quantum 1e-5, so +/-5e-6). A segment
-   * whose expected E is below 5e-6 / 0.02 = 2.5e-4 mm cannot resolve 2 % in the file itself. Such runs are
-   * counted in metrics.belowResolution (never silently dropped) and are not judged.
+   * Measurement floor, not a tolerance: G-code prints E with 5 decimals (quantum 1e-5, so +/-5e-6 per move).
+   * Below E = 1e-3 mm the file's own rounding can eat 0.5 % of the budget on one move (and more when a run sums
+   * several), leaving too little of the 2 % for geometry. Such runs are counted in metrics.belowResolution
+   * (never silently dropped) and are not judged.
    */
-  eResolution: 2.5e-4,
+  eResolution: 1e-3,
   /** Z-weave: Pearson correlation of adjacent-layer Z offsets must be at most this (anti-phase). */
   zWeaveCorrelation: -0.8,
 });

@@ -4,6 +4,7 @@
 // (heater block, fan duct, carriage). Offending points are lifted (up to half a layer) or reported.
 import type { LayerOps } from './classic/gcode';
 import type { ToolheadProfile } from '../../plugins/motionex/core/toolhead';
+import { rescaleE } from './runs';
 
 /** worst: deepest collision found; worstLeft: deepest one left unresolved. */
 export interface ClearanceReport { checked: number; collisions: number; raised: number; unresolved: number; worst: number; worstLeft: number }
@@ -132,7 +133,9 @@ export function clearancePass(layers: LayerOps[], head: ToolheadProfile, bed: { 
           const maxLift = Math.max(op.h * (op.feature === 'sparse_infill' || op.feature === 'internal_solid_infill' ? 1 : 0.5), -(op.dev ?? 0) + op.h * 0.25);
           if (fix && floor - op.z <= maxLift + 1e-4) {
             const lift = floor - op.z;
-            op.e *= (op.h + lift) / Math.max(op.h, 1e-6);
+            // the bead keeps its bottom and gains the lift in thickness: declared height and E follow the same cross-section
+            op.e = rescaleE(op.e, op.w, op.h, op.h + lift);
+            op.h = +(op.h + lift).toFixed(5);
             op.z = +(op.z + lift).toFixed(4);
             rep.raised++;
           } else { rep.unresolved++; rep.worstLeft = Math.max(rep.worstLeft, floor - op.z); }

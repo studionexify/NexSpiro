@@ -144,37 +144,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 2.141480349390998,
-      "checkedMm": 13287.67235160783,
-      "checkedSegments": 2470,
-      "belowResolution": 19,
-      "failureCount": 2
+      "maxRelErrPct": 0.5985424373410831,
+      "checkedMm": 13274.08458770056,
+      "checkedSegments": 2414,
+      "belowResolution": 75,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 1846,
-        "message": "run dE 0.00039 vs expected 0.00038 (2.14 %) [internal solid infill|2|0.10000000149011612|0.07999999821186066]",
-        "actual": 0.00039,
-        "expected": 0.00038182332845181375
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 1846,
-        "message": "run dE 0.00039 vs expected 0.00038 (2.14 %) [internal solid infill|2|0.10000000149011612|0.07999999821186066]",
-        "actual": 0.00039,
-        "expected": 0.00038182332845181375
-      }
-    ],
-    "byFeature": {
-      "internal solid infill": {
-        "count": 2,
-        "worstPct": 2.141480349390998
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "core/cube",
@@ -380,10 +359,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.7936026086695713,
-      "checkedMm": 10429.228821605864,
-      "checkedSegments": 15960,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5869980946072624,
+      "checkedMm": 7825.302642781435,
+      "checkedSegments": 6808,
+      "belowResolution": 9152,
       "failureCount": 0
     },
     "firstFailures": []
@@ -591,10 +570,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.4018892554881737,
-      "checkedMm": 92947.32478113126,
-      "checkedSegments": 8564,
-      "belowResolution": 43,
+      "maxRelErrPct": 0.4450746442806911,
+      "checkedMm": 92936.09591011453,
+      "checkedSegments": 8514,
+      "belowResolution": 93,
       "failureCount": 0
     },
     "firstFailures": []
@@ -865,10 +844,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.789669261159609,
-      "checkedMm": 5782.284479687663,
-      "checkedSegments": 10572,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5869980946072624,
+      "checkedMm": 4448.399751008909,
+      "checkedSegments": 5964,
+      "belowResolution": 4608,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1107,10 +1086,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.4018892554881737,
-      "checkedMm": 90304.42078113019,
-      "checkedSegments": 8282,
-      "belowResolution": 43,
+      "maxRelErrPct": 0.4450746442806911,
+      "checkedMm": 90293.19191011346,
+      "checkedSegments": 8232,
+      "belowResolution": 93,
       "failureCount": 0
     },
     "firstFailures": []
@@ -2005,13 +1984,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 503,
+    "failureCount": 506,
     "metrics": {
-      "maxRelErrPct": 51.95020199117077,
-      "checkedMm": 52008.33870533264,
-      "checkedSegments": 10560,
-      "belowResolution": 0,
-      "failureCount": 503
+      "maxRelErrPct": 50.165028805575076,
+      "checkedMm": 52008.314663702076,
+      "checkedSegments": 10559,
+      "belowResolution": 1,
+      "failureCount": 506
     },
     "firstFailures": [
       {
@@ -2057,8 +2036,8 @@
     ],
     "byFeature": {
       "top surface": {
-        "count": 503,
-        "worstPct": 51.95020199117077
+        "count": 506,
+        "worstPct": 50.165028805575076
       }
     }
   },
@@ -2161,13 +2140,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 503,
+    "failureCount": 506,
     "metrics": {
-      "maxRelErrPct": 51.95020199117077,
-      "checkedMm": 52008.33870533264,
-      "checkedSegments": 10560,
-      "belowResolution": 0,
-      "failureCount": 503
+      "maxRelErrPct": 50.165028805575076,
+      "checkedMm": 52008.314663702076,
+      "checkedSegments": 10559,
+      "belowResolution": 1,
+      "failureCount": 506
     },
     "firstFailures": [
       {
@@ -2213,8 +2192,8 @@
     ],
     "byFeature": {
       "top surface": {
-        "count": 503,
-        "worstPct": 51.95020199117077
+        "count": 506,
+        "worstPct": 50.165028805575076
       }
     }
   },
@@ -2837,59 +2816,59 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 233,
+    "failureCount": 92,
     "metrics": {
       "maxRelErrPct": 279.19161558990015,
       "checkedMm": 31440.334041221737,
       "checkedSegments": 34877,
       "belowResolution": 0,
-      "failureCount": 233
+      "failureCount": 92
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1174,
-        "layer": 3,
-        "message": "dE 0.01477 vs expected 0.01236 (19.49 %), dL3D=0.4760 [sparse infill]",
-        "actual": 0.01477,
-        "expected": 0.012361231870469521
+        "line": 6975,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1285,
-        "layer": 3,
-        "message": "dE 0.01557 vs expected 0.01337 (16.43 %), dL3D=0.4900 [sparse infill]",
-        "actual": 0.01557,
-        "expected": 0.01337230653792453
+        "line": 6981,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1286,
-        "layer": 3,
-        "message": "dE 0.01337 vs expected 0.01293 (3.38 %), dL3D=0.4900 [sparse infill]",
-        "actual": 0.01337,
-        "expected": 0.01293226852485473
+        "line": 6987,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1518,
-        "layer": 4,
-        "message": "dE 0.01363 vs expected 0.01192 (14.36 %), dL3D=0.4794 [sparse infill]",
-        "actual": 0.01363,
-        "expected": 0.011918042121037087
+        "line": 6993,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1608,
-        "layer": 4,
-        "message": "dE 0.01734 vs expected 0.01621 (6.98 %), dL3D=0.4922 [sparse infill]",
-        "actual": 0.01734,
-        "expected": 0.016208836166323796
+        "line": 8217,
+        "layer": 20,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       }
     ],
     "byFeature": {
       "sparse infill": {
-        "count": 233,
+        "count": 92,
         "worstPct": 279.19161558990015
       }
     }
@@ -3175,10 +3154,10 @@
     "pass": false,
     "failureCount": 3264,
     "metrics": {
-      "maxRelErrPct": 41.223593554364754,
-      "checkedMm": 52007.23627632622,
-      "checkedSegments": 20234,
-      "belowResolution": 0,
+      "maxRelErrPct": 44.052832063108625,
+      "checkedMm": 52007.21223469566,
+      "checkedSegments": 20233,
+      "belowResolution": 1,
       "failureCount": 3264
     },
     "firstFailures": [
@@ -3226,7 +3205,7 @@
     "byFeature": {
       "outer wall": {
         "count": 3264,
-        "worstPct": 41.223593554364754
+        "worstPct": 44.052832063108625
       }
     }
   },
@@ -3331,9 +3310,9 @@
     "failureCount": 3264,
     "metrics": {
       "maxRelErrPct": 10.250876111810477,
-      "checkedMm": 52006.52295078091,
-      "checkedSegments": 20234,
-      "belowResolution": 0,
+      "checkedMm": 52006.49890915035,
+      "checkedSegments": 20233,
+      "belowResolution": 1,
       "failureCount": 3264
     },
     "firstFailures": [
@@ -3444,7 +3423,7 @@
     "pass": false,
     "failureCount": 96,
     "metrics": {
-      "maxRelErrPct": 31.919332645480246,
+      "maxRelErrPct": 35.0140601470259,
       "checkedMm": 116334.97061113751,
       "checkedSegments": 48037,
       "belowResolution": 0,
@@ -3495,7 +3474,7 @@
     "byFeature": {
       "outer wall": {
         "count": 96,
-        "worstPct": 31.919332645480246
+        "worstPct": 35.0140601470259
       }
     }
   },
@@ -3693,9 +3672,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5787940026344524,
-      "checkedMm": 4121.731157471523,
-      "checkedSegments": 1026,
-      "belowResolution": 0,
+      "checkedMm": 4113.811561522224,
+      "checkedSegments": 914,
+      "belowResolution": 112,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4855,13 +4834,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 85,
+    "failureCount": 34,
     "metrics": {
-      "maxRelErrPct": 6.211059624524277,
-      "checkedMm": 106038.26863798506,
-      "checkedSegments": 24709,
-      "belowResolution": 0,
-      "failureCount": 85
+      "maxRelErrPct": 2.2773166753932994,
+      "checkedMm": 106037.28293113208,
+      "checkedSegments": 24658,
+      "belowResolution": 51,
+      "failureCount": 34
     },
     "firstFailures": [
       {
@@ -4880,30 +4859,30 @@
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 5261,
-        "message": "run dE 0.00064 vs expected 0.00061 (5.20 %) [internal solid infill|9|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00064,
-        "expected": 0.0006083677617365833
+        "line": 6806,
+        "message": "run dE 0.00111 vs expected 0.00109 (2.18 %) [internal solid infill|10|0.41999998688697815|0.20000000298023224]",
+        "actual": 0.00111,
+        "expected": 0.0010863710031010635
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 5261,
-        "message": "run dE 0.00064 vs expected 0.00061 (5.20 %) [internal solid infill|9|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.00064,
-        "expected": 0.0006083677617365833
+        "line": 6806,
+        "message": "run dE 0.00120 vs expected 0.00117 (2.28 %) [internal solid infill|10|0.41999998688697815|0.20000000298023224]",
+        "actual": 0.0012,
+        "expected": 0.0011732806833489263
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 5261,
-        "message": "run dE 0.00060 vs expected 0.00056 (6.21 %) [internal solid infill|9|0.41999998688697815|0.20000000298023224]",
-        "actual": 0.0006,
-        "expected": 0.0005649129216120344
+        "line": 9892,
+        "message": "run dE 0.00111 vs expected 0.00109 (2.18 %) [internal solid infill|12|0.41999998688697815|0.20000000298023224]",
+        "actual": 0.00111,
+        "expected": 0.0010863710031010635
       }
     ],
     "byFeature": {
       "internal solid infill": {
-        "count": 85,
-        "worstPct": 6.211059624524277
+        "count": 34,
+        "worstPct": 2.2773166753932994
       }
     }
   },
@@ -4967,9 +4946,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.7968229631619795,
-      "checkedMm": 247759.74098131587,
-      "checkedSegments": 87313,
-      "belowResolution": 16,
+      "checkedMm": 247756.411777207,
+      "checkedSegments": 87269,
+      "belowResolution": 60,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5032,31 +5011,15 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 530,
+    "failureCount": 283,
     "metrics": {
-      "maxRelErrPct": 55.82815549866066,
+      "maxRelErrPct": 21.994006922397194,
       "checkedMm": 16733.54242255192,
       "checkedSegments": 7873,
       "belowResolution": 1,
-      "failureCount": 530
+      "failureCount": 283
     },
     "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4476,
-        "layer": 48,
-        "message": "dE 0.09304 vs expected 0.08927 (4.22 %), dL3D=2.9036 [top surface]",
-        "actual": 0.09304,
-        "expected": 0.0892746520405237
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 4755,
-        "layer": 50,
-        "message": "dE 0.04764 vs expected 0.04197 (13.51 %), dL3D=1.3649 [outer wall]",
-        "actual": 0.04764,
-        "expected": 0.04196848895904941
-      },
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 4795,
@@ -5080,20 +5043,28 @@
         "message": "dE 0.05196 vs expected 0.06624 (21.56 %), dL3D=1.0149 [bridge]",
         "actual": 0.05196,
         "expected": 0.0662409260268981
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4798,
+        "layer": 50,
+        "message": "dE 0.10384 vs expected 0.13294 (21.89 %), dL3D=2.0383 [bridge]",
+        "actual": 0.10384,
+        "expected": 0.13293513043955568
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 4799,
+        "layer": 50,
+        "message": "dE 0.05190 vs expected 0.06644 (21.89 %), dL3D=1.0191 [bridge]",
+        "actual": 0.0519,
+        "expected": 0.06644466208153202
       }
     ],
     "byFeature": {
-      "outer wall": {
-        "count": 1,
-        "worstPct": 13.513736571465676
-      },
       "internal solid infill": {
-        "count": 229,
-        "worstPct": 55.82815549866066
-      },
-      "top surface": {
-        "count": 18,
-        "worstPct": 26.153596133624763
+        "count": 1,
+        "worstPct": 3.834697730966255
       },
       "bridge": {
         "count": 282,
@@ -5168,13 +5139,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 48,
+    "failureCount": 46,
     "metrics": {
       "maxRelErrPct": 21.453252229719002,
       "checkedMm": 16302.8650624401,
       "checkedSegments": 1849,
       "belowResolution": 0,
-      "failureCount": 48
+      "failureCount": 46
     },
     "firstFailures": [
       {
@@ -5219,10 +5190,6 @@
       }
     ],
     "byFeature": {
-      "internal solid infill": {
-        "count": 2,
-        "worstPct": 18.214930021273386
-      },
       "bridge": {
         "count": 46,
         "worstPct": 21.453252229719002
@@ -5805,37 +5772,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 39048.38708591397,
-      "checkedSegments": 1979,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 39048.37294377835,
+      "checkedSegments": 1977,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/gloss_modulation",
@@ -5893,37 +5839,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 39048.38708591397,
-      "checkedSegments": 1979,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 39048.37294377835,
+      "checkedSegments": 1977,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/gloss_modulation",
@@ -5981,37 +5906,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 87570.44291577263,
-      "checkedSegments": 4134,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.7968229631619795,
+      "checkedMm": 87570.428773637,
+      "checkedSegments": 4132,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/gloss_modulation",
@@ -6692,9 +6596,9 @@
     "failureCount": 201,
     "metrics": {
       "maxRelErrPct": 21.477134707282836,
-      "checkedMm": 125486.5045960308,
-      "checkedSegments": 39723,
-      "belowResolution": 0,
+      "checkedMm": 125486.42679535253,
+      "checkedSegments": 39720,
+      "belowResolution": 3,
       "failureCount": 201
     },
     "firstFailures": [
@@ -6876,56 +6780,57 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 361,
+    "failureCount": 267,
     "metrics": {
       "maxRelErrPct": 21.608670969562745,
-      "checkedMm": 320800.9388198457,
-      "checkedSegments": 61685,
-      "belowResolution": 192,
-      "failureCount": 361
+      "checkedMm": 320728.0238969795,
+      "checkedSegments": 60390,
+      "belowResolution": 1487,
+      "failureCount": 267
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 3342,
-        "message": "run dE 0.00038 vs expected 0.00039 (2.55 %) [internal solid infill|10|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00038,
-        "expected": 0.00038994931091722865
+        "line": 578267,
+        "layer": 228,
+        "message": "dE 0.02181 vs expected 0.02777 (21.46 %), dL3D=0.4260 [bridge]",
+        "actual": 0.02181,
+        "expected": 0.0277708831857645
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 25882,
-        "message": "run dE 0.00040 vs expected 0.00041 (2.09 %) [internal solid infill|23|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.0004,
-        "expected": 0.00040851832572263503
+        "line": 578269,
+        "layer": 228,
+        "message": "dE 1.73742 vs expected 2.21215 (21.46 %), dL3D=33.9340 [bridge]",
+        "actual": 1.73742,
+        "expected": 2.2121529343326958
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 30017,
-        "message": "run dE 0.00032 vs expected 0.00033 (4.26 %) [internal solid infill|24|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00032,
-        "expected": 0.0003342422665004817
+        "line": 578271,
+        "layer": 228,
+        "message": "dE 1.62183 vs expected 2.06495 (21.46 %), dL3D=31.6760 [bridge]",
+        "actual": 1.62183,
+        "expected": 2.064954215474818
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 30017,
-        "message": "run dE 0.00032 vs expected 0.00033 (4.26 %) [internal solid infill|24|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00032,
-        "expected": 0.0003342422665004817
+        "line": 578273,
+        "layer": 228,
+        "message": "dE 1.59947 vs expected 2.03653 (21.46 %), dL3D=31.2400 [bridge]",
+        "actual": 1.59947,
+        "expected": 2.036531433622722
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 30017,
-        "message": "run dE 0.00032 vs expected 0.00033 (4.26 %) [internal solid infill|24|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00032,
-        "expected": 0.0003342422665004817
+        "line": 578275,
+        "layer": 228,
+        "message": "dE 1.58731 vs expected 2.02102 (21.46 %), dL3D=31.0020 [bridge]",
+        "actual": 1.58731,
+        "expected": 2.021016245364008
       }
     ],
     "byFeature": {
-      "internal solid infill": {
-        "count": 94,
-        "worstPct": 4.965023678966667
-      },
       "bridge": {
         "count": 267,
         "worstPct": 21.608670969562745
@@ -6988,31 +6893,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 8.299069248264521,
+      "maxRelErrPct": 0.3854364583493202,
       "checkedMm": 34948.02003216071,
       "checkedSegments": 2564,
       "belowResolution": 0,
-      "failureCount": 1
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 937,
-        "layer": 4,
-        "message": "dE 0.65157 vs expected 0.60164 (8.30 %), dL3D=19.5800 [outer wall]",
-        "actual": 0.65157,
-        "expected": 0.6016395196401388
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 1,
-        "worstPct": 8.299069248264521
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/thick_vase",
@@ -7070,31 +6960,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 8.299069248264521,
+      "maxRelErrPct": 0.3854364583493202,
       "checkedMm": 34948.02003216071,
       "checkedSegments": 2564,
       "belowResolution": 0,
-      "failureCount": 1
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 937,
-        "layer": 4,
-        "message": "dE 0.65157 vs expected 0.60164 (8.30 %), dL3D=19.5800 [outer wall]",
-        "actual": 0.65157,
-        "expected": 0.6016395196401388
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 1,
-        "worstPct": 8.299069248264521
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/thick_vase",
@@ -7152,47 +7027,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 3,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 27.50450300661649,
+      "maxRelErrPct": 0.5787940026344524,
       "checkedMm": 4893.625994740099,
       "checkedSegments": 1082,
       "belowResolution": 0,
-      "failureCount": 3
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 362,
-        "layer": 4,
-        "message": "dE 0.09342 vs expected 0.07327 (27.50 %), dL3D=5.5801 [outer wall]",
-        "actual": 0.09342,
-        "expected": 0.07326800057810683
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 363,
-        "layer": 4,
-        "message": "dE 0.08600 vs expected 0.07327 (17.38 %), dL3D=5.5800 [outer wall]",
-        "actual": 0.086,
-        "expected": 0.07326694169250945
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 364,
-        "layer": 4,
-        "message": "dE 0.07867 vs expected 0.07327 (7.37 %), dL3D=5.5800 [outer wall]",
-        "actual": 0.07867,
-        "expected": 0.07326694169250945
-      }
-    ],
-    "byFeature": {
-      "outer wall": {
-        "count": 3,
-        "worstPct": 27.50450300661649
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/thick_vase",
@@ -7250,37 +7094,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 35467.338441361586,
-      "checkedSegments": 4569,
-      "belowResolution": 252,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 35378.58967132644,
+      "checkedSegments": 4231,
+      "belowResolution": 590,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/tangent_entry",
@@ -7338,37 +7161,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 34671.370554019966,
-      "checkedSegments": 3089,
-      "belowResolution": 99,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 34628.5024608894,
+      "checkedSegments": 2922,
+      "belowResolution": 266,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/tangent_entry",
@@ -7432,66 +7234,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 11,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 75064.07709240359,
-      "checkedSegments": 3611,
-      "belowResolution": 0,
-      "failureCount": 11
+      "maxRelErrPct": 0.7968229631619795,
+      "checkedMm": 75063.8211197488,
+      "checkedSegments": 3600,
+      "belowResolution": 11,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 441,
-        "message": "run dE 0.00036 vs expected 0.00035 (2.04 %) [internal solid infill|1|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00036,
-        "expected": 0.00035281128130615195
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 895,
-        "message": "run dE 0.00036 vs expected 0.00035 (2.04 %) [internal solid infill|3|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00036,
-        "expected": 0.00035281128130615195
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 5718,
-        "message": "run dE 0.00036 vs expected 0.00035 (2.04 %) [internal solid infill|85|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00036,
-        "expected": 0.00035281128130615195
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      },
-      "internal solid infill": {
-        "count": 8,
-        "worstPct": 2.037553523581935
-      },
-      "top surface": {
-        "count": 1,
-        "worstPct": 2.037553523581935
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/tangent_entry",
@@ -7552,10 +7304,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.9912153053146862,
-      "checkedMm": 33085.75824499814,
-      "checkedSegments": 6552,
-      "belowResolution": 396,
+      "maxRelErrPct": 0.3854364583493202,
+      "checkedMm": 32887.75418608534,
+      "checkedSegments": 6156,
+      "belowResolution": 792,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7660,10 +7412,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.9141385206247816,
-      "checkedMm": 34678.32447231734,
-      "checkedSegments": 13581,
-      "belowResolution": 792,
+      "maxRelErrPct": 0.3854364583493202,
+      "checkedMm": 34185.89707922311,
+      "checkedSegments": 12591,
+      "belowResolution": 1782,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7727,10 +7479,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.9211180221780526,
-      "checkedMm": 4410.270927211725,
-      "checkedSegments": 1490,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5787940026344524,
+      "checkedMm": 4338.206185426985,
+      "checkedSegments": 1346,
+      "belowResolution": 144,
       "failureCount": 0
     },
     "firstFailures": []
@@ -7793,13 +7545,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 9710,
+    "failureCount": 9659,
     "metrics": {
-      "maxRelErrPct": 28.703300136226773,
-      "checkedMm": 55915.71312288495,
-      "checkedSegments": 22814,
-      "belowResolution": 1,
-      "failureCount": 9710
+      "maxRelErrPct": 5.921387624221251,
+      "checkedMm": 55915.521931048905,
+      "checkedSegments": 22809,
+      "belowResolution": 6,
+      "failureCount": 9659
     },
     "firstFailures": [
       {
@@ -7849,20 +7601,20 @@
         "worstPct": 5.393009746152241
       },
       "outer wall": {
-        "count": 2398,
-        "worstPct": 22.485717354172145
+        "count": 2395,
+        "worstPct": 5.278170534424284
       },
       "internal solid infill": {
-        "count": 3444,
-        "worstPct": 28.703300136226773
+        "count": 3417,
+        "worstPct": 5.921387624221251
       },
       "sparse infill": {
         "count": 1370,
-        "worstPct": 17.851025265738542
+        "worstPct": 4.732330365784949
       },
       "top surface": {
-        "count": 202,
-        "worstPct": 23.642349600194912
+        "count": 181,
+        "worstPct": 2.5619120505124946
       }
     }
   },
@@ -7924,13 +7676,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 218,
+    "failureCount": 212,
     "metrics": {
-      "maxRelErrPct": 19.203097946970388,
-      "checkedMm": 53271.43295789852,
-      "checkedSegments": 19147,
-      "belowResolution": 0,
-      "failureCount": 218
+      "maxRelErrPct": 5.472037140773307,
+      "checkedMm": 53271.41385292535,
+      "checkedSegments": 19146,
+      "belowResolution": 1,
+      "failureCount": 212
     },
     "firstFailures": [
       {
@@ -7975,21 +7727,17 @@
       }
     ],
     "byFeature": {
-      "outer wall": {
-        "count": 4,
-        "worstPct": 19.203097946970388
-      },
       "internal solid infill": {
-        "count": 15,
-        "worstPct": 13.05834767292526
+        "count": 14,
+        "worstPct": 4.159171335219518
       },
       "sparse infill": {
         "count": 197,
         "worstPct": 5.472037140773307
       },
       "top surface": {
-        "count": 2,
-        "worstPct": 3.8175230912447224
+        "count": 1,
+        "worstPct": 2.088352009135699
       }
     }
   },
@@ -8051,76 +7799,76 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 17145,
+    "failureCount": 9395,
     "metrics": {
-      "maxRelErrPct": 98.67065356672623,
-      "checkedMm": 128528.20220188564,
-      "checkedSegments": 54001,
-      "belowResolution": 5,
-      "failureCount": 17145
+      "maxRelErrPct": 5.993453340078683,
+      "checkedMm": 128509.59399029207,
+      "checkedSegments": 53863,
+      "belowResolution": 143,
+      "failureCount": 9395
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 3831,
-        "layer": 15,
-        "message": "dE 0.03221 vs expected 0.03118 (3.32 %), dL3D=2.5886 [outer wall]",
-        "actual": 0.03221,
-        "expected": 0.03117623495148938
+        "line": 21540,
+        "layer": 87,
+        "message": "dE 0.01090 vs expected 0.01112 (2.00 %), dL3D=1.3007 [outer wall]",
+        "actual": 0.0109,
+        "expected": 0.011122951118225236
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 3851,
-        "layer": 15,
-        "message": "dE 0.03221 vs expected 0.03118 (3.32 %), dL3D=2.5886 [outer wall]",
-        "actual": 0.03221,
-        "expected": 0.03117623495148938
+        "line": 21765,
+        "layer": 88,
+        "message": "dE 0.00247 vs expected 0.00252 (2.14 %), dL3D=0.3246 [outer wall]",
+        "actual": 0.00247,
+        "expected": 0.0025240096824157387
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4023,
-        "layer": 16,
-        "message": "dE 0.01663 vs expected 0.01604 (3.66 %), dL3D=1.2971 [outer wall]",
-        "actual": 0.01663,
-        "expected": 0.016042544434018955
+        "line": 21770,
+        "layer": 88,
+        "message": "dE 0.00712 vs expected 0.00727 (2.04 %), dL3D=0.6491 [outer wall]",
+        "actual": 0.00712,
+        "expected": 0.007268057629693194
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4025,
-        "layer": 16,
-        "message": "dE 0.01645 vs expected 0.01605 (2.46 %), dL3D=1.2950 [outer wall]",
-        "actual": 0.01645,
-        "expected": 0.016054602715831683
+        "line": 21781,
+        "layer": 88,
+        "message": "dE 0.00498 vs expected 0.00508 (2.05 %), dL3D=0.6491 [outer wall]",
+        "actual": 0.00498,
+        "expected": 0.005084230410004015
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 4029,
-        "layer": 16,
-        "message": "dE 0.03306 vs expected 0.03189 (3.67 %), dL3D=2.5894 [outer wall]",
-        "actual": 0.03306,
-        "expected": 0.03188811758846002
+        "line": 21786,
+        "layer": 88,
+        "message": "dE 0.00270 vs expected 0.00276 (2.11 %), dL3D=0.3246 [outer wall]",
+        "actual": 0.0027,
+        "expected": 0.002758277623352842
       }
     ],
     "byFeature": {
       "inner wall": {
-        "count": 3226,
-        "worstPct": 48.53063580234978
+        "count": 2665,
+        "worstPct": 2.9787758513026104
       },
       "outer wall": {
-        "count": 7140,
-        "worstPct": 49.51886793965578
+        "count": 3488,
+        "worstPct": 5.119635096316388
       },
       "internal solid infill": {
-        "count": 5276,
-        "worstPct": 98.67065356672623
+        "count": 1961,
+        "worstPct": 3.5625442833889425
       },
       "sparse infill": {
-        "count": 1442,
-        "worstPct": 95.3418777665883
+        "count": 1270,
+        "worstPct": 3.247576715988967
       },
       "top surface": {
-        "count": 61,
-        "worstPct": 46.87824120869558
+        "count": 11,
+        "worstPct": 5.993453340078683
       }
     }
   },
@@ -8974,10 +8722,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.5228749411073335,
-      "checkedMm": 32010.129451500845,
-      "checkedSegments": 2084,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5371767479528566,
+      "checkedMm": 32010.114451500845,
+      "checkedSegments": 2083,
+      "belowResolution": 1,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9042,9 +8790,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.2533015366255165,
-      "checkedMm": 29087.333142342286,
-      "checkedSegments": 1930,
-      "belowResolution": 0,
+      "checkedMm": 29087.31701782679,
+      "checkedSegments": 1929,
+      "belowResolution": 1,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9409,13 +9157,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 130,
+    "failureCount": 126,
     "metrics": {
-      "maxRelErrPct": 2.9545576810764143,
-      "checkedMm": 174.217654562276,
-      "checkedSegments": 436,
-      "belowResolution": 0,
-      "failureCount": 130
+      "maxRelErrPct": 2.8789479499401125,
+      "checkedMm": 174.00835095504473,
+      "checkedSegments": 432,
+      "belowResolution": 4,
+      "failureCount": 126
     },
     "firstFailures": [
       {
@@ -9465,8 +9213,8 @@
         "worstPct": 2.172073715906555
       },
       "internal solid infill": {
-        "count": 66,
-        "worstPct": 2.9545576810764143
+        "count": 62,
+        "worstPct": 2.8789479499401125
       }
     }
   },
@@ -9527,13 +9275,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 267,
+    "failureCount": 266,
     "metrics": {
       "maxRelErrPct": 21.496279665448668,
-      "checkedMm": 51658.15447086734,
-      "checkedSegments": 2882,
-      "belowResolution": 1,
-      "failureCount": 267
+      "checkedMm": 51658.07942924633,
+      "checkedSegments": 2879,
+      "belowResolution": 4,
+      "failureCount": 266
     },
     "firstFailures": [
       {
@@ -9578,10 +9326,6 @@
       }
     ],
     "byFeature": {
-      "top surface": {
-        "count": 1,
-        "worstPct": 3.0078689373603784
-      },
       "bridge": {
         "count": 266,
         "worstPct": 21.496279665448668
@@ -9645,13 +9389,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 212,
+    "failureCount": 210,
     "metrics": {
       "maxRelErrPct": 21.6862463208452,
-      "checkedMm": 51283.36986504838,
-      "checkedSegments": 2747,
-      "belowResolution": 1,
-      "failureCount": 212
+      "checkedMm": 51283.351865048375,
+      "checkedSegments": 2745,
+      "belowResolution": 3,
+      "failureCount": 210
     },
     "firstFailures": [
       {
@@ -9697,7 +9441,7 @@
     ],
     "byFeature": {
       "bridge": {
-        "count": 212,
+        "count": 210,
         "worstPct": 21.6862463208452
       }
     }
@@ -9759,13 +9503,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 993,
+    "failureCount": 984,
     "metrics": {
-      "maxRelErrPct": 30.970866602459008,
-      "checkedMm": 109912.06614886058,
-      "checkedSegments": 7928,
-      "belowResolution": 0,
-      "failureCount": 993
+      "maxRelErrPct": 24.259700855408592,
+      "checkedMm": 109910.76726963773,
+      "checkedSegments": 7900,
+      "belowResolution": 28,
+      "failureCount": 984
     },
     "firstFailures": [
       {
@@ -9810,17 +9554,9 @@
       }
     ],
     "byFeature": {
-      "internal solid infill": {
-        "count": 1,
-        "worstPct": 2.3911597369514253
-      },
-      "overhang wall": {
-        "count": 4,
-        "worstPct": 2.3392902967397555
-      },
       "bridge": {
-        "count": 988,
-        "worstPct": 30.970866602459008
+        "count": 984,
+        "worstPct": 24.259700855408592
       }
     }
   },
@@ -10289,37 +10025,16 @@
     "profile": "Default",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 38862.748575115336,
-      "checkedSegments": 13165,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 38862.73443297971,
+      "checkedSegments": 13163,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spinor_fields",
@@ -10378,37 +10093,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 39701.8251217339,
-      "checkedSegments": 13739,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.6792336023402723,
+      "checkedMm": 39701.810979598275,
+      "checkedSegments": 13737,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spinor_fields",
@@ -10467,37 +10161,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 2,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.314147482425933,
-      "checkedMm": 86092.10321491015,
-      "checkedSegments": 33584,
-      "belowResolution": 0,
-      "failureCount": 2
+      "maxRelErrPct": 0.7968229631619795,
+      "checkedMm": 86092.08907277453,
+      "checkedSegments": 33582,
+      "belowResolution": 2,
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00027 vs expected 0.00026 (2.52 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00027,
-        "expected": 0.00026337040425055834
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 237,
-        "message": "run dE 0.00028 vs expected 0.00026 (6.31 %) [bottom surface|0|0.5|0.20000000298023224]",
-        "actual": 0.00028,
-        "expected": 0.00026337040425055834
-      }
-    ],
-    "byFeature": {
-      "bottom surface": {
-        "count": 2,
-        "worstPct": 6.314147482425933
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "adv/spinor_fields",
@@ -10766,9 +10439,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.4186575628840232,
-      "checkedMm": 56570.85353189818,
-      "checkedSegments": 76725,
-      "belowResolution": 1,
+      "checkedMm": 56570.84221818968,
+      "checkedSegments": 76724,
+      "belowResolution": 2,
       "failureCount": 0
     },
     "firstFailures": []
@@ -10901,9 +10574,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.8039103728539829,
-      "checkedMm": 4388.583915904892,
-      "checkedSegments": 1448,
-      "belowResolution": 0,
+      "checkedMm": 4388.453318745262,
+      "checkedSegments": 1446,
+      "belowResolution": 2,
       "failureCount": 0
     },
     "firstFailures": []
@@ -11372,10 +11045,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 1.2692190442539346,
-      "checkedMm": 4448.090408932605,
-      "checkedSegments": 1024,
-      "belowResolution": 0,
+      "maxRelErrPct": 0.5787940026344524,
+      "checkedMm": 4447.9716149933665,
+      "checkedSegments": 1022,
+      "belowResolution": 2,
       "failureCount": 0
     },
     "firstFailures": []
@@ -11760,13 +11433,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 4,
+    "failureCount": 2,
     "metrics": {
-      "maxRelErrPct": 5.2991226246499945,
-      "checkedMm": 16216.639401462979,
-      "checkedSegments": 6526,
-      "belowResolution": 2,
-      "failureCount": 4
+      "maxRelErrPct": 2.268075732879044,
+      "checkedMm": 16216.619671851706,
+      "checkedSegments": 6524,
+      "belowResolution": 4,
+      "failureCount": 2
     },
     "firstFailures": [
       {
@@ -11782,26 +11455,12 @@
         "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
         "actual": 0.00119,
         "expected": 0.001163608478474008
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00037 vs expected 0.00035 (5.30 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00037,
-        "expected": 0.0003513799457939499
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00037 vs expected 0.00038 (3.51 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00037,
-        "expected": 0.0003834730969053099
       }
     ],
     "byFeature": {
       "brim": {
-        "count": 4,
-        "worstPct": 5.2991226246499945
+        "count": 2,
+        "worstPct": 2.268075732879044
       }
     }
   },
@@ -11852,13 +11511,13 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 4,
+    "failureCount": 2,
     "metrics": {
-      "maxRelErrPct": 5.2991226246499945,
-      "checkedMm": 15856.316190284668,
-      "checkedSegments": 3767,
-      "belowResolution": 0,
-      "failureCount": 4
+      "maxRelErrPct": 2.268075732879044,
+      "checkedMm": 15856.296460673395,
+      "checkedSegments": 3765,
+      "belowResolution": 2,
+      "failureCount": 2
     },
     "firstFailures": [
       {
@@ -11874,26 +11533,12 @@
         "message": "run dE 0.00119 vs expected 0.00116 (2.27 %) [brim|0|0.5|0.20000000298023224]",
         "actual": 0.00119,
         "expected": 0.001163608478474008
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00037 vs expected 0.00035 (5.30 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00037,
-        "expected": 0.0003513799457939499
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 322,
-        "message": "run dE 0.00037 vs expected 0.00038 (3.51 %) [brim|0|0.5|0.20000000298023224]",
-        "actual": 0.00037,
-        "expected": 0.0003834730969053099
       }
     ],
     "byFeature": {
       "brim": {
-        "count": 4,
-        "worstPct": 5.2991226246499945
+        "count": 2,
+        "worstPct": 2.268075732879044
       }
     }
   },
@@ -11944,29 +11589,15 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 3762,
+    "failureCount": 3760,
     "metrics": {
-      "maxRelErrPct": 4.5384739530929785,
-      "checkedMm": 19583.005260599446,
-      "checkedSegments": 4812,
-      "belowResolution": 8,
-      "failureCount": 3762
+      "maxRelErrPct": 0.5310290152413683,
+      "checkedMm": 19582.957177338325,
+      "checkedSegments": 4810,
+      "belowResolution": 10,
+      "failureCount": 3760
     },
     "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2094,
-        "message": "run dE 0.00033 vs expected 0.00032 (4.54 %) [internal solid infill|1|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00033,
-        "expected": 0.00031567325169494335
-      },
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 2867,
-        "message": "run dE 0.00033 vs expected 0.00032 (4.54 %) [internal solid infill|3|0.41999998688697815|0.07999999821186066]",
-        "actual": 0.00033,
-        "expected": 0.00031567325169494335
-      },
       {
         "assertion": "volumetric-extrusion-conservation",
         "line": 25797,
@@ -11984,6 +11615,18 @@
         "line": 25799,
         "layer": 68,
         "message": "extrusion with 2.000 mm of filament still retracted"
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 25800,
+        "layer": 68,
+        "message": "extrusion with 2.000 mm of filament still retracted"
+      },
+      {
+        "assertion": "volumetric-extrusion-conservation",
+        "line": 25801,
+        "layer": 68,
+        "message": "extrusion with 2.000 mm of filament still retracted"
       }
     ],
     "byFeature": {
@@ -11994,10 +11637,6 @@
       "prime tower": {
         "count": 1040,
         "worstPct": 0.5310290152413683
-      },
-      "internal solid infill": {
-        "count": 2,
-        "worstPct": 4.5384739530929785
       },
       "gap infill": {
         "count": 72,
@@ -12067,59 +11706,59 @@
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
     "pass": false,
-    "failureCount": 184,
+    "failureCount": 92,
     "metrics": {
       "maxRelErrPct": 279.19161558990015,
       "checkedMm": 24242.732447143324,
       "checkedSegments": 33566,
       "belowResolution": 0,
-      "failureCount": 184
+      "failureCount": 92
     },
     "firstFailures": [
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1339,
-        "layer": 3,
-        "message": "dE 0.01477 vs expected 0.01426 (3.60 %), dL3D=0.4960 [sparse infill]",
-        "actual": 0.01477,
-        "expected": 0.014256432441725374
+        "line": 6861,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 1724,
-        "layer": 4,
-        "message": "dE 0.01439 vs expected 0.01326 (8.53 %), dL3D=0.4865 [sparse infill]",
-        "actual": 0.01439,
-        "expected": 0.013259063849934687
+        "line": 6867,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 2082,
-        "layer": 5,
-        "message": "dE 0.01635 vs expected 0.01528 (6.98 %), dL3D=0.4916 [sparse infill]",
-        "actual": 0.01635,
-        "expected": 0.0152829491031987
+        "line": 6873,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 2498,
-        "layer": 6,
-        "message": "dE 0.01521 vs expected 0.01396 (8.95 %), dL3D=0.4858 [sparse infill]",
-        "actual": 0.01521,
-        "expected": 0.013961051224993769
+        "line": 6879,
+        "layer": 17,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       },
       {
         "assertion": "volumetric-extrusion-conservation",
-        "line": 2856,
-        "layer": 7,
-        "message": "dE 0.01646 vs expected 0.01529 (7.68 %), dL3D=0.4917 [sparse infill]",
-        "actual": 0.01646,
-        "expected": 0.015286427069099147
+        "line": 8046,
+        "layer": 20,
+        "message": "dE 1.12849 vs expected 0.29760 (279.19 %), dL3D=0.5360 [sparse infill]",
+        "actual": 1.12849,
+        "expected": 0.29760415410146496
       }
     ],
     "byFeature": {
       "sparse infill": {
-        "count": 184,
+        "count": 92,
         "worstPct": 279.19161558990015
       }
     }
@@ -12237,31 +11876,16 @@
     "profile": "Extreme Modulation",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 7.434748539095487,
+      "maxRelErrPct": 0.7784249654994009,
       "checkedMm": 24891.77505843433,
       "checkedSegments": 16947,
       "belowResolution": 0,
-      "failureCount": 1
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 1254,
-        "layer": 3,
-        "message": "dE 0.06153 vs expected 0.05727 (7.43 %), dL3D=2.2235 [sparse infill]",
-        "actual": 0.06153,
-        "expected": 0.057271972836246035
-      }
-    ],
-    "byFeature": {
-      "sparse infill": {
-        "count": 1,
-        "worstPct": 7.434748539095487
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "weave/z_weave-cylinder",
@@ -12335,30 +11959,16 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "volumetric-extrusion-conservation",
     "type": "VOLUME",
-    "pass": false,
-    "failureCount": 1,
+    "pass": true,
+    "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 6.012974551982482,
+      "maxRelErrPct": 1.45216094215173,
       "checkedMm": 4996.502925318584,
       "checkedSegments": 14931,
       "belowResolution": 0,
-      "failureCount": 1
+      "failureCount": 0
     },
-    "firstFailures": [
-      {
-        "assertion": "volumetric-extrusion-conservation",
-        "line": 14373,
-        "message": "run dE 0.00156 vs expected 0.00147 (6.01 %) [inner wall|60|0.44999998807907104|0.08056128025054932]",
-        "actual": 0.00156,
-        "expected": 0.0014715179972948202
-      }
-    ],
-    "byFeature": {
-      "inner wall": {
-        "count": 1,
-        "worstPct": 6.012974551982482
-      }
-    }
+    "firstFailures": []
   },
   {
     "target": "weave/z_weave-cylinder",
