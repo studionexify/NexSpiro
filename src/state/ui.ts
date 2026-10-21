@@ -204,19 +204,22 @@ export interface ClearanceStatus {
   /** First / last affected layer, when known. */
   layers?: [number, number];
   canAutoFix: boolean;
+  /** The scene changed since the slice the check came from (slice again to re-check). */
+  stale?: boolean;
 }
 /** Read from the Motionex print check of the last slice (engine.ts checkCollisions; same source as the panel's Report and exportGcode). */
 export function clearanceStatus(): ClearanceStatus {
   const s = useStore.getState();
   const c = mxReport()?.check;
   if (!c) return { state: 'none', message: '', canAutoFix: false };
-  const stale = s.slice.dirty ? ' (out of date — slice again)' : '';
+  const isStale = s.slice.dirty || s.slice.plate !== s.activePlate;
+  const stale = isStale ? ' (out of date — slice again)' : '';
   const ls = c.collisions.map((p) => p.layer).filter((l) => Number.isFinite(l));
   const layers: [number, number] | undefined = ls.length ? [Math.min(...ls), Math.max(...ls)] : undefined;
   const fixable = mx.applications.some((a) => a.enabled) || mx.weave.enabled;
-  if (!c.collisionCount) return { state: 'ok', message: `Print head stays clear of the print${stale}`, canAutoFix: false };
-  if (c.blocking) return { state: 'collision', message: `Print head would hit the print in ${c.collisionCount} spots — export stopped${stale}`, layers, canAutoFix: fixable };
-  return { state: 'warn', message: `Print head would hit the print in ${c.collisionCount} spots (lowered automatically)${stale}`, layers, canAutoFix: fixable };
+  if (!c.collisionCount) return { state: 'ok', message: `Print head stays clear of the print${stale}`, canAutoFix: false, stale: isStale };
+  if (c.blocking) return { state: 'collision', message: `Print head would hit the print in ${c.collisionCount} spots — export stopped${stale}`, layers, canAutoFix: fixable, stale: isStale };
+  return { state: 'warn', message: `Print head would hit the print in ${c.collisionCount} spots (lowered automatically)${stale}`, layers, canAutoFix: fixable, stale: isStale };
 }
 export function useClearanceStatus(): ClearanceStatus {
   useStore((s) => s.slice.result); useStore((s) => s.slice.dirty); useMx();
@@ -224,22 +227,71 @@ export function useClearanceStatus(): ClearanceStatus {
 }
 /** Share each fix keeps of the wave size / weave depth. */
 const FIX_FACTOR = 0.7;
-/** Applies the automatic fix (e.g. lowers wave / weave depth) and reports what changed. */
+/** Smallest motion size / weave depth (mm) Auto-fix lowers to. */
+const FIX_MIN_SCALE = 0.05, FIX_MIN_DEPTH = 0.02;
+/** Most lower-and-re-check rounds one Auto-fix click runs (0.7^8 ≈ 6 % of the original size). */
+const FIX_MAX_STEPS = 8;
+/**
+ * One fix step: lowers every enabled motion / the weave by FIX_FACTOR (down to a floor) and reports what changed.
+ * Returns null when there is nothing to fix or everything is already at the floor. Marks the slice dirty.
+ */
 export function autoFixClearance(): string | null {
   const st = clearanceStatus();
   if (!st.canAutoFix || st.state === 'none' || st.state === 'ok') return null;
   const parts: string[] = [];
-  const apps = mx.applications.filter((a) => a.enabled);
-  for (const a of apps) a.scale = +Math.max(0.05, (a.scale ?? 1) * FIX_FACTOR).toFixed(3);
-  if (apps.length) parts.push(`${apps.length} motion${apps.length > 1 ? 's' : ''} to ${Math.round(FIX_FACTOR * 100)}% size`);
-  if (mx.weave.enabled) {
+  const apps = mx.applications.filter((a) => a.enabled && (a.scale ?? 1) > FIX_MIN_SCALE);
+  for (const a of apps) a.scale = +Math.max(FIX_MIN_SCALE, (a.scale ?? 1) * FIX_FACTOR).toFixed(3);
+  if (apps.length) {
+    const sizes = [...new Set(apps.map((a) => `${Math.round((a.scale ?? 1) * 100)}%`))];
+    parts.push(`${apps.length} motion${apps.length > 1 ? 's' : ''} to ${sizes.join('/')} size`);
+  }
+  if (mx.weave.enabled && mx.weave.depth_mm > FIX_MIN_DEPTH) {
     const before = mx.weave.depth_mm;
-    mx.weave.depth_mm = +Math.max(0.02, before * FIX_FACTOR).toFixed(3);
+    mx.weave.depth_mm = +Math.max(FIX_MIN_DEPTH, before * FIX_FACTOR).toFixed(3);
     parts.push(`weave depth ${before} → ${mx.weave.depth_mm} mm`);
   }
   if (!parts.length) return null;
   mxChanged(); // marks the slice dirty: the check runs again on the next slice
-  return `Lowered ${parts.join(' and ')}. Slice again to re-check clearance.`;
+  return `Lowered ${parts.join(' and ')}.`;
+}
+let fixing = false;
+/** True while autoFixUntilClear is lowering and re-slicing. */
+export const autoFixRunning = () => fixing;
+/**
+ * Auto-fix: lowers the motions / weave one step, slices again (the slice runs the same Motionex print check as
+ * export) and repeats until the print head stays clear, the floor is reached or FIX_MAX_STEPS rounds have run.
+ * Returns the message it also shows as a toast.
+ */
+export async function autoFixUntilClear(slice?: () => Promise<unknown>): Promise<string | null> {
+  if (fixing) return null;
+  fixing = true;
+  const run = slice ?? (async () => (await import('./actions')).sliceAndPreview());
+  let last: string | null = null, steps = 0;
+  try {
+    for (; steps < FIX_MAX_STEPS; steps++) {
+      if (clearanceStatus().state !== 'collision') break;
+      let msg = autoFixClearance();
+      if (!msg && mx.collisionMode === 'fail') {
+        // Already at the smallest size and still hitting (e.g. a motion that dips into the layer below by design):
+        // let Motionex lower the moves at the remaining spots itself instead of stopping export.
+        mx.collisionMode = 'clamp'; mxChanged();
+        msg = 'Already at the smallest size, so the remaining spots are now lowered automatically (collision mode "clamp").';
+      }
+      if (!msg) break;
+      last = msg;
+      useStore.getState().set({ toast: { kind: 'info', text: `Auto-fix: ${msg} Checking clearance…` } });
+      await run();
+      const s = useStore.getState().slice;
+      if (s.status !== 'done' || s.dirty) break; // slice failed or was replaced
+    }
+  } finally { fixing = false; }
+  if (!last) return null;
+  const st = clearanceStatus();
+  const text = st.state === 'collision'
+    ? `Auto-fix: ${last} The print head still hits the print${steps >= FIX_MAX_STEPS ? ' — press Auto-fix again or' : ' —'} lower the motion by hand.`
+    : `Auto-fix: ${last} Print head now clears the print.`;
+  useStore.getState().set({ toast: { kind: st.state === 'collision' ? 'error' : 'info', text } });
+  return text;
 }
 
 export interface SliceSummary {

@@ -99,6 +99,43 @@ describe('ui bindings', () => {
     expect(ui.sliceSummary().ready).toBe(true);
   });
 
+  it('marks a collision from an older slice as stale', async () => {
+    const { ui, useStore, mx, defaultApplication } = await load();
+    useStore.getState().set({ objects: [obj('a')] as any });
+    mx.applications = [defaultApplication(mx.library.all()[0].id)];
+    done(useStore, check(5, true));
+    expect(ui.clearanceStatus().stale).toBe(false);
+    done(useStore, check(5, true), true);
+    expect(ui.clearanceStatus()).toMatchObject({ state: 'collision', stale: true });
+    expect(ui.clearanceStatus().message).toMatch(/out of date/);
+  });
+
+  it('auto-fix repeats lower-and-re-slice until clear, then falls back to clamping at the floor', async () => {
+    const { ui, useStore, mx, defaultApplication } = await load();
+    useStore.getState().set({ objects: [obj('a')] as any });
+    mx.collisionMode = 'fail';
+    mx.applications = [defaultApplication(mx.library.all()[0].id)];
+    done(useStore, check(5, true));
+    // the fake slice keeps colliding until the motion is under 40 % size
+    let slices = 0;
+    const slice = async () => { slices++; done(useStore, (mx.applications[0].scale ?? 1) < 0.4 ? check(0, false) : check(5, true)); };
+    const msg = await ui.autoFixUntilClear(slice);
+    expect(slices).toBe(3); // 0.7 → 0.49 → 0.343
+    expect(mx.applications[0].scale).toBeCloseTo(0.343);
+    expect(msg).toMatch(/now clears/);
+    expect(ui.sliceSummary().ready).toBe(true);
+    // a collision that no size clears: lowers to the floor, then switches the check to clamp (export allowed, warned)
+    mx.applications[0].scale = 0.06;
+    done(useStore, check(5, true));
+    const stuck = async () => { done(useStore, mx.collisionMode === 'clamp' ? check(5, false) : check(5, true)); };
+    const msg2 = await ui.autoFixUntilClear(stuck);
+    expect(mx.applications[0].scale).toBe(0.05);
+    expect(mx.collisionMode).toBe('clamp');
+    expect(msg2).toMatch(/lowered automatically/);
+    expect(ui.clearanceStatus().state).toBe('warn');
+    mx.collisionMode = 'clamp';
+  });
+
   it('summarises the slice', async () => {
     const { ui, useStore } = await load();
     expect(ui.sliceSummary()).toEqual({ status: 'empty', progress: 0, ready: false });
