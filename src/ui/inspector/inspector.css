@@ -5,6 +5,7 @@
   --i-t2: var(--text-muted); --i-mono: var(--ns-font-mono, ui-monospace, monospace);
   flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--i-panel); border: 1px solid var(--i-line);
   border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); font-family: var(--ns-font-ui, inherit); font-size: 12.5px; }
+.panel.insp { width: auto; height: 100%; padding: 0; position: static; border: 0; border-radius: 0; box-shadow: none; }
 .insp .crumb { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--i-line); font-size: 12px; min-width: 0; }
 .insp .crumb button { color: var(--i-t2); display: flex; align-items: center; gap: 4px; background: none; border: 0; cursor: pointer; padding: 0; font: inherit; }
 .insp .crumb button:hover { color: var(--text); }
