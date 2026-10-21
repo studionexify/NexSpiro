@@ -255,8 +255,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .xyz { display: grid; grid-template-columns: 14px 1fr 26px; align-items: center; gap: 6px; margin-bottom: 6px; }
 .xyz .ax { font-weight: 700; }
 .ax.x { color: #E53935; } .ax.y { color: #43A047; } .ax.z { color: #1E88E5; }
+.empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 2;
 }
+.empty .hint { pointer-events: auto; text-align: center; color: var(--text-muted); padding: 28px 36px; border: 2px dashed var(--border); border-radius: 14px; background: var(--surface-overlay); }
+.empty .hint b { display: block; font-size: 16px; color: var(--text-strong); margin-bottom: 6px; }
 .dropzone { position: absolute; inset: 8px; z-index: 30; border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-tint); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: var(--accent); pointer-events: none; }
 
 /* ---------- preview */

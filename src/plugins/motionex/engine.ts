@@ -11,6 +11,8 @@ import { clearOverlaps, type ClearanceOptions } from './core/clearance';
 import { emptyCheck, SEAM_TOL, type Layer, type PointAction, type PrintCheck, type Toolpath, type ToolpathPoint } from './core/types';
 import type { PrintProfiles, Firmware } from './core/profiles';
 import type { MotionApplication, MotionBrush } from './model';
+import type { WeaveSettings } from './weave/model';
+import { applyWeave, weaveSession, type WeaveReport, type WeaveSession } from './weave/engine';
 
 /** Everything the worker needs, as plain data. */
 export interface MotionexConfig {
@@ -21,12 +23,15 @@ export interface MotionexConfig {
   collisionMode: CollisionMode;
   toolhead: ToolheadProfile;
   printerId: string;
+  /** Weave mode: a picture woven into the wall, one colour per layer. */
+  weave?: WeaveSettings;
 }
 
 export interface MotionexReport {
   check: PrintCheck;
   /** Moves changed by Motionex, for the preview. */
   movedPaths: number;
+  weave?: WeaveReport;
 }
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -146,11 +151,16 @@ function runToOps(run: Run, original: ToolpathPoint, cfg: Config): Op[] {
 export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
   id: 'motionex',
   name: 'Motionex',
-  version: '0.3.0',
+  version: '0.4.0',
+  prepare(config, ctx) {
+    return config.weave?.enabled ? weaveSession(config.weave, ctx) : undefined;
+  },
   postToolpath(layerOps, config, ctx: PluginContext) {
     const check = emptyCheck();
+    // the weave goes first; motions then add on top of the woven wall
+    const weave = config.weave?.enabled ? applyWeave(layerOps, config.weave, ctx.cfg, ctx.session as WeaveSession | undefined, ctx.warn) : undefined;
     const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
-    if (!apps.length) return { check, movedPaths: 0 };
+    if (!apps.length) return { check, movedPaths: 0, weave };
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);
     const regions = new RegionRegistry();
     for (const f of ctx.faceRegions) {
@@ -202,14 +212,16 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
       layerOps[r.layer].ops.splice(r.start, r.end - r.start, ...runToOps(r, originals[k], ctx.cfg));
       moved++;
     }
-    return { check, movedPaths: moved };
+    return { check, movedPaths: moved, weave };
   },
   gcodeHeader(config) {
     const names = new Map(config.brushes.map((b) => [b.id, b]));
-    return config.applications.filter((a) => a.enabled).map((a) => {
+    const w = config.weave;
+    const weave = w?.enabled ? [`; motionex weave: ${w.mode} ${w.image.name ?? 'picture'} ${w.image.w}x${w.image.h} x${w.tiles_around} round, slots ${w.slots.map((s) => s + 1).join('/')}, ${w.layers_per_colour} layer(s) per colour, depth ${w.depth_mm}mm, z ${w.z_start}-${w.z_end}, change ${w.change.mode}${w.change.mode === 'reduced' ? ` ${w.change.volume_mm3}mm3` : ''}, seam ${w.seam.inward ? `inside ${w.seam.tuck_mm}mm` : 'plain'} at ${w.seam.angle_deg}deg`] : [];
+    return [...weave, ...config.applications.filter((a) => a.enabled).map((a) => {
       const b = a.brush ?? names.get(a.brush_id);
       const where = a.target.type === 'faces' ? `${(a.target.faces ?? []).length} picked surface(s)` : 'whole body';
       return `; motionex: ${b?.name ?? a.brush_id} v${b?.version ?? '?'} on ${where}, ${a.target.walls} walls, z ${a.mask.z_start}-${a.mask.z_end}${a.scale && a.scale !== 1 ? ` size x${a.scale}` : ''}${a.blend === 'override' ? ' replace' : ''}${a.round_mm ? ` round ${a.round_mm}mm` : ''}${a.tip ? ` tip ${a.tip.mode} ${a.tip.share}` : ''}`;
-    });
+    })];
   },
 };
