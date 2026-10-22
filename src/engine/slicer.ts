@@ -15,6 +15,7 @@ import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type Painted
 import { sliceMesh, type SlicingMode } from './slice';
 import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
+import { changerOf, flushesIntoTower, slotCount, toolheadCount } from '../profiles/changer';
 import { computeOverhangs, filterOverhangs, generateSupport, generateTreeSupport, treeStyle } from './support';
 import { anchorInfill, archimedeanFill, cubicFill, honeycombFill } from './patterns';
 import { lightningInfill } from './lightning';
@@ -210,7 +211,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
   const flavor = str('gcode_flavor');
-  const hasAms = bool('has_ams');
+  const changer = changerOf(cfg);
+  // automatic changes: a filament unit (AMS) or a tool changer; manual changes pause for a spool swap
+  const hasAms = changer !== 'manual';
+  const toolChanger = changer === 'toolchanger';
+  // a filament unit without a purge chute (MMU3, ERCF, BoxTurtle…) flushes the old colour into the prime tower
+  const towerFlush = flushesIntoTower(cfg);
   const byObject = str('print_sequence') === 'by_object' && meshes.length > 1;
 
   // ---------- per-object config, with height range modifiers
@@ -346,7 +352,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
-    filamentCount: filaments.length, hasAms: bool('has_ams'), warn,
+    filamentCount: filaments.length, hasAms, changer, toolheads: toolheadCount(cfg), warn,
   });
   // raised / recessed artwork changes the cross-sections themselves, before walls, surfaces and support
   const reshapers = [...sessions.values()].filter((x) => x.reshape);
@@ -789,17 +795,25 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     for (let i = 0; i < N; i++) {
       const order = [...layerFils[i]].sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a - b));
       let c = 0;
-      for (const f of order) { if (cur !== -1 && f !== cur) c++; cur = f; }
+      // without a chute the first load is flushed on the tower too
+      for (const f of order) { if ((cur !== -1 || (towerFlush && usedFils.size > 1)) && f !== cur) c++; cur = f; }
       changesPerLayer.push(c);
     }
   }
-  const useTower = bool('enable_prime_tower') && usedFils.size > 1 && !vase && !byObject;
-  if (byObject && usedFils.size > 1 && bool('enable_prime_tower')) warn('The prime tower is not used when printing by object.');
+  const towerWanted = bool('enable_prime_tower') || (towerFlush && usedFils.size > 1);
+  const useTower = towerWanted && usedFils.size > 1 && !vase && !byObject;
+  if (byObject && usedFils.size > 1 && towerWanted) warn('The prime tower is not used when printing by object.');
+  if (towerFlush && usedFils.size > 1) {
+    if (!bool('enable_prime_tower') && useTower) warn('This filament unit has no purge chute, so the flush goes onto the prime tower: the tower is printed even though it is off.');
+    if (!useTower) warn('This filament unit has no purge chute and this print has no prime tower: each change flushes over the print ([flush_length] in the change G-code). Turn the prime tower on, or print by layer.');
+  }
   const lastChangeLayer = changesPerLayer.reduce((a, c, i) => (c > 0 ? i : a), -1);
   const tw = num('prime_tower_width') || 35;
+  // the largest flush into filament f from any other filament in use (tower-flushing units size their bands from it)
+  const maxFlushInto = (f: number) => Math.max(0, ...[...usedFils].filter((p) => p !== f).map((p) => opts.flushMatrix?.[p]?.[f] ?? num('flush_volume') ?? 0));
   const primeVolOf = (f: number) => {
     const fv = Number(filaments[f]?.settings?.filament_prime_volume ?? NaN);
-    return (isFinite(fv) && fv > 0 ? fv : num('prime_volume') || 45) + (hasAms ? 0 : num('flush_volume'));
+    return (isFinite(fv) && fv > 0 ? fv : num('prime_volume') || 45) + (towerFlush ? maxFlushInto(f) : hasAms ? 0 : num('flush_volume'));
   };
   const primeVol = Math.max(...[...usedFils].map(primeVolOf), num('prime_volume') || 45);
   const bandDepth = Math.max(1.5, primeVol / (tw * hN));
@@ -1350,7 +1364,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     let flushSupportDone = false;
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || (usedFils.size <= 1 && next === 0))) {
+      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) {
         ops.push({ k: 'tool', tool: next }); curTool = next; toolSet = filaments[next]?.settings ?? {}; loadRetraction();
         const sg = String(toolSet.filament_start_gcode ?? '');
         if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
@@ -1358,10 +1372,11 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       }
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
-      let flushVol = opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      // a tool changer picks up a head that is already loaded: only the ooze of the parked head is primed
+      let flushVol = toolChanger ? num('tool_prime_volume') : opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
       let plan: TransitionPlan | undefined;
       for (const x of transitionPlugins) plan = x.transition!({ layer: i, from: prev, to: next, flushVolume: flushVol }) ?? plan;
-      if (plan?.flushVolume !== undefined) flushVol = plan.flushVolume;
+      if (plan?.flushVolume !== undefined) flushVol = toolChanger ? Math.min(flushVol, plan.flushVolume) : plan.flushVolume;
       // material printed right after the change absorbs part of the flush
       let absorbed = 0;
       for (const it of deferred) absorbed += volumeOf(it);
@@ -1375,17 +1390,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (absorbed > 0 && curTool >= 0) flushVol = Math.max(0, flushVol - absorbed);
       if (plan) ops.push({ k: 'raw', text: `${TRANSITION_MARKER} ${prev}->${next} mode=${plan.skipTower ? 'none' : plan.flushVolume !== undefined ? 'reduced' : 'full'} shift=${(plan.shiftMm ?? 0).toFixed(3)}${plan.regionId ? ` region=${plan.regionId}` : ''}` });
       if (plan?.label && !hasAms) ops.push({ k: 'raw', text: `M117 Load ${plan.label.replace(/[;\n]/g, ' ')}` });
-      const flushLen = (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
-      if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: num('retract_length_toolchange') || retractLen, speed: retractSpeed });
+      // no chute: the tower band printed right after the change takes the flush, the change G-code purges nothing
+      const flushLen = towerFlush && towerActive ? 0 : (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
+      // a head is parked retracted by its normal length, which comes back when it is next picked up
+      if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: toolChanger ? retractLen : num('retract_length_toolchange') || retractLen, speed: retractSpeed });
       if (curTool >= 0) { const eg = String(filaments[curTool]?.settings?.filament_end_gcode ?? ''); if (eg) ops.push({ k: 'raw', text: expandMacro(eg, cfg, { filament_extruder_id: curTool }) }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
         text: expandMacro(str('change_filament_gcode'), cfg, {
           previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
           new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
-          flush_length: flushLen.toFixed(2),
+          flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
         }),
       });
+      // the parked head waits below its print temperature (it is heated again before its next pick-up)
+      if (toolChanger && curTool >= 0 && num('standby_temperature_delta') < 0)
+        ops.push({ k: 'raw', text: `M104 T${prev} S${Math.max(0, Math.round(filaments[prev].nozzleTemp + num('standby_temperature_delta')))} ; park T${prev} at standby` });
       if (fl.pressureAdvance !== undefined) ops.push({ k: 'raw', text: paLine(flavor, fl.pressureAdvance) });
       ops.push({ k: 'tool', tool: next });
       toolSet = fl.settings ?? {};
@@ -1393,12 +1413,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const sg = String(toolSet.filament_start_gcode ?? '');
       if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
       if (num('retract_restart_extra_toolchange')) ops.push({ k: 'raw', text: `G1 E${num('retract_restart_extra_toolchange').toFixed(3)} F${Math.round(deretractSpeed * 60)}` });
-      retracted = hasAms; // the AMS sequence ends with a retraction; M600 leaves the nozzle primed
+      retracted = hasAms; // the AMS sequence ends with a retraction, a parked head was retracted; M600 leaves the nozzle primed
       px = NaN; py = NaN;
       wipeTrail = [];
       const wasFirst = curTool === -1;
       curTool = next;
-      if (towerActive && !wasFirst && !plan?.skipTower) { towerOutline(); towerBand(bandsDone++, true); }
+      if (towerActive && (!wasFirst || towerFlush) && !plan?.skipTower) { towerOutline(); towerBand(bandsDone++, true); }
       // flush targets, printed with the new filament
       if (deferred.length) { for (const it of orderPaths(deferred, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it); deferred = []; }
       if (deferredJobs.length) { const dj = deferredJobs; deferredJobs = []; for (const d of dj) emitJob(d.o, d.job, () => true); }
@@ -1844,6 +1864,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   }
   if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
+  if (changer === 'ams' && slotCount(cfg) > 0 && Math.max(...usedFils) + 1 > slotCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the filament unit has ${slotCount(cfg)} slots. Move the filaments to slots 1–${slotCount(cfg)}, or swap spools by hand when the printer asks.`);
+  if (toolChanger && Math.max(...usedFils) + 1 > toolheadCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the tool changer has ${toolheadCount(cfg)} heads. Slot n prints with head n: move the filaments to slots 1–${toolheadCount(cfg)}.`);
   progress('Done', 1);
   // a program that repeats the print (Bulnex) is longer than the single print the preview and stats describe: say so
   const bx1 = pluginRun.reports.bulnex as BulnexReport | undefined;

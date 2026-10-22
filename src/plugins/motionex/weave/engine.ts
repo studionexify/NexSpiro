@@ -8,9 +8,11 @@
 import type { Config } from '../../../profiles/settings';
 import type { LayerOps, Op } from '../../../engine/gcode';
 import type { Paths } from '../../../engine/types';
-import { offset, pointIn } from '../../../engine/clipper';
+import { pointIn } from '../../../engine/clipper';
+import { objectMask } from '../wall/targets';
 import type { PluginSession, PrepareContext, RegionContribution, TransitionPlan } from '../../api';
 import { cycleLayers, type WeaveSettings } from './model';
+import { minMoveMm, outerLineWidth } from '../wall/machine';
 import { filamentAt, inBand, offsetAt, planLayers, signedArea, weaveLoop, type Pt, type WovenPoint } from './core';
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -38,29 +40,14 @@ const num = (cfg: Config, k: string, d: number) => { const v = parseFloat(String
 
 /** Region and transition hooks for weave mode (colour mode needs them; mono only the target mask). */
 export function weaveSession(w: WeaveSettings, ctx: PrepareContext): WeaveSession {
-  const ids = new Set(w.objects ?? []);
-  const targets = (o: number) => !ids.size || ids.has(ctx.meshes[o]?.id);
-  const masks = new Map<number, Paths | null>();
-  const session: WeaveSession = {
-    weave: {
-      targets,
-      maskAt(layer) {
-        if (!ids.size) return null;
-        let m = masks.get(layer);
-        if (m === undefined) {
-          const all: Paths = [];
-          for (let o = 0; o < ctx.meshes.length; o++) if (targets(o)) all.push(...ctx.sliceAt(o, layer));
-          m = offset(all, 0.8);
-          masks.set(layer, m);
-        }
-        return m;
-      },
-    },
-  };
+  const mask = objectMask(w.objects, ctx);
+  const targets = mask.targets;
+  const session: WeaveSession = { weave: mask };
   if (w.mode !== 'colour' || w.slots.length < 2) return session;
   const usable = w.slots.every((s) => s >= 0 && s < ctx.filamentCount);
   if (!usable) { ctx.warn(`Weave: the picture uses filament slots ${w.slots.map((s) => s + 1).join(', ')} but this print has ${ctx.filamentCount}. Add the missing filaments.`); return session; }
-  if (!ctx.hasAms) ctx.warn('Weave: this printer has no AMS, so every layer is a manual filament change. Use an AMS printer (A1 / P1S / X1 combo) for colour weave, or mono relief.');
+  if (!ctx.hasAms) ctx.warn('Weave: this printer changes filament by hand, so every layer is a manual change. Use a printer with a filament unit (AMS) or a tool changer for colour weave, or mono relief.');
+  if (ctx.changer === 'toolchanger' && Math.max(...w.slots) + 1 > (ctx.toolheads ?? 1)) ctx.warn(`Weave: colour slots ${w.slots.map((s) => s + 1).join(', ')} need ${Math.max(...w.slots) + 1} heads, the tool changer has ${ctx.toolheads}. Pick colours from slots 1–${ctx.toolheads}.`);
   session.regionsAt = (o, layer): RegionContribution[] => {
     if (!targets(o)) return [];
     const paths = ctx.sliceAt(o, layer);
@@ -136,7 +123,7 @@ const perimeter = (p: Pt[]) => p.reduce((s, q, i) => s + Math.hypot(p[(i + 1) % 
 
 /** The weave pass over the finished move list. Edits layers in place. */
 export function applyWeave(layers: LayerOps[], w: WeaveSettings, cfg: Config, session: WeaveSession | undefined, warn: (m: string) => void): WeaveReport {
-  const lw = num(cfg, 'outer_wall_line_width', 0) || num(cfg, 'line_width', 0.42);
+  const lw = outerLineWidth(cfg);
   const rep: WeaveReport = { wovenLayers: 0, loops: 0, changes: 0, seamsTucked: 0, columns: w.image.w * Math.max(1, w.tiles_around), rows: w.image.h, swing: 0, lineWidth: lw };
   if (cfg.spiral_mode === true || cfg.spiral_mode === 'true') { warn('Weave: spiral vase is on. Turn it off: weave needs one closed loop per layer (and a filament change between layers).'); return rep; }
   if (num(cfg, 'wall_loops', 2) > 1) warn('Weave: works best with 1 wall. More walls sit behind the woven line and squash it where it pulls in (use "Set up print settings").');
@@ -147,7 +134,8 @@ export function applyWeave(layers: LayerOps[], w: WeaveSettings, cfg: Config, se
   const zs = layers.map((L) => L.z);
   const per = found.map((ls) => (ls.length ? Math.max(...ls.map((l) => perimeter(l.pts))) : NaN));
   const plan = planLayers(w, zs, per);
-  const step = Math.max(0.08, Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6));
+  // woven points: ~6 per picture column, but no closer than the firmware streams at the wall speed
+  const step = Math.max(0.08, Math.min(0.5, minMoveMm(cfg, num(cfg, 'outer_wall_speed', 80))), Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6));
   const tuck = Math.max(0, w.seam.tuck_mm);
   let prevColour = -1;
   for (let li = 1; li < layers.length; li++) {

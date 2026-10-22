@@ -13,6 +13,7 @@ import type { WorldPlacement } from './projection';
 import { placementGroups, type GroupResolver } from './resolve';
 import { ditherPick, ditherStripes, fuzzMove, inPaths, mergeBands, purgeFirst } from './effects';
 import { rng as mulberry } from './library/geom';
+import { autoChanges } from '../../profiles/changer';
 
 export type SingleColourPolicy = 'skip' | 'band' | 'allow';
 
@@ -536,7 +537,7 @@ export const patternexEngine: EnginePlugin<PatternexConfig, PatternexReport> = {
     const s = ctx.session as PatternexSession | undefined;
     const absorbed = s ? applyPurgeTargets(layers, config, ctx.cfg, s) : 0;
     if (s) applyRegionEffects(layers, ctx.cfg, s);
-    const rep = buildReport(layers, config, ctx.cfg, s, ctx.cfg.has_ams === true);
+    const rep = buildReport(layers, config, ctx.cfg, s, autoChanges(ctx.cfg));
     rep.purgeAbsorbedMm3 = absorbed;
     for (const w of rep.warnings) if (!s?.warnings.includes(w)) ctx.warn(w);
     return rep;
@@ -554,7 +555,7 @@ export function applyPurgeTargets(layers: LayerOps[], config: PatternexConfig, c
   if (!s.purgeInto.size) return 0;
   const num = (k: string, d = 0) => (cfg[k] === undefined || cfg[k] === '' ? d : Number(cfg[k]));
   const fa = Math.PI * (num('filament_diameter', 1.75) / 2) ** 2;
-  const retract = { len: num('retraction_length', 0.8), speed: num('retraction_speed', 30), deretractSpeed: num('deretraction_speed') || num('retraction_speed', 30), afterChange: cfg.has_ams === true };
+  const retract = { len: num('retraction_length', 0.8), speed: num('retraction_speed', 30), deretractSpeed: num('deretraction_speed') || num('retraction_speed', 30), afterChange: autoChanges(cfg) };
   let total = 0;
   layers.forEach((L, li) => {
     for (let k = 0; k < L.ops.length; k++) {

@@ -18,6 +18,7 @@ import { ParamRow } from './ParamRow';
 import { useAdvanced } from '../state/advanced';
 import { AdvancedPanel } from './advanced/AdvancedPanel';
 import { collapseAllObjects, expandAllObjects, toggleObjectRow, useTree } from '../state/tree';
+import { autoChanges, changerLabel } from '../profiles/changer';
 
 /** Collapsed state of the sidebar sections, kept between sessions. */
 const COLLAPSE_KEY = 'nexspiro.sidebar.collapsed.v1';
@@ -163,7 +164,7 @@ export function FilamentCard() {
   const [edit, setEdit] = useState<number | null>(null);
   const [flush, setFlush] = useState(false);
   const [closed, toggle] = useCollapsed('filament');
-  const ams = !!printerById(printerId).machine.has_ams;
+  const ams = autoChanges(printerById(printerId).machine);
   const update = (k: number, patch: Partial<{ presetId: string; color: string }>) => {
     set({ filaments: filaments.map((f, i) => (i === k ? { ...f, ...patch } : f)) });
     markDirty();
@@ -183,7 +184,7 @@ export function FilamentCard() {
       <div className="card-head">
         <CardTitle icon="filamentB" label="Filament" closed={closed} onToggle={toggle} />
         <span className="spacer" />
-        <span className="badge" title={ams ? 'Automatic filament changes (AMS)' : 'Manual filament changes (M600 pause)'}>{ams ? 'AMS' : <Icon name="edit" size={12} />}</span>
+        <span className="badge" title={ams ? `Automatic filament changes (${changerLabel(printerById(printerId).machine)})` : 'Manual filament changes (M600 pause)'}>{ams ? changerLabel(printerById(printerId).machine) : <Icon name="edit" size={12} />}</span>
         <SyncAmsLink />
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}

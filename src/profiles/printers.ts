@@ -289,10 +289,63 @@ const K = (id: string, vendor: string, model: string, bed: [number, number, numb
 const M = (id: string, vendor: string, model: string, bed: [number, number, number], speed: Spec['speed'], accel: number, extra: Partial<Spec> = {}) =>
   make({ id, vendor, model, bed, flavor: 'marlin', connections: ['serial', 'octoprint'], accel, speed, start: marlinStart(`${vendor} ${model}`), end: marlinEnd(10, bed[1] - 10), ...extra });
 
+/** G-code for a head swap: heat the next head if it isn't yet, pick it up (the firmware applies its offsets), wait for it. */
+const TOOL_CHANGE = `; ===== NexSpiro tool change T[previous_extruder] -> T[next_extruder] =====
+M104 T[next_extruder] S[new_filament_temp] ; next head to print temperature (preheated already when there was time)
+T[next_extruder] ; park the head in use, pick up the next one
+M109 T[next_extruder] S[new_filament_temp]
+G92 E0
+; ===== end tool change =====`;
+
+/** A printer with one nozzle per filament: head swaps instead of filament swaps. */
+const toolchanger = (p: PrinterProfile, heads: number, swapSeconds: number): PrinterProfile => ({
+  ...p,
+  machine: {
+    ...p.machine, changer_type: 'toolchanger', toolhead_count: heads, has_ams: false, change_filament_gcode: TOOL_CHANGE, filament_change_time: swapSeconds,
+    retract_restart_extra_toolchange: 0.1,
+    tool_prime_volume: 3, standby_temperature_delta: -40, tool_preheat_time: 30,
+  },
+});
+
+/** Filament change on a unit without a purge chute (MMU3, ERCF / Happy Hare, BoxTurtle / AFC): the swap happens over the
+ *  prime tower, which then takes the flush ([flush_length] is 0 while the tower is printed). */
+const TOWER_UNIT_CHANGE = (unit: string) => `; ===== NexSpiro filament change [previous_extruder] -> [next_extruder] =====
+G1 Z[toolchange_z] F1200
+G1 X[wipe_tower_x] Y[wipe_tower_y] F9000 ; over the prime tower, so any ooze lands there
+M104 S[new_filament_temp]
+T[next_extruder] ; ${unit}: unload, select, load to the nozzle
+M109 S[new_filament_temp]
+G92 E0
+G1 E[flush_length] F240 ; flush here only without a prime tower
+; ===== end filament change =====`;
+
+/** Filament change on a unit with a purge chute (Creality CFS, Anycubic ACE Pro): the firmware's T command cuts,
+ *  unloads, loads and parks over the chute; the flush is pushed out there. */
+const CHUTE_UNIT_CHANGE = (unit: string) => `; ===== NexSpiro filament change [previous_extruder] -> [next_extruder] =====
+G1 Z[toolchange_z] F1200
+M104 S[new_filament_temp]
+T[next_extruder] ; ${unit}: cut, unload, load, park over the purge chute
+M109 S[new_filament_temp]
+G92 E0
+G1 E[flush_length] F300 ; flush the previous colour into the chute
+G1 E-0.8 F1800
+; ===== end filament change =====`;
+
+const VERIFY = (slicer: string) => ` Check the start and change G-code against ${slicer} before the first print.`;
+
+/** A single-nozzle printer with a filament unit: a filament swap (and a flush) on every colour change. */
+const filamentUnit = (p: PrinterProfile, u: { id: string; model: string; unit: string; slots: number; seconds: number; purge: 'chute' | 'tower'; note: string }): PrinterProfile => ({
+  ...p, id: u.id, model: u.model, note: u.note,
+  machine: {
+    ...p.machine, changer_type: 'ams', has_ams: false, purge_target: u.purge, filament_slots: u.slots, filament_change_time: u.seconds,
+    change_filament_gcode: u.purge === 'tower' ? TOWER_UNIT_CHANGE(u.unit) : CHUTE_UNIT_CHANGE(u.unit),
+  },
+});
+
 const H2D: PrinterProfile = {
   id: 'bbl-h2d', printerModelId: 'O1D', cameraMode: 'rtsp', vendor: 'Bambu Lab', model: 'H2D', nozzle: 0.4, bed: { x: 350, y: 320, z: 325 },
   plates: BBL_PLATES, flavor: 'bbl', connections: ['bbl_lan'],
-  note: 'Single-nozzle printing on the H2D. Dual-nozzle (left/right extruder) slicing is not supported yet.',
+  note: 'Prints with one of the H2D\'s two nozzles: every colour comes from the AMS through that nozzle, with a cut, a flush into the chute and ~95 s per change, as on the X1. Printing with both nozzles (one filament each, no flush between them) is not supported: use Bambu Studio for dual-nozzle prints.',
   machine: bblMachine({ machine_start_gcode: bblStart('Bambu Lab H2D', 0.5, 20), machine_end_gcode: bblEnd.replace('X128 Y250', 'X160 Y310'), change_filament_gcode: bblChange(340, 300), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
   processOverrides: {},
 };
@@ -303,7 +356,7 @@ PRINTERS.push(
   K('creality-k1', 'Creality', 'K1', [220, 220, 250], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
   K('creality-k1c', 'Creality', 'K1C', [220, 220, 250], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
   K('creality-k1max', 'Creality', 'K1 Max', [300, 300, 300], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
-  K('creality-k2plus', 'Creality', 'K2 Plus', [350, 350, 350], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000, { note: 'Single-colour printing; CFS multi-colour units are not driven yet.' }),
+  K('creality-k2plus', 'Creality', 'K2 Plus', [350, 350, 350], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000, { note: 'Single colour. With a CFS, pick K2 Plus Combo (CFS).' }),
   K('creality-ender3v3', 'Creality', 'Ender-3 V3', [220, 220, 250], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
   M('creality-ender3v3se', 'Creality', 'Ender-3 V3 SE', [220, 220, 250], 'medium', 3000, { start: marlinStart('Creality Ender-3 V3 SE', 5, 20, 180, 'G29 ; CR Touch levelling') }),
   M('creality-ender3s1', 'Creality', 'Ender-3 S1', [220, 220, 270], 'slow', 1000),
@@ -326,7 +379,7 @@ PRINTERS.push(
   // Anycubic
   M('anycubic-kobra2neo', 'Anycubic', 'Kobra 2 Neo', [220, 220, 250], 'medium', 2500),
   M('anycubic-kobra2max', 'Anycubic', 'Kobra 2 Max', [420, 420, 500], 'medium', 3000),
-  M('anycubic-kobra3', 'Anycubic', 'Kobra 3', [250, 250, 260], 'fast', 10000, { connections: ['serial'], note: 'ACE Pro multi-colour is not driven yet; prints single colour.' }),
+  M('anycubic-kobra3', 'Anycubic', 'Kobra 3', [250, 250, 260], 'fast', 10000, { connections: ['serial'], note: 'Single colour. With an ACE Pro, pick Kobra 3 Combo (ACE Pro).' }),
   // Voron & other Klipper machines
   K('voron-24-350', 'Voron', '2.4 350', [350, 350, 340], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END' }),
   K('voron-trident-300', 'Voron', 'Trident 300', [300, 300, 250], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END' }),
@@ -338,6 +391,45 @@ PRINTERS.push(
   K('sovol-sv07', 'Sovol', 'SV07', [220, 220, 250], 'PRINT_START BED_TEMP=[bed_temperature_initial_layer] EXTRUDER_TEMP=[nozzle_temperature_initial_layer]', 'fast', 8000, { end: 'PRINT_END' }),
   M('sovol-sv06', 'Sovol', 'SV06', [220, 220, 250], 'slow', 1500),
   K('artillery-x4plus', 'Artillery', 'Sidewinder X4 Plus', [300, 300, 400], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 7000),
+  // filament units: one nozzle, a filament swap and a flush on every colour change (chute or prime tower)
+  filamentUnit(M('prusa-mk4s', 'Prusa', 'MK4S', [250, 210, 220], 'medium', 4000, { connections: ['octoprint', 'serial'], start: marlinStart('Prusa MK4S MMU3', 5, 20, 120, 'G29 ; mesh bed levelling') }),
+    { id: 'prusa-mk4s-mmu3', model: 'MK4S + MMU3', unit: 'MMU3', slots: 5, seconds: 40, purge: 'tower',
+      note: 'Five filaments through one nozzle. The MMU3 has no purge chute, so each change is flushed on the prime tower (sized from the flushing volumes).' + VERIFY('PrusaSlicer\'s MK4S MMU3 profile') }),
+  filamentUnit(M('prusa-coreone', 'Prusa', 'CORE One', [250, 220, 270], 'fast', 8000, { connections: ['octoprint'], start: marlinStart('Prusa CORE One MMU3', 5, 20, 120, 'G29 ; mesh bed levelling') }),
+    { id: 'prusa-coreone-mmu3', model: 'CORE One + MMU3', unit: 'MMU3', slots: 5, seconds: 40, purge: 'tower',
+      note: 'Five filaments through one nozzle, flushed on the prime tower (the MMU3 has no purge chute).' + VERIFY('PrusaSlicer\'s CORE One MMU3 profile') }),
+  filamentUnit(M('prusa-mk3s', 'Prusa', 'MK3S+', [250, 210, 210], 'slow', 1250, { connections: ['octoprint', 'serial'], start: marlinStart('Prusa MK3S+ MMU3', 5, 20, 120, 'G80 ; mesh bed levelling') }),
+    { id: 'prusa-mk3s-mmu3', model: 'MK3S+ + MMU3', unit: 'MMU3', slots: 5, seconds: 45, purge: 'tower',
+      note: 'Five filaments through one nozzle, flushed on the prime tower (the MMU3 has no purge chute).' + VERIFY('PrusaSlicer\'s MK3S+ MMU3 profile') }),
+  filamentUnit(K('creality-k2plus', 'Creality', 'K2 Plus', [350, 350, 350], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
+    { id: 'creality-k2plus-cfs', model: 'K2 Plus Combo (CFS)', unit: 'CFS', slots: 4, seconds: 80, purge: 'chute',
+      note: 'CFS: cut, unload, load and flush into the purge chute. 4 slots per CFS: set Filament slots to 8, 12 or 16 with more units.' + VERIFY('Creality Print\'s K2 Plus CFS profile (the T command must park the nozzle over the chute)') }),
+  filamentUnit(K('creality-k1c', 'Creality', 'K1C', [220, 220, 250], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
+    { id: 'creality-k1c-cfs', model: 'K1C + CFS', unit: 'CFS', slots: 4, seconds: 80, purge: 'chute',
+      note: 'K1C with the CFS upgrade (cutter and purge chute).' + VERIFY('Creality Print\'s K1C CFS profile (the T command must park the nozzle over the chute)') }),
+  filamentUnit(K('creality-k1max', 'Creality', 'K1 Max', [300, 300, 300], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 20000),
+    { id: 'creality-k1max-cfs', model: 'K1 Max + CFS', unit: 'CFS', slots: 4, seconds: 80, purge: 'chute',
+      note: 'K1 Max with the CFS upgrade (cutter and purge chute).' + VERIFY('Creality Print\'s K1 Max CFS profile (the T command must park the nozzle over the chute)') }),
+  filamentUnit(K('creality-hi', 'Creality', 'Hi', [260, 260, 300], 'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer]', 'fast', 12000),
+    { id: 'creality-hi-cfs', model: 'Hi Combo (CFS)', unit: 'CFS', slots: 4, seconds: 80, purge: 'chute',
+      note: 'Hi Combo: CFS feeding a bed-slinger, flushed into the purge chute.' + VERIFY('Creality Print\'s Hi Combo profile (bed size and the T command too)') }),
+  filamentUnit(M('anycubic-kobra3', 'Anycubic', 'Kobra 3', [250, 250, 260], 'fast', 10000, { connections: ['serial'] }),
+    { id: 'anycubic-kobra3-ace', model: 'Kobra 3 Combo (ACE Pro)', unit: 'ACE Pro', slots: 4, seconds: 75, purge: 'chute',
+      note: 'ACE Pro: cut, unload, load and flush into the purge chute. Set Filament slots to 8 with two ACE Pro units.' + VERIFY('Anycubic Slicer Next\'s Kobra 3 Combo profile (the T command must park the nozzle over the chute)') }),
+  filamentUnit(M('anycubic-kobras1', 'Anycubic', 'Kobra S1', [250, 250, 250], 'fast', 20000, { connections: [] }),
+    { id: 'anycubic-kobras1-ace', model: 'Kobra S1 Combo (ACE Pro)', unit: 'ACE Pro', slots: 4, seconds: 75, purge: 'chute',
+      note: 'ACE Pro, flushed into the purge chute. Export the G-code and print from USB or Anycubic\'s app.' + VERIFY('Anycubic Slicer Next\'s Kobra S1 Combo profile (the T command must park the nozzle over the chute)') }),
+  filamentUnit(K('generic-klipper-mmu', 'Generic', 'Klipper printer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'medium', 5000, { end: 'PRINT_END' }),
+    { id: 'generic-klipper-mmu', model: 'Klipper multi-material unit', unit: 'MMU', slots: 8, seconds: 45, purge: 'tower',
+      note: 'ERCF / Tradrack (Happy Hare), BoxTurtle / AFC and other Klipper units: T0…Tn macros swap the filament, the prime tower takes the flush. Set Filament slots to your lane count (4–12); with a purge bucket (Blobifier), set Purge into to Purge chute and move the flush in the change G-code over the bucket.' }),
+  // tool changers and IDEX: one nozzle per filament, no purge between colours
+  toolchanger(M('prusa-xl-5t', 'Prusa', 'XL (5 toolheads)', [360, 360, 360], 'medium', 5000, { connections: ['octoprint'], start: marlinStart('Prusa XL 5T', 5, 20, 200, 'G29 ; mesh bed levelling'),
+    note: 'Five heads, one filament each. Check the start G-code against PrusaSlicer\'s XL profile before the first print.' }), 5, 12),
+  toolchanger(K('snapmaker-u1', 'Snapmaker', 'U1', [270, 270, 270], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END', connections: [],
+    note: 'Four-head tool changer. Export the G-code; check the start macro against Snapmaker\'s own slicer profile before the first print.' }), 4, 6),
+  toolchanger(K('generic-toolchanger', 'Generic', 'Klipper tool changer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END',
+    note: 'StealthChanger, TapChanger, Jubilee and other Klipper tool changers: T0…Tn macros pick up the head and apply its offsets. Set the number of heads in Printer settings.' }), 4, 10),
+  toolchanger(M('generic-idex', 'Generic', 'IDEX printer', [300, 300, 300], 'medium', 4000, { note: 'Independent dual extruder (two heads, T0 / T1). The firmware parks the idle head and applies its offset.' }), 2, 6),
   // generic
   M('generic-marlin', 'Generic', 'Marlin printer', [220, 220, 250], 'slow', 1000, { note: 'Starting point for any Marlin printer — set the bed size and start G-code in Printer settings.' }),
   K('generic-klipper', 'Generic', 'Klipper printer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'medium', 5000, { end: 'PRINT_END', note: 'Expects PRINT_START / PRINT_END macros in printer.cfg.' }),

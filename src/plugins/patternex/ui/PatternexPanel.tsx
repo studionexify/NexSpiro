@@ -16,6 +16,7 @@ import { LibraryWindow } from '../library/LibraryWindow';
 import { GROUP_KEYS, GROUP_NAMES, libraryCounts } from '../library/catalog';
 import { CreatePanel } from './CreatePanel';
 import { Calibration } from './Calibration';
+import { autoChanges } from '../../../profiles/changer';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
 export const px: PatternexState = createPatternexState(storage);
@@ -120,7 +121,7 @@ const POLICY: [SingleColourPolicy, string][] = [['skip', 'Leave in base colour (
 export function PatternexPanel() {
   usePatternex();
   const { printerId, filaments, tool, set } = useStore();
-  const ams = printerById(printerId).machine.has_ams === true;
+  const ams = autoChanges(printerById(printerId).machine);
   const sel = px.placements.find((p) => p.id === px.selected) ?? null;
   return (
     <div className="mx-panel">

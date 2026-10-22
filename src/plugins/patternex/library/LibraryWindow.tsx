@@ -9,6 +9,7 @@ import { buildPattern, GROUP_KEYS, GROUP_NAMES, libraryCounts, patternSvg, searc
 import { applyToObject, inkActions, SIDES, targetObject, targetSize, type Side, type Target } from './apply';
 import { px, changed } from '../ui/PatternexPanel';
 import { addPattern, patternInkKey } from '../ui/state';
+import { autoChanges } from '../../../profiles/changer';
 
 const PAGE = 120;
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -143,7 +144,7 @@ function Editor({ entry, onDone, guard, request }: { entry: LibraryEntry; onDone
   const [fitTarget, setFitTarget] = useState(true);
   const obj = targetObject();
   const filaments = useStore((s) => s.filaments);
-  const ams = useStore((s) => printerById(s.printerId).machine.has_ams === true);
+  const ams = useStore((s) => autoChanges(printerById(s.printerId).machine));
   /** Ink per group key colour: filament slot index, or -1 = base / not inked. Nothing is inked to start with. */
   const saved = px.savedInks[entry.key];
   const [inks, setInks] = useState<Record<string, number>>(() => ({ ...(saved ?? {}) }));
