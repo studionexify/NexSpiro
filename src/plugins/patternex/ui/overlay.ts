@@ -75,12 +75,12 @@ export function syncPlacementOverlay(group: THREE.Group, objects: SceneObject[])
       pts.push(...a, ...b);
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      const ring = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#FF5C8D', transparent: true, opacity: 0.7, depthTest: false }));
+      const ring = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#2563EB', transparent: true, opacity: 0.7, depthTest: false }));
       ring.renderOrder = 7;
       group.add(ring);
     }
     // anchor marker
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), new THREE.MeshBasicMaterial({ color: wp.id === px.selected ? '#FF5C8D' : '#85A3B2' }));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), new THREE.MeshBasicMaterial({ color: wp.id === px.selected ? '#2563EB' : '#A1A1AA' }));
     dot.position.set(...wp.position_xyz);
     group.add(dot);
   }
@@ -323,7 +323,7 @@ export function syncPreviewOverlay(group: THREE.Group, rep: PatternexReport | un
       const [x, y] = b.pts, z = b.z + 0.05, d = 0.8;
       pts.push(x - d, y, z, x + d, y, z, x, y - d, z, x, y + d, z);
     }
-    if (pts.length) lines(pts, '#FF5C8D');
+    if (pts.length) lines(pts, '#2563EB');
   }
   if (ov.swaps && rep.swaps.length) {
     // a ring around the print at each manual swap height, in the colour being loaded

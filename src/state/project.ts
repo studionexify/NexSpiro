@@ -5,6 +5,8 @@ import { saveFile } from '../platform';
 import { emptyProject, newId, objectMatrix, useStore, type FilamentSlotState, type Plate, type ProjectInfo, type SceneObject } from './store';
 import type { LayerAction } from '../engine/types';
 import { migrateConfig, type Config } from '../profiles/settings';
+import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
+import { mergeUserPresets } from './userPresets';
 import type { PatternexProjectData } from '../plugins/patternex/ui/state';
 import type { PrimSpec } from './ops';
 
@@ -23,6 +25,9 @@ interface ProjectJson {
   printerId: string; plate: string; presetId: string;
   overrides: Config; machineOverrides: Config;
   filaments: FilamentSlotState[];
+  /** User process presets saved in this project (optional; older projects have none). */
+  userPresets?: UserPreset[];
+  userPresetId?: string | null;
   plates: Plate[];
   project: ProjectInfo;
   /** Older projects stored Patternex placements here; they now live on each object. */
@@ -93,6 +98,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     version: VERSION, app: 'NexSpiro',
     printerId: s.printerId, plate: s.plate, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
     filaments: s.filaments, plates: s.plates, project,
+    userPresets: s.userPresets, userPresetId: s.userPresetId,
     plugins: (await import('../plugins/registry')).pluginProjectData(),
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
@@ -157,6 +163,10 @@ export async function loadProject(data: ArrayBuffer) {
     slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
     workspace: 'prepare',
   });
+  const ups = sanitizeUserPresets(json.userPresets).map((p) => ({ ...p, overrides: migrateConfig(p.overrides, json.version) }));
+  mergeUserPresets(ups);
+  const active = typeof json.userPresetId === 'string' ? useStore.getState().userPresets.find((p) => p.id === json.userPresetId) : undefined;
+  useStore.getState().set({ userPresetId: active?.id ?? null });
   (await import('../plugins/registry')).loadPluginProjectData(json.plugins);
 }
 

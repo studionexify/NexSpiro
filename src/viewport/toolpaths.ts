@@ -138,7 +138,7 @@ export class ToolpathView {
     const cone = new THREE.ConeGeometry(1.2, 4, 24);
     cone.rotateX(-Math.PI / 2);
     cone.translate(0, 0, 2);
-    this.nozzle = new THREE.Mesh(cone, new THREE.MeshStandardMaterial({ color: '#FF5C8D', emissive: '#732553', transparent: true, opacity: 0.85 }));
+    this.nozzle = new THREE.Mesh(cone, new THREE.MeshStandardMaterial({ color: '#2563EB', emissive: '#1E3A8A', transparent: true, opacity: 0.85 }));
     this.nozzle.visible = false;
     this.group.add(this.nozzle);
   }

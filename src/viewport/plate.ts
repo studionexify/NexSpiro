@@ -6,22 +6,25 @@ import type { PlateType, PrinterProfile } from '../profiles/printers';
 import { ICON_PATHS } from '../ui/icons';
 
 export type PlateAction = 'remove' | 'orient' | 'arrange' | 'lock' | 'settings' | 'number' | 'name';
-export const ACCENT_GREEN = '#00AE42';
+export const ACCENT_GREEN = '#10B981';
 
-interface BedLook { color: string; print: string; strip: string; textured: boolean }
-/** Plate surface colour and the print on it, per bed type. */
-function bedLook(type: PlateType, isBbl: boolean, label: string): BedLook {
+interface BedLook { color: string; print: string; strip: string; textured: boolean; ink: string; grid: string }
+/** Plate surface colour and the print on it, per bed type: soft light sheets on the light theme, deep greys on dark. */
+function bedLook(type: PlateType, isBbl: boolean, label: string, dark: boolean): BedLook {
+  const ink = dark ? 'rgba(228,228,231,0.55)' : 'rgba(82,82,91,0.5)';
+  const grid = dark ? '#52525B' : '#A1A1AA';
+  const sheet = (light: string, deep: string, print: string, strip: string, textured: boolean): BedLook => ({ color: dark ? deep : light, print, strip, textured, ink, grid });
   if (isBbl) {
     switch (type) {
-      case 'cool_plate': return { color: '#2E3031', print: 'Cool Plate SuperTack', strip: 'PLA/PETG/TPU', textured: false };
-      case 'engineering_plate': return { color: '#3B3C3E', print: 'Engineering Plate', strip: 'ABS/ASA/PC/PA', textured: false };
-      case 'high_temp_plate': return { color: '#45423C', print: 'Smooth PEI Plate', strip: 'PLA/ABS/PETG', textured: false };
-      default: return { color: '#404343', print: 'Textured PEI Plate', strip: 'PLA/ABS/PETG', textured: true };
+      case 'cool_plate': return sheet('#ECECEE', '#232327', 'Cool Plate SuperTack', 'PLA/PETG/TPU', false);
+      case 'engineering_plate': return sheet('#DEDEE2', '#2A2A30', 'Engineering Plate', 'ABS/ASA/PC/PA', false);
+      case 'high_temp_plate': return sheet('#E8E4DC', '#2C2A26', 'Smooth PEI Plate', 'PLA/ABS/PETG', false);
+      default: return sheet('#E4E4E7', '#26262B', 'Textured PEI Plate', 'PLA/ABS/PETG', true);
     }
   }
   return type === 'high_temp_plate'
-    ? { color: '#A9853F', print: label, strip: '', textured: false }
-    : { color: '#2F3031', print: label, strip: '', textured: true };
+    ? { ...sheet('#E6DCC6', '#3A3224', label, '', false), grid: dark ? '#6B5B3A' : '#A8946A' }
+    : sheet('#E4E4E7', '#232327', label, '', true);
 }
 
 type V2 = [number, number];
@@ -69,7 +72,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean,
     for (let i = 0; i < d.length; i += 4) {
       if (!d[i + 3]) continue;
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      const n = ((seed >> 16) & 31) - 16;
+      const n = (((seed >> 16) & 31) - 16) / 2;
       d[i] += n; d[i + 1] += n; d[i + 2] += n;
     }
     g.putImageData(img, 0, 0);
@@ -77,7 +80,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean,
   // excluded areas (e.g. the lidar calibration spot) as light grey pads
   for (const area of p.excludedAreas ?? []) {
     g.beginPath(); roundedPath(g, area as V2[], area.map(() => 2)); g.closePath();
-    g.fillStyle = '#C9CBCB'; g.fill();
+    g.fillStyle = look.grid; g.globalAlpha = 0.35; g.fill(); g.globalAlpha = 1;
   }
   const text = (s: string, x: number, y: number, size: number, color: string, rot = 0, font = 'italic 700', align: CanvasTextAlign = 'left') => {
     g.save();
@@ -90,7 +93,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean,
     g.restore();
   };
   // bed type printed along the left edge, reading from the back towards the front
-  if (look.print) text(look.print, 6.5, Y - 8, Math.min(9, X / 26), 'rgba(226,228,228,0.85)', Math.PI / 2);
+  if (look.print) text(look.print, 6.5, Y - 8, Math.min(9, X / 26), look.ink, Math.PI / 2);
   if (isBbl) {
     // front lip: material strip with HOT SURFACE warning, and the lip markings
     const sx0 = X * 0.36, sx1 = X * 0.86, sy0 = -2 - 7.6, sy1 = -2 - 1.6;
@@ -140,12 +143,12 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
 /** Icon tile: light rounded square with a dark outline icon. state: normal, hover, on (toggled) or off (disabled). */
 export function iconTexture(icon: string, state: 'normal' | 'hover' | 'on' | 'off', dark: boolean) {
   return canvasTex(128, 128, (g) => {
-    const bg = state === 'hover' ? '#FFFFFF' : state === 'on' ? ACCENT_GREEN : dark ? '#3A3D42' : '#F2F2F2';
-    const fg = state === 'on' ? '#FFFFFF' : state === 'off' ? (dark ? '#5A5E64' : '#C4C4C4') : state === 'hover' ? ACCENT_GREEN : dark ? '#D8DADC' : '#5A5E62';
+    const bg = state === 'hover' ? (dark ? '#3F3F46' : '#F4F4F5') : state === 'on' ? (dark ? '#F4F4F5' : '#18181B') : dark ? '#202024' : '#FFFFFF';
+    const fg = state === 'on' ? (dark ? '#18181B' : '#FFFFFF') : state === 'off' ? (dark ? '#52525B' : '#D4D4D8') : state === 'hover' ? (dark ? '#F4F4F5' : '#18181B') : dark ? '#A1A1AA' : '#52525B';
     g.globalAlpha = state === 'off' ? 0.6 : 1;
     g.beginPath(); g.roundRect(6, 6, 116, 116, 16);
     g.fillStyle = bg; g.fill();
-    g.lineWidth = 4; g.strokeStyle = state === 'hover' || state === 'on' ? ACCENT_GREEN : dark ? '#62666C' : '#B9BBBD'; g.stroke();
+    g.lineWidth = 4; g.strokeStyle = state === 'on' ? (dark ? '#F4F4F5' : '#18181B') : dark ? '#2C2C31' : '#E4E4E7'; g.stroke();
     g.translate(22, 22); g.scale(3.5, 3.5);
     g.strokeStyle = fg; g.lineWidth = 1.7; g.lineCap = 'round'; g.lineJoin = 'round';
     g.stroke(new Path2D(ICON_PATHS[icon] ?? ICON_PATHS.info));
@@ -160,7 +163,7 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   const g = new THREE.Group();
   const { x: X, y: Y } = p.bed;
   const isBbl = p.flavor === 'bbl';
-  const look = bedLook(plateType, isBbl, bedLabel);
+  const look = bedLook(plateType, isBbl, bedLabel, opts.dark);
   const o = outline(X, Y, isBbl);
   const xs = o.pts.map((q) => q[0]), ys = o.pts.map((q) => q[1]);
   const box = { x0: Math.min(...xs) - 1, y0: Math.min(...ys) - 1, x1: Math.max(...xs) + 1, y1: Math.max(...ys) + 1 };
@@ -171,7 +174,7 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false, curveSegments: 6 });
   slabGeo.translate(0, 0, -1.2);
   const top = new THREE.MeshBasicMaterial({ map: surfaceTexture(p, X, Y, isBbl, look, box) });
-  const side = new THREE.MeshBasicMaterial({ color: new THREE.Color(look.color).multiplyScalar(0.7) });
+  const side = new THREE.MeshBasicMaterial({ color: new THREE.Color(look.color).multiplyScalar(opts.dark ? 0.75 : 0.88) });
   const slab = new THREE.Mesh(slabGeo, [top, side]);
   slab.userData.plateIndex = index;
   slab.userData.surface = true;
@@ -186,12 +189,12 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
   };
-  const lineColor = plateType === 'high_temp_plate' && !isBbl ? '#5A4720' : '#A9ACAD';
+  const lineColor = look.grid;
   g.add(lines(minor, lineColor, 0.42));
   g.add(lines(major, lineColor, 0.75));
   g.add(lines([0, 0, 0.02, X, 0, 0.02, X, 0, 0.02, X, Y, 0.02, X, Y, 0.02, 0, Y, 0.02, 0, Y, 0.02, 0, 0, 0.02], opts.active && opts.plates > 1 ? ACCENT_GREEN : lineColor, opts.active && opts.plates > 1 ? 1 : 0.8));
   // the printable volume, faintly
-  const vol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, p.bed.z)), new THREE.LineBasicMaterial({ color: '#8C9094', transparent: true, opacity: opts.active ? 0.22 : 0.08 }));
+  const vol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(X, Y, p.bed.z)), new THREE.LineBasicMaterial({ color: look.grid, transparent: true, opacity: opts.active ? 0.22 : 0.08 }));
   vol.position.set(X / 2, Y / 2, p.bed.z / 2);
   g.add(vol);
   // axes at the origin

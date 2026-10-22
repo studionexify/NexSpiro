@@ -126,7 +126,7 @@ function Viewer() {
           emissiveIntensity: isBulb ? 1.6 : 0.35,
           clippingPlanes: lx.cutaway && view !== 'pieces' ? [clip] : [],
         });
-        if (sel && p.part.group === sel && !p.part.ghost) { mat.emissive = new THREE.Color('#ff5c8d'); mat.emissiveIntensity = 0.07; }
+        if (sel && p.part.group === sel && !p.part.ghost) { mat.emissive = new THREE.Color('#2563eb'); mat.emissiveIntensity = 0.07; }
         const mesh = new THREE.Mesh(flatGeo, mat);
         mesh.userData.group = p.part.group;
         mesh.userData.name = p.part.name;

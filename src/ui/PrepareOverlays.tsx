@@ -2,6 +2,7 @@ import { BRUSHES, BRUSH_LABELS, type BrushType } from '../engine/brush';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
+import { repairObjects } from '../state/meshTools';
 import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
 import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
@@ -153,7 +154,7 @@ export function ObjectInfo() {
         <span>Size:</span><b>{size[0]} x {size[1]} x {size[2]} mm</b>
         <span>Volume:</span><b>{volume.toFixed(2)} mm³</b>
         <span>Triangles:</span><b>{(o.mesh.indices.length / 3).toLocaleString()}</b>
-        {o.openEdges > 0 && <><span>Errors:</span><b className="oi-warn">{o.openEdges} open edges</b></>}
+        {o.openEdges > 0 && <><span>Errors:</span><b className="oi-warn">{o.openEdges} open edges <button className="btn-secondary btn-small" style={{ marginLeft: 6 }} title="Repair the mesh: close holes, remove bad triangles, fix flipped faces" onClick={() => repairObjects([o.id])}>Fix model</button></b></>}
         {o.printable === false && <><span>Printable:</span><b>No</b></>}
       </div>}
     </div>

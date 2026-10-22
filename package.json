@@ -80,6 +80,8 @@
   "author": "NexSpiro",
   "homepage": "https://github.com/studionexify/NexSpiro",
   "dependencies": {
+    "@fontsource/inter": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.0",
     "bwip-js": "^4.11.4",
     "manifold-3d": "^3.5.4",
     "opentype.js": "^1.3.4"

@@ -13,6 +13,7 @@ import { printerById } from '../profiles/printers';
 import { CONFIG_VERSION, migrateConfig, type Config, type ProcessTab } from '../profiles/settings';
 import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
+import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
 export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
@@ -125,6 +126,9 @@ interface State {
   filaments: FilamentSlotState[];
   presetId: string;
   overrides: Config;
+  /** Saved user process presets and the one last applied / saved (null = a system preset). */
+  userPresets: UserPreset[];
+  userPresetId: string | null;
   machineOverrides: Config;
   processTab: ProcessTab;
   processMode: 'global' | 'objects';
@@ -243,6 +247,14 @@ const LS = 'nexspiro.prefs.v1';
 const loadPrefs = (): any => {
   try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; }
 };
+const LS_USER_PRESETS = 'nexspiro.userPresets.v1';
+function loadUserPresets(): UserPreset[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const d = JSON.parse(localStorage.getItem(LS_USER_PRESETS) ?? '{}');
+    return sanitizeUserPresets(d.presets).map((p) => ({ ...p, overrides: migrateConfig(p.overrides, d.configVersion ?? CONFIG_VERSION) }));
+  } catch { return []; }
+}
 const prefs = typeof localStorage !== 'undefined' ? loadPrefs() : {};
 const systemTheme: Theme = typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 const defaultFilaments = (): FilamentSlotState[] => {
@@ -288,6 +300,8 @@ export const useStore = create<State>((set, get) => ({
   filaments: defaultFilaments(),
   presetId: prefs.presetId ?? '0.20',
   overrides: migrateConfig(prefs.overrides, prefs.configVersion ?? 1),
+  userPresets: loadUserPresets(),
+  userPresetId: typeof prefs.userPresetId === 'string' ? prefs.userPresetId : null,
   machineOverrides: prefs.machineOverrides ?? {},
   processTab: 'Quality',
   processMode: 'global',
@@ -388,13 +402,18 @@ export const useStore = create<State>((set, get) => ({
 }));
 
 // persist preferences
+let lastUserPresets: UserPreset[] | null = null;
 useStore.subscribe((s) => {
   try {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, configVersion: CONFIG_VERSION,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
     }));
+    if (s.userPresets !== lastUserPresets) {
+      lastUserPresets = s.userPresets;
+      localStorage.setItem(LS_USER_PRESETS, JSON.stringify({ configVersion: CONFIG_VERSION, presets: s.userPresets }));
+    }
   } catch { /* storage unavailable */ }
 });
 
