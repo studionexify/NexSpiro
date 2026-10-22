@@ -70,7 +70,9 @@ void main() {
   vec3 L = normalize(vec3(0.35, 0.45, 0.82));
   vec3 L2 = normalize(vec3(-0.6, -0.3, 0.4));
   float diff = max(dot(normalize(vNormal), L), 0.0) * 0.7 + max(dot(normalize(vNormal), L2), 0.0) * 0.25;
-  gl_FragColor = vec4(vColor * (0.38 + diff), 1.0);
+  vec3 n = normalize(vNormal);
+  float spec = pow(max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0), 24.0) * 0.18;
+  gl_FragColor = vec4(vColor * (0.34 + diff) + spec, 1.0);
   #include <colorspace_fragment>
 }`;
 
@@ -92,19 +94,28 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-function unitBox(): THREE.BufferGeometry {
-  // x ∈ [0,1] along the move, y ∈ [-0.5,0.5] across, z ∈ [-1,0] (top of the bead at move z). No bottom face.
+/** One extrusion bead: x ∈ [0,1] along the move, a rounded (stadium) cross-section y ∈ [-0.5,0.5], z ∈ [-1,0]
+ *  with the top of the bead at move z. Round normals make consecutive beads shade as one continuous strand. */
+function unitBead(segs = 12): THREE.BufferGeometry {
   const P: number[] = [], N: number[] = [], I: number[] = [];
-  const quad = (a: number[], b: number[], c: number[], d: number[], n: number[]) => {
+  const ring: [number, number, number, number][] = []; // y, z, ny, nz
+  for (let k = 0; k < segs; k++) {
+    const t = (k / segs) * Math.PI * 2;
+    ring.push([0.5 * Math.cos(t), -0.5 + 0.5 * Math.sin(t), Math.cos(t), Math.sin(t)]);
+  }
+  for (let k = 0; k < segs; k++) {
+    const [y0, z0, ny0, nz0] = ring[k], [y1, z1, ny1, nz1] = ring[(k + 1) % segs];
     const o = P.length / 3;
-    P.push(...a, ...b, ...c, ...d); for (let k = 0; k < 4; k++) N.push(...n);
+    P.push(0, y0, z0, 1, y0, z0, 1, y1, z1, 0, y1, z1);
+    N.push(0, ny0, nz0, 0, ny0, nz0, 0, ny1, nz1, 0, ny1, nz1);
     I.push(o, o + 1, o + 2, o, o + 2, o + 3);
-  };
-  quad([0, -0.5, 0], [1, -0.5, 0], [1, 0.5, 0], [0, 0.5, 0], [0, 0, 1]); // top
-  quad([0, -0.5, -1], [1, -0.5, -1], [1, -0.5, 0], [0, -0.5, 0], [0, -1, 0]); // right
-  quad([1, 0.5, -1], [0, 0.5, -1], [0, 0.5, 0], [1, 0.5, 0], [0, 1, 0]); // left
-  quad([1, -0.5, -1], [1, 0.5, -1], [1, 0.5, 0], [1, -0.5, 0], [1, 0, 0]); // end
-  quad([0, 0.5, -1], [0, -0.5, -1], [0, -0.5, 0], [0, 0.5, 0], [-1, 0, 0]); // start
+  }
+  for (const [x, nx] of [[0, -1], [1, 1]] as const) { // end caps
+    const c = P.length / 3;
+    P.push(x, 0, -0.5); N.push(nx, 0, 0);
+    for (const [y, z] of ring) { P.push(x, y, z); N.push(nx, 0, 0); }
+    for (let k = 0; k < segs; k++) { const p = c + 1 + k, q = c + 1 + ((k + 1) % segs); if (nx > 0) I.push(c, p, q); else I.push(c, q, p); }
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
@@ -164,7 +175,7 @@ export class ToolpathView {
         e++;
       }
     }
-    const base = unitBox();
+    const base = unitBead();
     const g = new THREE.InstancedBufferGeometry();
     g.index = base.index;
     g.setAttribute('position', base.getAttribute('position'));

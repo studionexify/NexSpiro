@@ -286,7 +286,7 @@ export const useStore = create<State>((set, get) => ({
   search: '',
   showOverhangs: false,
   showEdges: false,
-  shadeSmooth: false,
+  shadeSmooth: true,
   edgeAngle: 30,
   edgeSel: null,
 

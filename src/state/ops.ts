@@ -245,26 +245,40 @@ export function signedVolume(m: IndexedMesh) {
   return vol / 6;
 }
 
-/** A closed, outward-facing primitive about `size` mm across, centred on the origin. */
+/** Chord tolerance for primitive tessellation (mm): curved surfaces deviate from the true shape by at most this. */
+export const PRIMITIVE_CHORD_TOL = 0.001;
+
+/** Segments needed around a full circle of radius `rad` for a chord error under PRIMITIVE_CHORD_TOL. */
+export function circleSegments(rad: number, tol = PRIMITIVE_CHORD_TOL): number {
+  if (rad <= tol) return 8;
+  const n = Math.ceil(Math.PI / Math.acos(1 - tol / rad));
+  return Math.max(48, Math.min(512, n + (n & 1)));
+}
+
+/** A closed, outward-facing primitive about `size` mm across, centred on the origin.
+ *  Round surfaces are tessellated to PRIMITIVE_CHORD_TOL, so the mesh is within a micron of the exact shape. */
 export function primitive(shape: ShapeKind, size: number): IndexedMesh {
   const r = size / 2;
   let out: number[] = [];
   const arc = (cx: number, cz: number, rad: number, from: number, to: number, n: number) =>
     Array.from({ length: n + 1 }, (_, i) => { const a = from + ((to - from) * i) / n; return [cx + rad * Math.cos(a), cz + rad * Math.sin(a)] as [number, number]; });
+  const S = circleSegments(r);
+  // segments along an arc of `sweep` radians on a circle of radius rad
+  const along = (rad: number, sweep: number) => Math.max(2, Math.ceil((circleSegments(rad) * sweep) / (Math.PI * 2)));
   if (shape === 'box') {
     const v = [[-r, -r, -r], [r, -r, -r], [r, r, -r], [-r, r, -r], [-r, -r, r], [r, -r, r], [r, r, r], [-r, r, r]];
     const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
     for (const t of f) for (const i of t) out.push(...v[i]);
-  } else if (shape === 'cylinder') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 48);
+  } else if (shape === 'cylinder') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], S);
   else if (shape === 'prism') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 3, Math.PI / 2);
-  else if (shape === 'disc') out = revolve([[0, -r * 0.15], [r, -r * 0.15], [r, r * 0.15], [0, r * 0.15]], 64);
-  else if (shape === 'cone') out = revolve([[0, -r], [r, -r], [0, r]], 48);
+  else if (shape === 'disc') out = revolve([[0, -r * 0.15], [r, -r * 0.15], [r, r * 0.15], [0, r * 0.15]], S);
+  else if (shape === 'cone') out = revolve([[0, -r], [r, -r], [0, r]], S);
   else if (shape === 'pyramid') out = revolve([[0, -r], [r * Math.SQRT2, -r], [0, r]], 4, Math.PI / 4);
-  else if (shape === 'sphere') out = revolve(arc(0, 0, r, -Math.PI / 2, Math.PI / 2, 24), 48);
-  else if (shape === 'hemisphere') out = revolve([[0, 0], ...arc(0, 0, r, 0, Math.PI / 2, 12)], 48);
-  else if (shape === 'capsule') out = revolve([...arc(0, -r * 0.5, r * 0.5, -Math.PI / 2, 0, 8), ...arc(0, r * 0.5, r * 0.5, 0, Math.PI / 2, 8)], 48);
-  else if (shape === 'tube') out = revolve([[r * 0.6, -r], [r, -r], [r, r], [r * 0.6, r], [r * 0.6, -r]], 48);
-  else if (shape === 'torus') out = revolve(arc(r * 0.68, 0, r * 0.32, 0, Math.PI * 2, 24), 48);
+  else if (shape === 'sphere') out = revolve(arc(0, 0, r, -Math.PI / 2, Math.PI / 2, along(r, Math.PI)), S);
+  else if (shape === 'hemisphere') out = revolve([[0, 0], ...arc(0, 0, r, 0, Math.PI / 2, along(r, Math.PI / 2))], S);
+  else if (shape === 'capsule') out = revolve([...arc(0, -r * 0.5, r * 0.5, -Math.PI / 2, 0, along(r * 0.5, Math.PI / 2)), ...arc(0, r * 0.5, r * 0.5, 0, Math.PI / 2, along(r * 0.5, Math.PI / 2))], S);
+  else if (shape === 'tube') out = revolve([[r * 0.6, -r], [r, -r], [r, r], [r * 0.6, r], [r * 0.6, -r]], S);
+  else if (shape === 'torus') out = revolve(arc(r * 0.68, 0, r * 0.32, 0, Math.PI * 2, along(r * 0.32, Math.PI * 2)), S);
   const m = weld(new Float32Array(out));
   if (signedVolume(m) < 0) for (let t = 0; t < m.indices.length; t += 3) { const k = m.indices[t + 1]; m.indices[t + 1] = m.indices[t + 2]; m.indices[t + 2] = k; }
   return m;

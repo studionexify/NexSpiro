@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, applyPartsBoolean, booleanSelected, hasShapeParts, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
-import { bevelSelectedEdges, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
+import { bevelSelectedEdges, exactifyObject, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
 import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
@@ -275,6 +275,11 @@ export function EdgesPanel() {
       <div className="row" style={{ marginBottom: 8 }}>
         <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, 1) ?? '')}>Chamfer</button>
         <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, segments) ?? '')}>Fillet</button>
+      </div>
+      <h4 style={{ marginTop: 6 }}>Smooth surface (exact)</h4>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>For faceted STL files. Flat faces, cylinders and spheres are recognised and rebuilt on their exact mathematical surface; other curved areas are smoothed. Edges steeper than the crease angle stay sharp. Prints smooth too.</p>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <button className="btn-primary btn-small" disabled={!o} onClick={() => o && exactifyObject(o.id, s.edgeAngle)}>Smooth surface</button>
       </div>
       <h4 style={{ marginTop: 6 }}>Smooth body</h4>
       <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>{quads ? 'This model has quad faces: they are subdivided into a smooth outer body (Catmull-Clark).' : 'Subdivides the triangles into a finer, rounder surface (Loop). Edges steeper than the crease angle stay sharp.'}</p>

@@ -224,9 +224,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.19851661682926758,
-      "checkedMm": 26881.964333433552,
-      "checkedSegments": 16423,
-      "belowResolution": 91,
+      "checkedMm": 26904.338573553494,
+      "checkedSegments": 2987,
+      "belowResolution": 0,
       "failureCount": 0
     },
     "firstFailures": []
@@ -268,7 +268,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 16514,
+      "declaredHits": 2987,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -282,7 +282,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "rMax": 9.79012277757537,
+      "rMax": 9.789725430266158,
       "zMax": 20,
       "failureCount": 0
     },
@@ -296,10 +296,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.1298664691898383,
-      "checkedMm": 4730.403668820792,
-      "checkedSegments": 4124,
-      "belowResolution": 20,
+      "maxRelErrPct": 0.05705233634715745,
+      "checkedMm": 4733.317851723312,
+      "checkedSegments": 354,
+      "belowResolution": 0,
       "failureCount": 0
     },
     "firstFailures": []
@@ -341,8 +341,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 4144,
-      "maxPosErrMm": 0.000503662109380798,
+      "declaredHits": 354,
+      "maxPosErrMm": 0.0005023803710884067,
       "failureCount": 0
     },
     "firstFailures": []
@@ -355,7 +355,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "rMax": 9.099306621935549,
+      "rMax": 9.09863506246954,
       "zMax": 19.64,
       "failureCount": 0
     },
@@ -369,10 +369,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5869980946072624,
-      "checkedMm": 7825.302642781435,
-      "checkedSegments": 6808,
-      "belowResolution": 9152,
+      "maxRelErrPct": 0.25724121165890057,
+      "checkedMm": 10431.355442011487,
+      "checkedSegments": 1576,
+      "belowResolution": 0,
       "failureCount": 0
     },
     "firstFailures": []
@@ -414,7 +414,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 15960,
+      "declaredHits": 1576,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -428,7 +428,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "rMax": 2.950471996138929,
+      "rMax": 2.949926270265064,
       "zMax": 5.96,
       "failureCount": 0
     },
@@ -1136,9 +1136,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.19851661682926758,
-      "checkedMm": 26723.03744026461,
-      "checkedSegments": 16332,
-      "belowResolution": 182,
+      "checkedMm": 26757.43329980896,
+      "checkedSegments": 2735,
+      "belowResolution": 0,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1180,7 +1180,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 16514,
+      "declaredHits": 2735,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -1208,9 +1208,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.16164852924216283,
-      "checkedMm": 7184.7052150780755,
-      "checkedSegments": 4654,
+      "maxRelErrPct": 0.07991579136705454,
+      "checkedMm": 7186.2752407823755,
+      "checkedSegments": 714,
       "belowResolution": 1,
       "failureCount": 0
     },
@@ -1253,8 +1253,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 4655,
-      "maxPosErrMm": 0.000503662109380798,
+      "declaredHits": 715,
+      "maxPosErrMm": 0.0005032348632880712,
       "failureCount": 0
     },
     "firstFailures": []
@@ -1281,9 +1281,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5869980946072624,
-      "checkedMm": 17764.22519931381,
-      "checkedSegments": 16284,
+      "maxRelErrPct": 0.3839525437241982,
+      "checkedMm": 17767.522836815035,
+      "checkedSegments": 4193,
       "belowResolution": 71,
       "failureCount": 0
     },
@@ -1326,7 +1326,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 16355,
+      "declaredHits": 4264,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -1365,8 +1365,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.39908840272453544,
-      "checkedMm": 32100.539385770393,
-      "checkedSegments": 12041,
+      "checkedMm": 32101.13904760918,
+      "checkedSegments": 7097,
       "belowResolution": 134,
       "failureCount": 0
     },
@@ -1409,7 +1409,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 12175,
+      "declaredHits": 7231,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -1433,9 +1433,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.2685721281724339,
-      "checkedMm": 31826.7180355151,
-      "checkedSegments": 11740,
+      "maxRelErrPct": 0.2512925295981604,
+      "checkedMm": 31827.312029247834,
+      "checkedSegments": 6751,
       "belowResolution": 134,
       "failureCount": 0
     },
@@ -1478,7 +1478,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 11874,
+      "declaredHits": 6885,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -1979,7 +1979,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_layers",
@@ -1990,8 +1990,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.47694196899831537,
-      "checkedMm": 51956.03691419,
-      "checkedSegments": 10197,
+      "checkedMm": 51956.1062048749,
+      "checkedSegments": 10013,
       "belowResolution": 363,
       "failureCount": 0
     },
@@ -2034,7 +2034,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 10560,
+      "declaredHits": 10376,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -2049,7 +2049,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_layers",
@@ -2060,8 +2060,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.47694196899831537,
-      "checkedMm": 51956.03691419,
-      "checkedSegments": 10197,
+      "checkedMm": 51956.1062048749,
+      "checkedSegments": 10013,
       "belowResolution": 363,
       "failureCount": 0
     },
@@ -2104,7 +2104,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 10560,
+      "declaredHits": 10376,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -2119,7 +2119,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_layers",
@@ -2130,8 +2130,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.41007283121340954,
-      "checkedMm": 116315.77374104109,
-      "checkedSegments": 23193,
+      "checkedMm": 116315.9190333559,
+      "checkedSegments": 22825,
       "belowResolution": 164,
       "failureCount": 0
     },
@@ -2174,7 +2174,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 23357,
+      "declaredHits": 22989,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -2871,8 +2871,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 1.7044001309218786,
-      "checkedMm": 51955.393009446205,
-      "checkedSegments": 19871,
+      "checkedMm": 51955.42641933925,
+      "checkedSegments": 19779,
       "belowResolution": 363,
       "failureCount": 0
     },
@@ -2915,7 +2915,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 20234,
+      "declaredHits": 20142,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -2940,8 +2940,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.47694196899831537,
-      "checkedMm": 51954.868204264894,
-      "checkedSegments": 19871,
+      "checkedMm": 51954.90161415794,
+      "checkedSegments": 19779,
       "belowResolution": 363,
       "failureCount": 0
     },
@@ -2984,7 +2984,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 20234,
+      "declaredHits": 20142,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -3009,8 +3009,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5603081596203477,
-      "checkedMm": 116315.75273169532,
-      "checkedSegments": 47873,
+      "checkedMm": 116315.8211885999,
+      "checkedSegments": 47689,
       "belowResolution": 164,
       "failureCount": 0
     },
@@ -3053,7 +3053,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 48037,
+      "declaredHits": 47853,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -4109,7 +4109,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Layer tilt limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/sgd_slicing",
@@ -4179,7 +4179,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Layer tilt limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/sgd_slicing",
@@ -4249,7 +4249,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Layer tilt limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/sgd_slicing",
@@ -4328,10 +4328,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.46101260340088096,
-      "checkedMm": 31646.03672756317,
-      "checkedSegments": 2871,
-      "belowResolution": 617,
+      "maxRelErrPct": 0.8583911161255819,
+      "checkedMm": 31848.436539005615,
+      "checkedSegments": 3271,
+      "belowResolution": 517,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4373,7 +4373,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 4790,
+      "declaredHits": 3990,
       "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
@@ -4398,8 +4398,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.45796056146517344,
-      "checkedMm": 31831.04249468048,
-      "checkedSegments": 5065,
+      "checkedMm": 31830.731011371226,
+      "checkedSegments": 4265,
       "belowResolution": 112,
       "failureCount": 0
     },
@@ -4442,7 +4442,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 5177,
+      "declaredHits": 4377,
       "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
@@ -4466,10 +4466,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.22903101320016442,
-      "checkedMm": 4010.2630387146846,
-      "checkedSegments": 1416,
-      "belowResolution": 365,
+      "maxRelErrPct": 0.7696952132806252,
+      "checkedMm": 4048.6522915271635,
+      "checkedSegments": 1490,
+      "belowResolution": 366,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4511,7 +4511,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 2513,
+      "declaredHits": 2365,
       "maxPosErrMm": 0.0005007934570357975,
       "failureCount": 0
     },
@@ -5163,8 +5163,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.43859652647427627,
-      "checkedMm": 21680.38286178483,
-      "checkedSegments": 19731,
+      "checkedMm": 21680.56081365613,
+      "checkedSegments": 14561,
       "belowResolution": 0,
       "failureCount": 0
     },
@@ -5207,7 +5207,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 19731,
+      "declaredHits": 14561,
       "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
@@ -5232,8 +5232,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.43859652647427627,
-      "checkedMm": 21619.07403332538,
-      "checkedSegments": 17944,
+      "checkedMm": 21619.033710659533,
+      "checkedSegments": 11108,
       "belowResolution": 0,
       "failureCount": 0
     },
@@ -5276,7 +5276,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 17944,
+      "declaredHits": 11108,
       "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
@@ -5370,9 +5370,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.3639107332543716,
-      "checkedMm": 125200.76324026518,
-      "checkedSegments": 37629,
-      "belowResolution": 2094,
+      "checkedMm": 125343.5281192477,
+      "checkedSegments": 18113,
+      "belowResolution": 1422,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5414,7 +5414,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 39723,
+      "declaredHits": 19535,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -5510,10 +5510,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6048063142999293,
-      "checkedMm": 258757.16957066447,
-      "checkedSegments": 37357,
-      "belowResolution": 24520,
+      "maxRelErrPct": 0.5799699501081553,
+      "checkedMm": 315759.9973334034,
+      "checkedSegments": 51961,
+      "belowResolution": 20088,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5555,7 +5555,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 471355,
+      "declaredHits": 89106,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -6194,7 +6194,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Dome layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/harmonic_dome",
@@ -6264,7 +6264,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Dome layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/harmonic_dome",
@@ -6334,7 +6334,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Dome layers limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/harmonic_dome",
@@ -6404,7 +6404,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal ironing limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_ironing",
@@ -6415,8 +6415,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.4423412879846221,
-      "checkedMm": 49507.051990468404,
-      "checkedSegments": 8561,
+      "checkedMm": 49507.09573531486,
+      "checkedSegments": 8469,
       "belowResolution": 9807,
       "failureCount": 0
     },
@@ -6459,7 +6459,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 18368,
+      "declaredHits": 18276,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -6474,7 +6474,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal ironing limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_ironing",
@@ -6485,8 +6485,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.4423412879846221,
-      "checkedMm": 50401.99227688992,
-      "checkedSegments": 9573,
+      "checkedMm": 50402.03602173638,
+      "checkedSegments": 9481,
       "belowResolution": 403,
       "failureCount": 0
     },
@@ -6529,7 +6529,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 9976,
+      "declaredHits": 9884,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -6544,7 +6544,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Conformal ironing limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/conformal_ironing",
@@ -6555,9 +6555,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.41007283121340954,
-      "checkedMm": 110135.72431002656,
-      "checkedSegments": 19004,
-      "belowResolution": 293,
+      "checkedMm": 110146.65204516232,
+      "checkedSegments": 18808,
+      "belowResolution": 282,
       "failureCount": 0
     },
     "firstFailures": []
@@ -6599,7 +6599,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 19349,
+      "declaredHits": 19090,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -6614,7 +6614,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Feathering limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Rounded-side shingling limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/perimeter_feathering",
@@ -6684,7 +6684,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Feathering limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Rounded-side shingling limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/perimeter_feathering",
@@ -6754,7 +6754,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Feathering limited to 11° slopes by Bambu Lab X1C hotend."
+    "reason": "Rounded-side shingling limited to 11° slopes by Bambu Lab X1C hotend."
   },
   {
     "target": "adv/perimeter_feathering",
@@ -7248,8 +7248,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.2916134527112024,
-      "checkedMm": 2670.307991819929,
-      "checkedSegments": 6556,
+      "checkedMm": 2670.303510085276,
+      "checkedSegments": 6396,
       "belowResolution": 68,
       "failureCount": 0
     },
@@ -7292,7 +7292,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 6624,
+      "declaredHits": 6464,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -7317,8 +7317,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.2916134527112024,
-      "checkedMm": 6008.192981596753,
-      "checkedSegments": 14751,
+      "checkedMm": 6008.182897693782,
+      "checkedSegments": 14391,
       "belowResolution": 153,
       "failureCount": 0
     },
@@ -7361,7 +7361,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 14904,
+      "declaredHits": 14544,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -7386,8 +7386,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5013156273376973,
-      "checkedMm": 172.76949987440594,
-      "checkedSegments": 422,
+      "checkedMm": 172.76669517687125,
+      "checkedSegments": 366,
       "belowResolution": 14,
       "failureCount": 0
     },
@@ -7430,7 +7430,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 436,
+      "declaredHits": 380,
       "maxPosErrMm": 0.000500732421869543,
       "failureCount": 0
     },
@@ -8083,8 +8083,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.3569645676953678,
-      "checkedMm": 38822.79136921414,
-      "checkedSegments": 12949,
+      "checkedMm": 38823.73976216705,
+      "checkedSegments": 6568,
       "belowResolution": 216,
       "failureCount": 0
     },
@@ -8127,7 +8127,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 13165,
+      "declaredHits": 6784,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8153,8 +8153,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.3569645676953678,
-      "checkedMm": 39661.792749350796,
-      "checkedSegments": 13522,
+      "checkedMm": 39662.55921671768,
+      "checkedSegments": 6118,
       "belowResolution": 217,
       "failureCount": 0
     },
@@ -8197,7 +8197,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 13739,
+      "declaredHits": 6335,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8222,9 +8222,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3108731666673528,
-      "checkedMm": 86063.71973171912,
-      "checkedSegments": 33372,
+      "maxRelErrPct": 0.3055167732745121,
+      "checkedMm": 86066.08796393758,
+      "checkedSegments": 16724,
       "belowResolution": 212,
       "failureCount": 0
     },
@@ -8267,7 +8267,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 33584,
+      "declaredHits": 16936,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8292,8 +8292,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.31810833648773595,
-      "checkedMm": 220181.77119931698,
-      "checkedSegments": 166998,
+      "checkedMm": 220200.0045499526,
+      "checkedSegments": 143312,
       "belowResolution": 1818,
       "failureCount": 0
     },
@@ -8336,7 +8336,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 178518,
+      "declaredHits": 154832,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8432,9 +8432,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.23099373736779044,
-      "checkedMm": 257657.83258703622,
-      "checkedSegments": 68209,
+      "maxRelErrPct": 0.22670187928409122,
+      "checkedMm": 257660.422752046,
+      "checkedSegments": 41245,
       "belowResolution": 513,
       "failureCount": 0
     },
@@ -8477,7 +8477,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 69471,
+      "declaredHits": 42507,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8501,10 +8501,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.5801117022010296,
-      "checkedMm": 37200.76214193073,
-      "checkedSegments": 42036,
-      "belowResolution": 34690,
+      "maxRelErrPct": 0.668539105123396,
+      "checkedMm": 53164.771030474476,
+      "checkedSegments": 56864,
+      "belowResolution": 18197,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8546,7 +8546,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 174244,
+      "declaredHits": 79356,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8571,7 +8571,7 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.35207029703006965,
-      "checkedMm": 55380.80679629147,
+      "checkedMm": 56361.0551701382,
       "checkedSegments": 121494,
       "belowResolution": 120718,
       "failureCount": 0
@@ -8615,7 +8615,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 482776,
+      "declaredHits": 473596,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8640,10 +8640,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3476038518979151,
-      "checkedMm": 4384.109412194036,
-      "checkedSegments": 1418,
-      "belowResolution": 30,
+      "maxRelErrPct": 0.3347966503104978,
+      "checkedMm": 4386.074677359202,
+      "checkedSegments": 1308,
+      "belowResolution": 18,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8685,7 +8685,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 1448,
+      "declaredHits": 1326,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -8919,9 +8919,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.45093602048311004,
-      "checkedMm": 18064.097484973372,
-      "checkedSegments": 5383,
-      "belowResolution": 163,
+      "checkedMm": 18108.937951319633,
+      "checkedSegments": 2283,
+      "belowResolution": 6,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8963,8 +8963,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 5662,
-      "maxPosErrMm": 0.000503662109380798,
+      "declaredHits": 2289,
+      "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
     "firstFailures": []
@@ -8978,9 +8978,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.45093602048311004,
-      "checkedMm": 18064.097484973372,
-      "checkedSegments": 5383,
-      "belowResolution": 163,
+      "checkedMm": 18108.937951319633,
+      "checkedSegments": 2283,
+      "belowResolution": 6,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9022,8 +9022,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 5662,
-      "maxPosErrMm": 0.000503662109380798,
+      "declaredHits": 2289,
+      "maxPosErrMm": 0.0005034790039104564,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9273,9 +9273,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5138197629585367,
-      "checkedMm": 15770.362648067628,
-      "checkedSegments": 6133,
-      "belowResolution": 395,
+      "checkedMm": 16175.370395190703,
+      "checkedSegments": 4667,
+      "belowResolution": 319,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9317,7 +9317,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 8868,
+      "declaredHits": 5106,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -9331,10 +9331,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3529064042886785,
-      "checkedMm": 15433.565234685084,
-      "checkedSegments": 3532,
-      "belowResolution": 235,
+      "maxRelErrPct": 0.306550714828177,
+      "checkedMm": 15837.613330625774,
+      "checkedSegments": 3114,
+      "belowResolution": 159,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9376,7 +9376,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 6087,
+      "declaredHits": 3373,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -9390,10 +9390,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.4395163218745988,
-      "checkedMm": 16726.61647626342,
-      "checkedSegments": 3670,
-      "belowResolution": 1150,
+      "maxRelErrPct": 0.3586584821099938,
+      "checkedMm": 19454.124424615566,
+      "checkedSegments": 3667,
+      "belowResolution": 133,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9435,7 +9435,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 20481,
+      "declaredHits": 5080,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -9461,8 +9461,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.32201503307426654,
-      "checkedMm": 24890.315354227478,
-      "checkedSegments": 34851,
+      "checkedMm": 24892.494660460303,
+      "checkedSegments": 28511,
       "belowResolution": 72,
       "failureCount": 0
     },
@@ -9505,7 +9505,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 34923,
+      "declaredHits": 28583,
       "maxPosErrMm": 0.0005037841796848852,
       "failureCount": 0
     },
@@ -9546,8 +9546,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.32984102886167005,
-      "checkedMm": 24881.010733219005,
-      "checkedSegments": 16875,
+      "checkedMm": 24883.190039451827,
+      "checkedSegments": 10535,
       "belowResolution": 72,
       "failureCount": 0
     },
@@ -9590,7 +9590,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 16947,
+      "declaredHits": 10607,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -9630,9 +9630,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.4791307294879423,
-      "checkedMm": 3955.1412653582947,
-      "checkedSegments": 6127,
+      "maxRelErrPct": 0.3116667185709662,
+      "checkedMm": 3955.7721027773205,
+      "checkedSegments": 920,
       "belowResolution": 8804,
       "failureCount": 0
     },
@@ -9675,7 +9675,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 15108,
+      "declaredHits": 9901,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -9716,8 +9716,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.32201503307426654,
-      "checkedMm": 24096.98414376963,
-      "checkedSegments": 33218,
+      "checkedMm": 24099.16345000255,
+      "checkedSegments": 26878,
       "belowResolution": 72,
       "failureCount": 0
     },
@@ -9760,7 +9760,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 33290,
+      "declaredHits": 26950,
       "maxPosErrMm": 0.0005037841796848852,
       "failureCount": 0
     },
@@ -9801,8 +9801,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.32984102886167005,
-      "checkedMm": 24881.010733219005,
-      "checkedSegments": 16875,
+      "checkedMm": 24883.190039451827,
+      "checkedSegments": 10535,
       "belowResolution": 72,
       "failureCount": 0
     },
@@ -9845,7 +9845,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 16947,
+      "declaredHits": 10607,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -9885,9 +9885,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.4791307294879423,
-      "checkedMm": 3955.1412653582947,
-      "checkedSegments": 6127,
+      "maxRelErrPct": 0.3116667185709662,
+      "checkedMm": 3955.7721027773205,
+      "checkedSegments": 920,
       "belowResolution": 8804,
       "failureCount": 0
     },
@@ -9930,7 +9930,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 15108,
+      "declaredHits": 9901,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
