@@ -119,7 +119,7 @@ function Viewer() {
       if (fx.showCuts) for (const g of fx.groups) {
         if (g.path.length < 2) continue;
         const sel = fx.selectedGroup === g.id;
-        overlay.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(g.path.map((p) => new THREE.Vector3(...p))), new THREE.LineBasicMaterial({ color: sel ? 0xff5c8d : 0xb48cff })));
+        overlay.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(g.path.map((p) => new THREE.Vector3(...p))), new THREE.LineBasicMaterial({ color: sel ? 0x2563eb : 0xb48cff })));
       }
       if (traceStart) { const m = new THREE.Mesh(new THREE.SphereGeometry(2.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd34d })); m.position.set(...traceStart.p); overlay.add(m); }
       if (!fx.showCuts || !built) return;
@@ -128,9 +128,9 @@ function Viewer() {
         const r = reports.get(c.id), centre = r?.centre ?? c.origin, rad = Math.max(3, Math.min(60, (r?.radius ?? c.radius) || 10));
         const M = cutFrame(centre, c.normal, c.roll);
         const sel = fx.selectedCut === c.id, bad = r && !r.ok;
-        const disc = new THREE.Mesh(new THREE.CircleGeometry(rad, 40), new THREE.MeshBasicMaterial({ color: bad ? 0xe5484d : sel ? 0xff5c8d : 0x35c2e8, transparent: true, opacity: sel ? 0.4 : 0.16, side: THREE.DoubleSide, depthWrite: false }));
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(rad, 40), new THREE.MeshBasicMaterial({ color: bad ? 0xe5484d : sel ? 0x2563eb : 0x35c2e8, transparent: true, opacity: sel ? 0.4 : 0.16, side: THREE.DoubleSide, depthWrite: false }));
         disc.applyMatrix4(M);
-        const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 48 }, (_, i) => new THREE.Vector3(Math.cos((i / 48) * 6.2832) * rad, Math.sin((i / 48) * 6.2832) * rad, 0))), new THREE.LineBasicMaterial({ color: bad ? 0xe5484d : sel ? 0xff5c8d : 0x35c2e8 }));
+        const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 48 }, (_, i) => new THREE.Vector3(Math.cos((i / 48) * 6.2832) * rad, Math.sin((i / 48) * 6.2832) * rad, 0))), new THREE.LineBasicMaterial({ color: bad ? 0xe5484d : sel ? 0x2563eb : 0x35c2e8 }));
         ring.applyMatrix4(M);
         overlay.add(disc, ring);
       }

@@ -4,6 +4,10 @@ import { PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
 import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
+import { activeUserPreset, currentPresetValue, isActiveUserPresetModified, selectPresetValue } from '../state/userPresets';
+import { USER_PREFIX } from '../profiles/userPresets';
+import { amsUnavailableReason, syncAmsFromPrinter } from '../state/amsSync';
+import { useDevices } from '../state/devices';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
@@ -19,13 +23,13 @@ import { autoChanges, changerLabel } from '../profiles/changer';
 /** Collapsed state of the sidebar sections, kept between sessions. */
 const COLLAPSE_KEY = 'nexspiro.sidebar.collapsed.v1';
 const readCollapsed = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '{}'); } catch { return {}; } };
-function useCollapsed(id: string): [boolean, () => void] {
+export function useCollapsed(id: string): [boolean, () => void] {
   const [c, setC] = useState(() => !!readCollapsed()[id]);
   return [c, () => { const v = !c; setC(v); try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ ...readCollapsed(), [id]: v })); } catch { /* storage unavailable */ } }];
 }
 
 /** Section title: icon, name and a chevron; clicking it collapses the section. */
-function CardTitle({ icon, label, closed, onToggle }: { icon: string; label: string; closed: boolean; onToggle: () => void }) {
+export function CardTitle({ icon, label, closed, onToggle }: { icon: string; label: string; closed: boolean; onToggle: () => void }) {
   return (
     <button className="card-title card-toggle" aria-expanded={!closed} title={closed ? `Expand ${label}` : `Collapse ${label}`} onClick={onToggle}>
       <Icon name="chevronDown" size={14} className={`card-chev ${closed ? 'closed' : ''}`} />
@@ -33,7 +37,7 @@ function CardTitle({ icon, label, closed, onToggle }: { icon: string; label: str
     </button>
   );
 }
-const Body = ({ closed, children }: { closed: boolean; children: ReactNode }) => (closed ? null : <>{children}</>);
+export const Body = ({ closed, children }: { closed: boolean; children: ReactNode }) => (closed ? null : <>{children}</>);
 
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 
@@ -52,7 +56,7 @@ export function Sidebar() {
 }
 
 /** Advanced mode: the base process preset, with the full Basic settings in a dialog. */
-function BaseProcessRow() {
+export function BaseProcessRow() {
   const s = useStore();
   const [open, setOpen] = useState(false);
   const n = Object.keys(s.overrides).length;
@@ -60,8 +64,8 @@ function BaseProcessRow() {
     <div className="base-process">
       <Icon name="layers" size={15} />
       <span className="muted">Base process</span>
-      <select className="select" value={s.presetId} aria-label="Base process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-        {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}{n && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+      <select className="select" value={currentPresetValue(s)} aria-label="Base process preset" onChange={(e) => selectPresetValue(e.target.value)}>
+        <PresetOptions modified={n > 0} />
       </select>
       <button className="icon-btn" title="Layer height, walls, speeds… (shared with Basic mode)" onClick={() => setOpen(true)}><Icon name="edit" size={15} /></button>
       {open && <Modal title="Base process settings (shared with Basic mode)" onClose={() => setOpen(false)}><div className="base-process-modal"><ProcessCard /></div></Modal>}
@@ -69,7 +73,7 @@ function BaseProcessRow() {
   );
 }
 
-function PrinterCard() {
+export function PrinterCard() {
   const { printerId, plate, machineOverrides, set, markDirty, setMachine } = useStore();
   const [edit, setEdit] = useState(false);
   const [closed, toggle] = useCollapsed('printer');
@@ -126,7 +130,36 @@ function PrinterCard() {
   );
 }
 
-function FilamentCard() {
+/** System presets, then the user's saved presets ("user:<id>" values). `modified` marks the active entry. */
+export function PresetOptions({ modified, model }: { modified: boolean; model?: boolean }) {
+  const s = useStore();
+  const up = activeUserPreset(s);
+  const upMod = isActiveUserPresetModified(s);
+  const mark = (on: boolean, name: string, suffix = '') => `${on && model ? '* ' : ''}${name}${suffix}${on ? ' (modified)' : ''}`;
+  const at = model ? ` @${printerById(s.printerId).model}` : '';
+  return <>
+    <optgroup label="System presets">
+      {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{mark(!up && modified && p.id === s.presetId, p.name, at)}</option>)}
+    </optgroup>
+    {s.userPresets.length > 0 && (
+      <optgroup label="My presets">
+        {s.userPresets.map((p) => <option key={p.id} value={USER_PREFIX + p.id}>{mark(up?.id === p.id && upMod, p.name)}</option>)}
+      </optgroup>
+    )}
+  </>;
+}
+
+/** "Sync AMS" link: copies the connected printer's AMS trays into the filament slots; disabled with the reason otherwise. */
+export function SyncAmsLink() {
+  const reason = useDevices((d) => amsUnavailableReason(d));
+  return (
+    <a role="button" tabIndex={reason ? -1 : 0} className={`sync-ams ${reason ? 'disabled' : ''}`} aria-disabled={!!reason}
+      title={reason ?? 'Set the filament slots from the trays loaded in the connected printer\'s AMS'}
+      onClick={() => { if (!reason) syncAmsFromPrinter(); }} onKeyDown={(e) => { if (!reason && e.key === 'Enter') syncAmsFromPrinter(); }}>Sync AMS</a>
+  );
+}
+
+export function FilamentCard() {
   const { filaments, plate, printerId, set, markDirty } = useStore();
   const [edit, setEdit] = useState<number | null>(null);
   const [flush, setFlush] = useState(false);
@@ -152,6 +185,7 @@ function FilamentCard() {
         <CardTitle icon="filamentB" label="Filament" closed={closed} onToggle={toggle} />
         <span className="spacer" />
         <span className="badge" title={ams ? `Automatic filament changes (${changerLabel(printerById(printerId).machine)})` : 'Manual filament changes (M600 pause)'}>{ams ? changerLabel(printerById(printerId).machine) : <Icon name="edit" size={12} />}</span>
+        <SyncAmsLink />
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
           onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
@@ -185,28 +219,22 @@ function FilamentCard() {
   );
 }
 
-function ProcessCard() {
+/**
+ * Process settings model shared by the classic ProcessCard and the Inspector's inline settings:
+ * the resolved global config, the selection-scoped object/part/range target and value accessors.
+ * `objMode` true edits the selection's own overrides; false edits the plate (global) overrides.
+ */
+export function useProcessModel(objMode: boolean) {
   const s = useStore();
   const base = useMemo(() => baseProcess({ printerId: s.printerId, presetId: s.presetId, machineOverrides: s.machineOverrides }), [s.printerId, s.presetId, s.machineOverrides]);
   const global: Config = { ...base, ...s.overrides };
   const modifiedCount = Object.keys(s.overrides).length;
-  const q = s.search.trim().toLowerCase();
-  const objMode = s.processMode === 'objects';
   const selObjs = s.objects.filter((o) => s.selected.includes(o.id));
   const part = s.selectedPart ? selObjs[0]?.parts?.find((p) => p.id === s.selectedPart) : undefined;
   const range = !part && s.selectedRange && selObjs.length === 1 ? selObjs[0].heightRanges?.find((r) => r.id === s.selectedRange) : undefined;
   // Objects mode edits only what can differ per object (or per modifier / height range); everything else stays global
   const allowed = objMode ? new Set(part ? (part.type === 'modifier' ? MODIFIER_KEYS : []) : range ? HEIGHT_RANGE_KEYS : OBJECT_KEYS) : null;
   const visible = PROCESS_PARAMS.filter((p) => (s.showAdvanced || !p.advanced || allowed) && (!allowed || allowed.has(p.key)));
-  const tabs = PROCESS_TABS.filter((t) => visible.some((p) => p.tab === t));
-  const tab = tabs.includes(s.processTab) ? s.processTab : tabs[0];
-  const list = q
-    ? visible.filter((p) => `${p.label} ${p.group} ${p.key} ${p.tab}`.toLowerCase().includes(q))
-    : visible.filter((p) => p.tab === tab);
-  const groups = [...new Set(list.map((p) => (q ? `${p.tab} › ${p.group}` : p.group)))];
-  const [closed, setClosed] = useState<Record<string, boolean>>({});
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [cardClosed, toggleCard] = useCollapsed('process');
 
   // per-object values: the object's override, else the global value
   const ov = (k: string): { value: Config[string]; modified: boolean } => {
@@ -233,9 +261,36 @@ function ProcessCard() {
     }, selObjs.map((o) => o.id));
   };
   const changed = (k: string) => (objMode ? (part ? k in part.overrides : range ? k in range.overrides : selObjs.some((o) => o.overrides && k in o.overrides)) : k in s.overrides);
-  const tabCount = (t: string) => visible.filter((p) => p.tab === t && changed(p.key)).length;
   const objOverrideCount = part ? Object.keys(part.overrides).length : range ? Object.keys(range.overrides).length : new Set(selObjs.flatMap((o) => Object.keys(o.overrides ?? {}))).size;
   const target = part ? part.name : range ? `${selObjs[0].name} · ${range.z0}–${range.z1} mm` : selObjs.length === 1 ? selObjs[0].name : `${selObjs.length} objects`;
+  const resetObj = () => part ? updatePart(selObjs[0].id, part.id, (p) => ({ ...p, overrides: {} })) : range ? updateHeightRange(selObjs[0].id, range.id, { overrides: {} }) : s.updateObjects((o) => ({ ...o, overrides: undefined }), selObjs.map((o) => o.id));
+  /** Props for a ParamRow editing `key` in the current scope (global or selection). */
+  const rowProps = (key: string) => {
+    const def = PARAM_BY_KEY[key];
+    if (!objMode) return { def, value: global[key], baseValue: base[key], cfg: global, modified: key in s.overrides,
+      onCommit: (x: Config[string]) => s.setOverride(key, x === base[key] ? undefined : x), onReset: () => s.setOverride(key, undefined) };
+    const v = ov(key);
+    return { def, value: v.value, baseValue: global[key], cfg: { ...global, [key]: v.value }, modified: v.modified,
+      onCommit: (x: Config[string]) => setObj(key, x), onReset: () => setObj(key, undefined), resetLabel: 'Use the global value' };
+  };
+  return { s, base, global, modifiedCount, selObjs, part, range, allowed, visible, ov, setObj, changed, objOverrideCount, target, resetObj, rowProps };
+}
+
+export function ProcessCard() {
+  const s = useStore();
+  const objMode = s.processMode === 'objects';
+  const { base, global, modifiedCount, selObjs, part, range, visible, ov, setObj, changed, objOverrideCount, target, resetObj } = useProcessModel(objMode);
+  const q = s.search.trim().toLowerCase();
+  const tabs = PROCESS_TABS.filter((t) => visible.some((p) => p.tab === t));
+  const tab = tabs.includes(s.processTab) ? s.processTab : tabs[0];
+  const list = q
+    ? visible.filter((p) => `${p.label} ${p.group} ${p.key} ${p.tab}`.toLowerCase().includes(q))
+    : visible.filter((p) => p.tab === tab);
+  const groups = [...new Set(list.map((p) => (q ? `${p.tab} › ${p.group}` : p.group)))];
+  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [cardClosed, toggleCard] = useCollapsed('process');
+  const tabCount = (t: string) => visible.filter((p) => p.tab === t && changed(p.key)).length;
 
   return (
     <section className="card process">
@@ -251,8 +306,8 @@ function ProcessCard() {
       <Body closed={cardClosed}>
       {!objMode && (
         <div className="row">
-          <select className="select" value={s.presetId} aria-label="Process preset" onChange={(e) => { s.set({ presetId: e.target.value }); s.markDirty(); }}>
-            {PROCESS_PRESETS.map((p) => <option key={p.id} value={p.id}>{modifiedCount && p.id === s.presetId ? '* ' : ''}{p.name} @{printerById(s.printerId).model}{modifiedCount && p.id === s.presetId ? ' (modified)' : ''}</option>)}
+          <select className="select" value={currentPresetValue(s)} aria-label="Process preset" onChange={(e) => selectPresetValue(e.target.value)}>
+            <PresetOptions modified={modifiedCount > 0} model />
           </select>
           <button className="icon-btn" title="Reset all modified values" disabled={!modifiedCount} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" /></button>
         </div>
@@ -263,7 +318,7 @@ function ProcessCard() {
           <span className="name">{target}</span>
           <span className="muted">{objOverrideCount ? `${objOverrideCount} own setting${objOverrideCount > 1 ? 's' : ''}` : 'uses global'}</span>
           <button className="icon-btn" title="Reset to the global settings" disabled={!objOverrideCount}
-            onClick={() => part ? updatePart(selObjs[0].id, part.id, (p) => ({ ...p, overrides: {} })) : range ? updateHeightRange(selObjs[0].id, range.id, { overrides: {} }) : s.updateObjects((o) => ({ ...o, overrides: undefined }), selObjs.map((o) => o.id))}>
+            onClick={resetObj}>
             <Icon name="reset" size={15} />
           </button>
         </div>
@@ -314,7 +369,7 @@ function ProcessCard() {
 }
 
 /** Object list: plates, their objects and parts. Click selects (Ctrl toggles), right click opens the object menu. */
-function ObjectsCard() {
+export function ObjectsCard() {
   const s = useStore();
   const plates = s.plates.length;
   const menuAt = (e: React.MouseEvent, kind: 'object' | 'part', id: string, partId?: string) => {
@@ -430,8 +485,8 @@ function RangeInput({ value, onCommit }: { value: number; onCommit: (v: number) 
     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />;
 }
 
-const PART_DOT: Record<string, string> = { part: '#00AE42',  negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
-const PART_HELP: Record<string, string> = {
+const PART_DOT: Record<string, string> = { part: '#10B981',  negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
+export const PART_HELP: Record<string, string> = {
   part: 'An extra solid volume printed as part of the object.',
   negative: 'Material inside this volume is removed (holes, cut-outs).',
   modifier: 'Changes infill settings inside this volume.',
@@ -439,7 +494,7 @@ const PART_HELP: Record<string, string> = {
   support_blocker: 'No support is generated inside this volume.',
 };
 
-function FlushModal({ onClose }: { onClose: () => void }) {
+export function FlushModal({ onClose }: { onClose: () => void }) {
   const { filaments, flushMatrix, flushMultiplier, set, markDirty } = useStore();
   const colors = filaments.map((f) => f.color);
   const auto = autoFlushMatrix(colors);

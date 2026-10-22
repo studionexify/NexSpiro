@@ -1,19 +1,19 @@
 import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
-import { PluginsButton, RightDock } from './ui/RightDock';
+import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
+import { useUi } from './state/ui';
+import { CameraBar, CommandPalette, ObjectPill, Rail, RightColumn, TopLeft, TopRight, ViewBar } from './ui/shell';
+import './ui/shell/shell.css';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
-import { printerById } from './profiles/printers';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
 import { DevicePage } from './ui/DevicePage';
 import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
-import { exportPlateFile } from './state/printjob';
 import { openProjectDialog, saveProject } from './state/project';
 import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
-import { Sidebar } from './ui/Sidebar';
 import { ContextMenu } from './ui/ContextMenu';
 import { FillBedHost } from './ui/FillBedDialog';
 import { PlateList, PlateSettingsHost } from './ui/PlateControls';
@@ -28,142 +28,6 @@ import { ClickexStudioHost } from './plugins/clickex/ui/Studio';
 import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
 import { ModeToggle } from './ui/advanced/ModeToggle';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
-
-const TABS: { id: Workspace; label: string; icon: string }[] = [
-  { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'prepare', label: 'Prepare', icon: 'cube' },
-  { id: 'preview', label: 'Preview', icon: 'layers' },
-  { id: 'motion', label: 'Motion', icon: 'brush' },
-  { id: 'device', label: 'Device', icon: 'device' },
-  { id: 'project', label: 'Project', icon: 'folder' },
-  { id: 'calibration', label: 'Calibration', icon: 'calib' },
-];
-
-function FileMenu() {
-  const [open, setOpen] = useState(false);
-  const sliced = useSliced();
-  const { objects } = useStore();
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('pointerdown', close);
-    return () => window.removeEventListener('pointerdown', close);
-  }, [open]);
-  const item = (label: string, kbd: string, fn: () => void, disabled = false) => (
-    <button className="menu-item" disabled={disabled} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setOpen(false); fn(); }}>
-      <span>{label}</span><kbd>{kbd}</kbd>
-    </button>
-  );
-  return (
-    <div className="menu">
-      <button className={`icon-btn ${open ? 'active' : ''}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)} aria-haspopup="menu">
-        File<Icon name="chevronDown" size={14} />
-      </button>
-      {open && (
-        <div className="menu-pop" role="menu">
-          {item('New project', 'Ctrl+N', newProject)}
-          {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
-          {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length && !useStore.getState().plates[useStore.getState().activePlate]?.program)}
-          {item('Export G-code…', 'Ctrl+G', exportGcode, !sliced)}
-          {item('Export plate sliced file (.gcode.3mf)…', '', () => exportPlateFile('3mf'), !sliced)}
-          {item('Print plate…', 'Ctrl+P', openPrintDialog, !sliced)}
-          <div className="sep" style={{ width: '100%', height: 1, margin: '4px 0' }} />
-          {item('Open project (.3mf)…', 'Ctrl+O', openProjectDialog)}
-          {item('Save project…', 'Ctrl+S', saveProject, !objects.length)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TopBar() {
-  const { workspace, set, theme, undo, redo, undoStack, redoStack, liveToolpaths } = useStore();
-  const hasStudio = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
-  return (
-    <header className="topbar">
-      <div className="tb-left">
-        <div className="brand"><img src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="" /><span className="brand-name">NexSpiro</span></div>
-        <FileMenu />
-        <button className="icon-btn" title="Import model (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="open" /></button>
-        <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" /></button>
-        <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" /></button>
-        <nav className="tabs" role="tablist">
-          {TABS.filter((t) => t.id !== 'motion' || hasStudio).map((t) => (
-            <button key={t.id} role="tab" aria-selected={workspace === t.id} title={t.label}
-              className={`tab ${workspace === t.id ? 'active' : ''} ${SECONDARY_TABS.has(t.id) ? 'secondary' : ''}`} onClick={() => set({ workspace: t.id })}>
-              <Icon name={t.icon} size={15} className="tab-icon" /><span className="tab-label">{t.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-      <div className="tb-center"><ModeToggle /></div>
-      <div className="tb-right">
-        {(workspace === 'prepare' || workspace === 'motion') && (
-          <button className={`btn-secondary btn-small tb-toggle ${liveToolpaths ? 'on' : ''}`} aria-pressed={liveToolpaths}
-            title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing"
-            onClick={() => set({ liveToolpaths: !liveToolpaths })}>
-            <span className={`toggle ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" /><span className="tb-label">Toolpath view</span>
-          </button>
-        )}
-        <PluginsButton />
-        <button className="icon-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} aria-label="Toggle theme" onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
-          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-        </button>
-        {(workspace === 'prepare' || workspace === 'preview') && <SliceControls />}
-      </div>
-    </header>
-  );
-}
-
-/** Tabs that collapse to icons when the header is narrow (the engine toggle keeps the centre). */
-const SECONDARY_TABS = new Set<Workspace>(['home', 'motion', 'device', 'project', 'calibration']);
-
-/** True when the active plate has a slice that matches the current scene and settings. */
-const useSliced = () => useStore((s) => s.slice.status === 'done' && !!s.slice.result && !s.slice.dirty && s.slice.plate === s.activePlate);
-
-/** Top-right buttons: Slice plate, then Print plate / export, which only work once the plate is sliced. */
-function SliceControls() {
-  const { slice, objects, printerId } = useStore();
-  const sliced = useSliced();
-  const hasProgram = useStore((s) => !!s.plates[s.activePlate]?.program);
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('pointerdown', close);
-    return () => window.removeEventListener('pointerdown', close);
-  }, [open]);
-  const isBbl = printerById(printerId).flavor === 'bbl';
-  const busy = slice.status === 'slicing';
-  const main = isBbl
-    ? { label: 'Print plate', run: openPrintDialog }
-    : { label: 'Export G-code file', run: exportGcode };
-  const item = (label: string, kbd: string, fn: () => void) => (
-    <button className="menu-item" disabled={!sliced} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setOpen(false); fn(); }}><span>{label}</span><kbd>{kbd}</kbd></button>
-  );
-  return (
-    <div className="slice-controls">
-      <button className="btn-primary slice-btn" disabled={(!objects.length && !hasProgram) || busy} onClick={sliceAndPreview} title="Slice plate (Ctrl+R)">
-        <Icon name="slice" size={16} />{busy ? `Slicing… ${Math.round(slice.progress * 100)}%` : 'Slice plate'}
-      </button>
-      <div className="split-btn menu">
-        <button className="btn-secondary slice-btn" disabled={!sliced} onClick={() => void main.run()}
-          title={sliced ? main.label : 'Slice the plate first'}>
-          <Icon name={isBbl ? 'print' : 'download'} size={16} />{main.label}
-        </button>
-        <button className="btn-secondary slice-btn caret" disabled={!sliced} aria-label="More print and export options" title={sliced ? 'More options' : 'Slice the plate first'}
-          onPointerDown={(e) => e.stopPropagation()} onClick={() => setOpen(!open)}><Icon name="chevronDown" size={14} /></button>
-        {open && (
-          <div className="menu-pop" role="menu" style={{ right: 0, left: 'auto' }}>
-            {item('Print plate', 'Ctrl+P', () => void openPrintDialog())}
-            {item('Export plate sliced file (.gcode.3mf)', '', () => void exportPlateFile('3mf'))}
-            {item('Export G-code file', 'Ctrl+G', exportGcode)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function Toast() {
   const { toast, set } = useStore();
@@ -185,6 +49,12 @@ function Toast() {
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        // Ctrl+K: command palette (works from inside text fields too)
+        const ui = useUi.getState();
+        ui.set({ paletteOpen: !ui.paletteOpen }); e.preventDefault(); return;
+      }
+      if (useUi.getState().paletteOpen) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const s = useStore.getState();
@@ -257,10 +127,11 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
-  const hasDock = useStore((s) => s.plugins.length > 0);
+  const hasDock = useStore((st) => st.plugins.length > 0);
+  const bodyCols = is3d ? (hasDock ? 'minmax(0, 1fr) auto 356px' : 'minmax(0, 1fr) 356px') : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
-    <div className="app"
+    <div className="app sh-app"
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
       onDrop={async (e) => {
@@ -268,18 +139,23 @@ export default function App() {
         const files = await Promise.all(Array.from(e.dataTransfer.files).map(async (f) => ({ name: f.name, data: await f.arrayBuffer() })));
         if (files.length) importBuffers(files);
       }}>
-      <TopBar />
-      <div className="workspace" style={is3d ? { gridTemplateColumns: hasDock ? 'var(--sidebar-w, 360px) 1fr auto' : undefined } : Studio ? { gridTemplateColumns: '1fr auto' } : { gridTemplateColumns: '1fr' }}>
-        {is3d && <Sidebar />}
-        <main className="stage" style={is3d || Studio ? undefined : { display: 'none' }}>
+      <Rail />
+      <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
+        <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          <TopLeft />
+          <div className="float sh-float sh-engine"><ModeToggle /></div>
+          <TopRight plates={is3d} />
+          {workspace === 'prepare' && <><Toolbar /><ObjectPill /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
+          <ViewBar />
           <ViewCube />
+          <CameraBar />
           <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
         {is3d && <RightDock />}
+        {is3d && <RightColumn />}
         {Studio && <Studio />}
         {workspace === 'home' && <HomePage />}
         {workspace === 'device' && <DevicePage />}
@@ -296,6 +172,7 @@ export default function App() {
       <FlenexStudioHost />
       <InstantTooltips />
       <ShortcutsHost />
+      <CommandPalette />
     </div>
   );
 }
@@ -303,7 +180,7 @@ export default function App() {
 /** Keyboard shortcuts list (opened with ?). */
 const SHORTCUTS: [string, [string, string][]][] = [
   ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
-    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],
+    ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+K', 'Command palette'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],
   ['Camera', [['Ctrl+0', 'Default view'], ['Ctrl+1', 'Top view'], ['Ctrl+2', 'Bottom view'], ['Ctrl+3', 'Front view'], ['Ctrl+4', 'Rear view'], ['Ctrl+5', 'Left view'], ['Ctrl+6', 'Right view'], ['Ctrl+7', 'Isometric view'], ['Z', 'Fit to scene or selection']]],
   ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Esc', 'Clear selection / leave tool'],
     ['A / Shift+A', 'Arrange all / selection'], ['O', 'Auto orient'], ['M', 'Move'], ['R', 'Rotate'], ['S', 'Scale'], ['F', 'Lay on face'], ['C', 'Cut'], ['B', 'Boolean'],

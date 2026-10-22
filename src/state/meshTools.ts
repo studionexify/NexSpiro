@@ -1,6 +1,7 @@
 // Surface edit actions on scene objects: chamfer / fillet of picked edges, smooth subdivision, smoothing.
 // Each is one undo step. Per-triangle paint is carried across the edit.
 import { openEdgeCount } from '../engine/mesh';
+import { repairMesh, type RepairReport, type RepairResult } from '../engine/repair';
 import { bevelEdges, refineMesh, remapTriArray, remeshEven, smoothMesh, subdivide, type EditResult, type EdgePair, type SmoothOptions, type SubdivOptions } from '../engine/meshedit';
 import { buildTopology, edgeChain, EDGE_SHARP } from '../engine/topology';
 import { dropToBed, edgeSelHistory, useStore, worldBounds, type ObjectPaint, type SceneObject } from './store';
@@ -148,4 +149,37 @@ export function remeshObject(id: string, target: number, creaseDeg: number): voi
   if (!o) return;
   const r = remeshEven(o.mesh, target, { creaseDeg });
   commit(id, r, `Remeshed: ${(r.mesh.indices.length / 3).toLocaleString()} triangles (${r.splits} splits, ${r.collapses} collapses, ${r.flips} flips).`);
+}
+
+/** "Fix model": repair the given objects (default: selection, else all) in one undo step and report what was done. */
+export function repairObjects(ids?: string[]): void {
+  const s = useStore.getState();
+  const targets = (ids ?? (s.selected.length ? s.selected : s.objects.map((o) => o.id))).filter((id) => s.objects.some((o) => o.id === id));
+  if (!targets.length) { s.set({ toast: { kind: 'info', text: 'Select a model to fix.' } }); return; }
+  const results = new Map<string, RepairResult>();
+  for (const id of targets) results.set(id, repairMesh(s.objects.find((o) => o.id === id)!.mesh));
+  const grounded = new Set(targets.filter((id) => Math.abs(worldBounds(s.objects.find((o) => o.id === id)!).min[2]) < 1e-3));
+  edgeSelHistory.set(s.objects, s.edgeSel);
+  s.updateObjects((o): SceneObject => {
+    const r = results.get(o.id)!;
+    const next: SceneObject = { ...o, mesh: r.mesh, openEdges: r.report.openEdgesAfter, paint: remapPaint(o.paint, r.triSource) };
+    return grounded.has(o.id) ? dropToBed(next) : next;
+  }, targets);
+  const lines = targets.map((id) => repairSummary(s.objects.find((o) => o.id === id)!.name, results.get(id)!.report));
+  const bad = targets.some((id) => results.get(id)!.report.openEdgesAfter > 0);
+  s.set({ edgeSel: null, toast: { kind: bad ? 'warn' : 'info', text: lines.join(' ') } });
+}
+
+/** Plain-words summary of a repair, e.g. "Fixed koi_vase: closed 3 holes (48 open edges), removed 2 bad triangles — model is watertight." */
+export function repairSummary(name: string, r: RepairReport): string {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const parts: string[] = [];
+  if (r.holesFilled) parts.push(`closed ${plural(r.holesFilled, 'hole')} (${plural(r.openEdgesBefore, 'open edge')})`);
+  const badTris = r.removedDegenerate + r.removedDuplicate;
+  if (badTris) parts.push(`removed ${plural(badTris, 'bad triangle')}`);
+  if (r.weldedVerts) parts.push(`merged ${plural(r.weldedVerts, 'duplicate vertex').replace(/vertexs$/, 'vertices')}`);
+  if (r.flipped) parts.push(`flipped ${plural(r.flipped, 'inside-out triangle')}`);
+  const tail = r.openEdgesAfter ? `${plural(r.openEdgesAfter, 'open edge')} could not be closed` : 'model is watertight';
+  if (!parts.length) return r.openEdgesAfter ? `${name}: nothing could be fixed — ${tail}.` : `${name}: no problems found — ${tail}.`;
+  return `Fixed ${name}: ${parts.join(', ')} — ${tail}.`;
 }
