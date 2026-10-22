@@ -4,10 +4,10 @@ import { addHeightRange } from '../state/ops';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { arrange, autoOrient, importDialog } from '../state/actions';
 import {
-  addShape, centreObjects, clearPlate, cloneObjects, copyObjects, dropObjects, exportStl, hasClipboard, mirrorObjects,
+  addShape, centreObjects, cutAndSeparate, clearPlate, cloneObjects, copyObjects, dropObjects, exportStl, hasClipboard, mirrorObjects,
   pasteObjects, renameObject, selectPlate, setObjectFilament, splitObject, togglePrintable,
 } from '../state/objectOps';
-import { addPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
+import { addPart, addWallPart, addPlate, arrangeAll, deletePlate, moveToPlate, orientPlate, PART_LABELS, SHAPES, updatePlate } from '../state/ops';
 import { openFillBed } from './FillBedDialog';
 import { openPlateSettings } from './PlateControls';
 import { collapseAllObjects, expandAllObjects } from '../state/tree';
@@ -33,6 +33,7 @@ export interface MenuItem {
 }
 
 /** Shapes offered for parts and modifiers. */
+let lastWall = 0.4;
 const PART_SHAPES = SHAPES.filter(([k]) => ['box', 'cylinder', 'sphere', 'cone', 'disc', 'torus'].includes(k));
 
 function plateItems(m: ContextMenuState): MenuItem[] {
@@ -69,6 +70,19 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     label: `Add ${PART_LABELS[type].toLowerCase()}`, disabled: !one, icon: PART_ICON[type][0], iconColor: PART_ICON[type][1],
     sub: PART_SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => one && addPart(one.id, type, k) })),
   });
+  // wall cutters / shells: every primitive, wall asked once (remembered for the next one)
+  const wallSub = (mode: 'cut' | 'add'): MenuItem => ({
+    label: mode === 'cut' ? 'Add wall cutter (splits along the shape)' : 'Add wall shell (thin-walled shape)', disabled: !one,
+    icon: mode === 'cut' ? 'partNeg' : 'partAdd', iconColor: mode === 'cut' ? '#D93025' : '#1FAA3C',
+    sub: SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => {
+      if (!one) return;
+      const v = prompt(mode === 'cut' ? 'Wall cutter thickness (mm): the gap cut along the shape\'s surface' : 'Wall thickness (mm)', String(lastWall));
+      const w = v === null ? NaN : parseFloat(v.replace(',', '.'));
+      if (!(w > 0)) return;
+      lastWall = w;
+      addWallPart(one.id, mode, k, w);
+    } })),
+  });
   const items: MenuItem[] = [
     { label: one ? `Rename “${one.name}”…` : `${ids.length} objects`, icon: 'editName', disabled: !one, onClick: () => one && renameObject(one.id) },
     { sep: true },
@@ -91,6 +105,9 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { sep: true },
     partSub('part'),
     partSub('negative'),
+    wallSub('cut'),
+    wallSub('add'),
+    { label: 'Cut along wall cutters and separate', icon: 'splitB', disabled: !one?.parts?.some((p) => p.type === 'negative' || p.type === 'part'), onClick: () => one && cutAndSeparate(one.id) },
     partSub('modifier'),
     partSub('support_enforcer'),
     partSub('support_blocker'),

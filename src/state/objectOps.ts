@@ -63,12 +63,40 @@ export function meshComponents(m: IndexedMesh): number[][] {
   return [...groups.values()];
 }
 
+/**
+ * Separate solid pieces of a mesh, as triangle lists. An inside-out shell (the wall of a hollow inside a piece) stays
+ * with the smallest piece whose box holds it, so a hollow body splits into one hollow piece, not a body and a void.
+ */
+export function pieces(m: IndexedMesh): number[][] {
+  const comps = meshComponents(m);
+  if (comps.length < 2) return comps;
+  const v = m.vertices, ix = m.indices;
+  const info = comps.map((tris) => {
+    let vol = 0;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const t of tris) {
+      const a = ix[t * 3] * 3, b = ix[t * 3 + 1] * 3, c = ix[t * 3 + 2] * 3;
+      vol += v[a] * (v[b + 1] * v[c + 2] - v[b + 2] * v[c + 1]) - v[a + 1] * (v[b] * v[c + 2] - v[b + 2] * v[c]) + v[a + 2] * (v[b] * v[c + 1] - v[b + 1] * v[c]);
+      for (const q of [a, b, c]) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], v[q + k]); hi[k] = Math.max(hi[k], v[q + k]); }
+    }
+    return { tris, vol, lo, hi };
+  });
+  const solids = info.filter((c) => c.vol >= 0), voids = info.filter((c) => c.vol < 0);
+  if (!solids.length) return comps;
+  for (const h of voids) {
+    let best: (typeof info)[number] | null = null;
+    for (const c of solids) if ([0, 1, 2].every((k) => c.lo[k] <= h.lo[k] + 1e-6 && c.hi[k] >= h.hi[k] - 1e-6) && (!best || c.vol < best.vol)) best = c;
+    (best ?? solids[0]).tris.push(...h.tris);
+  }
+  return solids.map((c) => c.tris);
+}
+
 /** Split an object into one object per separate piece. */
 export function splitObject(id: string) {
   const s = useStore.getState();
   const o = s.objects.find((x) => x.id === id);
   if (!o) return;
-  const comps = meshComponents(o.mesh);
+  const comps = pieces(o.mesh);
   if (comps.length < 2) { s.set({ toast: { kind: 'info', text: `${o.name} is a single piece, so there is nothing to split.` } }); return; }
   const w = worldMesh(o);
   const out = comps.map((tris, k) => {
@@ -227,8 +255,17 @@ export function addShape(shape: ShapeKind, at?: [number, number]) {
   const s = useStore.getState();
   const mesh = primitive(shape, 20);
   centreMesh(mesh);
-  let o: SceneObject = { id: newId(), name: SHAPES.find(([k]) => k === shape)?.[1] ?? 'Shape', mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: openEdgeCount(mesh) };
+  let o: SceneObject = { id: newId(), name: SHAPES.find(([k]) => k === shape)?.[1] ?? 'Shape', mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: openEdgeCount(mesh),
+    prim: { shape, size: 20, tess: 1, tris: mesh.indices.length / 3 } };
   o = centreOnBed(o, s.printerId);
   if (at) o = { ...o, position: [at[0], at[1], o.position[2]] };
   s.addObjects([o]);
+}
+
+/** Apply an object's parts (wall cutters included) and split the result into separate objects, one per piece. */
+export async function cutAndSeparate(id: string) {
+  const { applyPartsBoolean } = await import('./tools');
+  applyPartsBoolean([id]);
+  const o = useStore.getState().objects.find((x) => x.id === id);
+  if (o && !hasShapeParts(o)) splitObject(id);
 }

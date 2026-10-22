@@ -23,7 +23,7 @@ import { fuzzLoop, type FuzzyMode, type NoiseType } from './noise';
 import { isSmoothLoop, loopLength, scarfLoop, seamGapLoop } from './seam';
 import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
-import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
+import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, PartInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
 import { checkInputs } from './validate';
 import type { BulnexReport } from '../plugins/bulnex/model';
@@ -293,14 +293,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const blkVol: Paths[] = Array.from({ length: N }, () => []);
   meshes.forEach((m, oi) => {
     const s = sliceMesh(m as IndexedMesh, planes, mode, sliceTol);
-    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceMesh(p as IndexedMesh, planes, mode, sliceTol));
+    // a hollow part (wall cutter / wall shell) is its outer surface minus its inner one, layer by layer
+    const sliceVolume = (p: PartInput, md: typeof mode): Paths[] => {
+      if (!p.innerFrom) return sliceMesh(p as IndexedMesh, planes, md, sliceTol);
+      const k = p.innerFrom * 3;
+      const outer = sliceMesh({ vertices: p.vertices, indices: p.indices.subarray(0, k) }, planes, 'regular', sliceTol);
+      const inner = sliceMesh({ vertices: p.vertices, indices: p.indices.subarray(k) }, planes, 'regular', sliceTol);
+      return outer.map((o, i) => (o.length && inner[i].length ? difference(union(o), union(inner[i])) : o));
+    };
+    const positives = (m.parts ?? []).filter((p) => p.type === 'part').map((p) => sliceVolume(p, mode));
     if (positives.length) for (let i = 0; i < N; i++) {
       const add = positives.flatMap((n) => n[i]);
       if (add.length) s[i] = union(s[i], add);
     }
     // volumes that overlap each other (several negative parts, parts and negatives, shells inside one mesh) are
     // merged: 'regular' unions the shells of a mesh instead of cancelling their overlap, and the cut is one union
-    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceMesh(p as IndexedMesh, planes, 'regular', sliceTol));
+    const negatives = (m.parts ?? []).filter((p) => p.type === 'negative').map((p) => sliceVolume(p, 'regular'));
     if (negatives.length) for (let i = 0; i < N; i++) {
       if (!s[i].length) continue;
       const cut = union(negatives.flatMap((n) => n[i]));

@@ -152,10 +152,10 @@ export function remeshObject(id: string, target: number, creaseDeg: number): voi
 }
 
 /** Hybrid smooth: recognise exact planes, spheres and cylinders and snap them to the true surface; smooth the rest. */
-export function exactifyObject(id: string, creaseDeg: number): void {
+export function exactifyObject(id: string, creaseDeg: number, levels?: number): void {
   const o = useStore.getState().objects.find((x) => x.id === id);
   if (!o) return;
-  const r = exactify(o.mesh, { creaseDeg });
+  const r = exactify(o.mesh, { creaseDeg, levels });
   const found = [r.cylinders && `${r.cylinders} cylinder${r.cylinders === 1 ? '' : 's'}`, r.spheres && `${r.spheres} sphere${r.spheres === 1 ? '' : 's'}`, r.planes && `${r.planes} flat face${r.planes === 1 ? '' : 's'}`].filter(Boolean).join(', ');
   const free = r.freeform ? `; ${r.freeform} freeform region${r.freeform === 1 ? '' : 's'} smoothed` : '';
   commit(id, r, `Smooth surface: ${found || 'no exact surfaces found'}${free}. ${(r.mesh.indices.length / 3).toLocaleString()} triangles.`);

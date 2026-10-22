@@ -7,6 +7,7 @@ import { openEdgeCount, repairTJunctions, transformVertices, weld, type IndexedM
 import { centreMesh } from '../io/load';
 import { dropToBed, newId, objectMatrix, partWorldMatrix, useStore, worldBounds, type SceneObject, type ScenePart, type Vec3 } from './store';
 import type { Config } from '../profiles/settings';
+import type { PartType } from '../engine/types';
 
 // ---------------------------------------------------------------- helpers
 const worldMesh = (o: SceneObject): IndexedMesh => ({ vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices });
@@ -219,13 +220,58 @@ export const hasShapeParts = (o: SceneObject) => !!o.parts?.some((p) => p.type =
 
 const partWorldMesh = (o: SceneObject, p: ScenePart): IndexedMesh => ({ vertices: transformVertices(p.mesh.vertices, partWorldMatrix(o, p).elements), indices: p.mesh.indices });
 
+/** Outer surface and (outward-facing) inner surface of a hollow part (wall cutter / wall shell), world coordinates. */
+function hollowSides(o: SceneObject, p: ScenePart): [IndexedMesh, IndexedMesh] | null {
+  const k = p.prim?.wall && p.mesh.indices.length / 3 === p.prim.tris ? (p.prim.innerFrom ?? 0) * 3 : 0;
+  if (!k) return null;
+  const w = partWorldMesh(o, p);
+  const inner = w.indices.slice(k);
+  for (let t = 0; t < inner.length; t += 3) { const x = inner[t + 1]; inner[t + 1] = inner[t + 2]; inner[t + 2] = x; }
+  return [compact(w.vertices, w.indices.slice(0, k)), compact(w.vertices, inner)];
+}
+
+/** Only the vertices a triangle list uses. */
+function compact(v: Float32Array, ix: Uint32Array): IndexedMesh {
+  const map = new Map<number, number>(), out: number[] = [], nix = new Uint32Array(ix.length);
+  for (let i = 0; i < ix.length; i++) {
+    let n = map.get(ix[i]);
+    if (n === undefined) { n = map.size; map.set(ix[i], n); out.push(v[ix[i] * 3], v[ix[i] * 3 + 1], v[ix[i] * 3 + 2]); }
+    nix[i] = n;
+  }
+  return { vertices: new Float32Array(out), indices: nix };
+}
+
+/** Two meshes as one (they must not overlap). */
+function concatMeshes(a: IndexedMesh, b: IndexedMesh): IndexedMesh {
+  const n = a.vertices.length / 3, v = new Float32Array(a.vertices.length + b.vertices.length), ix = new Uint32Array(a.indices.length + b.indices.length);
+  v.set(a.vertices); v.set(b.vertices, a.vertices.length); ix.set(a.indices);
+  for (let i = 0; i < b.indices.length; i++) ix[a.indices.length + i] = b.indices[i] + n;
+  return { vertices: v, indices: ix };
+}
+
 /** Mesh of the object (world coordinates) with positive parts merged in and negative parts cut out. */
 export function bakedWorldMesh(o: SceneObject): IndexedMesh {
   let m = worldMesh(o);
-  const pos = (o.parts ?? []).filter((p) => p.type === 'part').map((p) => partWorldMesh(o, p));
-  const neg = (o.parts ?? []).filter((p) => p.type === 'negative').map((p) => partWorldMesh(o, p));
+  const parts = o.parts ?? [];
+  const solidOf = (type: PartType) => parts.filter((p) => p.type === type && !hollowSides(o, p)).map((p) => partWorldMesh(o, p));
+  const pos = solidOf('part'), neg = solidOf('negative');
   if (pos.length) m = booleanAll([m, ...pos], 'union');
+  // wall shell: add the skin between outer and inner = (body ∪ outer) − (inner − body)
+  for (const p of parts.filter((q) => q.type === 'part')) {
+    const h = hollowSides(o, p);
+    if (!h) continue;
+    const gap = booleanMeshes(h[1], m, 'difference');
+    m = booleanMeshes(m, h[0], 'union');
+    if (gap.indices.length) m = booleanMeshes(m, gap, 'difference');
+  }
   if (neg.length) m = booleanMeshes(m, neg.length > 1 ? booleanAll(neg, 'union') : neg[0], 'difference');
+  // wall cutter: remove the skin = (body − outer) + (body ∩ inner); the two never touch (the wall lies between)
+  for (const p of parts.filter((q) => q.type === 'negative')) {
+    const h = hollowSides(o, p);
+    if (!h) continue;
+    const outside = booleanMeshes(m, h[0], 'difference'), inside = booleanMeshes(m, h[1], 'intersection');
+    m = concatMeshes(outside, inside);
+  }
   return m;
 }
 

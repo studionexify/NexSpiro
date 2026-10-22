@@ -6,7 +6,7 @@ import type { PrintProfiles } from "./core/profiles";
 import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
-import { DEFAULT_TIP, type CurveKey, wallMatches, type MotionApplication, type MotionBrush, type TipControl } from "./model";
+import { DEFAULT_TIP, type CurveKey, wallMatches, type MotionApplication, type MotionBrush, type TipControl, type WaveShape } from "./model";
 import { offsetInnerWalls } from "./core/follow";
 
 export interface ModifierOptions {
@@ -41,6 +41,18 @@ export function resample(points: ToolpathPoint[], step: number): Sample[] {
   return out;
 }
 
+/** Lead/lag swing over one period (t = 0..1): +1 = full lead, −1 = full lag. Starts at 0 heading into the lead. */
+export function waveValue(shape: WaveShape, t: number): number {
+  t -= Math.floor(t);
+  switch (shape) {
+    case "triangle": return t < 0.25 ? 4 * t : t < 0.75 ? 2 - 4 * t : 4 * t - 4;
+    case "square": return t < 0.5 ? 1 : -1;
+    case "ramp": return t < 0.5 ? 2 * t : 2 * t - 2; // creeps forward, then from full lag back up through 0
+    case "rounded": return Math.tanh(3 * Math.sin(2 * Math.PI * t)) / Math.tanh(3);
+    default: return Math.sin(2 * Math.PI * t);
+  }
+}
+
 /** Extra phase (degrees) for a layer, or null when the layer falls in an "off" band. */
 export function layerPhase(b: MotionBrush, layer: number): number | null {
   const e = b.layers;
@@ -50,7 +62,11 @@ export function layerPhase(b: MotionBrush, layer: number): number | null {
   const k = Math.floor(layer / every);
   switch (e.mode) {
     case "steady": return k * e.shift_deg;
-    case "alternate": return (k % 2) * e.shift_deg;
+    case "alternate": return k % 2 ? e.shift_deg : e.lag_deg ? -e.lag_deg : 0;
+    case "wave": {
+      const f = waveValue(e.wave_shape ?? "sine", (layer % Math.max(2, every)) / Math.max(2, every));
+      return f >= 0 ? f * e.shift_deg : f * (e.lag_deg ?? e.shift_deg);
+    }
     case "back_and_forth": { const n = 2 * every, pos = layer % n; return (pos < every ? pos : n - pos) * e.shift_deg; }
     case "shift_hold": {
       // Rise for every layers, hold for every, fall for every, hold for every.

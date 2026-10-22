@@ -11,7 +11,7 @@ import { composePath, layerPhase } from '../modifier';
 import { VIEW_COLORS, type PreviewView } from '../preview';
 import type { PrintProfiles } from '../core/profiles';
 import type { Toolpath, ToolpathPoint } from '../core/types';
-import { CURVE_INFO, pt, type CurveKey, type EventType, type Interpolation, type LayerEffect, type LayerMode, type MotionApplication, type MotionBrush, type MotionEvent } from '../model';
+import { CURVE_INFO, pt, type CurveKey, type EventType, type Interpolation, type LayerEffect, type LayerMode, type WaveShape, type MotionApplication, type MotionBrush, type MotionEvent } from '../model';
 import { CurveEditor } from './curveEditor';
 import { activate, activeApp, brushOf, changed, lastPreview, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
 
@@ -44,6 +44,7 @@ const STACKS: { id: string; label: string; hint: string; make: (b: MotionBrush) 
   { id: 'twist', label: 'Twist', hint: 'Each layer leads the one below a little, so the ridges climb round the part.', make: () => ({ shift_deg: 6, mode: 'steady', every: 1, band_on: 0, band_off: 0 }) },
   { id: 'bricks', label: 'Bricks', hint: 'Every few layers the motion moves half a step, like brickwork.', make: () => ({ shift_deg: 180, mode: 'alternate', every: 4, band_on: 0, band_off: 0 }) },
   { id: 'zigzag', label: 'Zigzag', hint: 'Layers lead for a while, then lag back.', make: () => ({ shift_deg: 6, mode: 'back_and_forth', every: 15, band_on: 0, band_off: 0 }) },
+  { id: 'wavy', label: 'Wavy', hint: 'Layers swing smoothly between leading and lagging: ridges snake up the wall.', make: () => ({ shift_deg: 30, lag_deg: 30, mode: 'wave', wave_shape: 'sine', every: 24, band_on: 0, band_off: 0 }) },
   { id: 'diamond', label: 'Diamonds', hint: 'Slants both ways at once for a diamond grid.', make: () => ({ shift_deg: 6, mode: 'back_and_forth', every: 15, band_on: 0, band_off: 0, cross: true }) },
   { id: 'bands', label: 'Bands', hint: 'Motion for some layers, then plain wall.', make: (b) => ({ shift_deg: 0, mode: 'steady', every: 1, ...b.layers, band_on: 10, band_off: 6 }) },
 ];
@@ -52,6 +53,14 @@ const MODES: [LayerMode, string, string][] = [
   ['alternate', 'Swap', 'Moves over and back every step.'],
   ['back_and_forth', 'There and back', 'Leads for a number of steps, then comes back.'],
   ['shift_hold', 'With pauses', 'Like there and back, but holds at each end.'],
+  ['wave', 'Wave', 'Swings between leading and lagging in a smooth (or chosen) wave.'],
+];
+const WAVE_SHAPES: [WaveShape, string, string][] = [
+  ['sine', 'Smooth', 'A smooth sine swing: soft S-shaped ridges.'],
+  ['rounded', 'Rounded', 'Holds near full lead and full lag, with smooth turns.'],
+  ['triangle', 'Zigzag', 'Straight runs with sharp turns.'],
+  ['square', 'Jump', 'Jumps between lead and lag: offset blocks.'],
+  ['ramp', 'Ramp', 'Creeps forward, then snaps back: saw-tooth ridges.'],
 ];
 
 const ADV_KEYS: CurveKey[] = ['along_offset', 'z_offset', 'extrusion_mult', 'speed_mult'];
@@ -209,6 +218,7 @@ function stackId(b: MotionBrush): string | null {
   if (e.cross) return 'diamond';
   if (e.mode === 'steady') return 'twist';
   if (e.mode === 'alternate') return 'bricks';
+  if (e.mode === 'wave') return 'wavy';
   if (e.mode === 'back_and_forth') return 'zigzag';
   return null;
 }
@@ -237,7 +247,7 @@ function LeadLag({ b, layerHeight, onEdit }: { b: MotionBrush; layerHeight: numb
       <p className="mx-muted" style={{ margin: 0 }}>Moves each layer's motion along the wall compared with the layer below. 0 lines the layers up exactly. Plus leads, minus lags.</p>
       <Slider label="Each step leads by" unit="mm" min={-b.period_mm / 2} max={b.period_mm / 2} step={0.01} value={mm} onChange={setShift} />
       <div className="studio-slider">
-        <span className="studio-slider-label">One step every</span>
+        <span className="studio-slider-label">{e?.mode === 'wave' ? 'One full swing every' : 'One step every'}</span>
         <input type="range" min={1} max={40} step={1} value={every} onChange={(ev) => onEdit((x) => { x.layers = { shift_deg: 0, mode: 'steady', band_on: 0, band_off: 0, ...x.layers, every: +ev.target.value }; })} aria-label="Layers per step" />
         <input className="input studio-num" type="number" min={1} step={1} value={every} onChange={(ev) => onEdit((x) => { x.layers = { shift_deg: 0, mode: 'steady', band_on: 0, band_off: 0, ...x.layers, every: Math.max(1, Math.round(+ev.target.value)) }; })} aria-label="Layers per step (number)" />
         <span className="studio-unit">layers</span>
@@ -248,11 +258,44 @@ function LeadLag({ b, layerHeight, onEdit }: { b: MotionBrush; layerHeight: numb
         <button className="btn-secondary btn-small" title="Lag by one line width, so each ridge sits a line behind the one below" onClick={() => setShift(-0.4)}>Lag 0.4 mm</button>
         <button className="btn-secondary btn-small" onClick={() => setShift(-mm)} disabled={!mm}>Flip lead ↔ lag</button>
       </div>
+      {(e?.mode === 'alternate' || e?.mode === 'wave') && (
+        <>
+          <Slider label={e.mode === 'wave' ? 'Lags by (at the other end of the swing)' : 'The other layers lag by'} unit="mm" min={0} max={b.period_mm / 2} step={0.01}
+            value={r3((((e.lag_deg ?? (e.mode === 'wave' ? e.shift_deg : 0)) / 360) * b.period_mm))}
+            onChange={(v) => onEdit((x) => { x.layers = { ...x.layers!, lag_deg: r3((v / x.period_mm) * 360) }; })} />
+          <p className="mx-muted" style={{ margin: 0 }}>{e.mode === 'wave' ? 'Lead and lag can differ: an uneven swing leans the snaking ridges one way.' : 'Alternate layers lead and lag by these amounts: 0 lag swaps between lined up and leading.'}</p>
+        </>
+      )}
+      {e?.mode === 'wave' && (
+        <>
+          <div className="mx-label">Wave type</div>
+          <div className="seg mx-seg">
+            {WAVE_SHAPES.map(([k, l, hint]) => <button key={k} title={hint} className={(e.wave_shape ?? 'sine') === k ? 'on' : ''} onClick={() => onEdit((x) => { x.layers = { ...x.layers!, wave_shape: k }; })}>{l}</button>)}
+          </div>
+          <SwingGraph e={e} />
+        </>
+      )}
       <p className="mx-muted" style={{ margin: 0 }}>
+        {e?.mode === 'wave' ? `One full swing every ${Math.max(2, every)} layers (${(Math.max(2, every) * layerHeight).toFixed(1)} mm of height). ` : ''}
         {mm === 0 ? 'Layers are lined up.' : `${mm > 0 ? 'Leads' : 'Lags'} ${Math.abs(mm).toFixed(2)} mm every ${every} layer${every > 1 ? 's' : ''}: ridges lean about ${angle.toFixed(0)}° from upright.`}
         {angle > 60 ? ' That is a steep lean; ridges may not stack well.' : ''}
       </p>
     </section>
+  );
+}
+
+/** Lead (up) and lag (down) of each layer over two swings, so the chosen wave type and amounts are visible. */
+function SwingGraph({ e }: { e: LayerEffect }) {
+  const n = Math.max(2, e.every) * 2, lead = Math.max(1e-9, e.shift_deg), lag = e.lag_deg ?? e.shift_deg, m = Math.max(lead, lag, 1e-9);
+  const pts = Array.from({ length: n + 1 }, (_, i) => {
+    const d = layerPhase({ layers: { ...e, band_on: 0 } } as MotionBrush, i) ?? 0;
+    return `${(i / n) * 100},${15 - (d / m) * 13}`;
+  }).join(' ');
+  return (
+    <svg className="mx-wave" viewBox="0 0 100 30" preserveAspectRatio="none" aria-label="Lead and lag by layer">
+      <line x1="0" y1="15" x2="100" y2="15" stroke="currentColor" strokeOpacity="0.25" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+      <polyline points={pts} fill="none" stroke="var(--accent, #2b7cff)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
   );
 }
 
