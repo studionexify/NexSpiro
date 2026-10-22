@@ -154,12 +154,27 @@ export function TransformPanel() {
     const size = [0, 1, 2].map((k) => pb.max[k] - pb.min[k]);
     const centre = [0, 1, 2].map((k) => (pb.min[k] + pb.max[k]) / 2);
     const tag = <span className="tp-part-tag">{part.prim?.wall ? (part.type === 'negative' ? 'Wall cutter' : 'Wall shell') : PART_LABELS[part.type]}</span>;
-    const wallRow = part.prim?.wall ? (
-      <div style={{ marginTop: 8 }}>
-        <div className="xyz"><span className="ax">Wall</span><NumField value={part.prim.wall} onSet={positive((v) => setPartWall(o.id, part.id, v))} /><span className="unit">mm</span></div>
-        <p className="muted" style={{ fontSize: 11, margin: '2px 0 0' }}>Wall thickness, true at any scale.{part.type === 'negative' ? ' The cut removes only this skin along the shape, splitting the object; use “Cut along wall cutters and separate” to get the pieces.' : ''}</p>
-      </div>
-    ) : null;
+    const wallRow = part.prim?.wall ? (() => {
+      const w = part.prim.wall, wo = part.prim.wallOut ?? 0, wi = w - wo;
+      const place = wo <= 1e-9 ? 'inside' : wi <= 1e-9 ? 'outside' : Math.abs(wo - wi) < 1e-9 ? 'centre' : 'custom';
+      const setPlace = (v: string) => setPartWall(o.id, part.id, w, v === 'inside' ? 0 : v === 'outside' ? w : v === 'centre' ? w / 2 : wo || w / 3);
+      return (
+        <div style={{ marginTop: 8 }}>
+          <div className="xyz"><span className="ax">Wall</span><NumField value={w} onSet={positive((v) => setPartWall(o.id, part.id, v))} /><span className="unit">mm</span></div>
+          <select className="tp-select" value={place} aria-label="Wall position" onChange={(e) => setPlace(e.target.value)}>
+            <option value="inside">Inside the shape's surface</option>
+            <option value="centre">Centred on the surface</option>
+            <option value="outside">Outside the surface</option>
+            <option value="custom">Uneven (set inside and outside)</option>
+          </select>
+          {place === 'custom' && <>
+            <div className="xyz"><span className="ax">In</span><NumField value={wi} onSet={(v) => { if (v >= 0 && v + wo > 0) setPartWall(o.id, part.id, v + wo, wo); }} /><span className="unit">mm</span></div>
+            <div className="xyz"><span className="ax">Out</span><NumField value={wo} onSet={(v) => { if (v >= 0 && v + wi > 0) setPartWall(o.id, part.id, v + wi, v); }} /><span className="unit">mm</span></div>
+          </>}
+          <p className="muted" style={{ fontSize: 11, margin: '2px 0 0' }}>Wall thickness, true at any scale: {wi.toFixed(2)} mm inside and {wo.toFixed(2)} mm outside the shape's surface.{part.type === 'negative' ? ' The cut removes only this skin along the shape, splitting the object; use “Cut along wall cutters and separate” to get the pieces.' : ''}</p>
+        </div>
+      );
+    })() : null;
     return (
       <div className="float panel">
         {tool === 'move' && <>

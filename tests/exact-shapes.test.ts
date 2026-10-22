@@ -143,3 +143,18 @@ describe('Motionex lead/lag wave', () => {
     expect(layerPhase(brush({ ...e, lag_deg: 30 }), 0)).toBe(-30);
   });
 });
+
+describe('wall position', () => {
+  const radii = (m: ReturnType<typeof shellPrimitive>) => {
+    let ro = 0, ri = 0;
+    for (let t = 0; t < m.indices.length; t++) { const i = m.indices[t] * 3, d = Math.hypot(m.vertices[i], m.vertices[i + 1]); if (t < m.innerFrom * 3) ro = Math.max(ro, d); else ri = Math.max(ri, d); }
+    return [ro, ri];
+  };
+  it('inside, centred, outside and uneven walls sit where asked', () => {
+    const r = 10, w = 2;
+    for (const [out, ro, ri] of [[0, 10, 8], [1, 11, 9], [2, 12, 10], [0.5, 10.5, 8.5]]) {
+      const [a, b] = radii(shellPrimitive('cylinder', 2 * r, w, 1e-3, out));
+      expect(a).toBeCloseTo(ro, 4); expect(b).toBeCloseTo(ri, 4);
+    }
+  });
+});

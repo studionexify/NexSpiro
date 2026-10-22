@@ -277,7 +277,8 @@ function primitiveSoup(shape: ShapeKind, r: number, tol: number, w = 0): number[
   };
   const need = (ok: boolean, max: number) => { if (!ok) throw new Error(`the wall (${w} mm) is thicker than this shape allows (under ${max.toFixed(2)} mm)`); };
   const rho = (2 * r) / (1 + Math.sqrt(5)); // in-radius of the cone and pyramid (apex at +r, base at -r)
-  if (w > 0) {
+  if (w !== 0) {
+    if (shape === 'torus' && 0.32 * r - w >= 0.68 * r) throw new Error(`the outside wall (${-w} mm) would close the torus hole (under ${(0.36 * r).toFixed(2)} mm)`);
     if (shape === 'box' || shape === 'cylinder' || shape === 'sphere') return homothety(r, 0);
     if (shape === 'cone' || shape === 'pyramid') return homothety(rho, -r + rho);
     if (shape === 'prism') { need(r - 2 * w > 0, r / 2); const h = r - w, c = r - 2 * w; return revolve([[0, -h], [c, -h], [c, h], [0, h]], 3, Math.PI / 2); }
@@ -322,8 +323,10 @@ export function primitive(shape: ShapeKind, size: number, tol = PRIMITIVE_CHORD_
  * cuts a wall-thick slot along the shape's surface (splitting the body into inside and outside pieces); added, it is a
  * thin-walled shell of the shape. `innerFrom` is the first triangle of the inner surface (the slicer cuts outer minus inner).
  */
-export function shellPrimitive(shape: ShapeKind, size: number, wall: number, tol = PRIMITIVE_CHORD_TOL): IndexedMesh & { innerFrom: number } {
-  const a = outward(primitiveSoup(shape, size / 2, tol)), b = outward(primitiveSoup(shape, size / 2, tol, wall));
+export function shellPrimitive(shape: ShapeKind, size: number, wall: number, tol = PRIMITIVE_CHORD_TOL, wallOut = 0): IndexedMesh & { innerFrom: number } {
+  const out = Math.min(Math.max(0, wallOut), wall);
+  // the skin runs from `out` outside the shape's surface to `wall - out` inside it
+  const a = outward(primitiveSoup(shape, size / 2, tol, -out)), b = outward(primitiveSoup(shape, size / 2, tol, wall - out));
   flipWinding(b);
   const nv = a.vertices.length / 3, v = new Float32Array(a.vertices.length + b.vertices.length), ix = new Uint32Array(a.indices.length + b.indices.length);
   v.set(a.vertices); v.set(b.vertices, a.vertices.length);
@@ -337,12 +340,12 @@ export function shellPrimitive(shape: ShapeKind, size: number, wall: number, tol
  * scale changes (so the wall stays `wall` mm thick in the world). `tess` is the scale the mesh was made for and `tris`
  * its triangle count: a mesh edited by another tool no longer matches and is left alone.
  */
-export interface PrimSpec { shape: ShapeKind; size: number; wall?: number; tess: number; tris: number; /** Shells: first triangle of the inner surface. */ innerFrom?: number }
+export interface PrimSpec { shape: ShapeKind; size: number; wall?: number; /** Part of the wall outside the shape's surface (mm, 0 = all inside). */ wallOut?: number; tess: number; tris: number; /** Shells: first triangle of the inner surface. */ innerFrom?: number }
 
 /** The mesh for a spec at an effective world scale (largest axis). */
-export function primMesh(p: Pick<PrimSpec, 'shape' | 'size' | 'wall'>, scale = 1): IndexedMesh & { innerFrom?: number } {
+export function primMesh(p: Pick<PrimSpec, 'shape' | 'size' | 'wall' | 'wallOut'>, scale = 1): IndexedMesh & { innerFrom?: number } {
   const tol = PRIMITIVE_CHORD_TOL / Math.max(1e-6, scale);
-  return p.wall ? shellPrimitive(p.shape, p.size, p.wall / Math.max(1e-6, scale), tol) : primitive(p.shape, p.size, tol);
+  return p.wall ? shellPrimitive(p.shape, p.size, p.wall / Math.max(1e-6, scale), tol, (p.wallOut ?? 0) / Math.max(1e-6, scale)) : primitive(p.shape, p.size, tol);
 }
 
 const maxAbs = (v: number[]) => Math.max(...v.map(Math.abs));
@@ -425,36 +428,40 @@ export function addPart(objectId: string, type: PartType, shape: ShapeKind) {
  * Add a wall cutter (cut: a negative part that removes only a `wall`-thick skin along the shape's surface, so the
  * body is split along it) or a wall shell (add: a part that adds only that skin). Returns false when the wall does not fit.
  */
-export function addWallPart(objectId: string, mode: 'cut' | 'add', shape: ShapeKind, wall: number): boolean {
+export function addWallPart(objectId: string, mode: 'cut' | 'add', shape: ShapeKind, wall: number, wallOut = 0): boolean {
   const s = useStore.getState();
   const o = s.objects.find((x) => x.id === objectId);
   if (!o || !(wall > 0)) return false;
   const { size, position, scale } = partPlacement(o);
   let mesh: ReturnType<typeof shellPrimitive>;
-  try { mesh = shellPrimitive(shape, size, wall); }
+  try { mesh = shellPrimitive(shape, size, wall, PRIMITIVE_CHORD_TOL, wallOut); }
   catch (e: any) { s.set({ toast: { kind: 'warn', text: `Wall ${mode === 'cut' ? 'cutter' : 'shell'}: ${e?.message ?? e}.` } }); return false; }
   const { innerFrom, ...m } = mesh;
   const label = mode === 'cut' ? 'Wall cutter' : 'Wall shell';
   const part: ScenePart = {
     id: newId('part'), name: `${label} (${shape}, ${wall} mm)`, type: mode === 'cut' ? 'negative' : 'part', mesh: m, position, rotation: [0, 0, 0], scale, overrides: {},
-    prim: { shape, size, wall, tess: 1, tris: m.indices.length / 3, innerFrom },
+    prim: { shape, size, wall, wallOut, tess: 1, tris: m.indices.length / 3, innerFrom },
   };
   s.updateObjects((x) => ({ ...x, parts: [...(x.parts ?? []), part] }), [objectId]);
   s.set({ selectedPart: part.id, selected: [objectId], processMode: 'objects' });
   return true;
 }
 
-/** Change a wall cutter's or wall shell's thickness (mm, true in the world at any scale). */
-export function setPartWall(objectId: string, partId: string, wall: number) {
+/**
+ * Change a wall cutter's or wall shell's thickness (mm, true in the world at any scale) and how much of it lies
+ * outside the shape's surface (`wallOut`: 0 inside, wall/2 centred, wall outside, anything between = uneven).
+ */
+export function setPartWall(objectId: string, partId: string, wall: number, wallOut?: number) {
   const s = useStore.getState();
   const o = s.objects.find((x) => x.id === objectId), p = o?.parts?.find((x) => x.id === partId);
   if (!o || !p?.prim?.wall || !(wall > 0)) return;
   const eff = [0, 1, 2].map((k) => o.scale[k] * p.scale[k]);
   let mesh: ReturnType<typeof primMesh>;
-  try { mesh = primMesh({ ...p.prim, wall }, meanScale(eff)); }
+  const wo = Math.min(wall, Math.max(0, wallOut ?? (p.prim.wallOut ?? 0) * (wall / p.prim.wall)));
+  try { mesh = primMesh({ ...p.prim, wall, wallOut: wo }, meanScale(eff)); }
   catch (e: any) { s.set({ toast: { kind: 'warn', text: `Wall: ${e?.message ?? e}.` } }); return; }
   const { innerFrom, ...m } = mesh;
-  updatePart(objectId, partId, (q) => ({ ...q, mesh: m, name: q.name.replace(/, [\d.]+ mm\)$/, `, ${wall} mm)`), prim: { ...q.prim!, wall, tess: meanScale(eff), tris: m.indices.length / 3, innerFrom } }));
+  updatePart(objectId, partId, (q) => ({ ...q, mesh: m, name: q.name.replace(/, [\d.]+ mm\)$/, `, ${wall} mm)`), prim: { ...q.prim!, wall, wallOut: wo, tess: meanScale(eff), tris: m.indices.length / 3, innerFrom } }));
 }
 
 export function updatePart(objectId: string, partId: string, fn: (p: ScenePart) => ScenePart, record = true) {
