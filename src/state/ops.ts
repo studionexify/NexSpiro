@@ -1,7 +1,7 @@
 // Scene operations: arrange, auto-orient, lay-on-face, centre.
 import * as THREE from 'three';
 import { printerById } from '../profiles/printers';
-import { dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type Plate, type SceneObject, type ScenePart } from './store';
+import { dropToBed, newId, setShapeRefresher, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type Plate, type SceneObject, type ScenePart, type Vec3 } from './store';
 import { weld, type IndexedMesh } from '../engine/mesh';
 import { adaptiveProfile, applyHeightRange, smoothProfile, uniformProfile } from '../engine/layers';
 import type { PartType } from '../engine/types';
@@ -245,29 +245,153 @@ export function signedVolume(m: IndexedMesh) {
   return vol / 6;
 }
 
-/** A closed, outward-facing primitive about `size` mm across, centred on the origin. */
-export function primitive(shape: ShapeKind, size: number): IndexedMesh {
-  const r = size / 2;
-  let out: number[] = [];
+/** Chord tolerance for primitive tessellation (mm): curved surfaces deviate from the true shape by at most this. */
+export const PRIMITIVE_CHORD_TOL = 0.001;
+
+/** Segments needed around a full circle of radius `rad` for a chord error under `tol`. */
+export function circleSegments(rad: number, tol = PRIMITIVE_CHORD_TOL): number {
+  if (rad <= tol) return 8;
+  const n = Math.ceil(Math.PI / Math.acos(1 - tol / rad));
+  return Math.max(48, Math.min(1024, n + (n & 1)));
+}
+
+const flipWinding = (m: IndexedMesh) => { for (let t = 0; t < m.indices.length; t += 3) { const k = m.indices[t + 1]; m.indices[t + 1] = m.indices[t + 2]; m.indices[t + 2] = k; } };
+const outward = (soup: number[]): IndexedMesh => { const m = weld(new Float32Array(soup)); if (signedVolume(m) < 0) flipWinding(m); return m; };
+
+/**
+ * Triangle soup of a primitive about `size` mm across (half-size r), optionally inset by a uniform wall `w`:
+ * the inset surface is the exact offset of the shape by w inwards (planes and circles move by w).
+ */
+function primitiveSoup(shape: ShapeKind, r: number, tol: number, w = 0): number[] {
   const arc = (cx: number, cz: number, rad: number, from: number, to: number, n: number) =>
     Array.from({ length: n + 1 }, (_, i) => { const a = from + ((to - from) * i) / n; return [cx + rad * Math.cos(a), cz + rad * Math.sin(a)] as [number, number]; });
+  const S = circleSegments(r, tol);
+  // segments along an arc of `sweep` radians on a circle of radius rad
+  const along = (rad: number, sweep: number) => Math.max(2, Math.ceil((circleSegments(rad, tol) * sweep) / (Math.PI * 2)));
+  // shapes with an inscribed sphere (box, cylinder, sphere, cone, pyramid) inset exactly by a homothety about its centre
+  const homothety = (inR: number, cz: number) => {
+    if (inR - w <= 0) throw new Error(`the wall (${w} mm) is thicker than the shape allows (${(inR).toFixed(2)} mm)`);
+    const k = (inR - w) / inR, out = primitiveSoup(shape, r, tol);
+    for (let i = 0; i < out.length; i += 3) { out[i] *= k; out[i + 1] *= k; out[i + 2] = cz + (out[i + 2] - cz) * k; }
+    return out;
+  };
+  const need = (ok: boolean, max: number) => { if (!ok) throw new Error(`the wall (${w} mm) is thicker than this shape allows (under ${max.toFixed(2)} mm)`); };
+  const rho = (2 * r) / (1 + Math.sqrt(5)); // in-radius of the cone and pyramid (apex at +r, base at -r)
+  if (w !== 0) {
+    if (shape === 'torus' && 0.32 * r - w >= 0.68 * r) throw new Error(`the outside wall (${-w} mm) would close the torus hole (under ${(0.36 * r).toFixed(2)} mm)`);
+    if (shape === 'box' || shape === 'cylinder' || shape === 'sphere') return homothety(r, 0);
+    if (shape === 'cone' || shape === 'pyramid') return homothety(rho, -r + rho);
+    if (shape === 'prism') { need(r - 2 * w > 0, r / 2); const h = r - w, c = r - 2 * w; return revolve([[0, -h], [c, -h], [c, h], [0, h]], 3, Math.PI / 2); }
+    if (shape === 'disc') { need(0.15 * r - w > 0, 0.15 * r); const h = 0.15 * r - w; return revolve([[0, -h], [r - w, -h], [r - w, h], [0, h]], S); }
+    if (shape === 'tube') { need(0.4 * r - 2 * w > 0, 0.2 * r); const a = 0.6 * r + w, b = r - w, h = r - w; return revolve([[a, -h], [b, -h], [b, h], [a, h], [a, -h]], S); }
+    if (shape === 'torus') { need(0.32 * r - w > 0, 0.32 * r); const m = 0.32 * r - w; return revolve(arc(r * 0.68, 0, m, 0, Math.PI * 2, along(m, Math.PI * 2)), S); }
+    if (shape === 'capsule') { need(0.5 * r - w > 0, 0.5 * r); const q = 0.5 * r - w; return revolve([...arc(0, -r * 0.5, q, -Math.PI / 2, 0, along(q, Math.PI / 2)), ...arc(0, r * 0.5, q, 0, Math.PI / 2, along(q, Math.PI / 2))], S); }
+    if (shape === 'hemisphere') {
+      const q = r - w; need(q > w, r / 2);
+      const a0 = Math.asin(w / q);
+      return revolve([[0, w], ...arc(0, 0, q, a0, Math.PI / 2, along(q, Math.PI / 2 - a0))], S);
+    }
+  }
   if (shape === 'box') {
     const v = [[-r, -r, -r], [r, -r, -r], [r, r, -r], [-r, r, -r], [-r, -r, r], [r, -r, r], [r, r, r], [-r, r, r]];
     const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
+    const out: number[] = [];
     for (const t of f) for (const i of t) out.push(...v[i]);
-  } else if (shape === 'cylinder') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 48);
-  else if (shape === 'prism') out = revolve([[0, -r], [r, -r], [r, r], [0, r]], 3, Math.PI / 2);
-  else if (shape === 'disc') out = revolve([[0, -r * 0.15], [r, -r * 0.15], [r, r * 0.15], [0, r * 0.15]], 64);
-  else if (shape === 'cone') out = revolve([[0, -r], [r, -r], [0, r]], 48);
-  else if (shape === 'pyramid') out = revolve([[0, -r], [r * Math.SQRT2, -r], [0, r]], 4, Math.PI / 4);
-  else if (shape === 'sphere') out = revolve(arc(0, 0, r, -Math.PI / 2, Math.PI / 2, 24), 48);
-  else if (shape === 'hemisphere') out = revolve([[0, 0], ...arc(0, 0, r, 0, Math.PI / 2, 12)], 48);
-  else if (shape === 'capsule') out = revolve([...arc(0, -r * 0.5, r * 0.5, -Math.PI / 2, 0, 8), ...arc(0, r * 0.5, r * 0.5, 0, Math.PI / 2, 8)], 48);
-  else if (shape === 'tube') out = revolve([[r * 0.6, -r], [r, -r], [r, r], [r * 0.6, r], [r * 0.6, -r]], 48);
-  else if (shape === 'torus') out = revolve(arc(r * 0.68, 0, r * 0.32, 0, Math.PI * 2, 24), 48);
-  const m = weld(new Float32Array(out));
-  if (signedVolume(m) < 0) for (let t = 0; t < m.indices.length; t += 3) { const k = m.indices[t + 1]; m.indices[t + 1] = m.indices[t + 2]; m.indices[t + 2] = k; }
-  return m;
+    return out;
+  }
+  if (shape === 'cylinder') return revolve([[0, -r], [r, -r], [r, r], [0, r]], S);
+  if (shape === 'prism') return revolve([[0, -r], [r, -r], [r, r], [0, r]], 3, Math.PI / 2);
+  if (shape === 'disc') return revolve([[0, -r * 0.15], [r, -r * 0.15], [r, r * 0.15], [0, r * 0.15]], S);
+  if (shape === 'cone') return revolve([[0, -r], [r, -r], [0, r]], S);
+  if (shape === 'pyramid') return revolve([[0, -r], [r * Math.SQRT2, -r], [0, r]], 4, Math.PI / 4);
+  if (shape === 'sphere') return revolve(arc(0, 0, r, -Math.PI / 2, Math.PI / 2, along(r, Math.PI)), S);
+  if (shape === 'hemisphere') return revolve([[0, 0], ...arc(0, 0, r, 0, Math.PI / 2, along(r, Math.PI / 2))], S);
+  if (shape === 'capsule') return revolve([...arc(0, -r * 0.5, r * 0.5, -Math.PI / 2, 0, along(r * 0.5, Math.PI / 2)), ...arc(0, r * 0.5, r * 0.5, 0, Math.PI / 2, along(r * 0.5, Math.PI / 2))], S);
+  if (shape === 'tube') return revolve([[r * 0.6, -r], [r, -r], [r, r], [r * 0.6, r], [r * 0.6, -r]], S);
+  if (shape === 'torus') return revolve(arc(r * 0.68, 0, r * 0.32, 0, Math.PI * 2, along(r * 0.32, Math.PI * 2)), S);
+  return [];
+}
+
+/** A closed, outward-facing primitive about `size` mm across, centred on the origin.
+ *  Round surfaces are tessellated to `tol` (default PRIMITIVE_CHORD_TOL), so the mesh is within a micron of the exact shape. */
+export function primitive(shape: ShapeKind, size: number, tol = PRIMITIVE_CHORD_TOL): IndexedMesh {
+  return outward(primitiveSoup(shape, size / 2, tol));
+}
+
+/**
+ * Hollow primitive: the shape's surface plus its exact inset by `wall` mm, facing inwards. Subtracted from a body it
+ * cuts a wall-thick slot along the shape's surface (splitting the body into inside and outside pieces); added, it is a
+ * thin-walled shell of the shape. `innerFrom` is the first triangle of the inner surface (the slicer cuts outer minus inner).
+ */
+export function shellPrimitive(shape: ShapeKind, size: number, wall: number, tol = PRIMITIVE_CHORD_TOL, wallOut = 0): IndexedMesh & { innerFrom: number } {
+  const out = Math.min(Math.max(0, wallOut), wall);
+  // the skin runs from `out` outside the shape's surface to `wall - out` inside it
+  const a = outward(primitiveSoup(shape, size / 2, tol, -out)), b = outward(primitiveSoup(shape, size / 2, tol, wall - out));
+  flipWinding(b);
+  const nv = a.vertices.length / 3, v = new Float32Array(a.vertices.length + b.vertices.length), ix = new Uint32Array(a.indices.length + b.indices.length);
+  v.set(a.vertices); v.set(b.vertices, a.vertices.length);
+  ix.set(a.indices); for (let i = 0; i < b.indices.length; i++) ix[a.indices.length + i] = b.indices[i] + nv;
+  return { vertices: v, indices: ix, innerFrom: a.indices.length / 3 };
+}
+
+/**
+ * Exact definition of a primitive object or part. The mesh is re-tessellated from it when the effective scale grows
+ * (so a scaled-up cylinder stays within PRIMITIVE_CHORD_TOL of the true surface) and, for shells, when the wall or the
+ * scale changes (so the wall stays `wall` mm thick in the world). `tess` is the scale the mesh was made for and `tris`
+ * its triangle count: a mesh edited by another tool no longer matches and is left alone.
+ */
+export interface PrimSpec { shape: ShapeKind; size: number; wall?: number; /** Part of the wall outside the shape's surface (mm, 0 = all inside). */ wallOut?: number; tess: number; tris: number; /** Shells: first triangle of the inner surface. */ innerFrom?: number }
+
+/** The mesh for a spec at an effective world scale (largest axis). */
+export function primMesh(p: Pick<PrimSpec, 'shape' | 'size' | 'wall' | 'wallOut'>, scale = 1): IndexedMesh & { innerFrom?: number } {
+  const tol = PRIMITIVE_CHORD_TOL / Math.max(1e-6, scale);
+  return p.wall ? shellPrimitive(p.shape, p.size, p.wall / Math.max(1e-6, scale), tol, (p.wallOut ?? 0) / Math.max(1e-6, scale)) : primitive(p.shape, p.size, tol);
+}
+
+const maxAbs = (v: number[]) => Math.max(...v.map(Math.abs));
+/** Geometric mean of the scale magnitudes: the factor a wall thickness is divided by to stay true in the world. */
+const meanScale = (v: number[]) => Math.cbrt(Math.abs(v[0] * v[1] * v[2])) || 1;
+
+/** Whether a mesh made at scale `tess` needs re-making at scale `now`: finer when growing, coarser when much smaller. */
+const needsRetess = (tess: number, now: number) => now > tess * 1.15 || now < tess / 3;
+
+/**
+ * Re-tessellate an object's primitive mesh and its primitive parts for their current scale. Returns the object unchanged
+ * when nothing needs it. Objects with paint keep their mesh (paint is per triangle).
+ */
+export function refreshPrimitives(o: SceneObject): SceneObject {
+  let next = o;
+  const op = o.prim;
+  if (op && !o.paint && o.mesh.indices.length / 3 === op.tris && needsRetess(op.tess, maxAbs(o.scale))) {
+    const s = maxAbs(o.scale), { innerFrom: _, ...m } = primMesh(op, s);
+    centreMeshLocal(m);
+    next = { ...next, mesh: m, prim: { ...op, tess: s, tris: m.indices.length / 3 } };
+  }
+  if (o.parts?.some((p) => p.prim)) {
+    let changed = false;
+    const parts = o.parts.map((p) => {
+      const pp = p.prim;
+      if (!pp || p.mesh.indices.length / 3 !== pp.tris) return p;
+      const eff = [0, 1, 2].map((k) => o.scale[k] * p.scale[k]);
+      const s = pp.wall ? meanScale(eff) : maxAbs(eff);
+      const wallOff = pp.wall && Math.abs(s - pp.tess) > 1e-6 * s; // a shell's wall must follow every scale change
+      if (!wallOff && !needsRetess(pp.tess, s)) return p;
+      changed = true;
+      const { innerFrom, ...m } = primMesh(pp, s);
+      return { ...p, mesh: m, prim: { ...pp, tess: s, tris: m.indices.length / 3, innerFrom } };
+    });
+    if (changed) next = { ...next, parts };
+  }
+  return next;
+}
+
+/** Centre a mesh the way objects are stored (XY centred, min z = 0). */
+function centreMeshLocal(m: IndexedMesh) {
+  const v = m.vertices;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity;
+  for (let i = 0; i < v.length; i += 3) { x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); z0 = Math.min(z0, v[i + 2]); }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  for (let i = 0; i < v.length; i += 3) { v[i] -= cx; v[i + 1] -= cy; v[i + 2] -= z0; }
 }
 
 export const PART_LABELS: Record<PartType, string> = {
@@ -275,22 +399,69 @@ export const PART_LABELS: Record<PartType, string> = {
   negative: 'Negative part', modifier: 'Modifier', support_enforcer: 'Support enforcer', support_blocker: 'Support blocker',
 };
 
-export function addPart(objectId: string, type: PartType, shape: ShapeKind) {
-  const s = useStore.getState();
-  const o = s.objects.find((x) => x.id === objectId);
-  if (!o) return;
+/** Where a new part goes and how big it is: the object's centre in its own frame, half its smallest side. */
+function partPlacement(o: SceneObject) {
   const b = worldBounds(o);
   const size = Math.max(4, Math.min(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 0.5);
   // place at the object's centre, expressed in the object frame (undo object scale)
   const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2)
     .applyMatrix4(objectMatrix(o).invert());
+  return { size, position: [centre.x, centre.y, centre.z] as Vec3, scale: [1 / o.scale[0], 1 / o.scale[1], 1 / o.scale[2]] as Vec3 };
+}
+
+export function addPart(objectId: string, type: PartType, shape: ShapeKind) {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === objectId);
+  if (!o) return;
+  const { size, position, scale } = partPlacement(o);
+  const mesh = primitive(shape, size);
   const part: ScenePart = {
-    id: newId('part'), name: `${PART_LABELS[type]} (${shape})`, type, mesh: primitive(shape, size),
-    position: [centre.x, centre.y, centre.z], rotation: [0, 0, 0], scale: [1 / o.scale[0], 1 / o.scale[1], 1 / o.scale[2]],
+    id: newId('part'), name: `${PART_LABELS[type]} (${shape})`, type, mesh, position, rotation: [0, 0, 0], scale,
     overrides: type === 'modifier' ? { sparse_infill_density: 50 } : {},
+    prim: { shape, size, tess: 1, tris: mesh.indices.length / 3 },
   };
   s.updateObjects((x) => ({ ...x, parts: [...(x.parts ?? []), part] }), [objectId]);
   s.set({ selectedPart: part.id, selected: [objectId], processMode: 'objects' });
+}
+
+/**
+ * Add a wall cutter (cut: a negative part that removes only a `wall`-thick skin along the shape's surface, so the
+ * body is split along it) or a wall shell (add: a part that adds only that skin). Returns false when the wall does not fit.
+ */
+export function addWallPart(objectId: string, mode: 'cut' | 'add', shape: ShapeKind, wall: number, wallOut = 0): boolean {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === objectId);
+  if (!o || !(wall > 0)) return false;
+  const { size, position, scale } = partPlacement(o);
+  let mesh: ReturnType<typeof shellPrimitive>;
+  try { mesh = shellPrimitive(shape, size, wall, PRIMITIVE_CHORD_TOL, wallOut); }
+  catch (e: any) { s.set({ toast: { kind: 'warn', text: `Wall ${mode === 'cut' ? 'cutter' : 'shell'}: ${e?.message ?? e}.` } }); return false; }
+  const { innerFrom, ...m } = mesh;
+  const label = mode === 'cut' ? 'Wall cutter' : 'Wall shell';
+  const part: ScenePart = {
+    id: newId('part'), name: `${label} (${shape}, ${wall} mm)`, type: mode === 'cut' ? 'negative' : 'part', mesh: m, position, rotation: [0, 0, 0], scale, overrides: {},
+    prim: { shape, size, wall, wallOut, tess: 1, tris: m.indices.length / 3, innerFrom },
+  };
+  s.updateObjects((x) => ({ ...x, parts: [...(x.parts ?? []), part] }), [objectId]);
+  s.set({ selectedPart: part.id, selected: [objectId], processMode: 'objects' });
+  return true;
+}
+
+/**
+ * Change a wall cutter's or wall shell's thickness (mm, true in the world at any scale) and how much of it lies
+ * outside the shape's surface (`wallOut`: 0 inside, wall/2 centred, wall outside, anything between = uneven).
+ */
+export function setPartWall(objectId: string, partId: string, wall: number, wallOut?: number) {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === objectId), p = o?.parts?.find((x) => x.id === partId);
+  if (!o || !p?.prim?.wall || !(wall > 0)) return;
+  const eff = [0, 1, 2].map((k) => o.scale[k] * p.scale[k]);
+  let mesh: ReturnType<typeof primMesh>;
+  const wo = Math.min(wall, Math.max(0, wallOut ?? (p.prim.wallOut ?? 0) * (wall / p.prim.wall)));
+  try { mesh = primMesh({ ...p.prim, wall, wallOut: wo }, meanScale(eff)); }
+  catch (e: any) { s.set({ toast: { kind: 'warn', text: `Wall: ${e?.message ?? e}.` } }); return; }
+  const { innerFrom, ...m } = mesh;
+  updatePart(objectId, partId, (q) => ({ ...q, mesh: m, name: q.name.replace(/, [\d.]+ mm\)$/, `, ${wall} mm)`), prim: { ...q.prim!, wall, wallOut: wo, tess: meanScale(eff), tris: m.indices.length / 3, innerFrom } }));
 }
 
 export function updatePart(objectId: string, partId: string, fn: (p: ScenePart) => ScenePart, record = true) {
@@ -367,3 +538,5 @@ export function updateHeightRange(id: string, rangeId: string, patch: Partial<{ 
   if (!patch && s.selectedRange === rangeId) s.set({ selectedRange: null });
   s.markDirty();
 }
+
+setShapeRefresher(refreshPrimitives);

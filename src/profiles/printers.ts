@@ -438,3 +438,10 @@ PRINTERS.push(
 export const printerById = (id: string) => PRINTERS.find((p) => p.id === id) ?? PRINTERS[0];
 /** Display name; pass the nozzle in use (see effectiveNozzle) to show a chosen nozzle instead of the printer's own. */
 export const printerName = (p: PrinterProfile, nozzle: number = p.nozzle) => `${p.vendor} ${p.model} ${nozzle} nozzle`;
+
+/** Note for the printer picker when exact arc output (G2/G3) needs something on the firmware side; null when arcs work as shipped. */
+export function arcSupportNote(p: PrinterProfile): string | null {
+  if (p.flavor === 'bbl') return null;
+  if (p.flavor === 'klipper') return 'Exact arcs (G2/G3) need [gcode_arcs] in printer.cfg. Without it, turn off Arc fitting; NexSpiro then writes fine segments.';
+  return 'Exact arcs (G2/G3) need ARC_SUPPORT in Marlin. It is on in most builds, but some vendor firmware leaves it out. If arcs are ignored, turn off Arc fitting.';
+}

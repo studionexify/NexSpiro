@@ -25,17 +25,24 @@ export interface MotionEvent {
 
 export interface NoiseSettings { enabled: boolean; type: "value"; seed: number; scale: number; octaves: number; persistence: number }
 
-export type LayerMode = "steady" | "alternate" | "back_and_forth" | "shift_hold";
+export type LayerMode = "steady" | "alternate" | "back_and_forth" | "shift_hold" | "wave";
+/** Shape of the lead/lag swing in "wave" mode, over one full swing: lead, back through 0, lag, back. */
+export type WaveShape = "sine" | "triangle" | "rounded" | "square" | "ramp";
 
 /** How the motion changes from one layer to the next. Builds diamonds, bricks, twists and bands. */
 export interface LayerEffect {
   /** Degrees of the repeat to shift by at each step. */
   shift_deg: number;
   /** steady: keep shifting (twist) · alternate: swap between 0 and shift · back_and_forth: shift up, then back down ·
-   *  shift_hold: like back_and_forth but pauses at both ends (with cross: six-sided cells). */
+   *  shift_hold: like back_and_forth but pauses at both ends (with cross: six-sided cells) ·
+   *  wave: swings smoothly between leading by shift_deg and lagging by lag_deg, one full swing every `every` layers. */
   mode: LayerMode;
-  /** Layers per step. */
+  /** Layers per step (wave: layers per full swing). */
   every: number;
+  /** alternate / wave: how far the lagging layers fall behind (degrees, ≥ 0). alternate without it swaps between 0 and shift. */
+  lag_deg?: number;
+  /** wave: shape of the swing (default sine). */
+  wave_shape?: WaveShape;
   /** Motion is on for band_on layers then off for band_off layers; 0 = always on. */
   band_on: number;
   band_off: number;

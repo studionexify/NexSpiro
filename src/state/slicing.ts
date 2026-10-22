@@ -61,6 +61,7 @@ export function plateMeshes(objs: SceneObject[], plate = useStore.getState().act
     }),
     parts: (o.parts ?? []).map((p) => ({
       type: p.type, overrides: p.overrides, indices: p.mesh.indices,
+      innerFrom: p.prim?.wall && p.mesh.indices.length / 3 === p.prim.tris ? p.prim.innerFrom : undefined,
       vertices: transformVertices(p.mesh.vertices, toPlate.clone().multiply(partWorldMatrix(o, p)).elements),
     })),
   }));

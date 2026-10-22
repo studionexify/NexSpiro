@@ -142,7 +142,7 @@ export function openMotionexEditor(root: HTMLElement, mx: MotionexState, profile
       ) : null,
       h("div.section", null, "Layer by layer"),
       row("Change each layer", select<LayerMode | "none">(brush.layers ? brush.layers.mode : "none",
-        [["none", "No change"], ["steady", "Twist (keep shifting)"], ["alternate", "Swap back and forth"], ["back_and_forth", "Shift, then shift back"], ["shift_hold", "Shift, pause, shift back"]],
+        [["none", "No change"], ["steady", "Twist (keep shifting)"], ["alternate", "Swap back and forth"], ["back_and_forth", "Shift, then shift back"], ["shift_hold", "Shift, pause, shift back"], ["wave", "Swing between lead and lag (wave)"]],
         (v) => { brush.layers = v === "none" ? (brush.layers && brush.layers.band_on > 0 ? { ...brush.layers, shift_deg: 0, mode: "steady" } : null) : { shift_deg: 15, every: 4, band_on: 0, band_off: 0, ...brush.layers, mode: v }; renderSide(); touch(); })),
       brush.layers ? h("div", null,
         row("Shift by (°)", numInput(brush.layers.shift_deg, (v) => { brush.layers!.shift_deg = v; touch(); }, { step: 5 })),

@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 import type { IndexedMesh } from '../engine/mesh';
 import type { LayerAction, PartType, SliceOutput } from '../engine/types';
+import type { PrimSpec } from './ops';
 import type { PlateType } from '../profiles/printers';
 import { printerById } from '../profiles/printers';
 import { CONFIG_VERSION, migrateConfig, type Config, type ProcessTab } from '../profiles/settings';
@@ -31,6 +32,8 @@ export interface ScenePart {
   rotation: Vec3;
   scale: Vec3;
   overrides: Config; // modifier settings
+  /** Exact shape the mesh was made from (primitives, wall cutters): re-tessellated on scale. */
+  prim?: PrimSpec;
 }
 
 /** motion: surface sets for plugins such as Motionex (0 none, n = surface set n). adv: Advanced mode (1 fixture, 2 load, 3 matte, 4 gloss). */
@@ -47,6 +50,8 @@ export interface SceneObject {
   filament?: number; // 0-based slot
   overrides?: Config;
   parts?: ScenePart[];
+  /** Exact shape the mesh was made from (added primitives): re-tessellated on scale so curves stay within a micron. */
+  prim?: PrimSpec;
   paint?: ObjectPaint;
   layerHeights?: number[];
   /** false: kept on the plate but left out of slicing. */
@@ -205,6 +210,10 @@ interface State {
 /** Edge selection that was active when an undo snapshot was taken (keyed by the snapshot), so Undo brings the picked edges back. */
 export const edgeSelHistory = new WeakMap<object, SceneEdgeSel | null>();
 
+/** Hook run on every changed object (ops.ts registers primitive re-tessellation; kept out of here to avoid an import cycle). */
+let shapeRefresher: (o: SceneObject) => SceneObject = (o) => o;
+export const setShapeRefresher = (fn: (o: SceneObject) => SceneObject) => { shapeRefresher = fn; };
+
 let idSeq = 0;
 export const newId = (p = 'obj') => `${p}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 
@@ -300,7 +309,7 @@ export const useStore = create<State>((set, get) => ({
   search: '',
   showOverhangs: false,
   showEdges: false,
-  shadeSmooth: false,
+  shadeSmooth: true,
   edgeAngle: 30,
   edgeSel: null,
 
@@ -336,7 +345,7 @@ export const useStore = create<State>((set, get) => ({
   updateObjects: (fn, ids, record = true) => {
     if (record) get().checkpoint();
     const sel = new Set(ids ?? get().selected);
-    set((s) => ({ objects: s.objects.map((o) => (sel.has(o.id) ? saneTransform(fn(o)) : o)) }));
+    set((s) => ({ objects: s.objects.map((o) => (sel.has(o.id) ? shapeRefresher(saneTransform(fn(o))) : o)) }));
     get().markDirty();
   },
   removeSelected: () => {

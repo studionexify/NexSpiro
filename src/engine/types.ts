@@ -89,6 +89,8 @@ export interface PartInput {
   indices: Uint32Array;
   /** Modifier overrides (only MODIFIER_KEYS are honoured). */
   overrides?: Record<string, number | boolean | string>;
+  /** Hollow volume (wall cutter / wall shell): triangles from here on are the inner surface; the volume is outer minus inner. */
+  innerFrom?: number;
 }
 
 /** Per-triangle paint layers. support/seam: 0 none, 1 enforce, 2 block. color: 0 = object filament, n = slot n-1. */

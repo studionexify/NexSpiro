@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
-import { PRINTERS, printerById } from '../profiles/printers';
+import { arcSupportNote, PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
 import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
@@ -124,6 +124,7 @@ export function PrinterCard() {
             ))}
           </div>
         </div>
+        {arcSupportNote(printer) && <p className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}><Icon name="info" size={11} /> {arcSupportNote(printer)}</p>}
       </Body>
       {edit && <PrinterModal onClose={() => setEdit(false)} />}
     </section>

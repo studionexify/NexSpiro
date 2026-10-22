@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { dropToBed, useStore, worldBounds } from '../state/store';
 import { addText, applyPartsBoolean, booleanSelected, hasShapeParts, cutObject, FONTS, type TextOptions } from '../state/tools';
 import { Icon } from './icons';
-import { bevelSelectedEdges, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
+import { bevelSelectedEdges, exactifyObject, refineObject, remeshObject, selectCreaseEdges, smoothObject, subdivideObject } from '../state/meshTools';
 import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
@@ -245,6 +245,7 @@ export function EdgesPanel() {
   const [size, setSize] = useState(2);
   const [segments, setSegments] = useState(6);
   const [levels, setLevels] = useState(1);
+  const [exactLevel, setExactLevel] = useState(0); // 0 = auto by mesh size
   const [relax, setRelax] = useState(8);
   const [paintedOnly, setPaintedOnly] = useState(false);
   const [refineLen, setRefineLen] = useState(2);
@@ -276,6 +277,18 @@ export function EdgesPanel() {
         <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, 1) ?? '')}>Chamfer</button>
         <button className="btn-secondary btn-small" disabled={!n} onClick={() => setMsg(bevelSelectedEdges(size, segments) ?? '')}>Fillet</button>
       </div>
+      <h4 style={{ marginTop: 6 }}>Smooth surface (exact)</h4>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>For faceted STL files. Flat faces, cylinders and spheres are recognised and rebuilt on their exact mathematical surface; other curved areas are smoothed. Edges steeper than the crease angle stay sharp. Prints smooth too.</p>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <select className="select" style={{ width: 'auto' }} value={exactLevel} aria-label="Smooth surface detail" title="Each level splits every triangle in four: finer is truer to the curve but makes a bigger file"
+          onChange={(e) => setExactLevel(+e.target.value)}>
+          {[[0, 'Auto'], [1, 'Light'], [2, 'Balanced'], [3, 'Fine']].map(([k, l]) => {
+            const t = o ? o.mesh.indices.length / 3 : 0, lv = k || (t < 60_000 ? 2 : 1);
+            return <option key={k} value={k}>{l} · {o ? `≈${fmtTris(t * 4 ** (lv as number))} triangles` : `×${4 ** (lv as number)}`}</option>;
+          })}
+        </select>
+        <button className="btn-primary btn-small" disabled={!o} onClick={() => o && exactifyObject(o.id, s.edgeAngle, exactLevel || undefined)}>Smooth surface</button>
+      </div>
       <h4 style={{ marginTop: 6 }}>Smooth body</h4>
       <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>{quads ? 'This model has quad faces: they are subdivided into a smooth outer body (Catmull-Clark).' : 'Subdivides the triangles into a finer, rounder surface (Loop). Edges steeper than the crease angle stay sharp.'}</p>
       <Slider label="Levels" value={levels} min={1} max={3} step={1} unit="×" onChange={setLevels} />
@@ -296,3 +309,5 @@ export function EdgesPanel() {
     </div>
   );
 }
+
+const fmtTris = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
