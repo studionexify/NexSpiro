@@ -1,6 +1,7 @@
 // Machine fit: tolerances worked out from the selected printer's nozzle and the layer height.
 // Print-in-place joints live on the clearance, so it follows the nozzle (0.4 mm → 0.30 mm gaps).
 import { printerById, type PrinterProfile } from '../../profiles/printers';
+import { autoChanges } from '../../profiles/changer';
 
 export interface Fit {
   nozzle: number;
@@ -36,7 +37,7 @@ export interface MachineInfo {
 
 export function machineFor(printerId: string, o: FitOverrides = {}): MachineInfo {
   const printer = printerById(printerId);
-  const ams = printer.machine.has_ams === true;
+  const ams = autoChanges(printer.machine);
   return {
     printer, bed: printer.bed, nozzle: printer.nozzle,
     colours: ams ? 16 : 1, multiColour: ams ? 'ams' : 'manual',

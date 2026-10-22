@@ -4,6 +4,7 @@
 // and (5) add a panel to the right dock.
 // Nexspiro always writes the G-code: plugins only add regions and edit the move list that Nexspiro then emits.
 import type { Config } from '../profiles/settings';
+import type { ChangerKind } from '../profiles/changer';
 import type { LayerOps } from '../engine/gcode';
 import type { MeshInput, Paths } from '../engine/types';
 import type { PatternexRegion } from './motionex/core/regions';
@@ -44,7 +45,12 @@ export interface PrepareContext {
   sliceAt(object: number, layer: number): Paths;
   /** Filament slots available for this print. */
   filamentCount: number;
+  /** Filament changes are automatic (a filament unit or a tool changer). */
   hasAms: boolean;
+  /** How the printer changes filament (missing = from hasAms). */
+  changer?: ChangerKind;
+  /** Heads on a tool changer (1 otherwise). */
+  toolheads?: number;
   warn(message: string): void;
 }
 

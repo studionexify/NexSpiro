@@ -19,8 +19,13 @@ import { patternexMotionApps, px } from '../../patternex/ui/PatternexPanel';
 import { regionColor, regionList, regionTriangles } from '../../patternex/ui/preview';
 import { openMotionexEditor } from './motionexEditor';
 import { WeaveCard, weaveColours } from './WeavePanel';
+import { PaintCard } from './PaintPanel';
+import { LaceCard } from './LacePanel';
 import { buildWeavePreview } from '../weave/preview';
-import { loadWeave } from '../index';
+import { buildPaintPreview } from '../paint/preview';
+import { buildLacePreview } from '../lace/preview';
+import { loadLace, loadPaint, loadWeave, motionexActive } from '../index';
+import { parseHex } from '../weave/image';
 import './editor.css';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -61,25 +66,32 @@ export function motionexPreview(): PreviewLines | null {
     const c = new THREE.Color(SURFACE_COLORS[surfaceOf(a) - 1]);
     apps.push({ app: a, brush, surface: surfaceOf(a), color: [c.r, c.g, c.b] });
   }
-  const weaveOn = mx.weave.enabled;
-  if (!apps.length && !weaveOn) return null;
+  const weaveOn = mx.weave.enabled, paintOn = mx.paint.enabled, laceOn = mx.lace.enabled;
+  if (!apps.length && !weaveOn && !paintOn && !laceOn) return null;
   const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
     .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
   lastPreview = apps.length ? buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId), 0.25, mx.previewView) : null;
-  if (!weaveOn) return lastPreview;
-  // the woven picture, coloured by the filament that shows at each pixel
-  const woven = buildWeavePreview(objs, mx.weave, Number(currentConfig().layer_height) || 0.2, weaveColours().map((c) => [c[0] / 255, c[1] / 255, c[2] / 255]));
-  if (!woven) return lastPreview;
-  if (!lastPreview) return { ...woven, layers: 0, view: mx.previewView, range: [0, 0], events: 0 };
+  const lh = Number(currentConfig().layer_height) || 0.2;
+  // wall art drawn on the model: the woven picture in filament colours, the painted picture as sheen
+  // (light to dark = slow to fast), the lace with its holes left out
+  const extra = [
+    weaveOn ? buildWeavePreview(objs, mx.weave, lh, weaveColours().map((c) => [c[0] / 255, c[1] / 255, c[2] / 255])) : null,
+    paintOn && !weaveOn ? buildPaintPreview(objs, mx.paint, lh) : null,
+    laceOn && !weaveOn && !paintOn ? buildLacePreview(objs, mx.lace, lh, filamentRgb(0), currentConfig()) : null,
+  ].filter((x): x is NonNullable<typeof x> => !!x);
+  if (!extra.length) return lastPreview;
   const cat = (a: Float32Array, b: Float32Array) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
-  return { ...lastPreview, positions: cat(lastPreview.positions, woven.positions), colors: cat(lastPreview.colors, woven.colors) };
+  let res: PreviewLines = lastPreview ?? { positions: new Float32Array(0), colors: new Float32Array(0), layers: 0, view: mx.previewView, range: [0, 0], events: 0 };
+  for (const e of extra) res = { ...res, positions: cat(res.positions, e.positions), colors: cat(res.colors, e.colors) };
+  return res;
 }
+const filamentRgb = (slot: number): [number, number, number] => { const c = parseHex(useStore.getState().filaments[slot]?.color ?? '#d8d4cc'); return [c[0] / 255, c[1] / 255, c[2] / 255]; };
 /** The last preview built, for the legend in the Motion tab. */
 export let lastPreview: PreviewLines | null = null;
 
 /** Slicer config, or undefined when no motion is switched on. */
 export function motionexConfig(printerId: string): MotionexConfig | undefined {
-  return mx.applications.some((a) => a.enabled) || mx.weave.enabled ? toConfig(mx, printerId) : undefined;
+  return motionexActive(mx) ? toConfig(mx, printerId) : undefined;
 }
 
 const MAX_SURFACES = SURFACE_COLORS.length;
@@ -89,6 +101,7 @@ export function motionexProject() {
   const used = new Set(mx.applications.map((a) => a.brush_id));
   return {
     applications: structuredClone(mx.applications), options: { ...mx.options }, collisionMode: mx.collisionMode, weave: structuredClone(mx.weave),
+    paint: structuredClone(mx.paint), lace: structuredClone(mx.lace),
     brushes: [...used].map((id) => mx.library.get(id)).filter((b) => !!b).map((b) => structuredClone(b)),
   };
 }
@@ -101,6 +114,8 @@ export function loadMotionexProject(data: unknown) {
   if (d.options) mx.options = { ...mx.options, ...d.options };
   if (d.collisionMode) mx.collisionMode = d.collisionMode;
   mx.weave = loadWeave(d.weave);
+  mx.paint = loadPaint(d.paint);
+  mx.lace = loadLace(d.lace);
   changed();
 }
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
@@ -227,6 +242,8 @@ export function MotionexPanel() {
       {!picking && <Placement a={act} />}
       {act && !picking && <MoreOptions a={act} first={apps.indexOf(act) === 0} />}
       {!picking && <WeaveCard />}
+      {!picking && <PaintCard />}
+      {!picking && <LaceCard />}
       <Report />
       {editing !== undefined && <EditorHost startId={editing} onClose={() => setEditing(undefined)} />}
     </div>

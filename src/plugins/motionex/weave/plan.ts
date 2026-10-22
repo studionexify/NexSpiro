@@ -1,5 +1,7 @@
 // What a weave costs before you slice: filament changes, extra time and purged plastic.
+import type { Config } from '../../../profiles/settings';
 import { colourCount, cycleLayers, type WeaveSettings } from './model';
+import { isBedSlinger } from '../wall/machine';
 
 export interface WeaveEstimate {
   wovenLayers: number;
@@ -50,15 +52,24 @@ export function formatDuration(s: number): string {
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
 }
 
+/** Outer wall speed for weaving (mm/s): 80, 60 on bed slingers, never faster than the printer's own. */
+export function weaveWallSpeed(cfg?: Config): number {
+  const own = Number(cfg?.outer_wall_speed);
+  // a bed slinger swings the whole part on every in-out step of the line: slower keeps the beads in place
+  const v = cfg && isBedSlinger(cfg) ? 60 : 80;
+  return own > 0 ? Math.min(v, own) : v;
+}
+
 /**
  * Print settings weave mode needs: one wall, no infill or top skin (a single woven skin over a solid
- * floor), spiral vase off, aligned seam, outer wall at 80 mm/s, no prime tower when bleeding colours.
+ * floor), spiral vase off, aligned seam, a slower outer wall, no prime tower when bleeding colours.
+ * Pass the print's config to fit the wall speed to the printer.
  */
-export function weavePrintSettings(w: WeaveSettings): Record<string, string | number | boolean> {
+export function weavePrintSettings(w: WeaveSettings, cfg?: Config): Record<string, string | number | boolean> {
   return {
     spiral_mode: false, wall_loops: 1, sparse_infill_density: 0, top_shell_layers: 0, top_shell_thickness: 0, bottom_shell_layers: 4,
     seam_position: 'aligned', seam_slope_type: 'none',
     // pixel-sized moves: slower outer wall places each bead where the picture wants it
-    outer_wall_speed: 80, ...(w.mode === 'colour' && w.change.mode === 'bleed' ? { enable_prime_tower: false } : {}),
+    outer_wall_speed: weaveWallSpeed(cfg), ...(w.mode === 'colour' && w.change.mode === 'bleed' ? { enable_prime_tower: false } : {}),
   };
 }

@@ -16,6 +16,7 @@ import { defaultGradientSpec, defaultTileSpec, gradientPattern, seamlessCount, t
 import { addPattern, patternInkKey } from './state';
 import { px, changed, usePatternex } from './PatternexPanel';
 import { runBatch } from './batch';
+import { autoChanges } from '../../../profiles/changer';
 
 type Tab = 'text' | 'code' | 'braille' | 'logo' | 'gradient' | 'tile' | 'brush';
 const TABS: [Tab, string][] = [['text', 'Text'], ['code', 'QR / barcode'], ['braille', 'Braille'], ['logo', 'Logo / image'], ['gradient', 'Gradient'], ['tile', 'Repeat'], ['brush', 'Brush']];
@@ -44,7 +45,7 @@ export function armGenerated(pat: Pattern, finish: Finish, inks?: Record<string,
 export function CreatePanel() {
   usePatternex();
   const [tab, setTab] = useState<Tab>('text');
-  const ams = printerById(useStore((s) => s.printerId)).machine.has_ams === true;
+  const ams = autoChanges(printerById(useStore((s) => s.printerId)).machine);
   const [finish, setFinish] = useState<Finish>(ams ? { kind: 'ink' } : { kind: 'raise', height: 0.6 });
   useEffect(() => { setFinish(ams ? { kind: 'ink' } : { kind: 'raise', height: 0.6 }); }, [ams]);
   return (
@@ -195,7 +196,7 @@ function TextTab({ finish }: { finish: Finish }) {
 /** Region actions for a generated pattern's groups from the chosen finish (used by the quick-apply buttons). */
 export function finishActions(placementId: string, pat: Pattern, finish: Finish) {
   const s = useStore.getState();
-  const ams = printerById(s.printerId).machine.has_ams === true;
+  const ams = autoChanges(printerById(s.printerId).machine);
   const groups = [...new Set(pat.shapes.map((x) => x.fill_color))];
   if (finish.kind === 'ink') return inkActions(placementId, pat, Object.fromEntries(groups.map((g, k) => [g, Math.min(s.filaments.length - 1, k + 1)])), ams).filter((a) => s.filaments.length > 1 || a.material.slot_index > 0);
   return groups.map((g) => ({

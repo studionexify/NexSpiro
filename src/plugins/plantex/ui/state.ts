@@ -12,6 +12,7 @@ import { buildBody, buildInsert, buildSaucer, type BuildResult } from '../mesh';
 import { defaultSpec, normalizeSpec, type PlantexSpec } from '../model';
 import { paintBody } from '../paint';
 import { patternMask } from '../patternLink';
+import { autoChanges } from '../../../profiles/changer';
 
 const KEY = 'nexspiro.plantex.v1';
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -105,7 +106,7 @@ export function transferToPlate(asNew = false): string[] {
   const parts = buildParts(spec, false);
   const warnings = parts.flatMap((p) => p.result.warnings);
   let s = useStore.getState();
-  const ams = !!printerById(s.printerId).machine.has_ams;
+  const ams = autoChanges(printerById(s.printerId).machine);
   if (!ams && parts.some((p) => slotsOf(p).length > 1)) warnings.push('This printer has no AMS: multi-colour parts pause for a manual filament swap at each colour change.');
   let nSlots = s.filaments.length;
   const need = Math.max(...parts.flatMap(slotsOf));
