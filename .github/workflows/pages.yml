@@ -34,7 +34,7 @@ jobs:
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      - run: npm test
+      # tests already run on every push to main in ci.yml
       - run: npm run build
       - uses: actions/configure-pages@v5
         with:

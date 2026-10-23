@@ -23,10 +23,6 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "tag=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
           else node -e "console.log('tag=v'+require('./package.json').version)" >> $GITHUB_OUTPUT; fi
-      - name: Remove a broken release named "v" left by an earlier run
-        run: gh release delete v --cleanup-tag -y || true
-        env:
-          GH_TOKEN: ${{ github.token }}
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.v.outputs.tag }}
