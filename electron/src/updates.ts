@@ -1,8 +1,12 @@
-// App updates without any server: "Update from file…" takes a NexSpiro Setup .exe (e.g. from a USB stick),
-// checks its version and signature, then runs it silently and relaunches.
+// App updates without any server: Help → "Update from file…" takes the NexSpiro Windows .zip (or the Setup .exe
+// inside it), checks its version and signature, then asks to restart. The installer runs silently (elevated, since
+// the app is installed for all users) when NexSpiro closes, and relaunches it when the user chose "Restart now".
 import { app, BrowserWindow, dialog } from 'electron';
 import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 
 function parentWin() {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -43,37 +47,66 @@ function inspectExe(file: string) {
   });
 }
 
+// the Setup .exe inside a release .zip, extracted to a temp folder
+async function extractSetup(zipFile: string) {
+  const zip = await JSZip.loadAsync(await fs.readFile(zipFile));
+  const entries = Object.values(zip.files).filter((f) => !f.dir && /\.exe$/i.test(f.name));
+  const entry = entries.find((f) => /setup/i.test(path.basename(f.name))) ?? entries[0];
+  if (!entry) throw new Error('The .zip does not contain a NexSpiro Setup .exe.');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexspiro-update-'));
+  const out = path.join(dir, path.basename(entry.name));
+  await fs.writeFile(out, await entry.async('nodebuffer'));
+  return out;
+}
+
+let pending: string | null = null;
+
+// Start-Process -Verb RunAs shows the UAC prompt; if it is declined the app is started again so it never just vanishes
+function runInstaller(setup: string, relaunch: boolean) {
+  const script = `try{Start-Process -FilePath $env:NX_SETUP -ArgumentList $env:NX_ARGS -Verb RunAs -ErrorAction Stop}`
+    + `catch{if($env:NX_APP){Start-Process -FilePath $env:NX_APP}}`;
+  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script], {
+    detached: true, stdio: 'ignore', windowsHide: true,
+    env: { ...process.env, NX_SETUP: setup, NX_ARGS: relaunch ? '--updated /S --force-run' : '--updated /S', NX_APP: relaunch ? process.execPath : '' },
+  });
+  child.unref();
+}
+
 export async function updateFromFile() {
   if (process.platform !== 'win32') {
     void box({ type: 'info', message: 'Update from file is available on Windows only.', detail: 'Open the new installer directly on this system.' });
     return;
   }
   const win = parentWin();
-  const opts: Electron.OpenDialogOptions = { title: 'Choose a NexSpiro installer', properties: ['openFile'], filters: [{ name: 'NexSpiro installer', extensions: ['exe'] }] };
+  const opts: Electron.OpenDialogOptions = {
+    title: 'Choose a NexSpiro update', properties: ['openFile'],
+    filters: [{ name: 'NexSpiro update (.zip, .exe)', extensions: ['zip', 'exe'] }],
+  };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   if (r.canceled || !r.filePaths[0]) return;
-  const file = r.filePaths[0];
 
+  let setup: string;
   let info: InstallerInfo;
   let own: InstallerInfo | null = null;
   try {
-    info = await inspectExe(file);
+    setup = /\.zip$/i.test(r.filePaths[0]) ? await extractSetup(r.filePaths[0]) : r.filePaths[0];
+    info = await inspectExe(setup);
     if (app.isPackaged) own = await inspectExe(process.execPath);
   } catch (e) {
-    void box({ type: 'error', message: 'Could not read the installer.', detail: String((e as Error)?.message ?? e) });
+    void box({ type: 'error', message: 'Could not read the update file.', detail: String((e as Error)?.message ?? e) });
     return;
   }
 
-  if (!/nexspiro/i.test(path.basename(file)) && !info.version) {
-    void box({ type: 'error', message: 'This does not look like a NexSpiro installer.', detail: file });
+  if (!/nexspiro/i.test(path.basename(setup))) {
+    void box({ type: 'error', message: 'This is not a NexSpiro update.', detail: r.filePaths[0] });
     return;
   }
 
-  // the installer must be signed by the same publisher as the running app; unsigned builds get an explicit warning
+  // the installer must be signed by the same publisher as the running app (when the app itself is signed)
   const ownSigned = own?.status === 'Valid' && own.signer;
   if (ownSigned && (info.status !== 'Valid' || info.signer !== own!.signer)) {
     void box({
-      type: 'error', message: 'The installer signature does not match NexSpiro.',
+      type: 'error', message: 'The update signature does not match NexSpiro.',
       detail: `Expected: ${own!.signer}\nFound: ${info.signer ?? 'not signed'} (${info.status})\n\nThe file may be damaged or not genuine.`,
     });
     return;
@@ -81,18 +114,29 @@ export async function updateFromFile() {
 
   const current = app.getVersion();
   const cmp = info.version ? cmpVersion(info.version, current) : 1;
-  const lines = [`Installed: ${current}`, `Installer: ${info.version || 'unknown'}`];
-  if (!ownSigned) lines.push('', 'Warning: this copy of NexSpiro is not code-signed, so the installer cannot be verified. Only continue if you trust where this file came from.');
-  const res = await box({
-    type: cmp > 0 && ownSigned ? 'question' : 'warning',
-    buttons: [cmp > 0 ? 'Install update' : cmp === 0 ? 'Reinstall' : 'Install older version', 'Cancel'], defaultId: cmp > 0 ? 0 : 1, cancelId: 1,
-    message: cmp > 0 ? `Update NexSpiro to ${info.version}?` : cmp === 0 ? 'This version is already installed.' : 'This installer is older than the installed version.',
-    detail: `${lines.join('\n')}\n\nNexSpiro will close, update and restart.`,
-  });
-  if (res.response !== 0) return;
+  if (cmp <= 0) {
+    const res = await box({
+      type: 'warning', buttons: [cmp === 0 ? 'Reinstall' : 'Install older version', 'Cancel'], defaultId: 1, cancelId: 1,
+      message: cmp === 0 ? 'This version is already installed.' : 'This update is older than the installed version.',
+      detail: `Installed: ${current}\nUpdate: ${info.version}`,
+    });
+    if (res.response !== 0) return;
+  }
 
-  // same switches electron-updater uses: silent NSIS install, then relaunch the app
-  const child = spawn(file, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore' });
-  child.on('error', (e) => void box({ type: 'error', message: 'Could not start the installer.', detail: e.message }));
-  child.once('spawn', () => { child.unref(); app.quit(); });
+  const first = !pending;
+  pending = setup;
+  if (first) app.once('will-quit', () => { if (pending) runInstaller(pending, false); });
+
+  const res = await box({
+    type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
+    message: `NexSpiro ${info.version || ''} is ready to install.`.replace('  ', ' '),
+    detail: `Installed: ${current}\n\nRestart NexSpiro to finish the update. If you choose Later, it is installed the next time you close NexSpiro.`
+      + (ownSigned ? '' : '\n\nNote: this build is not code-signed, so the update file could not be verified.')
+      + '\n\nWindows will ask for administrator permission.',
+  });
+  if (res.response === 0) {
+    runInstaller(setup, true);
+    pending = null;
+    app.quit();
+  }
 }

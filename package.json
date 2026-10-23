@@ -12,6 +12,7 @@
     "test": "vitest run",
     "electron:dev": "node scripts/build-electron.mjs && concurrently -k \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && cross-env NEXSPIRO_DEV_URL=http://localhost:5173 electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win --publish never && node scripts/package-win.mjs",
     "build:electron": "node scripts/build-electron.mjs",
     "hanex:prints": "cross-env HANEX_TEST_PRINTS=out/hanex vitest run tests/hanex/calibration.test.ts"
   },
@@ -28,7 +29,20 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "NexSpiro-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "NexSpiro",
+      "uninstallDisplayName": "NexSpiro",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": "dmg",
