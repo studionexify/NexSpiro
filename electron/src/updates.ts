@@ -1,12 +1,8 @@
-// App updates. Online: electron-updater checks the GitHub release feed (package.json "publish") on startup and
-// from the Help menu, downloads in the background and installs on restart. Offline: "Update from file…" takes a
-// NexSpiro Setup .exe (e.g. from a USB stick), checks its version and signature, then runs it silently.
+// App updates without any server: "Update from file…" takes a NexSpiro Setup .exe (e.g. from a USB stick),
+// checks its version and signature, then runs it silently and relaunches.
 import { app, BrowserWindow, dialog } from 'electron';
-import { autoUpdater } from 'electron-updater';
 import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
-
-let manualCheck = false;
 
 function parentWin() {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -26,45 +22,6 @@ function cmpVersion(a: string, b: string) {
     if (d) return Math.sign(d);
   }
   return 0;
-}
-
-export function initAutoUpdates() {
-  if (!app.isPackaged) return;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('update-not-available', () => {
-    if (manualCheck) void box({ type: 'info', message: 'NexSpiro is up to date.', detail: `Version ${app.getVersion()}` });
-    manualCheck = false;
-  });
-  autoUpdater.on('error', (err) => {
-    // offline PCs fail here on every start; only report when the user asked
-    if (manualCheck) void box({ type: 'warning', message: 'Could not check for updates.', detail: `${err?.message ?? err}\n\nNo internet? Use Help → Update from file….` });
-    manualCheck = false;
-  });
-  autoUpdater.on('update-available', (info) => {
-    if (manualCheck) void box({ type: 'info', message: `Downloading NexSpiro ${info.version}…`, detail: 'You will be asked to restart when it is ready.' });
-    manualCheck = false;
-  });
-  autoUpdater.on('update-downloaded', async (info) => {
-    const r = await box({
-      type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
-      message: `NexSpiro ${info.version} is ready to install.`,
-      detail: 'Restart now, or it will be installed the next time you close NexSpiro.',
-    });
-    if (r.response === 0) autoUpdater.quitAndInstall();
-  });
-
-  void autoUpdater.checkForUpdates().catch(() => {});
-}
-
-export function checkForUpdatesNow() {
-  if (!app.isPackaged) {
-    void box({ type: 'info', message: 'Updates are only available in the installed app.' });
-    return;
-  }
-  manualCheck = true;
-  void autoUpdater.checkForUpdates().catch(() => {});
 }
 
 type InstallerInfo = { version: string; signer: string | null; status: string };
