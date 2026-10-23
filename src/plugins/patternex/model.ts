@@ -108,8 +108,6 @@ export interface PatternexProject {
   actions: RegionAction[];
 }
 
-export const emptyProject = (): PatternexProject => ({ patterns: [], placements: [], actions: [] });
-
 export function boundsOf(shapes: PatternShape[]): [number, number, number, number] {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const s of shapes) for (const r of s.polygon_rings) for (const [x, y] of r) {

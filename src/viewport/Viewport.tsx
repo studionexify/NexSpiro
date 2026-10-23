@@ -13,7 +13,7 @@ import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, slotColor, trsMatrix, useStore,
+  dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace, silhouette } from '../state/ops';

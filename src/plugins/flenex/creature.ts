@@ -175,7 +175,6 @@ const f_ = (T: THREE.Vector3) => T.clone().setZ(0).normalize();
 // ---------------------------------------------------------------- add-ons
 interface Ctx { st: Station[]; spec: BodySpec; marks: Mark[]; chains: Chain[]; warn(m: string): void }
 
-const sides = (side: AddOn['side'], both = true): number[] => (both ? [1, -1] : [1]);
 
 function build(a: AddOn, c: Ctx): IndexedMesh[] {
   // head parts sit at the very front, where the body is still rounding off: size them from just behind the tip

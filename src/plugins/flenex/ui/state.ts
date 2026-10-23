@@ -14,7 +14,7 @@ import type { FromWorker, ToWorker } from '../worker';
 import { newGroup, type CutEdit, type CutGroup } from '../groups';
 import { modelBvh } from '../flexi';
 import type { MeshBVH } from 'three-mesh-bvh';
-import { defaultCreature, type CreatureDesign } from '../design';
+import { type CreatureDesign } from '../design';
 import { designFromPreset, presetById } from '../presets';
 import { applyPaint, PALETTE_DEFAULT, SCHEMES, type PaintOp } from '../paint';
 import { machineFor, type MachineInfo } from '../fit';
@@ -101,7 +101,6 @@ export function baseBvh(): MeshBVH | null {
 /** First click of "add a part": the start of the part's centre line. */
 export let traceStart: { p: V3; sn: V3 } | null = null;
 export const setTraceStart = (v: { p: V3; sn: V3 } | null): void => { traceStart = v; notify(); };
-export const importedBase = () => importedMesh;
 
 // ---------------------------------------------------------------- build result
 export interface Built {

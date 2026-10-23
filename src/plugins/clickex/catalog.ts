@@ -84,7 +84,4 @@ export function baseShapePaths(id: string, size: number, round = 0): Paths {
 // ---------------------------------------------------------------- colours
 export const COLOR_PALETTE = ['#ffffff', '#e9e5dc', '#2f2f33', '#e85d4a', '#f28c28', '#f2c14e', '#5dbe7a', '#3d7ddb', '#9b59b6', '#ff5c8d', '#8c8c8c', '#7a4b2b'];
 
-/** Filament preset id used when a colour has no loaded slot yet. */
-export const DEFAULT_PRESET = 'generic-pla';
-
 export { circlePath };

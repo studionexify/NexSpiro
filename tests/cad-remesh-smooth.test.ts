@@ -53,7 +53,6 @@ describe('even remeshing', () => {
 });
 
 describe('outline smoothing', () => {
-  const circle = (n: number, r: number) => Array.from({ length: n }, (_, i) => ({ X: Math.round(r * Math.cos((2 * Math.PI * i) / n) * SCALE), Y: Math.round(r * Math.sin((2 * Math.PI * i) / n) * SCALE) }));
   it('calms a noisy circle and keeps the corners of a square', () => {
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);

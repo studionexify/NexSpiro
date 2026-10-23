@@ -6,7 +6,6 @@ import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, type Con
 import {
   area, bounds, clipLines, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
 } from './clipper';
-import ClipperLib from 'clipper-lib';
 import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import type { IndexedMesh } from './mesh';
@@ -28,7 +27,6 @@ import { pushAll } from './util';
 import { checkInputs } from './validate';
 import type { BulnexReport } from '../plugins/bulnex/model';
 
-const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export type ProgressFn = (stage: string, pct: number) => void;
 
@@ -71,12 +69,6 @@ function pathToPoly(p: Paths[number]): number[] {
   return out;
 }
 
-function pointInPaths(x: number, y: number, paths: Paths): boolean {
-  const pt = { X: Math.round(x * SCALE), Y: Math.round(y * SCALE) };
-  let inside = 0;
-  for (const p of paths) if (C.Clipper.PointInPolygon(pt, p) !== 0) inside++;
-  return inside % 2 === 1;
-}
 
 /** Even-odd point-in-polygons test with the edges bucketed by Y, for many queries against the same outline. */
 function insideTester(paths: Paths): (x: number, y: number) => boolean {

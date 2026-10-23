@@ -136,8 +136,4 @@ export const defaultSegments = (): SegmentSpec => ({
   mode: 'scaled', count: 14, length: 12, ratio: 2.5, from: 0.16, to: 0.97, joint: defaultJoint('ball'), alternate: true, firstRoll: 0, armCuts: 0,
 });
 
-export const defaultCreature = (): CreatureDesign => ({
-  version: 1, name: 'Flexi snake', family: 'Snake', body: defaultBody(), addons: [], segments: defaultSegments(),
-});
-
 export type { Cut };

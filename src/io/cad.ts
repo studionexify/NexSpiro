@@ -5,9 +5,6 @@ import { tessellateCad } from '../renex/cad/importModel';
 import { centreMesh, type LoadedModel } from './load';
 import { openEdgeCount } from '../engine/mesh';
 
-export const CAD_EXT = ['.step', '.stp', '.iges', '.igs', '.brep'];
-export const isCadFile = (name: string) => CAD_EXT.some((e) => name.toLowerCase().endsWith(e));
-
 export async function loadCadFile(name: string, data: ArrayBuffer): Promise<LoadedModel[]> {
   const base = name.replace(/\.[^.]+$/, '');
   const raws = (await tessellateCad(name, data)).filter((m) => m.indices.length);

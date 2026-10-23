@@ -28,11 +28,6 @@ function commit(id: string, r: EditResult, label: string) {
   s.set({ edgeSel: null, toast: { kind: 'info', text: label } });
 }
 
-export function selectedEdgeObject(): SceneObject | undefined {
-  const s = useStore.getState();
-  return s.edgeSel ? s.objects.find((o) => o.id === s.edgeSel!.objectId) : undefined;
-}
-
 /** A crease an Edges click may pick. On CAD imports that is the boundary between two CAD faces, not the tessellation inside a curved face. */
 function isFeature(o: SceneObject, t: ReturnType<typeof buildTopology>, e: number): boolean {
   if (t.kind[e] !== EDGE_SHARP) return false;

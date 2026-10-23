@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { weld, type IndexedMesh } from '../src/engine/mesh';
+import { weld } from '../src/engine/mesh';
 import { slice, slotFromConfig } from '../src/engine/slicer';
 import { adaptiveProfile, smoothProfile, applyHeightRange } from '../src/engine/layers';
 import { pickSeam } from '../src/engine/order';

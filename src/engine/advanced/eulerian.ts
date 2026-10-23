@@ -97,6 +97,3 @@ export function spiralFill(region: Paths, o: SpiralOptions): InfillPath[] {
   }
   return out;
 }
-
-/** Number of separate extrusions the spiral fill of a region needs (1 = continuous). */
-export const spiralCount = (region: Paths, o: SpiralOptions) => spiralFill(region, o).length;

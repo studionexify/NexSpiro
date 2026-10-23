@@ -67,7 +67,6 @@ const PLA = 1.24e-3; // g per mm³
 
 export const mapColor = (spec: ClickexSpec, hex: string) => (spec.colors.map[hex.toLowerCase()] ?? hex).toLowerCase();
 
-const allArt = (units: Unit[]): Art => units.flatMap((u) => u.art);
 
 export function baseShells(spec: ClickexSpec, plan: Plan, H: Heights): Shell[] {
   const sw = effectiveSwitch(spec), tol = spec.fit.switchTol, out: Shell[] = [];

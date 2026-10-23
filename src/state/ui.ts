@@ -255,8 +255,6 @@ export function autoFixClearance(): string | null {
   return `Lowered ${parts.join(' and ')}.`;
 }
 let fixing = false;
-/** True while autoFixUntilClear is lowering and re-slicing. */
-export const autoFixRunning = () => fixing;
 /**
  * Auto-fix: lowers the motions / weave one step, slices again (the slice runs the same Motionex print check as
  * export) and repeats until the print head stays clear, the floor is reached or FIX_MAX_STEPS rounds have run.

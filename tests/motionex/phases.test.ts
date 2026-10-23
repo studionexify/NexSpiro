@@ -2,7 +2,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { applyBrushToPath, applyMotion, DEFAULT_OPTIONS } from "../../src/plugins/motionex/modifier";
 import { PRESETS } from "../../src/plugins/motionex/presets";
-import { flatCurve, type MotionApplication, type MotionBrush } from "../../src/plugins/motionex/model";
+import { type MotionApplication, type MotionBrush } from "../../src/plugins/motionex/model";
 import { emptyCheck, type Layer, type Toolpath } from "../../src/plugins/motionex/core/types";
 import { checkCollisions, HeightMap, type ToolheadProfile } from "../../src/plugins/motionex/core/toolhead";
 import { regionFromDef, regionWeight, RegionRegistry } from "../../src/plugins/motionex/core/regions";
