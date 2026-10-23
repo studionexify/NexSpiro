@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { disconnectAll, registerDeviceIpc } from './devices';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { checkForUpdatesNow, initAutoUpdates, updateFromFile } from './updates';
 
 // Post-processing scripts (post_process): each command runs with the G-code file path as its last
 // argument and may rewrite the file. Commands come from settings, which projects can carry, so each new set of
@@ -126,13 +127,22 @@ app.whenReady().then(() => {
 
   registerDeviceIpc();
 
+  // Help menu carries the update actions; on Windows/Linux the bar is auto-hidden and shows with Alt
+  const help: Electron.MenuItemConstructorOptions = {
+    role: 'help',
+    submenu: [
+      { label: 'Check for updates…', click: () => checkForUpdatesNow() },
+      ...(process.platform === 'win32' ? [{ label: 'Update from file…', click: () => void updateFromFile() }] : []),
+    ],
+  };
   if (process.platform === 'darwin') {
-    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }, help]));
   } else {
-    Menu.setApplicationMenu(null);
+    Menu.setApplicationMenu(Menu.buildFromTemplate([help]));
   }
 
   createWindow();
+  initAutoUpdates();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
