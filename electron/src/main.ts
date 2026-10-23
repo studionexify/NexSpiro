@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { disconnectAll, registerDeviceIpc } from './devices';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { updateFromFile } from './updates';
 
 // Post-processing scripts (post_process): each command runs with the G-code file path as its last
 // argument and may rewrite the file. Commands come from settings, which projects can carry, so each new set of
@@ -128,6 +129,9 @@ app.whenReady().then(() => {
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+  } else if (process.platform === 'win32') {
+    // the bar is auto-hidden and shows with Alt
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'help', submenu: [{ label: 'Update from file…', click: () => void updateFromFile() }] }]));
   } else {
     Menu.setApplicationMenu(null);
   }
