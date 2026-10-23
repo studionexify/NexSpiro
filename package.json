@@ -92,6 +92,7 @@
     "zustand": "^4.5.5"
   },
   "author": "NexSpiro",
+  "license": "UNLICENSED",
   "homepage": "https://github.com/studionexify/NexSpiro",
   "dependencies": {
     "@fontsource/inter": "^5.1.0",
