@@ -131,13 +131,6 @@ export function pixelAt(img: WeaveImage, x: number, y: number): number {
   return img.px[yy * img.w + xx] ?? 0;
 }
 
-/** How many pixels of each palette index the picture uses. */
-export function usage(img: WeaveImage, colours: number): number[] {
-  const out = new Array<number>(colours).fill(0);
-  for (const v of img.px) if (v < colours) out[v]++;
-  return out;
-}
-
 /** Remap palette indices (e.g. after a colour was removed): indices ≥ n fold onto the last one. */
 export function clampPalette(img: WeaveImage, n: number): WeaveImage {
   if (img.px.every((v) => v < n)) return img;

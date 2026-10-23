@@ -156,4 +156,3 @@ export function faceSetsOf(motion: Uint8Array | undefined): FaceSet[] | undefine
 }
 
 export const surfaceName = (n: number) => `Surface ${n}`;
-export { SURFACE_COLORS } from '../state/motionPaint';

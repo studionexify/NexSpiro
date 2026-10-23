@@ -1,14 +1,13 @@
 // Thin typed wrapper around clipper-lib (Angus Johnson's Clipper, JS port).
 // Coordinates are scaled to integers: 1 unit = 1/SCALE mm (0.1 µm).
 import ClipperLib from 'clipper-lib';
-import type { ExPolygon, IntPoint, Path, Paths } from './types';
+import type { ExPolygon, Path, Paths } from './types';
 
 const C: any = (ClipperLib as any).default ?? ClipperLib;
 
 export const SCALE = 10000;
 
 export const toInt = (v: number) => Math.round(v * SCALE);
-export const toMm = (v: number) => v / SCALE;
 
 const CT = C.ClipType;
 const PT = C.PolyType;
@@ -145,7 +144,6 @@ function toExPolygons0(paths: Paths): ExPolygon[] {
 }
 
 export const exToPaths = (ex: ExPolygon): Paths => [ex.contour, ...ex.holes];
-export const exsToPaths = (exs: ExPolygon[]): Paths => exs.flatMap(exToPaths);
 
 export function bounds(paths: Paths) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -155,8 +153,6 @@ export function bounds(paths: Paths) {
   }
   return { minX, minY, maxX, maxY };
 }
-
-export const pt = (x: number, y: number): IntPoint => ({ X: toInt(x), Y: toInt(y) });
 
 /** Even–odd point-in-polygons test (mm). */
 export function pointIn(x: number, y: number, paths: Paths): boolean {

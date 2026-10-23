@@ -765,5 +765,3 @@ function mountArm(m: LampDesign['mount'], ro: number, head: Section | undefined)
   void head;
   return out;
 }
-
-export { flip as flipSoup, roundedPrism as plateSoup };

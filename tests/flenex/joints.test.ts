@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { boolean, bounds, cylinder, initKernel, minDistance, pieces, transform, volume, type V3 } from '../../src/plugins/flenex/csg';
+import { boolean, bounds, cylinder, initKernel, minDistance, pieces, transform, volume } from '../../src/plugins/flenex/csg';
 import { buildFlexi, cutFrame, newCut } from '../../src/plugins/flenex/flexi';
 import { defaultJoint, type JointKind } from '../../src/plugins/flenex/joints';
 import { fitFor } from '../../src/plugins/flenex/fit';

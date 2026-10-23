@@ -4,7 +4,7 @@
 import type { LayerOps } from '../classic/gcode';
 import { planLayer } from '../planner';
 import type { Move } from '../runs';
-import type { SessionCtx, TechModule } from '../session';
+import type { TechModule } from '../session';
 
 /** PLA melt as a power-law fluid: τ = K γ̇ⁿ (K in Pa·sⁿ). */
 export const PLA_MELT = { K: 4500, n: 0.35 };

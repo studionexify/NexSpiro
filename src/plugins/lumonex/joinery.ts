@@ -3,7 +3,7 @@
 // described as radius functions r(θ, z) (z = mm from the joint face), plus negative volumes for
 // cross holes, slots, nut traps and magnet pockets, and loose extra parts (pins, rings).
 import { BOLTS, MAGNETS } from './catalog';
-import { angDist, box, clamp, cylinder, fract, merge, polarRing, prism, rotateZ, smooth, strut, tau, translate, tri, tubeShell, type Ring, type Soup } from './geom';
+import { angDist, box, clamp, cylinder, fract, merge, polarRing, prism, rotateZ, smooth, strut, tau, tri, tubeShell, type Ring, type Soup } from './geom';
 
 export type JointKind =
   | 'thread' | 'bayonet' | 'cam' | 'snap-ring' | 'snap-fingers' | 'crush-ribs' | 'taper' | 'hex' | 'square'
@@ -261,9 +261,6 @@ export function spigotShell(g: JointGeometry, rb: number, z0: number, around: nu
   return tubeShell(outer, inner);
 }
 
-/** Lay an extra joint part flat for printing. */
-export const extraLaid = (s: Soup) => translate(s, 0, 0, 0);
-
 /** Clearance check used by tests and the report: female always clears male. */
 export function minFit(g: JointGeometry, samples = 72): number {
   let m = Infinity;
@@ -275,4 +272,3 @@ export function minFit(g: JointGeometry, samples = 72): number {
 }
 
 export const jointByKind = (k: JointKind) => JOINTS.find((x) => x.id === k) ?? JOINTS[0];
-export { box as jointBox };

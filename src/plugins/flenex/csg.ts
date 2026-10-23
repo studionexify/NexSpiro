@@ -21,7 +21,6 @@ export function initKernel(): Promise<void> {
   })();
   return loading;
 }
-export const kernelReady = () => wasm !== null;
 const need = () => { if (!wasm) throw new Error('Flenex kernel is not loaded yet (call initKernel first).'); return wasm; };
 
 /** A solid in the kernel. Free it with free() when done. */

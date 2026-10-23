@@ -70,8 +70,6 @@ useAdvanced.subscribe((s, prev) => {
   }
 });
 
-export const isAdvanced = () => useAdvanced.getState().engineMode === 'advanced';
-
 /** Config sent to the slicer in Advanced mode, or undefined in Basic mode. */
 export function advancedSliceConfig(): AdvancedConfig | undefined {
   const a = useAdvanced.getState();

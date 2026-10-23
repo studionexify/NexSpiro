@@ -3,7 +3,6 @@
 import JSZip from 'jszip';
 import { saveFile } from '../platform';
 import { emptyProject, newId, objectMatrix, useStore, type FilamentSlotState, type Plate, type ProjectInfo, type SceneObject } from './store';
-import type { LayerAction } from '../engine/types';
 import { migrateConfig, type Config } from '../profiles/settings';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 import { mergeUserPresets } from './userPresets';

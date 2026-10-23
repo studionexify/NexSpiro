@@ -57,8 +57,3 @@ export const PROCESSES: ProcessProfile[] = [
 ];
 
 export interface PrintProfiles { machine: MachineProfile; filament: FilamentProfile; process: ProcessProfile }
-
-/** Effective volumetric flow cap: the lower of hotend and filament limits. */
-export function flowCap(p: PrintProfiles): number {
-  return Math.min(p.machine.maxVolumetricFlow, p.filament.maxVolumetricFlow);
-}

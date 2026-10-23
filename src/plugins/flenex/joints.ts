@@ -268,7 +268,5 @@ export function hingeKerf(R: number, g: number, t: number): IndexedMesh {
   const poly: [number, number][] = [[-R, -g / 2 - t * R], [0, -g / 2], [R, -g / 2 - t * R], [R, g / 2 + t * R], [0, g / 2], [-R, g / 2 + t * R]];
   return axisPrism(poly, -R, R);
 }
-
-export const placeJointParts = (parts: IndexedMesh[], m: THREE.Matrix4, transform: (a: IndexedMesh, m: THREE.Matrix4) => IndexedMesh): IndexedMesh[] => parts.map((p) => transform(p, m));
 export { merge };
 export type { V3 };

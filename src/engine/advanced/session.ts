@@ -220,7 +220,7 @@ export function createAdvancedSession(meshes: MeshInput[], cfg: Config, adv: Adv
       for (const m of active) if (m.post) timed(m.id, () => m.post!(ctx, layers, c));
       if (ctx.nonPlanar) {
         const lengths = snapshotLengths(layers);
-        clearance = clearancePass(layers, caps.toolhead, caps.bed, true, 3, debugCollision);
+        clearance = clearancePass(layers, caps.toolhead, caps.bed, true, 3);
         limitRamp(layers, caps.maxSlopeDeg);
         restoreLengths(layers, lengths);
         if (clearance.raised) ctx.warn(`Head clearance: lifted ${clearance.raised} non-planar points so the ${caps.toolhead.name} clears the print.`);
@@ -272,9 +272,5 @@ function warpMesh(m: MeshInput, w: Warp): MeshInput {
     return { ...p, vertices: pv };
   }) };
 }
-
-/** Test hook: receives every clearance collision (unset in production). */
-export let debugCollision: Parameters<typeof clearancePass>[5];
-export const setDebugCollision = (f: typeof debugCollision) => { debugCollision = f; };
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());

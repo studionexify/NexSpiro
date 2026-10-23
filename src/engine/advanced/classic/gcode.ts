@@ -62,8 +62,6 @@ export interface EmitOutput {
   stats: SliceStats;
 }
 
-export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
-
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
 export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);

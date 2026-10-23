@@ -71,4 +71,3 @@ export const MACHINE_PARAMS: ParamDef[] = [
 ];
 
 export const MACHINE_DEFAULTS: Config = Object.fromEntries(MACHINE_PARAMS.map((p) => [p.key, p.def]));
-export const MACHINE_PARAM_BY_KEY: Record<string, ParamDef> = Object.fromEntries(MACHINE_PARAMS.map((p) => [p.key, p]));

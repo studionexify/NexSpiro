@@ -2,7 +2,7 @@
 // twist and lean, then stacked surface patterns (up to 4 layers, each in its own height band).
 // Everything resolves to an outer radius R(θ, t) and an inner radius, so any combination gives a
 // closed printable shell.
-import { angDist, clamp, fract, polarRing, smooth, tau, tri, tubeShell, solidShell, type Ring, type Soup, type V3 } from './geom';
+import { clamp, fract, polarRing, smooth, tau, tri, tubeShell, solidShell, type Ring, type Soup, type V3 } from './geom';
 import { app } from './geom';
 
 export type SectionKind = 'circle' | 'polygon' | 'star' | 'squircle' | 'petal' | 'gear' | 'half' | 'teardrop';
@@ -374,9 +374,6 @@ export function worstOverhang(s: ShapeSpec, flipped: boolean): number {
   }
   return worst;
 }
-
-/** Uses angDist so callers can test angular windows without importing geom. */
-export const angularDistance = angDist;
 
 export const defaultShape = (p: Partial<ShapeSpec> = {}): ShapeSpec => ({
   silhouette: 'cylinder', handles: [1, 1, 1, 1, 1, 1, 1], height: 160, diameter: 180, scaleX: 1, scaleY: 1,
