@@ -48,7 +48,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      # tests run on every push in ci.yml; skipped here to keep installer builds fast
       - run: npm run build
       - run: npx electron-builder ${{ matrix.target }} --publish never
         env:
