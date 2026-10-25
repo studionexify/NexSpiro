@@ -1,7 +1,7 @@
 {
   "name": "nexspiro",
   "productName": "NexSpiro",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "NexSpiro — 3D printing slicer",
   "main": "electron/dist/main.cjs",
   "type": "module",
