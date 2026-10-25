@@ -65,13 +65,7 @@ export function Rail() {
         );
       })}
       <RB title="All plugins · install, pin / unpin" onClick={() => setMgr(true)}><Icon name="add" size={18} /></RB>
-      <div className="sh-rail-spacer" />
-      {mode('home', 'home', 'Home')}
-      {mode('project', 'folder', 'Project')}
-      {mode('calibration', 'calib', 'Calibration')}
-      <RB title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => set({ theme: theme === 'dark' ? 'light' : 'dark' })}>
-        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
-      </RB>
+      {/* Home, Project, Calibration and the theme live in the View / Tools menus */}
       {mgr && <PluginManager onClose={() => setMgr(false)} />}
     </nav>
   );

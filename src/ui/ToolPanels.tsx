@@ -24,7 +24,10 @@ function Seg({ label, value, options, onChange }: { label: string; value: string
   return (
     <div className="row" style={{ marginBottom: 4 }}>
       <span className="muted" style={{ width: 92, fontSize: 12 }}>{label}</span>
-      <div className="seg">{options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}</div>
+      {/* up to 3 short options stay buttons; longer lists become a dropdown */}
+      {options.length <= 3 && options.every(([, l]) => l.length <= 10)
+        ? <div className="seg">{options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}</div>
+        : <select className="select" style={{ flex: 1 }} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>}
     </div>
   );
 }
@@ -171,11 +174,11 @@ export function TextPanel() {
       )}
       <Slider label={src === 'text' ? 'Height' : 'Width'} value={o.size} min={2} max={src === 'text' ? 80 : 200} step={0.5} unit="mm" onChange={(v) => setO({ ...o, size: v })} />
       <Slider label="Depth" value={o.depth} min={0.2} max={20} step={0.1} unit="mm" onChange={(v) => setO({ ...o, depth: v })} />
-      <div className="seg" style={{ margin: '4px 0 8px', flexWrap: 'wrap' }}>
+      <select className="select" style={{ width: '100%', margin: '4px 0 8px' }} aria-label="Text mode" value={o.mode} onChange={(e) => setO({ ...o, mode: e.target.value as typeof o.mode })}>
         {TEXT_MODES.filter(([m]) => src === 'text' || (m !== 'emboss' && m !== 'engrave')).map(([m, label]) => (
-          <button key={m} className={o.mode === m ? 'on' : ''} disabled={m !== 'object' && !selected.length} onClick={() => setO({ ...o, mode: m })}>{label}</button>
+          <option key={m} value={m} disabled={m !== 'object' && !selected.length}>{label}</option>
         ))}
-      </div>
+      </select>
       {volume && <>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{surfacePick ? 'Placed on the picked surface point (green).' : 'Click the model where the shape should go.'} A {o.mode === 'negative' ? 'negative part is cut out of' : o.mode === 'modifier' ? 'modifier changes settings inside' : 'part is added to'} the object.</p>
         <label className="row" style={{ marginBottom: 8 }}><input type="checkbox" checked={useSurface} onChange={(e) => setUseSurface(e.target.checked)} />Use surface (bend onto curved faces)</label>
@@ -211,9 +214,9 @@ export function MeasurePanel() {
   return (
     <div className="float panel" style={{ width: 270 }}>
       <h4>Measure</h4>
-      <div className="seg" style={{ marginBottom: 8 }}>
-        {(['auto', 'point', 'edge', 'face', 'circle'] as const).map((m) => <button key={m} className={measureMode === m ? 'on' : ''} onClick={() => set({ measureMode: m, measureFeatures: [] })}>{m === 'auto' ? 'Auto' : FEATURE_LABEL[m === 'face' ? 'plane' : m]}</button>)}
-      </div>
+      <select className="select" style={{ width: '100%', marginBottom: 8 }} aria-label="Measure mode" value={measureMode} onChange={(e) => set({ measureMode: e.target.value as typeof measureMode, measureFeatures: [] })}>
+        {(['auto', 'point', 'edge', 'face', 'circle'] as const).map((m) => <option key={m} value={m}>{m === 'auto' ? 'Auto' : FEATURE_LABEL[m === 'face' ? 'plane' : m]}</option>)}
+      </select>
       <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click two features. Auto picks a circle near a round hole or boss edge, an edge near a sharp crease, a plane on flat surfaces, otherwise a point. Circles are measured from their centre.</p>
       {fs.map((f, i) => <div key={i} className="row" style={{ fontSize: 12 }}><span className="badge">{i + 1}</span>{FEATURE_LABEL[f.kind]}{f.kind === 'edge' && <span className="muted mono">{edgeLength(f)!.toFixed(2)} mm</span>}{f.kind === 'circle' && <span className="muted mono">⌀ {(f.r * 2).toFixed(2)} mm</span>}</div>)}
       {r && (

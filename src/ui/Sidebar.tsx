@@ -12,7 +12,6 @@ import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store'
 import { updateHeightRange, updatePart } from '../state/ops';
 import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
-import { PlateThumb, PrinterThumb } from './assets/Thumbs';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
 import { ParamRow } from './ParamRow';
 import { useAdvanced } from '../state/advanced';
@@ -90,36 +89,30 @@ export function PrinterCard() {
         <button className="icon-btn" title="Edit printer settings" aria-label="Edit printer settings" onClick={() => setEdit(true)}><Icon name="edit" size={16} /></button>
       </div>
       <Body closed={closed}>
-        <div className="thumb-pair">
-          <label className="thumb-card" title={`${printer.vendor} ${printer.model}`}>
-            <PrinterThumb printer={printer} />
-            <select className="thumb-select" value={printerId} aria-label="Printer" onChange={(e) => {
-              const p = printerById(e.target.value);
-              set({ printerId: p.id, plate: p.plates.some((x) => x.type === plate) ? plate : p.plates[0].type, machineOverrides: {} });
-              markDirty();
-            }}>
-              {vendors.map((v) => (
-                <optgroup key={v} label={v}>
-                  {PRINTERS.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{p.vendor === 'Generic' ? p.model : `${p.vendor} ${p.model}`}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <span className="thumb-caption">{printer.model}</span>
-          </label>
-          <label className="thumb-card" title={plateLabel}>
-            <PlateThumb type={plate} />
-            <select className="thumb-select" value={plate} aria-label="Build plate" onChange={(e) => { set({ plate: e.target.value as any }); markDirty(); }}>
-              {printer.plates.map((p) => <option key={p.type} value={p.type}>{p.label}</option>)}
-            </select>
-            <span className="thumb-caption">{plateLabel.replace(/ \(.*\)| Spring Steel/g, '')}</span>
-          </label>
+        {/* compact: printer on one row, build plate and nozzle on the next */}
+        <div className="row compact-row">
+          <Icon name="printer" size={15} style={{ color: 'var(--text-muted)' }} />
+          <select className="grow-select" value={printerId} aria-label="Printer" title={`${printer.vendor} ${printer.model}`} onChange={(e) => {
+            const p = printerById(e.target.value);
+            set({ printerId: p.id, plate: p.plates.some((x) => x.type === plate) ? plate : p.plates[0].type, machineOverrides: {} });
+            markDirty();
+          }}>
+            {vendors.map((v) => (
+              <optgroup key={v} label={v}>
+                {PRINTERS.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{p.vendor === 'Generic' ? p.model : `${p.vendor} ${p.model}`}</option>)}
+              </optgroup>
+            ))}
+          </select>
         </div>
-        <div className="row nozzle-row">
-          <Icon name="nozzle" size={16} style={{ color: 'var(--text-muted)' }} />
-          <span className="muted" title="Nozzle diameter (mm)">Ø</span>
-          <select className="nozzle-select" aria-label="Nozzle diameter" value={nozzle}
+        <div className="row compact-row">
+          <Icon name="plate" size={15} style={{ color: 'var(--text-muted)' }} />
+          <select className="grow-select" value={plate} aria-label="Build plate" title={plateLabel} onChange={(e) => { set({ plate: e.target.value as any }); markDirty(); }}>
+            {printer.plates.map((p) => <option key={p.type} value={p.type}>{p.label}</option>)}
+          </select>
+          <Icon name="nozzle" size={15} style={{ color: 'var(--text-muted)' }} />
+          <select className="nozzle-select" aria-label="Nozzle diameter" title="Nozzle diameter" value={nozzle}
             onChange={(e) => { const n = Number(e.target.value); setMachine('nozzle_diameter', n === printer.nozzle ? undefined : n); markDirty(); }}>
-            {NOZZLES.map((n) => <option key={n} value={n}>{n} mm{n === printer.nozzle ? ' (stock)' : ''}</option>)}
+            {NOZZLES.map((n) => <option key={n} value={n}>{n} mm{n === printer.nozzle ? ' ·' : ''}</option>)}
           </select>
         </div>
         {arcSupportNote(printer) && <p className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}><Icon name="info" size={11} /> {arcSupportNote(printer)}</p>}

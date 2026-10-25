@@ -69,9 +69,9 @@ function FillBedDialog({ id, onClose }: { id: string; onClose: () => void }) {
           {ROTATIONS.map(([v, l]) => <option key={v} value={v}>{v ? `Every ${l}` : l}</option>)}
         </select>
         <span>Mirror copies</span>
-        <div className="seg">
-          {(['off', 'x', 'y', 'auto'] as const).map((m) => <button key={m} className={opt.mirror === m ? 'on' : ''} onClick={() => set({ mirror: m })}>{m === 'off' ? 'Off' : m === 'auto' ? 'Auto' : `Along ${m.toUpperCase()}`}</button>)}
-        </div>
+        <select className="select" value={opt.mirror} onChange={(e) => set({ mirror: e.target.value as typeof opt.mirror })}>
+          {(['off', 'x', 'y', 'auto'] as const).map((m) => <option key={m} value={m}>{m === 'off' ? 'Off' : m === 'auto' ? 'Auto' : `Along ${m.toUpperCase()}`}</option>)}
+        </select>
         <span>Precision</span>
         <select className="select" value={opt.precision} onChange={(e) => set({ precision: +e.target.value })}>
           {PRECISION.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

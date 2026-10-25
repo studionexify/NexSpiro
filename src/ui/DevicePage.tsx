@@ -237,11 +237,11 @@ function SpeedLight({ dev, st, online }: { dev: SavedDevice; st: PrinterStatus; 
     <div className="row" style={{ marginTop: 14, flexWrap: 'wrap' }}>
       <span className="muted">Speed</span>
       {isBbl ? (
-        <div className="seg">
-          {[[1, 'Silent'], [2, 'Standard'], [3, 'Sport'], [4, 'Ludicrous']].map(([lvl, label]) => (
-            <button key={lvl} disabled={!online} className={st.speedPercent === { 1: 50, 2: 100, 3: 124, 4: 166 }[lvl as number] ? 'on' : ''} onClick={() => tryRun(() => run(dev.id, 'Speed…', (h) => h.setSpeed(lvl as number)))}>{label}</button>
-          ))}
-        </div>
+        <select className="select" style={{ maxWidth: 140, flex: 'none' }} disabled={!online} aria-label="Speed"
+          value={({ 50: 1, 100: 2, 124: 3, 166: 4 } as Record<number, number>)[st.speedPercent ?? 100] ?? 2}
+          onChange={(e) => { const lvl = Number(e.target.value); tryRun(() => run(dev.id, 'Speed…', (h) => h.setSpeed(lvl))); }}>
+          {([[1, 'Silent'], [2, 'Standard'], [3, 'Sport'], [4, 'Ludicrous']] as const).map(([lvl, label]) => <option key={lvl} value={lvl}>{label}</option>)}
+        </select>
       ) : (
         <select className="select" style={{ maxWidth: 100, flex: 'none' }} disabled={!online} value={st.speedPercent ?? 100} onChange={(e) => tryRun(() => run(dev.id, 'Speed…', (h) => h.setSpeed(Number(e.target.value))))}>
           {[50, 75, 100, 125, 150].map((v) => <option key={v} value={v}>{v}%</option>)}

@@ -164,3 +164,15 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-stage { container: stage / inline-size; }
 @media (max-width: 1280px) { .sh-cmdk { width: 40px; } .sh-cmdk span, .sh-cmdk kbd { display: none; } .sh-pill .sh-ib kbd { display: none; } }
 .nozzle-row .nozzle-select { flex: 1; min-width: 0; height: 30px; }
+.compact-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.compact-row .grow-select { flex: 1; min-width: 0; height: 30px; }
+.compact-row .nozzle-select { flex: 0 0 86px; height: 30px; }
+/* Motionex "Where it goes": one row of icon buttons, names in the tooltip */
+.mx-card .mx-tools { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mx-tool { padding: 6px 0; }
+.mx-tool .lbl { display: none; }
+.mx-select { width: 100%; height: 30px; margin-bottom: 6px; }
+.legend-details { margin-top: 8px; }
+.legend-details > summary { cursor: pointer; font-size: 12px; color: var(--text-muted); padding: 4px 0; }
+.insp-settings > .h { white-space: nowrap; }
+.select.mx-select { height: 30px; min-height: 30px; padding: 0 8px; font-size: 13px; }

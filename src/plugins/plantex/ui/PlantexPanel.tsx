@@ -42,6 +42,10 @@ function Check({ label, value, set }: { label: string; value: boolean; set: (v: 
 }
 
 function Seg<T extends string>({ value, options, set }: { value: T; options: [T, string][]; set: (v: T) => void }) {
+  // up to 3 short options stay buttons; longer lists become a dropdown
+  if (options.length > 3 || options.some(([, l]) => l.length > 10)) {
+    return <select className="select mx-select" value={value} onChange={(e) => { set(e.target.value as T); changed(); }}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>;
+  }
   return <div className="seg mx-seg">{options.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => { set(v); changed(); }}>{l}</button>)}</div>;
 }
 

@@ -389,14 +389,14 @@ function Placement({ a: active }: { a?: MotionApplication }) {
         <div className="mx-card-title">Where it goes</div>
         <div className="mx-tools">
           {PLACE_TOOLS.map((p) => (
-            <button key={p.label} className="mx-tool" title={p.hint} onClick={() => {
+            <button key={p.label} className="mx-tool" title={`${p.label}: ${p.hint}`} aria-label={p.label} onClick={() => {
               const a = addApplication('preset-sine');
               if (p.tool === 'plate') a.target = { ...a.target, type: 'body' };
               else if (p.tool === 'box' || p.tool === 'lasso_motion') set({ tool: 'lasso_motion', motionDraw: p.tool === 'box' ? 'box' : 'lasso' });
               else set({ tool: p.tool });
               changed();
             }}>
-              <span className="ic">{p.icon}</span>{p.label}
+              <span className="ic">{p.icon}</span><span className="lbl">{p.label}</span>
             </button>
           ))}
         </div>
@@ -426,8 +426,8 @@ function PlacementFor({ a }: { a: MotionApplication }) {
       <div className="mx-card-title">Where it goes</div>
       <div className="mx-tools">
         {PLACE_TOOLS.map((p) => (
-          <button key={p.label} className={`mx-tool ${current === p.tool ? 'on' : ''}`} title={p.hint} onClick={() => pick(p.tool)}>
-            <span className="ic">{p.icon}</span>{p.label}
+          <button key={p.label} className={`mx-tool ${current === p.tool ? 'on' : ''}`} title={`${p.label}: ${p.hint}`} aria-label={p.label} onClick={() => pick(p.tool)}>
+            <span className="ic">{p.icon}</span><span className="lbl">{p.label}</span>
           </button>
         ))}
       </div>
@@ -478,9 +478,9 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
     <details className="mx-card mx-more">
       <summary className="mx-card-title">More options</summary>
       <div className="mx-label">Walls</div>
-      <div className="seg mx-seg">
-        {WALLS.map(([w, l]) => <button key={w} className={(a.target.walls ?? 'outer') === w ? 'on' : ''} onClick={() => upd(() => { a.target = { ...a.target, walls: w }; })}>{l}</button>)}
-      </div>
+      <select className="select mx-select" aria-label="Walls" value={a.target.walls ?? 'outer'} onChange={(e) => upd(() => { a.target = { ...a.target, walls: e.target.value as WallChoice }; })}>
+        {WALLS.map(([w, l]) => <option key={w} value={w}>{l}</option>)}
+      </select>
       <div className="mx-two">
         <label className="mx-field">Start at (mm)<input className="input" type="number" min={0} step={0.2} value={a.mask.z_start} onChange={(e) => upd(() => { a.mask.z_start = +e.target.value; })} /></label>
         <label className="mx-field">Stop at (mm)<input className="input" type="number" min={0} step={0.2} value={a.mask.z_end >= 1e4 ? '' : a.mask.z_end} placeholder="top" onChange={(e) => upd(() => { a.mask.z_end = e.target.value === '' ? 1e4 : +e.target.value; })} /></label>
@@ -493,9 +493,9 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
         <input type="range" min={0} max={10} step={0.5} value={a.mask.blend_mm ?? 1.5} onChange={(e) => upd(() => { a.mask.blend_mm = +e.target.value; })} />
       </label>
       <div className="mx-label">Near the tip (loops too small for the motion)</div>
-      <div className="seg mx-seg">
-        {TIP_MODES.map(([m, l]) => <button key={m} className={(a.tip?.mode ?? DEFAULT_TIP.mode) === m ? 'on' : ''} onClick={() => upd(() => { a.tip = { ...(a.tip ?? DEFAULT_TIP), mode: m }; })}>{l}</button>)}
-      </div>
+      <select className="select mx-select" aria-label="Near the tip" value={a.tip?.mode ?? DEFAULT_TIP.mode} onChange={(e) => upd(() => { a.tip = { ...(a.tip ?? DEFAULT_TIP), mode: e.target.value as (typeof TIP_MODES)[number][0] }; })}>
+        {TIP_MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+      </select>
       {(a.tip?.mode ?? DEFAULT_TIP.mode) !== 'full' && (
         <label className="mx-field">{(a.tip?.mode ?? DEFAULT_TIP.mode) === 'off' ? 'Switch off' : 'Start shrinking'} when the motion needs more than {Math.round((a.tip?.share ?? DEFAULT_TIP.share) * 100)}% of the loop's inner radius
           <input type="range" min={0.05} max={1} step={0.05} value={a.tip?.share ?? DEFAULT_TIP.share} onChange={(e) => upd(() => { a.tip = { ...(a.tip ?? DEFAULT_TIP), share: +e.target.value }; })} />

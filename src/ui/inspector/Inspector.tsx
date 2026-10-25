@@ -280,8 +280,16 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
   return (
     <section className="insp-settings">
       <div className="h">{title}
+        {!objMode && m.modifiedCount > 0 && (
+          <button className="icon-btn" title={`${m.modifiedCount} changed from the preset: reset all`} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={13} /></button>
+        )}
+        {!objMode && (
+          <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
+            <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
+          </label>
+        )}
         <a role="button" tabIndex={0} aria-pressed={changedOnly} className={changedOnly ? 'on' : ''} title="Show only the settings you changed"
-          onClick={() => setChangedOnly(!changedOnly)}><Icon name="others" size={12} />Changed only</a>
+          onClick={() => setChangedOnly(!changedOnly)}><Icon name="others" size={12} />Changed</a>
       </div>
       {objMode && m.selObjs.length > 0 && (
         <div className="obj-target">
@@ -289,16 +297,6 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
           <span className="name">{m.target}</span>
           <span className="muted">{m.objOverrideCount ? `${m.objOverrideCount} own setting${m.objOverrideCount > 1 ? 's' : ''}` : 'uses the plate settings'}</span>
           <button className="icon-btn" title="Reset to the plate settings" disabled={!m.objOverrideCount} onClick={m.resetObj}><Icon name="reset" size={15} /></button>
-        </div>
-      )}
-      {!objMode && (
-        <div className="insp-line">
-          <span className="muted-s">{m.modifiedCount ? `${m.modifiedCount} changed from the preset` : 'Preset values'}</span>
-          <button className="icon-btn" title="Reset all changed values" disabled={!m.modifiedCount} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={14} /></button>
-          <span className="spacer" />
-          <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
-            <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
-          </label>
         </div>
       )}
       {noSel ? (

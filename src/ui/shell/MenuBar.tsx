@@ -93,6 +93,8 @@ function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item
       { label: 'Prepare', onClick: () => go('prepare'), checked: prep },
       { label: 'Preview', onClick: () => go('preview'), checked: s.workspace === 'preview' },
       { label: 'Device', onClick: () => go('device'), checked: s.workspace === 'device' },
+      { label: 'Project', onClick: () => go('project'), checked: s.workspace === 'project' },
+      { label: 'Calibration', onClick: () => go('calibration'), checked: s.workspace === 'calibration' },
       { sep: true },
       { label: 'Fit to view', kbd: 'Z', onClick: () => viewApi.current?.fit() },
       { label: 'Isometric', kbd: 'Ctrl+0', onClick: () => viewApi.current?.setView('iso') },
