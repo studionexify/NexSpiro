@@ -81,7 +81,7 @@
 
 /* ---------- plugin dock ---------- */
 .dock.sh-pdock { background: var(--ns-panel, var(--surface-primary)); border-left: 1px solid var(--ns-line, var(--border)); max-width: 640px; }
-.dock.sh-pdock:not(.collapsed) { min-width: 260px; }
+.dock.sh-pdock { min-width: 260px; }
 
 /* ---------- right column ---------- */
 .sh-right { display: flex; flex-direction: column; min-height: 0; background: var(--ns-panel, var(--surface-secondary)); border-left: 1px solid var(--ns-line, var(--border)); }

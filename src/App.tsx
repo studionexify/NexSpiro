@@ -127,7 +127,7 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
-  const hasDock = useStore((st) => st.plugins.length > 0);
+  const hasDock = useStore((st) => st.plugins.length > 0 && st.dock.open);
   const bodyCols = is3d ? (hasDock ? 'minmax(0, 1fr) auto 356px' : 'minmax(0, 1fr) 356px') : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
