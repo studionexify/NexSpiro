@@ -177,7 +177,7 @@ function Pinned() {
   const keys = pinnedParams.filter((k) => PARAM_BY_KEY[k]);
   return (
     <section>
-      <div className="h">Pinned <span className="muted-s">☆ any setting below to pin it</span></div>
+      <div className="h">Pinned</div>
       {!keys.length && <div className="muted-s">Nothing pinned yet.</div>}
       {keys.map((k) => {
         // per-object when the setting can differ per object; otherwise it edits the plate value

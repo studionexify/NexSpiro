@@ -17,14 +17,14 @@ export function RightDock() {
   if (!dock.open) return null;
   const startResize = (e: React.PointerEvent) => {
     const x0 = e.clientX, w0 = dock.width;
-    const move = (ev: PointerEvent) => setDock({ width: Math.max(260, Math.min(640, w0 + (x0 - ev.clientX))) });
+    const move = (ev: PointerEvent) => setDock({ width: Math.max(220, Math.min(640, w0 + (x0 - ev.clientX))) });
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
   const Panel = active.Panel;
   return (
-    <aside className="dock sh-pdock" style={{ width: dock.width }} aria-label="Plugins">
+    <aside className="dock sh-pdock" aria-label="Plugins">
       <div className="dock-resize" onPointerDown={startResize} title="Drag to resize" />
       <div className="dock-tabs">
         {/* the left rail switches plugins; the header only names the active one */}

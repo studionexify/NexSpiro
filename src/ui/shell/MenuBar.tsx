@@ -15,6 +15,9 @@ import { openFillBed } from '../FillBedDialog';
 import { Modal } from '../Modals';
 import { PluginManager } from '../RightDock';
 import { useSliced } from './FileMenu';
+import { PlateSelect } from './TopRight';
+import { ModeToggle } from '../advanced/ModeToggle';
+import { Icon } from '../icons';
 
 interface Item { label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
 
@@ -172,6 +175,8 @@ export function MenuBar() {
   const [prefs, setPrefs] = useState(false);
   const [plugins, setPlugins] = useState(false);
   const menus = useMenus(() => setPrefs(true), () => setPlugins(true));
+  const { undo, redo, undoStack, redoStack, workspace } = useStore();
+  const is3d = workspace === 'prepare' || workspace === 'preview';
   useUiScale();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -205,6 +210,15 @@ export function MenuBar() {
           )}
         </div>
       ))}
+      <span className="sh-div" />
+      <button className="sh-ib" title="Import (Ctrl+I)" aria-label="Import" onClick={importDialog}><Icon name="download" size={15} /></button>
+      <button className="sh-ib" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" size={15} /></button>
+      <button className="sh-ib" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" size={15} /></button>
+      <span className="sh-div" />
+      <ModeToggle compact />
+      <span className="spacer" />
+      <button className="sh-ib" title="Search (Ctrl+K)" aria-label="Search" onClick={() => useUi.getState().set({ paletteOpen: true })}><Icon name="search" size={15} /></button>
+      {is3d && <PlateSelect />}
       {prefs && <Preferences onClose={() => setPrefs(false)} />}
       {plugins && <PluginManager onClose={() => setPlugins(false)} />}
     </nav>

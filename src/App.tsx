@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, TopLeft, TopRight, ViewBar } from './ui/shell';
+import { CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
@@ -26,7 +26,6 @@ import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
 import { ClickexStudioHost } from './plugins/clickex/ui/Studio';
 import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
-import { ModeToggle } from './ui/advanced/ModeToggle';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
 function Toast() {
@@ -128,7 +127,10 @@ export default function App() {
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
   const hasDock = useStore((st) => st.plugins.length > 0 && st.dock.open);
-  const bodyCols = is3d ? (hasDock ? 'minmax(0, 1fr) auto 356px' : 'minmax(0, 1fr) 356px') : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
+  const dockW = useStore((st) => st.dock.width);
+  // the work area keeps at least ~62% of the body; the inspector and plugin dock share the rest
+  const right = 'clamp(260px, 22%, 340px)';
+  const bodyCols = is3d ? (hasDock ? `minmax(62%, 1fr) minmax(0, ${dockW}px) ${right}` : `minmax(62%, 1fr) ${right}`) : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
     <div className="app sh-app"
@@ -144,9 +146,6 @@ export default function App() {
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          <TopLeft />
-          <div className="float sh-float sh-engine"><ModeToggle /></div>
-          <TopRight plates={is3d} />
           {workspace === 'prepare' && <><Toolbar /><ObjectPill /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
