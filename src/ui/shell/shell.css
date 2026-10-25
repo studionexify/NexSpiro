@@ -54,7 +54,7 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-rail-sep { width: 24px; height: 1px; background: var(--ns-line, var(--border)); margin: 6px 0; }
 .sh-rail-spacer { flex: 1; }
 .sh-tip { position: absolute; left: 50px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--ns-active, #18181B); color: var(--ns-on-active, #fff); padding: 4px 8px; border-radius: 6px; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 60; }
-.sh-rb:hover .sh-tip, .sh-rb:focus-visible .sh-tip { opacity: 1; }
+.sh-rb:hover .sh-tip, .sh-rb:focus-visible .sh-tip { opacity: 1; transition-delay: 1s; }
 
 /* ---------- stage + floating chrome ---------- */
 .sh-stage { background: radial-gradient(ellipse at 50% 38%, var(--ns-canvas-a, transparent), var(--ns-canvas-b, transparent) 78%); }
