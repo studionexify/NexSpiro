@@ -29,7 +29,12 @@
 .sh-seg .sh-ib { height: 24px; min-width: 30px; padding: 0 6px; }
 
 /* hints and explanatory copy are hidden app-wide: the UI keeps labels, values and warnings only */
-p.mx-muted:not(.px-warn), .mx-sub, .empty-hint, .dock-body p.muted, .sh-right p.muted, .rx-hint, .fx-hint, .cx-hint, .cx-help, .hint, .hint-list, .pin-hint { display: none !important; }
+p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh-right p.muted, .rx-hint, .fx-hint, .cx-hint, .cx-help, .hint, .hint-list, .pin-hint { display: none !important; }
+
+/* the dock header already names the plugin: drop each panel's own name card (a head that holds a
+   control, like Hanex's on/off switch, keeps the control and its name) */
+.dock-body .mx-head:not(:has(button, input)) { display: none; }
+.dock-body .mx-head .mx-badge { display: none; }
 
 /* ---------- rail ---------- */
 .sh-rail { overflow-y: auto; scrollbar-width: none; background: var(--ns-panel, var(--surface-secondary)); border-right: 1px solid var(--ns-line, var(--border)); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; z-index: 6; }

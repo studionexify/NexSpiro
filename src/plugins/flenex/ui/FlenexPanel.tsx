@@ -10,9 +10,7 @@ export function FlenexPanel() {
   return (
     <div className="mx-panel">
       <div className="mx-card">
-        <div className="mx-card-title">Flenex</div>
-        <div className="mx-sub">Print-in-place flexi animals and characters: design one from {PRESETS.length} shapes, or import a model and place the joints where you want them. Paint it, then export a coloured 3MF or send it to the plate.</div>
-        <button className="btn-primary" style={{ marginTop: 8 }} onClick={() => openStudio(true)}>Open Flenex Studio</button>
+        <button className="btn-primary" onClick={() => openStudio(true)}>Open Flenex Studio</button>
       </div>
       <div className="mx-card">
         <div className="mx-card-title">Machine</div>
