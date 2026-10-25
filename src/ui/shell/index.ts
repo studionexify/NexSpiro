@@ -7,3 +7,4 @@ export { ActionDock } from './ActionDock';
 export { RightColumn } from './RightColumn';
 export { CommandPalette } from './CommandPalette';
 export { RightDock as PluginDock } from '../RightDock';
+export { MenuBar } from './MenuBar';

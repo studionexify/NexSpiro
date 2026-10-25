@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { CameraBar, CommandPalette, ObjectPill, Rail, RightColumn, TopLeft, TopRight, ViewBar } from './ui/shell';
+import { CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, TopLeft, TopRight, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
@@ -139,6 +139,7 @@ export default function App() {
         const files = await Promise.all(Array.from(e.dataTransfer.files).map(async (f) => ({ name: f.name, data: await f.arrayBuffer() })));
         if (files.length) importBuffers(files);
       }}>
+      <MenuBar />
       <Rail />
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
