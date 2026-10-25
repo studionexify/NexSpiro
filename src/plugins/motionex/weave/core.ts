@@ -73,18 +73,32 @@ export function planLayers(w: WeaveSettings, layerZ: number[], perimeters?: numb
 /** Stitch shape across one pixel (t = 0..1): full height in the middle, dipping by `stitch` at its edges. */
 const stitchShape = (stitch: number, t: number) => 1 - Math.max(0, Math.min(1, stitch)) * (1 - Math.sin(Math.PI * t));
 
+/** Hand-made move (mm, + = out) for the pixel under column position x on picture row `row`; 0 when none or the grid changed. */
+export function nudgeAt(w: WeaveSettings, row: number, x: number): number {
+  const n = w.nudge, img = w.image;
+  if (!n || n.w !== img.w || n.h !== img.h) return 0;
+  const col = ((Math.floor(x) % img.w) + img.w) % img.w;
+  return n.d[Math.max(0, Math.min(img.h - 1, row)) * img.w + col] ?? 0;
+}
+
 /** Sideways offset (mm, + = out of the part) at fraction u (0..1) round the loop on a woven layer. */
 export function offsetAt(w: WeaveSettings, L: WeaveLayer, u: number): number {
   const img = w.image;
   const x = u * img.w * Math.max(1, w.tiles_around) + w.shift_px_per_row * L.rowFromBottom;
   const p = pixelAt(img, x, L.row), t = x - Math.floor(x);
   const D = w.depth_mm * L.depthMul;
-  if (w.mode === 'colour') return p === L.colour ? D * stitchShape(w.stitch, t) : -D * w.recess;
-  // mono: palette index = darkness level
-  const levels = levelsOf(img);
-  const dark = levels > 1 ? p / (levels - 1) : 0;
-  if (w.mono_style === 'emboss') return D * (1 - 2 * dark) * stitchShape(w.stitch, t);
-  return dark * D * (L.parity ? -w.recess : 1) * stitchShape(w.stitch, t);
+  let off: number;
+  if (w.mode === 'colour') off = p === L.colour ? D * stitchShape(w.stitch, t) : -D * w.recess;
+  else {
+    // mono: palette index = darkness level
+    const levels = levelsOf(img);
+    const dark = levels > 1 ? p / (levels - 1) : 0;
+    off = w.mono_style === 'emboss' ? D * (1 - 2 * dark) * stitchShape(w.stitch, t) : dark * D * (L.parity ? -w.recess : 1) * stitchShape(w.stitch, t);
+  }
+  // hand-made moves shift every layer of the pixel together, so the stack moves as one
+  off += nudgeAt(w, L.row, x);
+  const cap = w.max_deviation_mm > 0 ? w.max_deviation_mm : Infinity;
+  return Math.max(-cap, Math.min(cap, off));
 }
 
 const LEVELS = new WeakMap<object, number>();

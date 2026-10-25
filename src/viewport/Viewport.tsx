@@ -21,6 +21,10 @@ import { convexHull, type Pt } from '../engine/arrange';
 import { machineConfig } from '../profiles/resolve';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
+import { ThreadMesh } from './threads';
+import { currentConfig } from '../state/slicing';
+import { hasThreads, linesToThreads, mergeThreads, type PluginPreview, type ThreadData } from '../plugins/threads';
+import { setDrool } from '../plugins/droolState';
 import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
 import type { PatternexReport } from '../plugins/patternex/engine';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
@@ -1514,6 +1518,9 @@ export function Viewport() {
     motionLines.visible = false;
     motionLines.frustumCulled = false;
     scene.add(motionLines);
+    // thick-thread twin of the lines: real-size beads and the hot drips (set while the toolpath view is on)
+    const threadMesh = new ThreadMesh();
+    scene.add(threadMesh.group);
     let previewTimer: ReturnType<typeof setTimeout> | null = null;
     const rebuildMotionPreview = () => {
       if (previewTimer) clearTimeout(previewTimer);
@@ -1523,15 +1530,27 @@ export function Viewport() {
         if (!showsMotion(s)) return;
         const t0 = performance.now();
         // every installed plugin adds its lines (Patternex inks, Motionex motion); drawn together
-        const parts: { positions: Float32Array; colors: Float32Array }[] = [];
+        const parts: PluginPreview[] = [];
         for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { const l = p.preview(); if (l && l.positions.length) parts.push(l); }
+        // thread view: parts with threads draw them (their markers stay lines); the rest turn into plain beads
+        const cfg = currentConfig();
+        const lw = Number(cfg.outer_wall_line_width) || Number(cfg.line_width) || 0.42, lh = Number(cfg.layer_height) || 0.2;
+        let lines = parts.map((l) => ({ positions: l.positions, colors: l.colors }));
+        let threads: ThreadData | null = null;
+        if (s.threadView && parts.length) {
+          const sets = parts.map((l) => ({ threads: hasThreads(l.threads) ? l.threads : linesToThreads(l.positions, l.colors, lw, lh), report: l.drool ?? { worstMm: 0, safeMm: 0, dripMm: 0, beads: 0, sagging: 0, dripping: 0, drips: 0, strings: 0, thinned: false, level: 'ok' as const } }));
+          threads = mergeThreads(sets)?.threads ?? null;
+          lines = parts.filter((l) => hasThreads(l.threads) && l.markers).map((l) => l.markers!);
+        }
+        setDrool(parts.map((l) => l.drool).filter((d): d is NonNullable<typeof d> => !!d));
+        threadMesh.set(threads);
         const geo = new LineSegmentsGeometry();
-        if (parts.length) {
-          const n = parts.reduce((a, l) => a + l.positions.length, 0);
+        if (lines.length) {
+          const n = lines.reduce((a, l) => a + l.positions.length, 0);
           const P = new Float32Array(n), C = new Float32Array(n);
           let o = 0;
-          for (const l of parts) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
-          geo.setPositions(P); geo.setColors(C);
+          for (const l of lines) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
+          if (n) { geo.setPositions(P); geo.setColors(C); }
         }
         motionLines.geometry.dispose();
         motionLines.geometry = geo;
@@ -1560,6 +1579,7 @@ export function Viewport() {
       selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
       motionLines.visible = showsMotion(s);
+      threadMesh.group.visible = showsMotion(s);
       if (preview) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
@@ -1621,7 +1641,7 @@ export function Viewport() {
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
-        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments)) rebuildMotionPreview();
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
@@ -1653,6 +1673,7 @@ export function Viewport() {
       gizmo.dispose();
       controls.dispose();
       toolpaths.dispose();
+      threadMesh.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);

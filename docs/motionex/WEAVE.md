@@ -11,6 +11,12 @@ Weaves a picture into the wall of a part, the way jacquard-style woven vases are
 - **Rows:** one picture row is one turn of the colours (2 layers for two colours at 1 layer per colour). With *Measure rows along the curve*, rows are spaced along the wall's profile, so bellies and flares don't stretch the picture.
 - **Columns:** columns are placed by distance round each loop from a fixed direction (+X), so pixels stack straight whatever the seam does. *Twist* drifts the picture by a fraction of a column per row.
 
+## Moving the path by hand
+
+*Move the path by hand* (in the Weave card) lets you pick pixels of any motif or imported picture and push their toolpath out of the wall or pull it in, from −cap to +cap mm. Pick with the brush, a box, a whole patch of one colour, or all; shift adds to the pick. Every layer of a picked pixel moves together, so the stack shifts as one. The 3D view shows the moved threads at once. Moves belong to the picture's grid size: if the picture is resized they are ignored until cleared.
+
+*Stand out* now goes up to 3 mm and *Largest move from the wall* (default 3 mm) caps the total deviation (depth, pull-in and hand moves together). High values hang the thread in the air: see [THREADS.md](THREADS.md) for the thick-thread view and the drool check that shows where it will sag or drip.
+
 ## Seam
 
 - *Seam inside the wall*: each layer starts with a lead-in from inside the wall and ends with a tail going inside. The slicer's wipe is turned inward too, and the travel arrives at the inside start point, not on the outer surface. The start blob and end string sit on the inside.
@@ -61,5 +67,5 @@ Use a solid body (Plantex *Weave* presets, or any closed vase model).
 - `src/plugins/motionex/weave/engine.ts`: per-layer filament regions, purge per change, and the move-list pass with the inward seam.
 - `src/plugins/motionex/weave/image.ts`, `motifs.ts`: turning pictures into the colour grid (nearest colour, dithering, grey levels), and the built-in motifs.
 - `src/plugins/motionex/weave/plan.ts`, `preview.ts`: the estimate, print settings and quick preview.
-- `src/plugins/motionex/ui/WeavePanel.tsx`: the panel.
+- `src/plugins/motionex/ui/WeavePanel.tsx`: the panel. `PathTool.tsx`: pick-and-move tool. `DroolCheck.tsx`: the reach / sag / drip card.
 - Tests: `tests/motionex/weave.test.ts`.

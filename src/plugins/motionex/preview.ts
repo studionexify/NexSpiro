@@ -8,6 +8,7 @@ import { composePath, makeRepeatLock, resample, type PathLayer, type RepeatLock,
 import type { PrintProfiles } from './core/profiles';
 import type { Toolpath } from './core/types';
 import type { MotionApplication, MotionBrush } from './model';
+import { segmentField, ThreadBuilder, type DroolReport, type ThreadData } from '../threads';
 
 export interface PreviewObject {
   id: string;
@@ -41,6 +42,10 @@ export interface PreviewLines {
   range: [number, number];
   /** Pauses, blobs and lift-offs drawn as markers. */
   events: number;
+  /** Real-size threads for the thick-thread view, the markers drawn over them, and the drool check. */
+  threads?: ThreadData;
+  markers?: { positions: Float32Array; colors: Float32Array };
+  drool?: DroolReport;
 }
 
 /** Colours shared with the legend. */
@@ -73,31 +78,6 @@ function pickedSegments(m: IndexedMesh, tris: number[], z: number): number[] {
   return out;
 }
 
-/** Distance from a point to the nearest segment, through a coarse grid. */
-function segmentField(segs: number[], cell: number) {
-  const grid = new Map<string, number[]>();
-  for (let k = 0; k < segs.length; k += 4) {
-    const x0 = Math.floor(Math.min(segs[k], segs[k + 2]) / cell), x1 = Math.floor(Math.max(segs[k], segs[k + 2]) / cell);
-    const y0 = Math.floor(Math.min(segs[k + 1], segs[k + 3]) / cell), y1 = Math.floor(Math.max(segs[k + 1], segs[k + 3]) / cell);
-    for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
-      const key = `${gx}|${gy}`; const l = grid.get(key); if (l) l.push(k); else grid.set(key, [k]);
-    }
-  }
-  return (x: number, y: number) => {
-    const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
-    let best = Infinity;
-    for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) {
-      for (const k of grid.get(`${ix}|${iy}`) ?? []) {
-        const ax = segs[k], ay = segs[k + 1], dx = segs[k + 2] - ax, dy = segs[k + 3] - ay;
-        const L2 = dx * dx + dy * dy || 1;
-        const u = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2));
-        best = Math.min(best, Math.hypot(x - ax - u * dx, y - ay - u * dy));
-      }
-    }
-    return best;
-  };
-}
-
 export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25, view: PreviewView = "motion"): PreviewLines {
   const pos: number[] = [], col: number[] = [];
   // colours that depend on the value range are filled in at the end: [index into col, value]
@@ -105,12 +85,17 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
   let vLo = Infinity, vHi = -Infinity, events = 0;
   const BASE_F = 50;
   let layersDrawn = 0;
+  const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
+  // thick-thread twin of the lines: real-size beads, plus the markers that stay lines on top of them
+  const tb = new ThreadBuilder(p.process.lineWidth || 0.42, lh);
+  const mpos: number[] = [], mcol: number[] = [];
+  const beadAt: [number, number][] = []; // bead number, index of its first end point's colour in col
   const cross = (x: number, y: number, z: number, r: number, c: readonly number[]) => {
-    pos.push(x - r, y, z, x + r, y, z, x, y - r, z, x, y + r, z, x, y, z - r, x, y, z + r);
-    for (let k = 0; k < 6; k++) col.push(c[0], c[1], c[2]);
+    const q = [x - r, y, z, x + r, y, z, x, y - r, z, x, y + r, z, x, y, z - r, x, y, z + r];
+    pos.push(...q); mpos.push(...q);
+    for (let k = 0; k < 6; k++) { col.push(c[0], c[1], c[2]); mcol.push(c[0], c[1], c[2]); }
     events++;
   };
-  const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
   const locks = new Map<string, Map<string, number>>();
   const lockFor = (id: string): RepeatLock => {
     let m = locks.get(id); if (!m) locks.set(id, (m = new Map()));
@@ -143,6 +128,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
     const firstIdx = Math.max(0, Math.ceil((lo - zMin - first) / lh));
     const lastIdx = Math.floor((hi - zMin - first) / lh);
     const every = Math.max(1, Math.ceil((lastIdx - firstIdx + 1) / MAX_LAYERS));
+    tb.newStack();
     const idx: number[] = [];
     for (let i = firstIdx; i <= lastIdx; i += every) idx.push(i);
     // cut a little under the layer top, like the slicer's mid-layer plane
@@ -150,6 +136,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
     const loops = sliceMesh(o.mesh, planes);
     planes.forEach((z, li) => {
       const layer = idx[li] + 1;
+      tb.layer(every);
       const fields = mine.map((a) => (a.tris ? segmentField(pickedSegments(o.mesh, a.tris, z), 2) : null));
       const parts: PathLayer[] = [];
       const ws: Weight[] = [];
@@ -188,10 +175,14 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
           if (pb.travel) {
             // lift-off: the nozzle jumps here without printing
             pos.push(pa.x, pa.y, pa.z + 0.15, pb.x, pb.y, pb.z + 0.15);
-            for (let k = 0; k < 2; k++) col.push(...VIEW_COLORS.jump);
+            mpos.push(pa.x, pa.y, pa.z + 0.15, pb.x, pb.y, pb.z + 0.15);
+            for (let k = 0; k < 2; k++) { col.push(...VIEW_COLORS.jump); mcol.push(...VIEW_COLORS.jump); }
+            tb.string(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, [0.85, 0.85, 0.85]);
             continue;
           }
           pos.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+          const bead = tb.seg(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, [0.6, 0.6, 0.6], Math.max(0.4, Math.min(2.2, (pa.flow + pb.flow) / 2)));
+          if (bead >= 0) beadAt.push([bead, col.length]);
           for (const [s, q] of [[a, pa], [b, pb]] as const) {
             if (view !== "motion" && s.best > 0) {
               const v = valueOf(q);
@@ -214,6 +205,10 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
   const centre = view === "height" ? 0 : 1;
   const span = Math.max(0.05, Math.abs(vLo - centre), Math.abs(vHi - centre));
   for (const [k, v] of valued) { const c = ramp((v - centre) / span); col[k] = c[0]; col[k + 1] = c[1]; col[k + 2] = c[2]; }
+  const { threads, report } = tb.finish();
+  // the beads take the colour of the line they stand for
+  for (const [b, c] of beadAt) for (let k = 0; k < 3; k++) threads.color[b * 3 + k] = (col[c + k] + col[c + 3 + k]) / 2;
   return { positions: Float32Array.from(pos), colors: Float32Array.from(col), layers: layersDrawn, view,
-    range: valued.length ? [vLo, vHi] : [centre, centre], events };
+    range: valued.length ? [vLo, vHi] : [centre, centre], events, threads, drool: report,
+    markers: { positions: Float32Array.from(mpos), colors: Float32Array.from(mcol) } };
 }

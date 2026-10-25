@@ -116,6 +116,11 @@ export function MotionStudio() {
   return (
     <aside className="studio" aria-label="Motion editor">
       <div className="studio-head">
+        <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
+          <button className="btn-secondary btn-small" onClick={() => set({ workspace: 'prepare', dock: { ...useStore.getState().dock, open: true, tab: 'motionex' } })} title="Back to the model and the Motionex settings bar">← Back to Prepare</button>
+          <b style={{ flex: 1 }}>Motion Studio</b>
+        </div>
+        <span className="mx-muted" style={{ margin: 0 }}>Edit one motion in detail. The model keeps showing it as you change it.</span>
         {apps.length > 1 && (
           <div className="studio-places">
             {apps.map((x, i) => (

@@ -50,7 +50,7 @@ export interface WeaveSettings {
   fit_height: FitHeight;
   /** Measure height along the curve of the wall (bellies and flares), so the picture isn't stretched there. */
   follow_curve: boolean;
-  /** How far a showing line stands out (mm). */
+  /** How far a showing line stands out (mm). Up to the deviation cap; a high value hangs the thread out in the air (see the drool check). */
   depth_mm: number;
   /** How far a hidden line pulls in, as a share of depth_mm (0..1). */
   recess: number;
@@ -60,6 +60,10 @@ export interface WeaveSettings {
   shift_px_per_row: number;
   /** Length (mm) over which the line eases from one pixel to the next. */
   smooth_mm: number;
+  /** Cap on the total sideways deviation from the wall (mm): depth, pull-in and hand-made moves together never go past it. */
+  max_deviation_mm: number;
+  /** Hand-made moves: extra mm out (+) or in (−) for single picture pixels, by pixel number (row × width + column). Only valid for the grid size it was made on. */
+  nudge?: { w: number; h: number; d: Record<number, number> };
   seam: WeaveSeam;
   change: { mode: ChangeMode; volume_mm3: number };
   mono_style: MonoStyle;
@@ -90,7 +94,7 @@ export function defaultWeave(): WeaveSettings {
     enabled: false, mode: 'colour',
     image: { w: 2, h: 2, px: [0, 1, 1, 0], name: 'Checker' },
     slots: [0, 1], layers_per_colour: 1, z_start: 1.2, z_end: 1e4, tiles_around: 1, fit_height: 'stretch', follow_curve: true,
-    depth_mm: 0.12, recess: 0.4, stitch: 0.25, shift_px_per_row: 0, smooth_mm: 0.25,
+    depth_mm: 0.12, recess: 0.4, stitch: 0.25, shift_px_per_row: 0, smooth_mm: 0.25, max_deviation_mm: 3,
     seam: { inward: true, angle_deg: 90, tuck_mm: 0.8 },
     change: { mode: 'purge', volume_mm3: 30 }, mono_style: 'texture',
     picture: { kind: 'motif', motif: 'checker', dither: 'floyd', levels: 2, pixel_mm: 1.2 },

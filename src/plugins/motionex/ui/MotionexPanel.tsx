@@ -21,11 +21,13 @@ import { openMotionexEditor } from './motionexEditor';
 import { WeaveCard, weaveColours } from './WeavePanel';
 import { PaintCard } from './PaintPanel';
 import { LaceCard } from './LacePanel';
-import { buildWeavePreview } from '../weave/preview';
+import { buildWeavePreview, buildWeaveThreads } from '../weave/preview';
+import { emptyDrool, linesToThreads, mergeThreads, type DroolReport, type ThreadData } from '../../threads';
 import { buildPaintPreview } from '../paint/preview';
 import { buildLacePreview } from '../lace/preview';
 import { loadLace, loadPaint, loadWeave, motionexActive } from '../index';
 import { parseHex } from '../weave/image';
+import { DroolCheck } from './DroolCheck';
 import './editor.css';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -70,12 +72,14 @@ export function motionexPreview(): PreviewLines | null {
   if (!apps.length && !weaveOn && !paintOn && !laceOn) return null;
   const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
     .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
-  lastPreview = apps.length ? buildPreview(objs, apps, profilesFromConfig(currentConfig(), s.printerId), 0.25, mx.previewView) : null;
-  const lh = Number(currentConfig().layer_height) || 0.2;
+  const profiles = profilesFromConfig(currentConfig(), s.printerId);
+  lastPreview = apps.length ? buildPreview(objs, apps, profiles, 0.25, mx.previewView) : null;
+  const lh = Number(currentConfig().layer_height) || 0.2, lw = profiles.process.lineWidth || 0.42;
   // wall art drawn on the model: the woven picture in filament colours, the painted picture as sheen
   // (light to dark = slow to fast), the lace with its holes left out
+  const palette = weaveOn ? weaveColours().map((c): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255]) : [];
   const extra = [
-    weaveOn ? buildWeavePreview(objs, mx.weave, lh, weaveColours().map((c) => [c[0] / 255, c[1] / 255, c[2] / 255])) : null,
+    weaveOn ? buildWeavePreview(objs, mx.weave, lh, palette) : null,
     paintOn && !weaveOn ? buildPaintPreview(objs, mx.paint, lh) : null,
     laceOn && !weaveOn && !paintOn ? buildLacePreview(objs, mx.lace, lh, filamentRgb(0), currentConfig()) : null,
   ].filter((x): x is NonNullable<typeof x> => !!x);
@@ -83,7 +87,16 @@ export function motionexPreview(): PreviewLines | null {
   const cat = (a: Float32Array, b: Float32Array) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
   let res: PreviewLines = lastPreview ?? { positions: new Float32Array(0), colors: new Float32Array(0), layers: 0, view: mx.previewView, range: [0, 0], events: 0 };
   for (const e of extra) res = { ...res, positions: cat(res.positions, e.positions), colors: cat(res.colors, e.colors) };
-  return res;
+  // the thick-thread twin: motion threads, the woven threads layer by layer, and plain beads for the other wall art
+  const parts: { threads: ThreadData; report: DroolReport }[] = [];
+  if (lastPreview?.threads) parts.push({ threads: lastPreview.threads, report: lastPreview.drool ?? emptyDrool(lw) });
+  if (weaveOn) {
+    const mono = filamentRgb(mx.weave.slots[0] ?? 0);
+    const t = buildWeaveThreads(objs, mx.weave, lh, lw, (P) => (mx.weave.mode === 'colour' ? palette[Math.min(P?.colour ?? 0, palette.length - 1)] ?? mono : mono));
+    if (t) parts.push(t);
+  } else for (const e of extra) parts.push({ threads: linesToThreads(e.positions, e.colors, lw, lh), report: emptyDrool(lw) });
+  const merged = mergeThreads(parts);
+  return merged ? { ...res, threads: merged.threads, drool: merged.report } : res;
 }
 const filamentRgb = (slot: number): [number, number, number] => { const c = parseHex(useStore.getState().filaments[slot]?.color ?? '#d8d4cc'); return [c[0] / 255, c[1] / 255, c[2] / 255]; };
 /** The last preview built, for the legend in the Motion tab. */
@@ -235,7 +248,7 @@ export function MotionexPanel() {
         <div className="mx-layers">
           {apps.map((a, i) => <LayerRow key={i} a={a} i={i} active={a === act} onChange={() => setPicking('change')} />)}
         </div>
-        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => useStore.getState().set({ workspace: 'motion', tool: 'select' })} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Edit {brushOf(act)?.name ?? 'motion'} in Motion tab →</button>}
+        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => useStore.getState().set({ workspace: 'motion', tool: 'select' })} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Open {brushOf(act)?.name ?? 'motion'} in Motion Studio ↗</button>}
         {picking ? <Library current={picking === 'change' ? act?.brush_id : undefined} onPick={choose} onCancel={() => setPicking(null)} />
           : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add motion</button>}
       </section>
@@ -244,6 +257,7 @@ export function MotionexPanel() {
       {!picking && <WeaveCard />}
       {!picking && <PaintCard />}
       {!picking && <LaceCard />}
+      <DroolCheck />
       <Report />
       {editing !== undefined && <EditorHost startId={editing} onClose={() => setEditing(undefined)} />}
     </div>

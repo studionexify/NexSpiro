@@ -7,6 +7,7 @@ import { slotColor, useStore, worldBounds, type Tool } from '../state/store';
 import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
+import { useDrool } from '../plugins/droolState';
 
 /** The Prepare toolbar: object commands, then the gizmos and tools (large Bambu-style icons). */
 export function Toolbar() {
@@ -59,17 +60,28 @@ export function Toolbar() {
   );
 }
 
-/** Shown while the motion preview is drawn on the model. */
+/** Shown while the motion preview is drawn on the model, with the drool check when threads reach too far out. */
 export function LiveChip() {
-  const { liveToolpaths, objects } = useStore();
+  const { liveToolpaths, objects, threadView } = useStore();
   const [info, setInfo] = useState('');
+  const drool = useDrool();
   useEffect(() => {
     const on = () => setInfo(`${Math.round((window as any).__nxPreviewMs ?? 0)} ms`);
     window.addEventListener('nx-preview-built', on);
     return () => window.removeEventListener('nx-preview-built', on);
   }, []);
   if (!liveToolpaths || !objects.length) return null;
-  return <div className="float live-chip" role="status"><i />Toolpath view (quick){info ? ` · ${info}` : ''} · slice for exact G-code</div>;
+  const warn = threadView && drool && drool.level !== 'ok';
+  return (
+    <div className={`float live-chip ${warn ? 'warn' : ''}`} role="status">
+      <i />Toolpath view ({threadView ? 'thick thread' : 'lines'}){info ? ` · ${info}` : ''} · slice for exact G-code
+      {warn && drool && (
+        <b title={`Threads reach up to ${drool.worstMm.toFixed(2)} mm from the layer below. Up to ${drool.safeMm.toFixed(2)} mm is held up; from ${drool.dripMm.toFixed(2)} mm hot plastic runs off.`}>
+          {drool.level === 'drip' ? ` · drooling: ${drool.drips} drip${drool.drips === 1 ? '' : 's'}, reach ${drool.worstMm.toFixed(2)} mm` : ` · sagging, reach ${drool.worstMm.toFixed(2)} mm`}
+        </b>
+      )}
+    </div>
+  );
 }
 
 type CubeFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';

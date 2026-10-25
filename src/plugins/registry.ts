@@ -3,6 +3,7 @@
 import type { ComponentType } from 'react';
 import type { FaceSet } from '../engine/types';
 import { useStore } from '../state/store';
+import type { PluginPreview } from './threads';
 import { loadMotionexProject, motionexConfig, motionexProject, MotionexPanel, motionexPreview, mx } from './motionex/ui/MotionexPanel';
 import { MotionStudio } from './motionex/ui/MotionStudio';
 import { toConfig } from './motionex';
@@ -29,7 +30,7 @@ export interface UiPlugin {
   /** Plain-data config for the slicer, or undefined when the plugin has nothing to do. */
   sliceConfig(): unknown;
   /** Quick preview lines drawn on the model in Prepare (no slicing), or null for none. */
-  preview?(): { positions: Float32Array; colors: Float32Array } | null;
+  preview?(): PluginPreview | null;
   /** Full-height editor shown beside the 3D view in the Motion tab. */
   Studio?: ComponentType;
   /** Plain data saved in the project file, and restored when the project is opened. */
