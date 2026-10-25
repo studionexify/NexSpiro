@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { changed, mx, useMx } from './MotionexPanel';
 import { weaveColours } from './WeavePanel';
 import type { SculptSettings } from '../sculpt/model';
+import { brush, pickChanged, pickedOf, usePickVersion } from '../sculpt/selection';
+import { useStore } from '../../../state/store';
 
 type Mode = 'brush' | 'box' | 'same' | 'all';
 const MODES: [Mode, string, string][] = [
@@ -14,15 +16,6 @@ const MODES: [Mode, string, string][] = [
   ['same', 'Same colour', 'Click a pixel to select its whole patch of one colour'],
   ['all', 'All', 'Select every pixel'],
 ];
-
-/** Picked cells per tool, kept while the panel is open (not saved with the project). */
-const picked = new Map<string, { grid: string; set: Set<number> }>();
-function pickedOf(id: string, w: number, h: number): Set<number> {
-  const key = `${w}x${h}`;
-  let p = picked.get(id);
-  if (!p || p.grid !== key) { p = { grid: key, set: new Set() }; picked.set(id, p); }
-  return p.set;
-}
 
 /** Cells of the same colour joined to (x, y), wrapping round the left and right edges. */
 function patch(w: number, h: number, colourOf: (i: number) => string, x: number, y: number): number[] {
@@ -62,11 +55,14 @@ export interface MoverGrid {
 export function PixelMover({ id, w: W, h: H, colour, moves: d, edit, cap, title, intro, cellAspect, footer }: MoverGrid) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode>('brush');
-  const [radius, setRadius] = useState(1);
+  const [radius, setRadiusState] = useState(brush.radius);
+  const setRadius = (r: number) => { brush.radius = r; setRadiusState(r); };
+  usePickVersion();
   const [move, setMove] = useState(0.5);
   const [, bump] = useState(0);
   const drag = useRef<{ x0: number; y0: number; base: Set<number> } | null>(null);
   const S = pickedOf(id, W, H);
+  const changedPick = () => { bump((n) => n + 1); if (id === 'sculpt') pickChanged(); };
   const moved = Object.keys(d).length;
   const peak = useMemo(() => Object.values(d).reduce((m, v) => Math.max(m, Math.abs(v)), 0), [d, moved]); // eslint-disable-line react-hooks/exhaustive-deps
   const key = (i: number) => colour(i).join();
@@ -104,7 +100,7 @@ export function PixelMover({ id, w: W, h: H, colour, moves: d, edit, cap, title,
     if (mode === 'brush') paint(x, y);
     else if (mode === 'box') drag.current = { x0: x, y0: y, base: new Set(S) };
     else if (mode === 'same') for (const i of patch(W, H, key, x, y)) S.add(i);
-    bump((n) => n + 1);
+    changedPick();
   };
   const onMove = (e: React.PointerEvent) => {
     if (e.buttons !== 1) return;
@@ -115,12 +111,12 @@ export function PixelMover({ id, w: W, h: H, colour, moves: d, edit, cap, title,
       S.clear(); b.base.forEach((i) => S.add(i));
       for (let yy = Math.min(b.y0, y); yy <= Math.max(b.y0, y); yy++) for (let xx = Math.min(b.x0, x); xx <= Math.max(b.x0, x); xx++) S.add(yy * W + xx);
     }
-    bump((n) => n + 1);
+    changedPick();
   };
   const onUp = () => { drag.current = null; };
   /** Set the picked cells to `value` mm (0 removes the move). */
   const apply = (value: number) => edit((m) => { for (const i of S) { if (Math.abs(value) < 1e-6) delete m[i]; else m[i] = value; } });
-  const selectAll = () => { for (let i = 0; i < W * H; i++) S.add(i); bump((n) => n + 1); };
+  const selectAll = () => { for (let i = 0; i < W * H; i++) S.add(i); changedPick(); };
 
   return (
     <details className="mx-more" open={moved > 0 || S.size > 0}>
@@ -146,7 +142,7 @@ export function PixelMover({ id, w: W, h: H, colour, moves: d, edit, cap, title,
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
         <button className="btn-primary btn-small" disabled={!S.size} onClick={() => apply(move)}>Move picked</button>
         <button className="btn-secondary btn-small" disabled={!S.size} onClick={() => apply(0)} title="Put the picked cells back on the wall">Reset picked</button>
-        <button className="btn-secondary btn-small" disabled={!S.size} onClick={() => { S.clear(); bump((n) => n + 1); }}>Pick none</button>
+        <button className="btn-secondary btn-small" disabled={!S.size} onClick={() => { S.clear(); changedPick(); }}>Pick none</button>
         <button className="btn-secondary btn-small" disabled={!moved} onClick={() => edit((m) => { for (const k of Object.keys(m)) delete m[+k]; })}>Clear all moves</button>
       </div>
       {moved > 0 && <div className="mx-check"><span className={peak >= cap ? 'bad' : 'ok'}>↔</span>Largest hand move {peak.toFixed(2)} mm (limit {cap.toFixed(1)} mm)</div>}
@@ -189,6 +185,7 @@ export function SculptCard() {
       {!s.enabled && <div className="mx-muted" style={{ margin: 0, display: 'block' }}>Move the outer wall by hand, anywhere, on top of any pattern: motions, weave, lace, Patternex regions or velocity paint. You pick cells on the unrolled wall and push them out or pull them in.</div>}
       {s.enabled && (
         <>
+          <PickOnModel />
           <PixelMover id="sculpt" w={s.w} h={s.h} colour={cols} moves={s.d} cap={s.max_mm > 0 ? s.max_mm : 6} cellAspect={0.5} title="Unrolled wall"
             intro="The wall cut open and laid flat: left to right is once round the part from +X, top is the top of the band. Pick cells and move them. Moves blend smoothly between cells and apply under every other pattern."
             edit={(f) => { f(s.d); changed(); }} />
@@ -227,4 +224,19 @@ function underlay(): ((u: number, t: number) => number | [number, number, number
     return (u, t) => { const x = Math.floor(((u * Math.max(1, w.tiles_around)) % 1) * w.image.w), y = Math.min(w.image.h - 1, Math.floor(t * w.image.h)); return colours[w.image.px[y * w.image.w + x]] ?? 70; };
   }
   return null;
+}
+
+/** Switch on picking directly on the 3D model. */
+function PickOnModel() {
+  const tool = useStore((st) => st.tool);
+  const on = tool === 'sculpt_pick';
+  return (
+    <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+      <button className={`btn-small ${on ? 'btn-primary' : 'btn-secondary'}`} aria-pressed={on} title="Drag over the model to pick the part of the wall to move. Shift unpicks. Esc leaves the tool."
+        onClick={() => useStore.getState().set({ tool: on ? 'select' : 'sculpt_pick', workspace: 'prepare', liveToolpaths: true })}>
+        {on ? 'Picking on the model… (Esc to stop)' : 'Pick on the model'}
+      </button>
+      <span className="mx-muted" style={{ display: 'block', margin: 0 }}>Drag over the model. Shift unpicks. Uses the brush size below.</span>
+    </div>
+  );
 }

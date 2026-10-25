@@ -16,7 +16,7 @@ import { filamentById } from '../profiles/filaments';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges' | 'sculpt_pick';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 

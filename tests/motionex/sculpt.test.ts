@@ -65,3 +65,24 @@ describe('path sculpt', () => {
     expect(makeWarp({ ...s, d: {} }, [{ id: o.id, mesh: o }])).toBeNull();
   });
 });
+
+import { cellAt, pickedOf, pickPoint } from '../../src/plugins/motionex/sculpt/selection';
+describe('picking on the model', () => {
+  const s = { ...defaultSculpt(), enabled: true, w: 8, h: 4 };
+  it('turns a point on the wall into a cell of the map', () => {
+    // +X side, near the top of a 100 mm part: first column, top row
+    expect(cellAt(s, 0, 0, 100, 10, 0.1, 95)).toEqual([0, 0]);
+    // -X side, near the bottom: column 4, bottom row
+    expect(cellAt(s, 0, 0, 100, -10, -0.01, 5)).toEqual([4, 3]);
+    expect(cellAt({ ...s, z_start: 50 }, 0, 0, 100, 10, 0, 20)).toBeNull();
+  });
+  it('picks and unpicks with the brush, wrapping round the part', () => {
+    pickedOf('sculpt', 8, 4).clear();
+    expect(pickPoint(s, 0, 0, 100, 10, -0.1, 50, false)).toBe(true); // column 7 (just below +X)
+    const S = pickedOf('sculpt', 8, 4);
+    expect(S.size).toBeGreaterThan(1);
+    expect([...S].some((i) => i % 8 === 0) && [...S].some((i) => i % 8 === 7)).toBe(true);
+    pickPoint(s, 0, 0, 100, 10, -0.1, 50, true);
+    expect(S.size).toBe(0);
+  });
+});

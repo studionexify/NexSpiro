@@ -25,6 +25,8 @@ import { ThreadMesh } from './threads';
 import { currentConfig } from '../state/slicing';
 import { hasThreads, linesToThreads, mergeThreads, type PluginPreview, type ThreadData } from '../plugins/threads';
 import { setDrool } from '../plugins/droolState';
+import { mx } from '../plugins/motionex/ui/MotionexPanel';
+import { cellCentre, pickChanged, pickedOf, pickPoint } from '../plugins/motionex/sculpt/selection';
 import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
 import type { PatternexReport } from '../plugins/patternex/engine';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
@@ -1011,6 +1013,17 @@ export function Viewport() {
     };
 
     const capture = (ev: PointerEvent) => { try { renderer.domElement.setPointerCapture(ev.pointerId); } catch { /* pointer already up */ } };
+    // Path sculpt: pick cells of the unrolled wall map by dragging over the model
+    let sculpting = false;
+    const sculptPickAt = (ev: PointerEvent, erase: boolean) => {
+      ray.setFromCamera(ndc(ev), camera);
+      const hit = ray.intersectObjects(objectMeshes(), false)[0];
+      if (!hit) return;
+      const o = useStore.getState().objects.find((x) => x.id === hit.object.userData.id);
+      if (!o) return;
+      const b = worldBounds(o);
+      if (pickPoint(mx.sculpt, (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, b.max[2], hit.point.x, hit.point.y, hit.point.z, erase)) pickChanged();
+    };
     const onDown = (ev: PointerEvent) => {
       downAt = [ev.clientX, ev.clientY];
       // middle and right buttons always pan; only the left button paints
@@ -1020,6 +1033,11 @@ export function Viewport() {
     /** Paint, pick or draw at the pointer. erase: take paint off · alt: the tool's second action (block / object filament). */
     const startPaint = (ev: PointerEvent, eraseIn: boolean, alt: boolean) => {
       const s = useStore.getState();
+      if (s.tool === 'sculpt_pick' && s.workspace === 'prepare' && ev.button === 0) {
+        sculpting = true; capture(ev);
+        sculptPickAt(ev, eraseIn);
+        return;
+      }
       if (s.tool === 'place_pattern' && s.workspace === 'prepare' && ev.button === 0) {
         ray.setFromCamera(ndc(ev), camera);
         const hit = ray.intersectObjects(objectMeshes(), false)[0];
@@ -1077,6 +1095,7 @@ export function Viewport() {
       paintAt(ev);
     };
     const onMove = (ev: PointerEvent) => {
+      if (sculpting) { if (ev.buttons === 1) sculptPickAt(ev, ev.shiftKey); return; }
       if (objDrag) { moveObjectDrag(ev); return; }
       if (boxSel) { boxSel.x1 = ev.clientX; boxSel.y1 = ev.clientY; showBox(); return; }
       if (pressedIcon) return;
@@ -1123,6 +1142,7 @@ export function Viewport() {
       s.markDirty();
     };
     const onUp = (ev: PointerEvent) => {
+      if (sculpting) { sculpting = false; downAt = null; return; }
       if (pressedIcon) {
         const pi = pressedIcon;
         pressedIcon = null;
@@ -1492,7 +1512,7 @@ export function Viewport() {
       if (ev.button === 0 && ev.target === renderer.domElement && s.workspace === 'prepare' && (pressedIcon = iconAt(ev))) {
         paints = true;
         capture(ev);
-      } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
+      } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern' || s.tool === 'sculpt_pick') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
         if (s.tool === 'lasso_motion') paints = true;
         else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
       } else if (ev.target === renderer.domElement && (startBoxSelect(ev) || startObjectDrag(ev))) paints = true;
@@ -1560,6 +1580,53 @@ export function Viewport() {
       }, 200);
     };
     window.addEventListener('nx-plugin-preview', rebuildMotionPreview);
+
+    // Path sculpt marks on the model: picked cells white, moved cells orange (out) or blue (in), found by casting
+    // a ray from the axis out through each cell's centre to the wall
+    const marks = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 5, sizeAttenuation: false, vertexColors: true, depthTest: false, transparent: true }));
+    marks.renderOrder = 12; marks.visible = false; marks.frustumCulled = false;
+    scene.add(marks);
+    let marksTimer: ReturnType<typeof setTimeout> | null = null;
+    const rebuildMarks = () => {
+      if (marksTimer) clearTimeout(marksTimer);
+      marksTimer = setTimeout(() => {
+        marksTimer = null;
+        const s = useStore.getState(), sc = mx.sculpt;
+        const show = s.workspace === 'prepare' && sc.enabled && (s.tool === 'sculpt_pick' || Object.keys(sc.d).length > 0);
+        marks.visible = show;
+        if (!show) { invalidate(); return; }
+        const picked = pickedOf('sculpt', sc.w, sc.h);
+        const cells = new Set<number>([...Object.keys(sc.d).map(Number), ...picked]);
+        const ids = new Set(sc.objects ?? []);
+        const objs = s.objects.filter((o) => o.printable !== false && (!ids.size || ids.has(o.id)));
+        const targets = objectMeshes().filter((m) => objs.some((o) => o.id === m.userData.id));
+        const P: number[] = [], C: number[] = [];
+        const stride = Math.max(1, Math.ceil(cells.size / 1500));
+        let n = 0;
+        for (const i of cells) {
+          if (n++ % stride) continue;
+          for (const o of objs) {
+            const b = worldBounds(o), cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, big = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1]) + 5;
+            const { u, z } = cellCentre(sc, b.max[2], i % sc.w, Math.floor(i / sc.w));
+            const a = u * 2 * Math.PI, dx = Math.cos(a), dy = Math.sin(a);
+            ray.set(new THREE.Vector3(cx + dx * big, cy + dy * big, z), new THREE.Vector3(-dx, -dy, 0));
+            const hit = ray.intersectObjects(targets.filter((m) => m.userData.id === o.id), false)[0];
+            if (!hit) continue;
+            P.push(hit.point.x + dx * 0.15, hit.point.y + dy * 0.15, hit.point.z);
+            const m = sc.d[i] ?? 0;
+            if (picked.has(i)) C.push(1, 1, 1); else if (m > 0) C.push(1, 0.47, 0.12); else C.push(0.16, 0.47, 1);
+          }
+        }
+        marks.geometry.dispose();
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+        marks.geometry = g;
+        invalidate();
+      }, 90);
+    };
+    window.addEventListener('nx-sculpt-pick', rebuildMarks);
+    window.addEventListener('nx-plugin-preview', rebuildMarks);
 
     // ---------------- preview
     let lastColorKey = '';
@@ -1640,6 +1707,7 @@ export function Viewport() {
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
+      if (s.tool !== prev.tool || s.workspace !== prev.workspace || s.objects !== prev.objects) rebuildMarks();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
@@ -1679,6 +1747,9 @@ export function Viewport() {
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);
       window.removeEventListener('nx-plugin-preview', rebuildMotionPreview);
+      window.removeEventListener('nx-sculpt-pick', rebuildMarks);
+      window.removeEventListener('nx-plugin-preview', rebuildMarks);
+      marks.geometry.dispose();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
       tip.remove();
