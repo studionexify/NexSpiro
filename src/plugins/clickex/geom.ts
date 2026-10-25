@@ -4,7 +4,7 @@
 // so every shell stays watertight even where two shells touch face to face.
 import { ShapeUtils, Vector2 } from 'three';
 import ClipperLib from 'clipper-lib';
-import { area, cleanPaths, difference, intersection, SCALE, toExPolygons, union } from '../../engine/clipper';
+import { area, cleanPaths, difference, SCALE, toExPolygons, union } from '../../engine/clipper';
 import { simplifyRing } from '../patternex/tools/shape';
 import { openEdgeCount, repairTJunctions, weld, type IndexedMesh } from '../../engine/mesh';
 import type { Path, Paths } from '../../engine/types';
@@ -163,9 +163,6 @@ export function pole(region: Paths, precision = 0.1): { x: number; y: number; d:
 
 /** Does a square (side × side, turned by angle) centred on (cx, cy) lie inside the region? */
 export const squareFits = (region: Paths, cx: number, cy: number, side: number, angle = 0) => isEmpty(difference([rectPath(cx, cy, side, side, angle)], region));
-
-/** Region as a set of rectangles' union, handy for clipping. */
-export const clip = (a: Paths, b: Paths) => intersection(a, b);
 export const clean = (p: Paths) => cleanPaths(p, 0.004);
 
 // ---------------------------------------------------------------- prisms and shells

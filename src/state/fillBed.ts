@@ -7,7 +7,7 @@ import { printerById } from '../profiles/printers';
 import type { Config } from '../profiles/settings';
 import { mirroredObject } from './objectOps';
 import { currentConfig } from './slicing';
-import { cloneObject, dropToBed, newId, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
+import { cloneObject, dropToBed, objectMatrix, objectPlate, plateOrigin, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
 
 export interface FillBedOptions {
   /** Minimum gap in mm toward N, NE, E, SE, S, SW, W, NW. */

@@ -321,7 +321,3 @@ function build(s: Shape): MotionBrush {
 
 /** Every built-in motion. Size is set per use with the Size slider. Presets are read-only; editing one saves a copy. */
 export const PRESETS: MotionBrush[] = SHAPES.map(build);
-
-export const PRESET_CATEGORIES: string[] = [...new Set(SHAPES.map((s) => s.cat))];
-
-export function presetById(id: string): MotionBrush | undefined { return PRESETS.find((b) => b.id === id); }

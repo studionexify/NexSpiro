@@ -8,7 +8,7 @@ import {
 const D = 1.75, W = 0.42, H = 0.2;
 function ring(layer: number, z: number, r: (th: number) => number, N = 720, eFn?: (dL: number, dz: number) => number): GMove[] {
   const out: GMove[] = [];
-  let px = r(0), py = 0, pz = z;
+  let px = r(0), py = 0;
   out.push({ type: 'G0', x: px, y: py, z, e: 0, f: 3000, isExtruding: false, layerIndex: layer, line: 0 });
   for (let n = 1; n <= N; n++) {
     const th = (n / N) * 2 * Math.PI, rr = r(th);

@@ -159,7 +159,3 @@ export function cycleParts(cfg: BulnexConfig, row: PushRow | null, bedTemp: numb
   const reheatS = Math.max(0, bedTemp - cfg.releaseBedTemp) * 3; // ~3 s/°C on the A1 heater
   return { coolS: cfg.coolWaitMin * 60, pushS, reheatS };
 }
-export function cycleOverhead(cfg: BulnexConfig, row: PushRow | null, bedTemp: number): number {
-  const p = cycleParts(cfg, row, bedTemp);
-  return p.coolS + p.pushS + p.reheatS;
-}

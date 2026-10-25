@@ -146,15 +146,6 @@ export function probeCut(bvh: MeshBVH, origin: V3, normal: V3, roll: number, up:
   };
 }
 
-/** Two joints' parts overlap when their reach spheres meet; they are grouped into separate boolean passes. */
-function batches<T extends { c: THREE.Vector3; r: number }>(items: T[]): T[][] {
-  const out: T[][] = [];
-  for (const it of items) {
-    const b = out.find((g) => g.every((o) => o.c.distanceTo(it.c) > o.r + it.r));
-    if (b) b.push(it); else out.push([it]);
-  }
-  return out;
-}
 
 export function buildFlexi(base: IndexedMesh, cuts: Cut[], fit: Fit, up: V3 = [0, 0, 1], progress?: (done: number, total: number) => void): FlexiResult {
   const bvh = modelBvh(base);

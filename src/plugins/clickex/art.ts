@@ -88,8 +88,6 @@ export async function artFromIcon(name: string, stroke: number, color: string): 
   return tidy([{ color, paths: toPaths(rings) }]);
 }
 
-export const iconNames = async () => Object.keys(await loadIcons());
-
 // ---------------------------------------------------------------- text
 export function artFromText(font: Parameters<typeof layoutText>[0], spec: TextSpec, color: string): Art {
   const lay = layoutText(font, spec);
@@ -107,9 +105,6 @@ export function placeArt(art: Art, p: Placement): Art {
   const centred = art.map((g) => ({ color: g.color, paths: transformPaths(g.paths, 1, 0, -b.cx, -b.cy) }));
   return centred.map((g) => ({ color: g.color, paths: simplify(transformPaths(g.paths, p.scale, p.angle, p.dx, p.dy, p.flip), 0.02) }));
 }
-
-/** Scale so the art's longer side measures `size` mm. */
-export const fitScale = (art: Art, size: number) => { const b = artBounds(art); const m = Math.max(b.w, b.h); return m > 0 ? size / m : 1; };
 
 /** Art → inline SVG markup (for thumbnails). Y is flipped back to screen orientation. */
 export function artToSvg(art: Art, size = 64, pad = 0.06): string {

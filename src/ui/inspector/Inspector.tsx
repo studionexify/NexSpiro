@@ -4,7 +4,6 @@
 // Replaces the old left Sidebar; it reuses the Sidebar's cards and process model so behaviour is identical.
 import { useState } from 'react';
 import { PARAM_BY_KEY, PROCESS_PRESETS, PROCESS_TABS, type ProcessTab } from '../../profiles/settings';
-import { printerById } from '../../profiles/printers';
 import { useStore } from '../../state/store';
 import { useAdvanced } from '../../state/advanced';
 import { setTool } from '../../state/advanced';

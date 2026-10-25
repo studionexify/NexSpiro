@@ -304,12 +304,6 @@ export function applyPartsBoolean(ids = useStore.getState().selected) {
   } catch (e: any) { s.set({ toast: { kind: 'error', text: `Boolean failed: ${e?.message ?? e}` } }); }
 }
 
-/**
- * Whether the object's own mesh is a closed solid the slicer and the boolean can work with. Parts never change it:
- * they stay editable volumes until they are applied or exported.
- */
-export function meshIsWorkable(o: SceneObject): boolean { return o.openEdges === 0; }
-
 // ---------------------------------------------------------------- text
 export const FONTS: Record<string, { label: string; load: () => Promise<any> }> = {
   helvetiker: { label: 'Helvetiker', load: () => import('three/examples/fonts/helvetiker_regular.typeface.json') },

@@ -4,7 +4,7 @@
 // Nodes outside the domain are impassable (F = 0), so the front bends around holes: the
 // solution is the geodesic distance inside the domain, which is what makes the waves diffract
 // round obstacles instead of jumping across them like a Euclidean offset would.
-import { pointInRings, distToSegment, type Ring, type Vec2 } from './geom';
+import { distToSegment, type Ring, type Vec2 } from './geom';
 
 export interface Grid {
   /** World position of node (0, 0), mm. */
@@ -50,7 +50,7 @@ export function rasterize(rings: Ring[], h: number, margin = 2 * h): Grid {
 /** A wave source: a point or an open polyline along which D = 0. */
 export type Seed = { kind: 'point'; p: Vec2 } | { kind: 'polyline'; pts: Vec2[] };
 
-const FAR = 0, TRIAL = 1, KNOWN = 2;
+const TRIAL = 1, KNOWN = 2;
 
 /** Binary min-heap of node indices keyed by tentative distance (lazy deletion). */
 class Heap {
@@ -216,11 +216,4 @@ export function sample(g: Grid, D: Float64Array, x: number, y: number): number {
   const a = D[j * g.nx + i], b = D[j * g.nx + i + 1], c = D[(j + 1) * g.nx + i], d = D[(j + 1) * g.nx + i + 1];
   if (![a, b, c, d].every(Number.isFinite)) return NaN;
   return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-}
-
-/** Mark grid nodes inside rings (used for speed maps and tests). */
-export function maskOf(g: Grid, rings: Ring[]): Uint8Array {
-  const m = new Uint8Array(g.nx * g.ny);
-  for (let j = 0; j < g.ny; j++) for (let i = 0; i < g.nx; i++) if (pointInRings(nodeX(g, i), nodeY(g, j), rings)) m[j * g.nx + i] = 1;
-  return m;
 }

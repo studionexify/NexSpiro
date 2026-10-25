@@ -8,7 +8,7 @@
 // tall bump does not drag them away from the infill.
 import { intersection, offset, union, SCALE } from "../../../engine/clipper";
 import type { Path, Paths } from "../../../engine/types";
-import { SEAM_TOL, type Layer, type Toolpath, type ToolpathPoint } from "./types";
+import { SEAM_TOL, type Layer, type ToolpathPoint } from "./types";
 
 const OUTER = new Set(["outer_wall", "overhang_wall"]);
 const toPath = (pts: { x: number; y: number }[]): Path => pts.map((q) => ({ X: Math.round(q.x * SCALE), Y: Math.round(q.y * SCALE) }));

@@ -12,7 +12,6 @@ import { rng, SHAPE_NAMES } from './geom';
 export const GROUP_KEYS = ['#ffffff', '#2f2f33', '#7d7d85', '#b9b9c0'];
 export const GROUP_NAMES = ['Base', 'Ink A', 'Ink B', 'Ink C'];
 export const NEUTRAL_BG = '#ecebe8';
-export const groupOfKey = (color: string) => GROUP_KEYS.indexOf(color);
 
 export interface LibraryEntry {
   key: string;

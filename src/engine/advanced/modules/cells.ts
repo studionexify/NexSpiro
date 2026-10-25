@@ -7,7 +7,7 @@ import { clipLines, SCALE } from '../../clipper';
 import type { Paths } from '../../types';
 import { sparseFill } from '../classic/fill';
 import { engineering, gibsonAshbyNu, gyroidCell, homogenize, homogenize2D, reentrantCell } from '../homogenize';
-import type { InfillPath, SessionCtx, TechModule } from '../session';
+import type { InfillPath, TechModule } from '../session';
 import { PLA } from '../stress';
 import { designDensity, stressOf } from './fea';
 

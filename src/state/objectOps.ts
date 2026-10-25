@@ -171,11 +171,6 @@ export function togglePrintable(ids = useStore.getState().selected) {
   s.updateObjects((o) => ({ ...o, printable: on ? false : undefined }), ids);
 }
 
-/** Binary STL of the objects in world coordinates. */
-export function stlBytes(objs: SceneObject[]): ArrayBuffer {
-  return stlBytesOfMeshes(objs.map(worldMesh));
-}
-
 /** Binary STL of meshes that are already in world coordinates. */
 export function stlBytesOfMeshes(meshes: IndexedMesh[]): ArrayBuffer {
   const T = meshes.reduce((a, m) => a + m.indices.length / 3, 0);

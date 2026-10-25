@@ -5,7 +5,7 @@
 // (right products with 1, i, j, k) and ±q are one orientation, averaged with the sign-blind outer
 // product Σ w q qᵀ; principal directions come back through the Hopf map q ↦ q e q̄.
 import type { PartAnalysis } from './analysis';
-import { eigSym3, elementStress, latticeIndex, NodalField, nodePos, quantile, solveElastic, voxelModel, vonMises, type VoxelModel } from './fea';
+import { eigSym3, elementStress, latticeIndex, NodalField, nodePos, solveElastic, voxelModel, vonMises, type VoxelModel } from './fea';
 
 export interface LoadCaseInfo { fixtures: number; loads: number; auto: boolean; dir: [number, number, number]; newtons: number; source: string }
 
@@ -258,7 +258,5 @@ export function smoothFrames(m: VoxelModel, sigma: Float32Array, passes: number)
 export function vmAt(ps: PartStress, x: number, y: number, z: number, tmp: number[] = [0, 0, 0, 0, 0, 0]): number {
   return ps.field.at(x, y, z, tmp) ? vonMises(tmp) : 0;
 }
-
-export const stressQuantile = (ps: PartStress, p: number) => quantile(ps.vm, p);
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
