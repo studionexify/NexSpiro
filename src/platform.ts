@@ -5,6 +5,8 @@ declare global {
       platform: string;
       saveFile: (opts: { defaultName: string; data: string | ArrayBuffer; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
       openFiles: (opts: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; data: ArrayBuffer }[]>;
+      /** Windows desktop: install a newer NexSpiro from its setup .zip or .exe (Help → Update from file…). */
+      updateFromFile?: () => Promise<void>;
       postProcess?: (opts: { gcode: string; scripts: string[]; env: Record<string, string>; outputName: string }) => Promise<{ gcode: string; skipped?: boolean }>;
     };
   }
