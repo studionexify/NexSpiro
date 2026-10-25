@@ -112,6 +112,12 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-stage.ws-preview .viewcube { right: 62px; bottom: 70px; }
 .sh-stage.ws-preview .sh-viewbar { bottom: 70px; }
 
+/* summary labels stay on one line; the long value wraps instead */
+.legend .summary { grid-template-columns: max-content minmax(0, 1fr); }
+.legend .summary .k { white-space: nowrap; }
+/* the G-code lines open above the slider's right end, clear of the legend on the left */
+.sh-stage .hslider .gcode-view { left: auto; right: 0; width: 360px; max-width: max(240px, calc(100cqw - 420px)); }
+
 /* ---------- plugin dock ---------- */
 .dock.sh-pdock { background: var(--ns-panel, var(--surface-primary)); border-left: 1px solid var(--ns-line, var(--border)); max-width: 640px; }
 .dock.sh-pdock { min-width: 0; width: auto; }
