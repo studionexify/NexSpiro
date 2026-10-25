@@ -26,6 +26,7 @@ import { Viewport, viewApi } from './viewport/Viewport';
 import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
 import { ClickexStudioHost } from './plugins/clickex/ui/Studio';
+import { MotionStudioHost } from './plugins/motionex/ui/studioWindow';
 import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
@@ -172,6 +173,7 @@ export default function App() {
       <LumonexStudioHost />
       <ClickexStudioHost />
       <FlenexStudioHost />
+      <MotionStudioHost />
       <InstantTooltips />
       <ShortcutsHost />
       <CommandPalette />

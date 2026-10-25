@@ -13,7 +13,7 @@ import type { PrintProfiles } from '../core/profiles';
 import type { Toolpath, ToolpathPoint } from '../core/types';
 import { CURVE_INFO, pt, type CurveKey, type EventType, type Interpolation, type LayerEffect, type LayerMode, type WaveShape, type MotionApplication, type MotionBrush, type MotionEvent } from '../model';
 import { CurveEditor } from './curveEditor';
-import { activate, activeApp, brushOf, changed, lastPreview, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
+import { activate, activeApp, addApplication, brushOf, changed, lastPreview, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
 
 /** The motion being edited: the placement's own copy, or a copy of the library motion with its size slider baked in. */
 function draftOf(a: MotionApplication): MotionBrush | undefined {
@@ -87,9 +87,9 @@ export function MotionStudio() {
     return (
       <aside className="studio">
         <div className="studio-empty">
-          <b>No motion on the plate yet</b>
-          <p className="mx-muted">Add a motion in Prepare and choose where it goes. Then come back here to change how it looks.</p>
-          <button className="btn-primary btn-small" onClick={() => set({ workspace: 'prepare', dock: { ...useStore.getState().dock, open: true, tab: 'motionex' } })}>Go to Prepare</button>
+          <b>No motion yet</b>
+          <p className="mx-muted">Start with a Wave and change it here. Choose where it goes on the model from the Motionex bar.</p>
+          <button className="btn-primary btn-small" onClick={() => { addApplication('preset-sine'); changed(); }}>Add a Wave</button>
         </div>
       </aside>
     );
@@ -116,11 +116,6 @@ export function MotionStudio() {
   return (
     <aside className="studio" aria-label="Motion editor">
       <div className="studio-head">
-        <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
-          <button className="btn-secondary btn-small" onClick={() => set({ workspace: 'prepare', dock: { ...useStore.getState().dock, open: true, tab: 'motionex' } })} title="Back to the model and the Motionex settings bar">← Back to Prepare</button>
-          <b style={{ flex: 1 }}>Motion Studio</b>
-        </div>
-        <span className="mx-muted" style={{ margin: 0 }}>Edit one motion in detail. The model keeps showing it as you change it.</span>
         {apps.length > 1 && (
           <div className="studio-places">
             {apps.map((x, i) => (

@@ -110,7 +110,7 @@ export class ThreadBuilder {
   /** Spacing between drips along a thread (mm). */
   private readonly dripGap: number;
 
-  constructor(readonly lineWidth: number, readonly layerHeight: number, private maxBeads = 450_000, private maxDrips = 2500) {
+  constructor(readonly lineWidth: number, readonly layerHeight: number, private warp: ((x: number, y: number, z: number) => [number, number]) | null = null, private maxBeads = 200_000, private maxDrips = 2500) {
     this.rep = emptyDrool(lineWidth);
     this.dripGap = Math.max(2, lineWidth * 5);
   }
@@ -138,6 +138,7 @@ export class ThreadBuilder {
    */
   seg(ax: number, ay: number, az: number, bx: number, by: number, bz: number, rgb: ArrayLike<number>, wScale = 1, check = true): number {
     if (this.full) { this.rep.thinned = true; return -1; }
+    if (this.warp) { [ax, ay] = this.warp(ax, ay, az); [bx, by] = this.warp(bx, by, bz); }
     const w = this.lineWidth, h = this.layerHeight * this.pitch;
     this.cur.push(ax, ay, bx, by);
     let sag = 0, ws = wScale;
@@ -172,6 +173,7 @@ export class ThreadBuilder {
 
   /** A string left by a long travel: a thin thread that hangs between the two ends. */
   string(ax: number, ay: number, az: number, bx: number, by: number, bz: number, rgb: ArrayLike<number>): void {
+    if (this.warp) { [ax, ay] = this.warp(ax, ay, az); [bx, by] = this.warp(bx, by, bz); }
     const len = Math.hypot(bx - ax, by - ay);
     if (len < 2.5 || this.full) return;
     this.rep.strings++;

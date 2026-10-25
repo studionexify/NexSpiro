@@ -9,6 +9,7 @@ import type { PreviewView } from './preview';
 import { defaultWeave, type WeaveSettings } from './weave/model';
 import { defaultPaint, type PaintSettings } from './paint/model';
 import { defaultLace, type LaceSettings } from './lace/model';
+import { defaultSculpt, sculptActive, type SculptSettings } from './sculpt/model';
 
 export interface MotionexState {
   library: BrushLibrary;
@@ -25,6 +26,8 @@ export interface MotionexState {
   paint: PaintSettings;
   /** Lace: openwork holes cut into the walls. */
   lace: LaceSettings;
+  /** Path sculpt: hand-made moves on the unrolled wall, over any pattern. */
+  sculpt: SculptSettings;
 }
 
 const TOOLHEAD_KEY = 'nexspiro.toolheads.v1';
@@ -49,17 +52,17 @@ export function createMotionexState(store: KeyValueStore | null): MotionexState 
   const state: MotionexState = {
     library: new BrushLibrary(store), applications: [], options: { ...DEFAULT_OPTIONS },
     collisionMode: 'clamp', toolheads: new ToolheadLibrary(store), previewView: 'motion', weave: defaultWeave(),
-    paint: defaultPaint(), lace: defaultLace(),
+    paint: defaultPaint(), lace: defaultLace(), sculpt: defaultSculpt(),
   };
   try {
     const s = JSON.parse(store?.getItem(APPS_KEY) ?? 'null');
-    if (s) { state.applications = s.applications ?? []; state.options = { ...DEFAULT_OPTIONS, ...s.options }; state.collisionMode = s.collisionMode ?? 'clamp'; state.previewView = s.previewView ?? 'motion'; state.weave = loadWeave(s.weave); state.paint = loadPaint(s.paint); state.lace = loadLace(s.lace); }
+    if (s) { state.applications = s.applications ?? []; state.options = { ...DEFAULT_OPTIONS, ...s.options }; state.collisionMode = s.collisionMode ?? 'clamp'; state.previewView = s.previewView ?? 'motion'; state.weave = loadWeave(s.weave); state.paint = loadPaint(s.paint); state.lace = loadLace(s.lace); state.sculpt = loadSculpt(s.sculpt); }
   } catch { /* fresh start */ }
   return state;
 }
 
 export function saveMotionexState(state: MotionexState, store: KeyValueStore | null): void {
-  try { store?.setItem(APPS_KEY, JSON.stringify({ applications: state.applications, options: state.options, collisionMode: state.collisionMode, previewView: state.previewView, weave: state.weave, paint: state.paint, lace: state.lace })); } catch { /* storage unavailable */ }
+  try { store?.setItem(APPS_KEY, JSON.stringify({ applications: state.applications, options: state.options, collisionMode: state.collisionMode, previewView: state.previewView, weave: state.weave, paint: state.paint, lace: state.lace, sculpt: state.sculpt })); } catch { /* storage unavailable */ }
 }
 
 /** Plain-data snapshot for the slicing worker. */
@@ -73,6 +76,7 @@ export function toConfig(state: MotionexState, printerId: string): MotionexConfi
     ...(state.weave.enabled ? { weave: structuredClone(state.weave) } : {}),
     ...(state.paint.enabled ? { paint: structuredClone(state.paint) } : {}),
     ...(state.lace.enabled ? { lace: structuredClone(state.lace) } : {}),
+    ...(sculptActive(state.sculpt) ? { sculpt: structuredClone(state.sculpt) } : {}),
   };
 }
 
@@ -92,6 +96,14 @@ export function loadPaint(d: unknown): PaintSettings {
   return { ...base, ...p, image: p.image?.px?.length ? p.image : base.image };
 }
 
+/** Saved path sculpt settings over the defaults. */
+export function loadSculpt(d: unknown): SculptSettings {
+  const base = defaultSculpt();
+  const x = d as Partial<SculptSettings> | null | undefined;
+  if (!x || typeof x !== 'object') return base;
+  return { ...base, ...x, d: x.d && typeof x.d === 'object' ? x.d : {} };
+}
+
 /** Saved lace settings over the defaults. */
 export function loadLace(d: unknown): LaceSettings {
   const base = defaultLace();
@@ -101,7 +113,7 @@ export function loadLace(d: unknown): LaceSettings {
 }
 
 /** Any wall-art mode or motion switched on (the slicer then needs Motionex). */
-export const motionexActive = (state: MotionexState) => state.applications.some((a) => a.enabled) || state.weave.enabled || state.paint.enabled || state.lace.enabled;
+export const motionexActive = (state: MotionexState) => state.applications.some((a) => a.enabled) || state.weave.enabled || state.paint.enabled || state.lace.enabled || sculptActive(state.sculpt);
 
 export function defaultApplication(brush_id: string): MotionApplication {
   return { brush_id, target: { type: 'body', walls: 'outer' }, mask: { z_start: 0.6, z_end: 1e4, fade_in_mm: 1, fade_out_mm: 0 }, order: 0, blend: 'add', enabled: true };

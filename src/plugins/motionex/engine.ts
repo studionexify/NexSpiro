@@ -17,6 +17,9 @@ import type { PaintSettings } from './paint/model';
 import { applyPaint, type PaintReport } from './paint/engine';
 import type { LaceSettings } from './lace/model';
 import { applyLace, type LaceReport } from './lace/engine';
+import { pointIn } from '../../engine/clipper';
+import type { SculptSettings } from './sculpt/model';
+import { applySculpt, type SculptReport } from './sculpt/engine';
 import { objectMask, type ObjectMask } from './wall/targets';
 
 /** Everything the worker needs, as plain data. */
@@ -34,10 +37,11 @@ export interface MotionexConfig {
   paint?: PaintSettings;
   /** Lace: holes cut into the walls (openwork). */
   lace?: LaceSettings;
+  sculpt?: SculptSettings;
 }
 
 /** What prepare() hands to postToolpath: the weave's hooks and the object masks of each wall-art mode. */
-export type MotionexSession = Partial<WeaveSession> & { masks?: { paint?: ObjectMask; lace?: ObjectMask } };
+export type MotionexSession = Partial<WeaveSession> & { masks?: { paint?: ObjectMask; lace?: ObjectMask; sculpt?: ObjectMask } };
 
 export interface MotionexReport {
   check: PrintCheck;
@@ -46,6 +50,7 @@ export interface MotionexReport {
   weave?: WeaveReport;
   paint?: PaintReport;
   lace?: LaceReport;
+  sculpt?: SculptReport;
 }
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -170,20 +175,24 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     const weave = config.weave?.enabled ? weaveSession(config.weave, ctx) : undefined;
     const paint = config.paint?.enabled ? objectMask(config.paint.objects, ctx) : undefined;
     const lace = config.lace?.enabled ? objectMask(config.lace.objects, ctx) : undefined;
-    if (!weave && !paint && !lace) return undefined;
-    const session: MotionexSession = { ...(weave ?? {}), masks: { paint, lace } };
+    const sculpt = config.sculpt?.enabled ? objectMask(config.sculpt.objects, ctx) : undefined;
+    if (!weave && !paint && !lace && !sculpt) return undefined;
+    const session: MotionexSession = { ...(weave ?? {}), masks: { paint, lace, sculpt } };
     return session;
   },
   postToolpath(layerOps, config, ctx: PluginContext) {
     const check = emptyCheck();
     // the weave goes first; motions then add on top of the woven wall
     const session = ctx.session as MotionexSession | undefined;
+    // path sculpt first: every other pass then works on the moved wall
+    const sculptMask = session?.masks?.sculpt;
+    const sculpt = config.sculpt?.enabled ? applySculpt(layerOps, config.sculpt, ctx.cfg, sculptMask ? (l, x, y) => { const m = sculptMask.maskAt(l); return !m || pointIn(x, y, m); } : null, ctx.warn) : undefined;
     const weave = config.weave?.enabled ? applyWeave(layerOps, config.weave, ctx.cfg, session?.weave ? (session as WeaveSession) : undefined, ctx.warn) : undefined;
     // velocity paint sets the outer wall speeds on whole loops, then lace cuts the walls (its pieces keep their speed)
     const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
     const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn, config.printerId) : undefined;
     const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
-    if (!apps.length) return { check, movedPaths: 0, weave, paint, lace };
+    if (!apps.length) return { check, movedPaths: 0, weave, paint, lace, sculpt };
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);
     const regions = new RegionRegistry();
     for (const f of ctx.faceRegions) {
@@ -235,7 +244,7 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
       layerOps[r.layer].ops.splice(r.start, r.end - r.start, ...runToOps(r, originals[k], ctx.cfg));
       moved++;
     }
-    return { check, movedPaths: moved, weave, paint, lace };
+    return { check, movedPaths: moved, weave, paint, lace, sculpt };
   },
   gcodeHeader(config) {
     const names = new Map(config.brushes.map((b) => [b.id, b]));

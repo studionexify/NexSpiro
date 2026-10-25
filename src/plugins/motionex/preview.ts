@@ -8,6 +8,7 @@ import { composePath, makeRepeatLock, resample, type PathLayer, type RepeatLock,
 import type { PrintProfiles } from './core/profiles';
 import type { Toolpath } from './core/types';
 import type { MotionApplication, MotionBrush } from './model';
+import type { Warp } from './sculpt/preview';
 import { segmentField, ThreadBuilder, type DroolReport, type ThreadData } from '../threads';
 
 export interface PreviewObject {
@@ -78,7 +79,7 @@ function pickedSegments(m: IndexedMesh, tris: number[], z: number): number[] {
   return out;
 }
 
-export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25, view: PreviewView = "motion"): PreviewLines {
+export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: PrintProfiles, step = 0.25, view: PreviewView = "motion", warp: Warp | null = null): PreviewLines {
   const pos: number[] = [], col: number[] = [];
   // colours that depend on the value range are filled in at the end: [index into col, value]
   const valued: [number, number][] = [];
@@ -87,7 +88,7 @@ export function buildPreview(objects: PreviewObject[], apps: PreviewApp[], p: Pr
   let layersDrawn = 0;
   const lh = p.process.layerHeight || 0.2, first = p.process.firstLayerHeight || lh;
   // thick-thread twin of the lines: real-size beads, plus the markers that stay lines on top of them
-  const tb = new ThreadBuilder(p.process.lineWidth || 0.42, lh);
+  const tb = new ThreadBuilder(p.process.lineWidth || 0.42, lh, warp);
   const mpos: number[] = [], mcol: number[] = [];
   const beadAt: [number, number][] = []; // bead number, index of its first end point's colour in col
   const cross = (x: number, y: number, z: number, r: number, c: readonly number[]) => {

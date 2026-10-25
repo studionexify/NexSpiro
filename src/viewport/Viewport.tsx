@@ -1557,7 +1557,7 @@ export function Viewport() {
         (window as any).__nxPreviewMs = performance.now() - t0;
         window.dispatchEvent(new Event('nx-preview-built'));
         invalidate();
-      }, 120);
+      }, 200);
     };
     window.addEventListener('nx-plugin-preview', rebuildMotionPreview);
 
@@ -1615,6 +1615,7 @@ export function Viewport() {
       renderer.domElement.style.height = h + 'px';
       camera.aspect = w / Math.max(h, 1);
       motionMat.resolution.set(w, h);
+      threadMesh.setResolution(w, h);
       outlineMat.uniforms.uRes.value.set(w, h);
       camera.updateProjectionMatrix();
       invalidate();

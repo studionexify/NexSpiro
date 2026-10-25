@@ -6,6 +6,7 @@ import { SCALE } from '../../../engine/clipper';
 import type { IndexedMesh } from '../../../engine/mesh';
 import { cycleLayers, type WeaveSettings } from './model';
 import { offsetAt, planLayers, signedArea, visibleAt, weaveLoop, type Pt, type WeaveLayer } from './core';
+import type { Warp } from '../sculpt/preview';
 import { ThreadBuilder, type DroolReport, type ThreadData } from '../../threads';
 
 /** Most outlines drawn; tall pictures show every n-th row. */
@@ -72,7 +73,7 @@ export function buildWeavePreview(objs: WeavePreviewObject[], w: WeaveSettings, 
 }
 
 /** Most layers drawn as threads; taller bands show every n-th layer, as thicker beads. */
-const MAX_THREAD_LAYERS = 700;
+const MAX_THREAD_LAYERS = 450;
 
 /**
  * The woven wall as real threads: every layer is its own loop at its true in or out position, at the real
@@ -80,10 +81,10 @@ const MAX_THREAD_LAYERS = 700;
  * the one below sag, and drip when they reach much further (see ../../threads.ts).
  * `colourOf` gives the filament colour (0..1) a layer prints in; null = the plain wall outside the band.
  */
-export function buildWeaveThreads(objs: WeavePreviewObject[], w: WeaveSettings, layerHeight: number, lineWidth: number, colourOf: (P: WeaveLayer | null) => [number, number, number]): { threads: ThreadData; report: DroolReport } | null {
+export function buildWeaveThreads(objs: WeavePreviewObject[], w: WeaveSettings, layerHeight: number, lineWidth: number, colourOf: (P: WeaveLayer | null) => [number, number, number], warp: Warp | null = null): { threads: ThreadData; report: DroolReport } | null {
   const ids = new Set(w.objects ?? []);
   const lh = Math.max(0.04, layerHeight);
-  const tb = new ThreadBuilder(lineWidth, lh);
+  const tb = new ThreadBuilder(lineWidth, lh, warp);
   const cols = Math.max(1, w.image.w * Math.max(1, w.tiles_around));
   for (const o of objs) {
     if (ids.size && !ids.has(o.id)) continue;
@@ -115,7 +116,7 @@ export function buildWeaveThreads(objs: WeavePreviewObject[], w: WeaveSettings, 
       tb.layer(stride);
       const rgb = colourOf(P);
       for (const loop of outer(cut[n])) {
-        const step = Math.min(0.6, Math.max(0.15, perim(loop) / (cols * 4)));
+        const step = Math.min(0.6, Math.max(0.15, perim(loop) / (cols * 2.5)));
         const woven = weaveLoop(loop, P ? (u) => offsetAt(w, P, u) : null, step, P ? w.smooth_mm : 0, w.seam.angle_deg);
         const z = zs[i] - lh / 2;
         for (let k = 1; k < woven.length; k++) tb.seg(woven[k - 1].x, woven[k - 1].y, z, woven[k].x, woven[k].y, z, rgb);
