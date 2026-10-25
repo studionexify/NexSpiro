@@ -56,8 +56,7 @@ export function TopLeft() {
   const { undo, redo, undoStack, redoStack } = useStore();
   return (
     <div className="float sh-float sh-tl">
-      <FileMenu />
-      <button className="sh-ib" title="Import model (Ctrl+I)" onClick={importDialog}><Icon name="download" size={16} />Import</button>
+      <button className="sh-ib" title="Import model (Ctrl+I)" onClick={importDialog}><Icon name="download" size={16} /><span className="ib-label">Import</span></button>
       <span className="sh-div" />
       <button className="sh-ib" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!undoStack.length} onClick={undo}><Icon name="undo" size={16} /></button>
       <button className="sh-ib" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!redoStack.length} onClick={redo}><Icon name="redo" size={16} /></button>

@@ -61,7 +61,7 @@ export function LaceCard() {
     return (
       <section className="mx-card">
         <div className="mx-card-title">Lace walls<span className="spacer" />
-          <button className="btn-primary btn-small" onClick={() => upd(() => { l.enabled = true; })}>Turn on</button>
+          <button className="toggle" aria-label="Turn on" title="Turn on" onClick={() => upd(() => { l.enabled = true; })} />
         </div>
         <p className="mx-muted" style={{ margin: 0 }}>Cut openwork holes into the walls: lattices, gothic arches, Voronoi or your own picture. Every hole closes in a point or a short bridge, so it prints without support on any printer.</p>
       </section>

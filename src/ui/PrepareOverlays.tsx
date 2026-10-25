@@ -198,9 +198,15 @@ export function PaintPanel() {
   return (
     <div className="float panel">
       <h4>{title}</h4>
-      <div className="seg brush-seg" role="radiogroup" aria-label="Brush">
-        {BRUSHES[layer].map((b) => <button key={b} className={brush === b ? 'on' : ''} onClick={() => s.set({ brushType: b })} title={BRUSH_TIPS[b]}>{BRUSH_LABELS[b]}</button>)}
-      </div>
+      {BRUSHES[layer].length > 3 ? (
+        <select className="select" style={{ width: '100%', marginBottom: 6 }} aria-label="Brush" title={BRUSH_TIPS[brush]} value={brush} onChange={(e) => s.set({ brushType: e.target.value as typeof brush })}>
+          {BRUSHES[layer].map((b) => <option key={b} value={b}>{BRUSH_LABELS[b]}</option>)}
+        </select>
+      ) : (
+        <div className="seg brush-seg" role="radiogroup" aria-label="Brush">
+          {BRUSHES[layer].map((b) => <button key={b} className={brush === b ? 'on' : ''} onClick={() => s.set({ brushType: b })} title={BRUSH_TIPS[b]}>{BRUSH_LABELS[b]}</button>)}
+        </div>
+      )}
       {(brush === 'circle' || brush === 'sphere' || brush === 'height_range') && <>
         <div className="row"><span style={{ flex: 1 }}>{brush === 'height_range' ? 'Height range' : 'Pen size'}</span><span className="mono">{s.brushSize.toFixed(1)} mm</span></div>
         <input type="range" min={0.4} max={20} step={0.2} value={s.brushSize} onChange={(e) => s.set({ brushSize: +e.target.value })} style={{ width: '100%', accentColor: 'var(--accent)' }} />

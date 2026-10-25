@@ -72,26 +72,27 @@ function PresetSection() {
   const [saveOpen, setSaveOpen] = useState(false);
   return (
     <section>
-      <div className="h">Preset
-        {up && upMod && <a role="button" tabIndex={0} onClick={() => updateUserPreset(up.id)} title={`Overwrite "${up.name}" with the current settings`}>Update preset</a>}
-        <a role="button" tabIndex={0} onClick={() => setSaveOpen(true)} title="Save the current settings as your own preset, or manage presets">Save as…</a>
-      </div>
-      <div className="chips">
-        {INTENT_PRESETS.map((p) => (
-          <button key={p.id} className={`chip ${active === p.id && !up ? 'on' : ''}`} title={`${p.description}${p.engine === 'advanced' ? ' · uses the Physics Core (advanced engine)' : ''}`}
-            aria-pressed={active === p.id && !up} onClick={() => { applyIntentPreset(p.id); s.set({ userPresetId: null }); }}>
-            {p.engine === 'advanced' && <span aria-hidden>⚛</span>}{p.label}
-          </button>
-        ))}
-        {s.userPresets.map((p) => {
-          const on = up?.id === p.id;
-          return (
-            <button key={p.id} className={`chip user ${on ? 'on' : ''} ${on && upMod ? 'mod' : ''}`} aria-pressed={on}
-              title={`Your preset (on ${PROCESS_PRESETS.find((x) => x.id === p.basePresetId)?.name ?? p.basePresetId}, ${Object.keys(p.overrides).length} change${Object.keys(p.overrides).length === 1 ? '' : 's'})${on && upMod ? ' · modified since applied' : ''}`}
-              onClick={() => applyUserPreset(p.id)}>{p.name}</button>
-          );
-        })}
-        {!INTENT_PRESETS.length && !s.userPresets.length && <span className="muted-s">No presets available.</span>}
+      {/* one dropdown instead of a wall of chips: built-in presets, then the user's own */}
+      <div className="preset-row">
+        <span className="h-inline">Preset</span>
+        <select className="preset-select" aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
+          title={up && upMod ? 'Modified since applied' : undefined}
+          onChange={(e) => {
+            const [k, id] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
+            if (k === 'i') { applyIntentPreset(id); s.set({ userPresetId: null }); } else if (k === 'u') applyUserPreset(id);
+          }}>
+          {!up && !active && <option value="">Custom</option>}
+          <optgroup label="Presets">
+            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}</option>)}
+          </optgroup>
+          {s.userPresets.length > 0 && (
+            <optgroup label="My presets">
+              {s.userPresets.map((p) => <option key={p.id} value={`u:${p.id}`}>{p.name}{up?.id === p.id && upMod ? ' (modified)' : ''}</option>)}
+            </optgroup>
+          )}
+        </select>
+        {up && upMod && <button className="sh-ib" title={`Overwrite "${up.name}" with the current settings`} onClick={() => updateUserPreset(up.id)}>Update</button>}
+        <button className="sh-ib" title="Save the current settings as your own preset, or manage presets" onClick={() => setSaveOpen(true)}>Save as…</button>
       </div>
       {saveOpen && <PresetModal onClose={() => setSaveOpen(false)} />}
     </section>
@@ -176,7 +177,7 @@ function Pinned() {
   const keys = pinnedParams.filter((k) => PARAM_BY_KEY[k]);
   return (
     <section>
-      <div className="h">Pinned <span className="muted-s">☆ any setting below to pin it</span></div>
+      <div className="h">Pinned</div>
       {!keys.length && <div className="muted-s">Nothing pinned yet.</div>}
       {keys.map((k) => {
         // per-object when the setting can differ per object; otherwise it edits the plate value
@@ -278,8 +279,16 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
   return (
     <section className="insp-settings">
       <div className="h">{title}
+        {!objMode && m.modifiedCount > 0 && (
+          <button className="icon-btn" title={`${m.modifiedCount} changed from the preset: reset all`} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={13} /></button>
+        )}
+        {!objMode && (
+          <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
+            <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
+          </label>
+        )}
         <a role="button" tabIndex={0} aria-pressed={changedOnly} className={changedOnly ? 'on' : ''} title="Show only the settings you changed"
-          onClick={() => setChangedOnly(!changedOnly)}><Icon name="others" size={12} />Changed only</a>
+          onClick={() => setChangedOnly(!changedOnly)}><Icon name="others" size={12} />Changed</a>
       </div>
       {objMode && m.selObjs.length > 0 && (
         <div className="obj-target">
@@ -287,16 +296,6 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
           <span className="name">{m.target}</span>
           <span className="muted">{m.objOverrideCount ? `${m.objOverrideCount} own setting${m.objOverrideCount > 1 ? 's' : ''}` : 'uses the plate settings'}</span>
           <button className="icon-btn" title="Reset to the plate settings" disabled={!m.objOverrideCount} onClick={m.resetObj}><Icon name="reset" size={15} /></button>
-        </div>
-      )}
-      {!objMode && (
-        <div className="insp-line">
-          <span className="muted-s">{m.modifiedCount ? `${m.modifiedCount} changed from the preset` : 'Preset values'}</span>
-          <button className="icon-btn" title="Reset all changed values" disabled={!m.modifiedCount} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={14} /></button>
-          <span className="spacer" />
-          <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
-            <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
-          </label>
         </div>
       )}
       {noSel ? (

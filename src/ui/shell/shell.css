@@ -1,15 +1,48 @@
 /* Workspace shell: rail | stage | plugin dock | inspector + action dock. Positional overrides for the
    existing overlays live here (scoped to .sh-stage) so their components stay unchanged. */
 .app.sh-app {
-  display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
-  height: 100%; min-width: 1024px; font-family: var(--ns-font-ui, inherit);
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  /* --ui-zoom (Preferences → Interface size, 'auto' follows the window) shrinks the whole UI evenly */
+  zoom: var(--ui-zoom, 1); width: calc(100vw / var(--ui-zoom, 1)); height: calc(100vh / var(--ui-zoom, 1));
+  min-width: 960px; font-family: var(--ns-font-ui, inherit);
   background: var(--ns-canvas-b, var(--surface-primary));
 }
 .sh-body { display: grid; min-width: 0; min-height: 0; }
 .sh-body > * { min-height: 0; }
 
+/* ---------- menu bar ---------- */
+.sh-menubar { grid-column: 1 / -1; display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 8px; background: var(--ns-panel, var(--surface-secondary)); border-bottom: 1px solid var(--ns-line, var(--border)); z-index: 40; }
+.sh-mb { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.sh-mb:hover, .sh-mb.on { background: var(--ns-panel-2, var(--surface-hover)); }
+.sh-mb-pop { top: 28px; left: 0; min-width: 250px; max-height: calc(100vh / var(--ui-zoom, 1) - 50px); overflow-y: auto; z-index: 80; }
+.sh-mb-pop .menu-item { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center; }
+.sh-mb-check { color: var(--accent); font-size: 12px; }
+.sh-mb-label { text-align: left; }
+.sh-mb-sep { height: 1px; margin: 4px 6px; background: var(--ns-line, var(--border)); }
+.prefs { display: flex; flex-direction: column; gap: 12px; min-width: 320px; }
+.prefs label { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.prefs label.row { justify-content: flex-start; gap: 8px; }
+
+.sh-menubar .sh-ib { height: 28px; min-width: 28px; padding: 0 7px; }
+.sh-menubar .spacer { flex: 1; }
+.sh-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--ns-panel-2, var(--surface-tertiary)); border: 1px solid var(--ns-line, var(--border)); }
+.sh-seg .sh-ib { height: 24px; min-width: 30px; padding: 0 6px; }
+
+/* hints and explanatory copy are hidden app-wide: the UI keeps labels, values and warnings only */
+p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh-right p.muted, .rx-hint, .fx-hint, .cx-hint, .cx-help, .hint, .hint-list, .pin-hint { display: none !important; }
+
+/* the dock header already names the plugin: drop each panel's own name card (a head that holds a
+   control, like Hanex's on/off switch, keeps the control and its name) */
+.dock-body .mx-head:not(:has(button, input)) { display: none; }
+.dock-body .mx-head .mx-badge { display: none; }
+
+.preset-row { display: flex; align-items: center; gap: 6px; }
+.preset-row .h-inline { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.preset-select { flex: 1; min-width: 0; height: 30px; }
+.preset-row .sh-ib { height: 28px; padding: 0 6px; font-size: 12px; }
+
 /* ---------- rail ---------- */
-.sh-rail { background: var(--ns-panel, var(--surface-secondary)); border-right: 1px solid var(--ns-line, var(--border)); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; z-index: 6; overflow: visible; }
+.sh-rail { overflow-y: auto; scrollbar-width: none; background: var(--ns-panel, var(--surface-secondary)); border-right: 1px solid var(--ns-line, var(--border)); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; z-index: 6; }
 .sh-logo { width: 30px; height: 30px; margin-bottom: 12px; display: grid; place-items: center; }
 .sh-logo img { width: 28px; height: 28px; }
 .sh-rb { width: 40px; height: 40px; border-radius: 10px; border: 0; background: none; cursor: pointer; display: grid; place-items: center; color: var(--text-muted); position: relative; flex: none; }
@@ -45,7 +78,7 @@
 .sh-engine .mode-toggle button { border-radius: 999px; padding: 6px 14px; color: var(--text-muted); background: none; }
 .sh-engine .mode-toggle button.on, .sh-engine .mode-toggle.is-adv button.on { background: var(--ns-active, var(--accent)); color: var(--ns-on-active, #fff); }
 
-.sh-stage .sh-pill { top: 62px; left: 50%; transform: translateX(-50%); border-radius: 999px; animation: sh-pill-in .18s ease; }
+.sh-stage .sh-pill { top: 14px; left: 50%; transform: translateX(-50%); border-radius: 999px; animation: sh-pill-in .18s ease; }
 .sh-pill .sh-ib { border-radius: 999px; }
 .sh-pill-name { font-weight: 600; padding: 0 8px 0 10px; display: flex; align-items: center; gap: 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes sh-pill-in { from { opacity: 0; transform: translateX(-50%) translateY(-6px); } }
@@ -58,7 +91,7 @@
 .sh-switch.on::after { left: 14px; }
 
 /* existing overlays, re-positioned */
-.sh-stage .toolbar { top: 62px; left: 14px; transform: none; flex-direction: column; height: auto; width: auto; padding: 4px; gap: 2px; max-height: calc(100% - 132px); overflow-y: auto; overflow-x: hidden; max-width: none;
+.sh-stage .toolbar { top: 14px; left: 14px; transform: none; flex-direction: column; height: auto; width: auto; padding: 4px; gap: 2px; max-height: calc(100% - 84px); overflow-y: auto; overflow-x: hidden; max-width: none;
   background: var(--ns-panel, var(--surface-secondary)); border: 1px solid var(--ns-line, var(--border)); border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); scrollbar-width: none; }
 .sh-stage .toolbar .tb-group { flex-direction: column; gap: 2px; }
 .sh-stage .toolbar .icon-btn { height: 34px; min-width: 34px; width: 34px; padding: 0; border-radius: var(--ns-r-inner, 8px); }
@@ -66,22 +99,28 @@
 .sh-stage .toolbar .icon-btn.active { background: var(--ns-active, var(--accent-tint)); color: var(--ns-on-active, var(--accent)); box-shadow: none; }
 .sh-stage .toolbar .sep { width: 24px; height: 1px; margin: 3px auto; }
 /* tool panels dock beside the strip instead of floating over the model */
-.sh-stage .float.panel { left: 62px; top: 62px; max-height: calc(100% - 132px); overflow-y: auto; border-radius: var(--ns-r-outer, 12px); }
+.sh-stage .float.panel { left: 62px; top: 14px; max-height: calc(100% - 84px); overflow-y: auto; border-radius: var(--ns-r-outer, 12px); }
 .sh-stage .live-chip { top: auto; bottom: 62px; }
 .sh-stage .viewcube { left: auto; right: 62px; bottom: 14px; }
-.sh-stage .object-info { left: 14px; right: auto; top: auto; bottom: 66px; }
+.sh-stage .object-info { left: 62px; right: auto; top: auto; bottom: 66px; }
 .sh-stage.ws-prepare .plate-list { right: 14px; top: auto; bottom: 140px; max-height: calc(100% - 360px); }
 /* preview */
-.sh-stage.ws-preview .legend { left: 14px; right: auto; top: 62px; max-height: calc(100% - 140px); }
-.sh-stage.ws-preview .vslider { right: 14px; top: 62px; bottom: 150px; }
+.sh-stage.ws-preview .legend { left: 14px; right: auto; top: 14px; max-height: calc(100% - 140px); }
+.sh-stage.ws-preview .vslider { right: 14px; top: 14px; bottom: 150px; }
 .sh-stage.ws-preview .hslider { bottom: 14px; }
-.sh-stage.ws-preview .plate-list { right: 92px; top: 62px; }
+.sh-stage.ws-preview .plate-list { right: 92px; top: 14px; }
 .sh-stage.ws-preview .viewcube { right: 62px; bottom: 70px; }
 .sh-stage.ws-preview .sh-viewbar { bottom: 70px; }
 
+/* summary labels stay on one line; the long value wraps instead */
+.legend .summary { grid-template-columns: max-content minmax(0, 1fr); }
+.legend .summary .k { white-space: nowrap; }
+/* the G-code lines open above the slider's right end, clear of the legend on the left */
+.sh-stage .hslider .gcode-view { left: auto; right: 0; width: 360px; max-width: max(240px, calc(100cqw - 420px)); }
+
 /* ---------- plugin dock ---------- */
 .dock.sh-pdock { background: var(--ns-panel, var(--surface-primary)); border-left: 1px solid var(--ns-line, var(--border)); max-width: 640px; }
-.dock.sh-pdock:not(.collapsed) { min-width: 260px; }
+.dock.sh-pdock { min-width: 0; width: auto; }
 
 /* ---------- right column ---------- */
 .sh-right { display: flex; flex-direction: column; min-height: 0; background: var(--ns-panel, var(--surface-secondary)); border-left: 1px solid var(--ns-line, var(--border)); }
@@ -121,4 +160,19 @@
 .sh-palette-foot { display: flex; gap: 14px; padding: 8px 16px; border-top: 1px solid var(--ns-line, var(--border)); font-size: 11px; color: var(--text-muted); }
 .sh-palette kbd { font: 10px var(--ns-font-mono, monospace); border: 1px solid var(--ns-line, var(--border)); border-radius: 4px; padding: 0 4px; margin-right: 2px; }
 
+/* the stage shrinks when the plugin dock is open: collapse the floating chrome by the stage's own width */
+.sh-stage { container: stage / inline-size; }
 @media (max-width: 1280px) { .sh-cmdk { width: 40px; } .sh-cmdk span, .sh-cmdk kbd { display: none; } .sh-pill .sh-ib kbd { display: none; } }
+.nozzle-row .nozzle-select { flex: 1; min-width: 0; height: 30px; }
+.compact-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.compact-row .grow-select { flex: 1; min-width: 0; height: 30px; }
+.compact-row .nozzle-select { flex: 0 0 86px; height: 30px; }
+/* Motionex "Where it goes": one row of icon buttons, names in the tooltip */
+.mx-card .mx-tools { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mx-tool { padding: 6px 0; }
+.mx-tool .lbl { display: none; }
+.mx-select { width: 100%; height: 30px; margin-bottom: 6px; }
+.legend-details { margin-top: 8px; }
+.legend-details > summary { cursor: pointer; font-size: 12px; color: var(--text-muted); padding: 4px 0; }
+.insp-settings > .h { white-space: nowrap; }
+.select.mx-select { height: 30px; min-height: 30px; padding: 0 8px; font-size: 13px; }

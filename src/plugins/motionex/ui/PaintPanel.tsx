@@ -76,7 +76,7 @@ export function PaintCard() {
     return (
       <section className="mx-card">
         <div className="mx-card-title">Velocity paint<span className="spacer" />
-          <button className="btn-primary btn-small" onClick={() => upd(() => { p.enabled = true; fit(p); })}>Turn on</button>
+          <button className="toggle" aria-label="Turn on" title="Turn on" onClick={() => upd(() => { p.enabled = true; fit(p); })} />
         </div>
         <p className="mx-muted" style={{ margin: 0 }}>Print a picture into the outer wall with one filament and no changes: each pixel sets the wall's speed, which changes its sheen. Strongest on silk and glossy filaments. Works on any printer.</p>
       </section>

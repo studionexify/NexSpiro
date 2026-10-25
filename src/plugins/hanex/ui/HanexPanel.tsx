@@ -100,9 +100,9 @@ export function HanexPanel() {
 
       <section className="mx-card">
         <div className="mx-card-title">Material</div>
-        <div className="seg mx-seg">
-          {PRESETS.map((q) => <button key={q.id} className={hx.presetId === q.id ? 'on' : ''} onClick={() => { hx.presetId = q.id; changed(); }}>{q.material}</button>)}
-        </div>
+        <select className="select mx-select" aria-label="Material" value={hx.presetId} onChange={(e) => { hx.presetId = e.target.value; changed(); }}>
+          {PRESETS.map((q) => <option key={q.id} value={q.id}>{q.material}</option>)}
+        </select>
         <div className="mx-two">
           <Num label="Overlap" k="overlap" min={0} max={95} step={5} scale={100} unit="%" />
           <Num label="Wave speed" k="waveSpeed" min={0.5} max={30} step={0.5} unit="mm/s" />
@@ -112,9 +112,9 @@ export function HanexPanel() {
           <Num label="Fan" k="fan" min={0} max={255} step={5} unit="0–255" />
         </div>
         <div className="mx-label">Wave start</div>
-        <div className="seg mx-seg">
-          {SEEDS.map(([m, l]) => <button key={m} className={p.seedMode === m ? 'on' : ''} onClick={() => { hx.edits.seedMode = m; changed(); }}>{l}</button>)}
-        </div>
+        <select className="select mx-select" aria-label="Wave start" value={p.seedMode} onChange={(e) => { hx.edits.seedMode = e.target.value as typeof p.seedMode; changed(); }}>
+          {SEEDS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+        </select>
         <details className="px-more">
           <summary>More settings</summary>
           <div className="mx-two">

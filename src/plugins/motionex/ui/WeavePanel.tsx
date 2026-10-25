@@ -170,7 +170,7 @@ export function WeaveCard() {
     return (
       <section className="mx-card">
         <div className="mx-card-title">Weave a picture<span className="spacer" />
-          <button className="btn-primary btn-small" onClick={() => upd(() => { w.enabled = true; if (filaments.length < 2 || !ams) w.mode = 'mono'; fitToPart(w); })}>Turn on</button>
+          <button className="toggle" aria-label="Turn on" title="Turn on" onClick={() => upd(() => { w.enabled = true; if (filaments.length < 2 || !ams) w.mode = 'mono'; fitToPart(w); })} />
         </div>
         <p className="mx-muted" style={{ margin: 0 }}>Weave a picture or motif into the wall: every layer is one colour and each line steps out where the picture shows its colour, like a woven vase. Or use one filament for relief only.</p>
         <p className="mx-muted" style={{ margin: 0 }}>{changer === 'toolchanger' ? `This printer: ${toolheadCount(cfg)} toolheads, up to ${MAX_COLOURS} colours with quick head swaps.` : ams ? `This printer: ${unit}, up to ${MAX_COLOURS} colours, purging ${purge === 'chute' ? 'into the chute' : 'into a prime tower'} at every change.` : 'This printer changes filament by hand, so it starts in Mono relief (one filament, no changes).'}</p>
@@ -341,11 +341,9 @@ export function WeaveCard() {
         {w.mode === 'colour' && changer !== 'toolchanger' && (
           <>
             <div className="mx-label">At each colour change</div>
-            <div className="seg mx-seg">
-              {([['purge', 'Full purge'], ['reduced', 'Small purge'], ['bleed', 'Bleed (no purge)']] as [ChangeMode, string][]).map(([m, l]) => (
-                <button key={m} className={w.change.mode === m ? 'on' : ''} onClick={() => upd(() => { w.change.mode = m; })}>{l}</button>
-              ))}
-            </div>
+            <select className="select mx-select" aria-label="At each colour change" value={w.change.mode} onChange={(e) => upd(() => { w.change.mode = e.target.value as ChangeMode; })}>
+              {([['purge', 'Full purge'], ['reduced', 'Small purge'], ['bleed', 'Bleed (no purge)']] as [ChangeMode, string][]).map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+            </select>
             {w.change.mode === 'reduced' && (
               <label className="mx-field">Purge {w.change.volume_mm3} mm³ per change
                 <input type="range" min={5} max={120} step={5} value={w.change.volume_mm3} onChange={(e) => upd(() => { w.change.volume_mm3 = +e.target.value; })} />

@@ -1,5 +1,5 @@
-// Right-hand plugin dock (like Blender's side panel): one tab per installed plugin, collapses to a
-// thin strip on the right edge, and can be resized by dragging its left edge.
+// Right-hand plugin dock: shows the plugin opened from the left rail, hides when closed, and can be
+// resized by dragging its left edge.
 import { useStore } from '../state/store';
 import { PLUGINS } from '../plugins/registry';
 import { Modal } from './Modals';
@@ -12,32 +12,22 @@ export function RightDock() {
   const active = installed.find((p) => p.id === dock.tab) ?? installed[0];
   const setDock = (d: Partial<typeof dock>) => set({ dock: { ...useStore.getState().dock, ...d } });
 
-  if (!dock.open) {
-    return (
-      <aside className="dock sh-pdock collapsed" aria-label="Plugins">
-        {installed.map((p) => (
-          <button key={p.id} className="dock-strip-tab" title={`Open ${p.name}`} onClick={() => setDock({ open: true, tab: p.id })}>
-            <span className="mx-badge sm">{p.badge}</span><span className="dock-strip-label">{p.name}</span>
-          </button>
-        ))}
-      </aside>
-    );
-  }
+  // closed: nothing on the right; the left rail opens plugins
+  if (!dock.open) return null;
   const startResize = (e: React.PointerEvent) => {
     const x0 = e.clientX, w0 = dock.width;
-    const move = (ev: PointerEvent) => setDock({ width: Math.max(260, Math.min(640, w0 + (x0 - ev.clientX))) });
+    const move = (ev: PointerEvent) => setDock({ width: Math.max(220, Math.min(640, w0 + (x0 - ev.clientX))) });
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
   const Panel = active.Panel;
   return (
-    <aside className="dock sh-pdock" style={{ width: dock.width }} aria-label="Plugins">
+    <aside className="dock sh-pdock" aria-label="Plugins">
       <div className="dock-resize" onPointerDown={startResize} title="Drag to resize" />
       <div className="dock-tabs">
-        {installed.map((p) => (
-          <button key={p.id} className={`dock-tab ${p.id === active.id ? 'on' : ''}`} onClick={() => setDock({ tab: p.id })}>{p.name}</button>
-        ))}
+        {/* the left rail switches plugins; the header only names the active one */}
+        <h2 className="dock-title">{active.name}</h2>
         <span className="spacer" />
         <button className="icon-btn" title="Collapse panel" aria-label="Collapse panel" onClick={() => setDock({ open: false })}>›</button>
       </div>

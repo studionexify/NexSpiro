@@ -7,7 +7,7 @@ import { Icon } from '../icons';
 import { openPlateSettings } from '../PlateControls';
 import { useOutsideClose } from './FileMenu';
 
-function PlateSelect() {
+export function PlateSelect() {
   const plates = useStore((s) => s.plates);
   const active = useStore((s) => s.activePlate);
   const set = useStore((s) => s.set);

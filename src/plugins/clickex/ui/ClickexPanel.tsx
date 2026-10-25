@@ -10,7 +10,6 @@ export function ClickexPanel() {
   return (
     <div className="mx-panel">
       <section className="mx-card">
-        <div className="mx-card-title">Clickex · fidget clickers from any design</div>
         <p className="muted" style={{ margin: '0 0 8px', fontSize: 12 }}>Turn an image, SVG, icon, text, name blocks or a 3D model into a clicker built around a mechanical keyboard switch. Everything prints without glue.</p>
         <button className="btn-primary" style={{ width: '100%' }} onClick={() => openStudio(true)}>Open Clickex Studio</button>
       </section>

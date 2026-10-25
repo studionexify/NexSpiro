@@ -6,3 +6,4 @@ export { ViewBar, CameraBar } from './ViewBar';
 export { ActionDock } from './ActionDock';
 export { RightColumn } from './RightColumn';
 export { CommandPalette } from './CommandPalette';
+export { MenuBar } from './MenuBar';

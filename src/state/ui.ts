@@ -15,6 +15,8 @@ import type { MotionApplication } from '../plugins/motionex/model';
 import type { PrintCheck } from '../plugins/motionex/core/types';
 
 export type InspectorContext = 'plate' | 'object';
+/** Interface zoom: 'auto' fits the window, or a fixed factor. */
+export type UiScale = 'auto' | 0.8 | 0.9 | 1 | 1.1;
 
 export interface UiState {
   /** Inspector shows the selection's object view, or the plate view. Derived default: 'object' when something is selected. */
@@ -24,6 +26,7 @@ export interface UiState {
   /** Plugin ids pinned to the left rail. */
   pinnedPlugins: string[];
   paletteOpen: boolean;
+  uiScale: UiScale;
   set: (p: Partial<UiState>) => void;
   togglePinParam: (key: string) => void;
   togglePinPlugin: (id: string) => void;
@@ -37,11 +40,12 @@ export const useUi = create<UiState>((set, get) => ({
   pinnedParams: Array.isArray(prefs.pinnedParams) ? prefs.pinnedParams : ['wall_loops', 'sparse_infill_density', 'outer_wall_speed'],
   pinnedPlugins: Array.isArray(prefs.pinnedPlugins) ? prefs.pinnedPlugins : [],
   paletteOpen: false,
+  uiScale: prefs.uiScale ?? 'auto',
   set: (p) => set(p),
   togglePinParam: (key) => { const l = get().pinnedParams; set({ pinnedParams: l.includes(key) ? l.filter((k) => k !== key) : [...l, key] }); },
   togglePinPlugin: (id) => { const l = get().pinnedPlugins; set({ pinnedPlugins: l.includes(id) ? l.filter((k) => k !== id) : [...l, id] }); },
 }));
-useUi.subscribe((s) => { try { localStorage.setItem(LS, JSON.stringify({ pinnedParams: s.pinnedParams, pinnedPlugins: s.pinnedPlugins })); } catch { /* storage off */ } });
+useUi.subscribe((s) => { try { localStorage.setItem(LS, JSON.stringify({ pinnedParams: s.pinnedParams, pinnedPlugins: s.pinnedPlugins, uiScale: s.uiScale })); } catch { /* storage off */ } });
 
 /* ---------- view models (bindings) ---------- */
 

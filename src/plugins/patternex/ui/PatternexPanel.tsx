@@ -292,12 +292,12 @@ function PlacementEditor({ p, slots, ams }: { p: ObjPlacement; slots: string[]; 
       </div>
       <label className="mx-field px-check"><input type="checkbox" checked={lockScale} onChange={(e) => setLockScale(e.target.checked)} />Uniform scale</label>
       <div className="mx-label">Depth</div>
-      <div className="seg mx-seg">
-        {([['outer_wall', 'Outer wall'], ['paint_depth', 'Paint depth'], ['fixed', 'Fixed']] as const).map(([k, l]) => (
-          <button key={k} className={p.depth_mode === k && !p.through ? 'on' : ''} onClick={() => upd(() => { p.depth_mode = k; p.through = false; })}>{l}</button>
-        ))}
-        <button className={p.through ? 'on' : ''} onClick={() => upd(() => { p.through = !p.through; })}>Through</button>
-      </div>
+      <select className="select mx-select" aria-label="Depth" value={p.through ? 'through' : p.depth_mode} onChange={(e) => upd(() => {
+        const v = e.target.value;
+        if (v === 'through') p.through = true; else { p.depth_mode = v as typeof p.depth_mode; p.through = false; }
+      })}>
+        {([['outer_wall', 'Outer wall'], ['paint_depth', 'Paint depth'], ['fixed', 'Fixed'], ['through', 'Through']] as const).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
       {p.depth_mode === 'fixed' && !p.through && <label className="mx-field">Depth (mm)<input className="input" type="number" min={0.05} step={0.1} value={p.depth_mm} onChange={(e) => upd(() => { p.depth_mm = Math.max(0.05, num(e.target.value, 1.5)); })} /></label>}
       <label className="mx-field">Surface angle filter: up to {p.max_angle ?? 78}° from the projection
         <input type="range" min={5} max={89} step={1} value={p.max_angle ?? 78} onChange={(e) => upd(() => { p.max_angle = Number(e.target.value); })} />
