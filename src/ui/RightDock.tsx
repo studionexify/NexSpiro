@@ -13,17 +13,8 @@ export function RightDock() {
   const active = installed.find((p) => p.id === dock.tab) ?? installed[0];
   const setDock = (d: Partial<typeof dock>) => set({ dock: { ...useStore.getState().dock, ...d } });
 
-  if (!dock.open) {
-    return (
-      <aside className="dock sh-pdock collapsed" aria-label="Plugins">
-        {installed.map((p) => (
-          <button key={p.id} className="dock-strip-tab" title={`Open ${p.name}`} onClick={() => setDock({ open: true, tab: p.id })}>
-            <span className="mx-badge sm">{p.badge}</span><span className="dock-strip-label">{p.name}</span>
-          </button>
-        ))}
-      </aside>
-    );
-  }
+  // closed: nothing on the right; the left rail opens plugins
+  if (!dock.open) return null;
   const startResize = (e: React.PointerEvent) => {
     const x0 = e.clientX, w0 = dock.width;
     const move = (ev: PointerEvent) => setDock({ width: Math.max(260, Math.min(640, w0 + (x0 - ev.clientX))) });
