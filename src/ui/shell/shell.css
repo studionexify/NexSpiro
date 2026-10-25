@@ -163,3 +163,4 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 /* the stage shrinks when the plugin dock is open: collapse the floating chrome by the stage's own width */
 .sh-stage { container: stage / inline-size; }
 @media (max-width: 1280px) { .sh-cmdk { width: 40px; } .sh-cmdk span, .sh-cmdk kbd { display: none; } .sh-pill .sh-ib kbd { display: none; } }
+.nozzle-row .nozzle-select { flex: 1; min-width: 0; height: 30px; }

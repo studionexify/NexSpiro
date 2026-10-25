@@ -117,12 +117,10 @@ export function PrinterCard() {
         <div className="row nozzle-row">
           <Icon name="nozzle" size={16} style={{ color: 'var(--text-muted)' }} />
           <span className="muted" title="Nozzle diameter (mm)">Ø</span>
-          <div className="seg nozzle-seg" role="radiogroup" aria-label="Nozzle diameter">
-            {NOZZLES.map((n) => (
-              <button key={n} role="radio" aria-checked={nozzle === n} className={nozzle === n ? 'on' : ''} title={`${n} mm nozzle`}
-                onClick={() => { setMachine('nozzle_diameter', n === printer.nozzle ? undefined : n); markDirty(); }}>{n}</button>
-            ))}
-          </div>
+          <select className="nozzle-select" aria-label="Nozzle diameter" value={nozzle}
+            onChange={(e) => { const n = Number(e.target.value); setMachine('nozzle_diameter', n === printer.nozzle ? undefined : n); markDirty(); }}>
+            {NOZZLES.map((n) => <option key={n} value={n}>{n} mm{n === printer.nozzle ? ' (stock)' : ''}</option>)}
+          </select>
         </div>
         {arcSupportNote(printer) && <p className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}><Icon name="info" size={11} /> {arcSupportNote(printer)}</p>}
       </Body>
