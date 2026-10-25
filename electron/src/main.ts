@@ -110,6 +110,7 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('nx:updateFromFile', () => updateFromFile());
   ipcMain.handle('nx:openFiles', async (ev, { filters }) => {
     const win = BrowserWindow.fromWebContents(ev.sender)!;
     const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters });
