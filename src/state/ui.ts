@@ -25,6 +25,8 @@ export interface UiState {
   pinnedParams: string[];
   /** Plugin ids pinned to the left rail. */
   pinnedPlugins: string[];
+  /** Print settings column folded away while a plugin's settings bar is open. */
+  inspectorCollapsed: boolean;
   paletteOpen: boolean;
   uiScale: UiScale;
   set: (p: Partial<UiState>) => void;
@@ -39,13 +41,14 @@ export const useUi = create<UiState>((set, get) => ({
   inspectorCtx: 'object',
   pinnedParams: Array.isArray(prefs.pinnedParams) ? prefs.pinnedParams : ['wall_loops', 'sparse_infill_density', 'outer_wall_speed'],
   pinnedPlugins: Array.isArray(prefs.pinnedPlugins) ? prefs.pinnedPlugins : [],
+  inspectorCollapsed: !!prefs.inspectorCollapsed,
   paletteOpen: false,
   uiScale: prefs.uiScale ?? 'auto',
   set: (p) => set(p),
   togglePinParam: (key) => { const l = get().pinnedParams; set({ pinnedParams: l.includes(key) ? l.filter((k) => k !== key) : [...l, key] }); },
   togglePinPlugin: (id) => { const l = get().pinnedPlugins; set({ pinnedPlugins: l.includes(id) ? l.filter((k) => k !== id) : [...l, id] }); },
 }));
-useUi.subscribe((s) => { try { localStorage.setItem(LS, JSON.stringify({ pinnedParams: s.pinnedParams, pinnedPlugins: s.pinnedPlugins, uiScale: s.uiScale })); } catch { /* storage off */ } });
+useUi.subscribe((s) => { try { localStorage.setItem(LS, JSON.stringify({ pinnedParams: s.pinnedParams, pinnedPlugins: s.pinnedPlugins, inspectorCollapsed: s.inspectorCollapsed, uiScale: s.uiScale })); } catch { /* storage off */ } });
 
 /* ---------- view models (bindings) ---------- */
 

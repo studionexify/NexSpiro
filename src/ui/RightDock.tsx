@@ -4,9 +4,12 @@ import { useStore } from '../state/store';
 import { PLUGINS } from '../plugins/registry';
 import { Modal } from './Modals';
 import { useUi } from '../state/ui';
+import { studioOf } from '../plugins/studios';
 
 export function RightDock() {
   const { plugins, dock, set } = useStore();
+  const folded = useUi((u) => u.inspectorCollapsed);
+  const setUi = useUi((u) => u.set);
   const installed = PLUGINS.filter((p) => plugins.includes(p.id));
   if (!installed.length) return null;
   const active = installed.find((p) => p.id === dock.tab) ?? installed[0];
@@ -22,6 +25,7 @@ export function RightDock() {
     window.addEventListener('pointerup', up);
   };
   const Panel = active.Panel;
+  const studio = studioOf(active.id);
   return (
     <aside className="dock sh-pdock" aria-label="Plugins">
       <div className="dock-resize" onPointerDown={startResize} title="Drag to resize" />
@@ -29,8 +33,17 @@ export function RightDock() {
         {/* the left rail switches plugins; the header only names the active one */}
         <h2 className="dock-title">{active.name}</h2>
         <span className="spacer" />
-        <button className="icon-btn" title="Collapse panel" aria-label="Collapse panel" onClick={() => setDock({ open: false })}>›</button>
+        <button className="btn-secondary btn-small dock-fold" aria-pressed={folded} title={folded ? 'Show the print settings again' : 'Hide the print settings column so this plugin has more room'} onClick={() => setUi({ inspectorCollapsed: !folded })}>
+          {folded ? 'Show print settings' : 'Hide print settings'}
+        </button>
+        <button className="icon-btn" title="Close this plugin's settings" aria-label="Close this plugin's settings" onClick={() => setDock({ open: false })}>›</button>
       </div>
+      {studio && (
+        <div className="dock-studio">
+          <button className="btn-secondary btn-small" onClick={studio.open} title={studio.about}>Open {studio.label} ↗</button>
+          <span className="mx-muted">{studio.about}</span>
+        </div>
+      )}
       <div className="dock-body"><Panel /></div>
     </aside>
   );

@@ -21,6 +21,12 @@ import { convexHull, type Pt } from '../engine/arrange';
 import { machineConfig } from '../profiles/resolve';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
+import { ThreadMesh } from './threads';
+import { currentConfig } from '../state/slicing';
+import { hasThreads, linesToThreads, mergeThreads, type PluginPreview, type ThreadData } from '../plugins/threads';
+import { setDrool } from '../plugins/droolState';
+import { mx } from '../plugins/motionex/ui/MotionexPanel';
+import { cellCentre, pickChanged, pickedOf, pickPoint } from '../plugins/motionex/sculpt/selection';
 import { placeDown, placeMove, placeUp, placeDragging, syncPlacementOverlay, syncPreviewOverlay } from '../plugins/patternex/ui/overlay';
 import type { PatternexReport } from '../plugins/patternex/engine';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
@@ -1007,6 +1013,17 @@ export function Viewport() {
     };
 
     const capture = (ev: PointerEvent) => { try { renderer.domElement.setPointerCapture(ev.pointerId); } catch { /* pointer already up */ } };
+    // Path sculpt: pick cells of the unrolled wall map by dragging over the model
+    let sculpting = false;
+    const sculptPickAt = (ev: PointerEvent, erase: boolean) => {
+      ray.setFromCamera(ndc(ev), camera);
+      const hit = ray.intersectObjects(objectMeshes(), false)[0];
+      if (!hit) return;
+      const o = useStore.getState().objects.find((x) => x.id === hit.object.userData.id);
+      if (!o) return;
+      const b = worldBounds(o);
+      if (pickPoint(mx.sculpt, (b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, b.max[2], hit.point.x, hit.point.y, hit.point.z, erase)) pickChanged();
+    };
     const onDown = (ev: PointerEvent) => {
       downAt = [ev.clientX, ev.clientY];
       // middle and right buttons always pan; only the left button paints
@@ -1016,6 +1033,11 @@ export function Viewport() {
     /** Paint, pick or draw at the pointer. erase: take paint off · alt: the tool's second action (block / object filament). */
     const startPaint = (ev: PointerEvent, eraseIn: boolean, alt: boolean) => {
       const s = useStore.getState();
+      if (s.tool === 'sculpt_pick' && s.workspace === 'prepare' && ev.button === 0) {
+        sculpting = true; capture(ev);
+        sculptPickAt(ev, eraseIn);
+        return;
+      }
       if (s.tool === 'place_pattern' && s.workspace === 'prepare' && ev.button === 0) {
         ray.setFromCamera(ndc(ev), camera);
         const hit = ray.intersectObjects(objectMeshes(), false)[0];
@@ -1073,6 +1095,7 @@ export function Viewport() {
       paintAt(ev);
     };
     const onMove = (ev: PointerEvent) => {
+      if (sculpting) { if (ev.buttons === 1) sculptPickAt(ev, ev.shiftKey); return; }
       if (objDrag) { moveObjectDrag(ev); return; }
       if (boxSel) { boxSel.x1 = ev.clientX; boxSel.y1 = ev.clientY; showBox(); return; }
       if (pressedIcon) return;
@@ -1119,6 +1142,7 @@ export function Viewport() {
       s.markDirty();
     };
     const onUp = (ev: PointerEvent) => {
+      if (sculpting) { sculpting = false; downAt = null; return; }
       if (pressedIcon) {
         const pi = pressedIcon;
         pressedIcon = null;
@@ -1488,7 +1512,7 @@ export function Viewport() {
       if (ev.button === 0 && ev.target === renderer.domElement && s.workspace === 'prepare' && (pressedIcon = iconAt(ev))) {
         paints = true;
         capture(ev);
-      } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
+      } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern' || s.tool === 'sculpt_pick') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
         if (s.tool === 'lasso_motion') paints = true;
         else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
       } else if (ev.target === renderer.domElement && (startBoxSelect(ev) || startObjectDrag(ev))) paints = true;
@@ -1514,6 +1538,9 @@ export function Viewport() {
     motionLines.visible = false;
     motionLines.frustumCulled = false;
     scene.add(motionLines);
+    // thick-thread twin of the lines: real-size beads and the hot drips (set while the toolpath view is on)
+    const threadMesh = new ThreadMesh();
+    scene.add(threadMesh.group);
     let previewTimer: ReturnType<typeof setTimeout> | null = null;
     const rebuildMotionPreview = () => {
       if (previewTimer) clearTimeout(previewTimer);
@@ -1523,24 +1550,83 @@ export function Viewport() {
         if (!showsMotion(s)) return;
         const t0 = performance.now();
         // every installed plugin adds its lines (Patternex inks, Motionex motion); drawn together
-        const parts: { positions: Float32Array; colors: Float32Array }[] = [];
+        const parts: PluginPreview[] = [];
         for (const p of PLUGINS) if (s.plugins.includes(p.id) && p.preview) { const l = p.preview(); if (l && l.positions.length) parts.push(l); }
+        // thread view: parts with threads draw them (their markers stay lines); the rest turn into plain beads
+        const cfg = currentConfig();
+        const lw = Number(cfg.outer_wall_line_width) || Number(cfg.line_width) || 0.42, lh = Number(cfg.layer_height) || 0.2;
+        let lines = parts.map((l) => ({ positions: l.positions, colors: l.colors }));
+        let threads: ThreadData | null = null;
+        if (s.threadView && parts.length) {
+          const sets = parts.map((l) => ({ threads: hasThreads(l.threads) ? l.threads : linesToThreads(l.positions, l.colors, lw, lh), report: l.drool ?? { worstMm: 0, safeMm: 0, dripMm: 0, beads: 0, sagging: 0, dripping: 0, drips: 0, strings: 0, thinned: false, level: 'ok' as const } }));
+          threads = mergeThreads(sets)?.threads ?? null;
+          lines = parts.filter((l) => hasThreads(l.threads) && l.markers).map((l) => l.markers!);
+        }
+        setDrool(parts.map((l) => l.drool).filter((d): d is NonNullable<typeof d> => !!d));
+        threadMesh.set(threads);
         const geo = new LineSegmentsGeometry();
-        if (parts.length) {
-          const n = parts.reduce((a, l) => a + l.positions.length, 0);
+        if (lines.length) {
+          const n = lines.reduce((a, l) => a + l.positions.length, 0);
           const P = new Float32Array(n), C = new Float32Array(n);
           let o = 0;
-          for (const l of parts) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
-          geo.setPositions(P); geo.setColors(C);
+          for (const l of lines) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
+          if (n) { geo.setPositions(P); geo.setColors(C); }
         }
         motionLines.geometry.dispose();
         motionLines.geometry = geo;
         (window as any).__nxPreviewMs = performance.now() - t0;
         window.dispatchEvent(new Event('nx-preview-built'));
         invalidate();
-      }, 120);
+      }, 200);
     };
     window.addEventListener('nx-plugin-preview', rebuildMotionPreview);
+
+    // Path sculpt marks on the model: picked cells white, moved cells orange (out) or blue (in), found by casting
+    // a ray from the axis out through each cell's centre to the wall
+    const marks = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 5, sizeAttenuation: false, vertexColors: true, depthTest: false, transparent: true }));
+    marks.renderOrder = 12; marks.visible = false; marks.frustumCulled = false;
+    scene.add(marks);
+    let marksTimer: ReturnType<typeof setTimeout> | null = null;
+    const rebuildMarks = () => {
+      if (marksTimer) clearTimeout(marksTimer);
+      marksTimer = setTimeout(() => {
+        marksTimer = null;
+        const s = useStore.getState(), sc = mx.sculpt;
+        const show = s.workspace === 'prepare' && sc.enabled && (s.tool === 'sculpt_pick' || Object.keys(sc.d).length > 0);
+        marks.visible = show;
+        if (!show) { invalidate(); return; }
+        const picked = pickedOf('sculpt', sc.w, sc.h);
+        const cells = new Set<number>([...Object.keys(sc.d).map(Number), ...picked]);
+        const ids = new Set(sc.objects ?? []);
+        const objs = s.objects.filter((o) => o.printable !== false && (!ids.size || ids.has(o.id)));
+        const targets = objectMeshes().filter((m) => objs.some((o) => o.id === m.userData.id));
+        const P: number[] = [], C: number[] = [];
+        const stride = Math.max(1, Math.ceil(cells.size / 1500));
+        let n = 0;
+        for (const i of cells) {
+          if (n++ % stride) continue;
+          for (const o of objs) {
+            const b = worldBounds(o), cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, big = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1]) + 5;
+            const { u, z } = cellCentre(sc, b.max[2], i % sc.w, Math.floor(i / sc.w));
+            const a = u * 2 * Math.PI, dx = Math.cos(a), dy = Math.sin(a);
+            ray.set(new THREE.Vector3(cx + dx * big, cy + dy * big, z), new THREE.Vector3(-dx, -dy, 0));
+            const hit = ray.intersectObjects(targets.filter((m) => m.userData.id === o.id), false)[0];
+            if (!hit) continue;
+            P.push(hit.point.x + dx * 0.15, hit.point.y + dy * 0.15, hit.point.z);
+            const m = sc.d[i] ?? 0;
+            if (picked.has(i)) C.push(1, 1, 1); else if (m > 0) C.push(1, 0.47, 0.12); else C.push(0.16, 0.47, 1);
+          }
+        }
+        marks.geometry.dispose();
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+        marks.geometry = g;
+        invalidate();
+      }, 90);
+    };
+    window.addEventListener('nx-sculpt-pick', rebuildMarks);
+    window.addEventListener('nx-plugin-preview', rebuildMarks);
 
     // ---------------- preview
     let lastColorKey = '';
@@ -1560,6 +1646,7 @@ export function Viewport() {
       selBoxes.visible = s.workspace === 'prepare';
       toolpaths.group.visible = preview;
       motionLines.visible = showsMotion(s);
+      threadMesh.group.visible = showsMotion(s);
       if (preview) {
         if (toolpaths.result !== s.slice.result) { toolpaths.setResult(s.slice.result); lastColorKey = ''; }
         const [ox, oy] = plateOrigin(s.slice.plate, s.printerId);
@@ -1595,6 +1682,7 @@ export function Viewport() {
       renderer.domElement.style.height = h + 'px';
       camera.aspect = w / Math.max(h, 1);
       motionMat.resolution.set(w, h);
+      threadMesh.setResolution(w, h);
       outlineMat.uniforms.uRes.value.set(w, h);
       camera.updateProjectionMatrix();
       invalidate();
@@ -1619,9 +1707,10 @@ export function Viewport() {
       }
       if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
+      if (s.tool !== prev.tool || s.workspace !== prev.workspace || s.objects !== prev.objects) rebuildMarks();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
-        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments)) rebuildMotionPreview();
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
@@ -1653,10 +1742,14 @@ export function Viewport() {
       gizmo.dispose();
       controls.dispose();
       toolpaths.dispose();
+      threadMesh.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
       el.removeChild(overlay);
       window.removeEventListener('nx-plugin-preview', rebuildMotionPreview);
+      window.removeEventListener('nx-sculpt-pick', rebuildMarks);
+      window.removeEventListener('nx-plugin-preview', rebuildMarks);
+      marks.geometry.dispose();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
       tip.remove();

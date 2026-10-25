@@ -33,7 +33,7 @@ function ramp(t: number, out: THREE.Color) {
   return out.copy(RAMP[i]).lerp(RAMP[i + 1], x - i);
 }
 
-const vert = /* glsl */ `
+export const BEAD_VERT = /* glsl */ `
 attribute vec3 aStart;
 attribute vec3 aEnd;
 attribute vec2 aWH;
@@ -63,7 +63,7 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }`;
 
-const frag = /* glsl */ `
+export const BEAD_FRAG = /* glsl */ `
 varying vec3 vColor;
 varying vec3 vNormal;
 void main() {
@@ -96,7 +96,7 @@ void main() {
 
 /** One extrusion bead: x ∈ [0,1] along the move, a rounded (stadium) cross-section y ∈ [-0.5,0.5], z ∈ [-1,0]
  *  with the top of the bead at move z. Round normals make consecutive beads shade as one continuous strand. */
-function unitBead(segs = 12): THREE.BufferGeometry {
+export function unitBead(segs = 12): THREE.BufferGeometry {
   const P: number[] = [], N: number[] = [], I: number[] = [];
   const ring: [number, number, number, number][] = []; // y, z, ny, nz
   for (let k = 0; k < segs; k++) {
@@ -187,7 +187,7 @@ export class ToolpathView {
     this.colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(ne * 4), 4);
     g.setAttribute('aColor', this.colorAttr);
     g.instanceCount = ne;
-    const mat = new THREE.ShaderMaterial({ vertexShader: vert, fragmentShader: frag, uniforms: this.uniforms });
+    const mat = new THREE.ShaderMaterial({ vertexShader: BEAD_VERT, fragmentShader: BEAD_FRAG, uniforms: this.uniforms });
     this.extrude = new THREE.Mesh(g, mat);
     this.extrude.frustumCulled = false;
     this.group.add(this.extrude);

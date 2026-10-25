@@ -5,7 +5,9 @@ import { sliceMesh } from '../../../engine/slice';
 import { SCALE } from '../../../engine/clipper';
 import type { IndexedMesh } from '../../../engine/mesh';
 import { cycleLayers, type WeaveSettings } from './model';
-import { offsetAt, planLayers, signedArea, visibleAt, weaveLoop, type Pt } from './core';
+import { offsetAt, planLayers, signedArea, visibleAt, weaveLoop, type Pt, type WeaveLayer } from './core';
+import type { Warp } from '../sculpt/preview';
+import { ThreadBuilder, type DroolReport, type ThreadData } from '../../threads';
 
 /** Most outlines drawn; tall pictures show every n-th row. */
 const MAX_ROWS = 260;
@@ -68,4 +70,59 @@ export function buildWeavePreview(objs: WeavePreviewObject[], w: WeaveSettings, 
   }
   if (!pos.length) return null;
   return { positions: Float32Array.from(pos), colors: Float32Array.from(col) };
+}
+
+/** Most layers drawn as threads; taller bands show every n-th layer, as thicker beads. */
+const MAX_THREAD_LAYERS = 450;
+
+/**
+ * The woven wall as real threads: every layer is its own loop at its true in or out position, at the real
+ * line width and layer height, so the bulges read as they will print. Layers that reach too far from
+ * the one below sag, and drip when they reach much further (see ../../threads.ts).
+ * `colourOf` gives the filament colour (0..1) a layer prints in; null = the plain wall outside the band.
+ */
+export function buildWeaveThreads(objs: WeavePreviewObject[], w: WeaveSettings, layerHeight: number, lineWidth: number, colourOf: (P: WeaveLayer | null) => [number, number, number], warp: Warp | null = null): { threads: ThreadData; report: DroolReport } | null {
+  const ids = new Set(w.objects ?? []);
+  const lh = Math.max(0.04, layerHeight);
+  const tb = new ThreadBuilder(lineWidth, lh, warp);
+  const cols = Math.max(1, w.image.w * Math.max(1, w.tiles_around));
+  for (const o of objs) {
+    if (ids.size && !ids.has(o.id)) continue;
+    const v = o.mesh.vertices;
+    let zMax = 0;
+    for (let i = 2; i < v.length; i += 3) zMax = Math.max(zMax, v[i]);
+    const zs: number[] = [];
+    for (let z = lh; z <= zMax + 1e-6; z += lh) zs.push(+z.toFixed(4));
+    if (!zs.length) continue;
+    // outline length per layer for "follow the curve", sampled and filled in between
+    const every = Math.max(1, Math.ceil(zs.length / 400));
+    const sampled = sliceMesh(o.mesh, zs.filter((_, i) => i % every === 0).map((z) => z - lh / 2));
+    const outer = (paths: (typeof sampled)[number]): Pt[][] => paths.map((p) => p.map((q) => ({ x: q.X / SCALE, y: q.Y / SCALE }))).filter((l) => l.length > 2 && signedArea(l) > 0);
+    const perim = (l: Pt[]) => l.reduce((s, q, i) => s + Math.hypot(l[(i + 1) % l.length].x - q.x, l[(i + 1) % l.length].y - q.y), 0);
+    const per = new Array<number>(zs.length).fill(NaN);
+    sampled.forEach((paths, k) => { const ls = outer(paths); if (ls.length) per[k * every] = Math.max(...ls.map(perim)); });
+    const plan = planLayers(w, zs, per);
+    const bandAt = plan.map((P, i) => (P ? i : -1)).filter((i) => i >= 0);
+    if (!bandAt.length) continue;
+    // two plain layers under the band show what the weave stands on
+    const lo = Math.max(0, bandAt[0] - 2), hi = bandAt[bandAt.length - 1];
+    const stride = Math.max(1, Math.ceil((hi - lo + 1) / MAX_THREAD_LAYERS));
+    const pick: number[] = [];
+    for (let i = lo; i <= hi; i += stride) pick.push(i);
+    const cut = sliceMesh(o.mesh, pick.map((i) => zs[i] - lh / 2));
+    tb.newStack();
+    pick.forEach((i, n) => {
+      const P = plan[i] ?? null;
+      tb.layer(stride);
+      const rgb = colourOf(P);
+      for (const loop of outer(cut[n])) {
+        const step = Math.min(0.6, Math.max(0.15, perim(loop) / (cols * 2.5)));
+        const woven = weaveLoop(loop, P ? (u) => offsetAt(w, P, u) : null, step, P ? w.smooth_mm : 0, w.seam.angle_deg);
+        const z = zs[i] - lh / 2;
+        for (let k = 1; k < woven.length; k++) tb.seg(woven[k - 1].x, woven[k - 1].y, z, woven[k].x, woven[k].y, z, rgb);
+      }
+    });
+  }
+  const out = tb.finish();
+  return out.report.beads ? out : null;
 }

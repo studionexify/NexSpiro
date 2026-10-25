@@ -16,6 +16,7 @@ import { MOTIFS, motifImage } from '../weave/motifs';
 import { estimateWeave, formatDuration, weavePrintSettings } from '../weave/plan';
 import { changerOf, purgeTarget, slotCount, toolheadCount } from '../../../profiles/changer';
 import type { Config } from '../../../profiles/settings';
+import { PathTool } from './PathTool';
 
 /** The last imported picture, kept at up to 640 px so it can be re-matched to new colours or sizes. */
 let source: { rgba: Uint8ClampedArray; w: number; h: number; name: string } | null = null;
@@ -283,7 +284,11 @@ export function WeaveCard() {
       <details className="mx-more">
         <summary className="mx-label" style={{ cursor: 'pointer' }}>Wall</summary>
         <label className="mx-field">Stand out: {w.depth_mm.toFixed(2)} mm
-          <input type="range" min={0.04} max={0.35} step={0.01} value={w.depth_mm} onChange={(e) => upd(() => { w.depth_mm = +e.target.value; })} />
+          <input type="range" min={0.04} max={Math.max(3, w.depth_mm)} step={0.02} value={w.depth_mm} onChange={(e) => upd(() => { w.depth_mm = +e.target.value; })} />
+        </label>
+        <div className="mx-muted" style={{ margin: 0, display: 'block' }}>Big values hang the thread out in the air. The drool check and the thick-thread view show where it will sag or drip.</div>
+        <label className="mx-field">Largest move from the wall: {w.max_deviation_mm.toFixed(1)} mm
+          <input type="range" min={0.2} max={6} step={0.1} value={w.max_deviation_mm} onChange={(e) => upd(() => { w.max_deviation_mm = +e.target.value; })} />
         </label>
         <label className="mx-field">Hidden lines pull in: {Math.round(w.recess * 100)}%
           <input type="range" min={0} max={1} step={0.05} value={w.recess} onChange={(e) => upd(() => { w.recess = +e.target.value; })} />
@@ -354,6 +359,7 @@ export function WeaveCard() {
         )}
       </details>
 
+      <PathTool />
       <Estimate w={w} />
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
         <button className="btn-secondary btn-small" title="1 wall, no infill or top skin, solid floor, spiral vase off, aligned seam, outer wall 80 mm/s, no prime tower when bleeding" onClick={() => {

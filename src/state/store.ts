@@ -16,7 +16,7 @@ import { filamentById } from '../profiles/filaments';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
+export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges' | 'sculpt_pick';
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 
@@ -193,6 +193,8 @@ interface State {
   contextMenu: ContextMenuState | null;
   /** Draw the plugins' quick motion preview on the model in Prepare (no slicing). */
   liveToolpaths: boolean;
+  /** Draw the quick toolpath view as real-size threads (true) or single lines (false). */
+  threadView: boolean;
 
   set: (p: Partial<State>) => void;
   addObjects: (o: SceneObject[]) => void;
@@ -294,6 +296,7 @@ export const useStore = create<State>((set, get) => ({
   surfacePick: null,
   contextMenu: null,
   liveToolpaths: !!prefs.liveToolpaths,
+  threadView: prefs.threadView !== false,
 
   printerId: prefs.printerId ?? 'bbl-p1s',
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
@@ -408,7 +411,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
     }));
     if (s.userPresets !== lastUserPresets) {
       lastUserPresets = s.userPresets;

@@ -4,13 +4,19 @@ import { viewApi } from '../../viewport/Viewport';
 import { Icon } from '../icons';
 
 export function ViewBar() {
-  const { liveToolpaths, showOverhangs, set, workspace } = useStore();
+  const { liveToolpaths, threadView, showOverhangs, set, workspace } = useStore();
   return (
     <div className="float sh-float sh-viewbar">
       {(workspace === 'prepare' || workspace === 'motion') && (
         <button className="sh-ib" aria-pressed={liveToolpaths} onClick={() => set({ liveToolpaths: !liveToolpaths })}
           title="Toolpath view: draw the walls on the model in their filament colours and motions, instantly, without slicing">
           <span className={`sh-switch ${liveToolpaths ? 'on' : ''}`} aria-hidden="true" />Toolpath view
+        </button>
+      )}
+      {(workspace === 'prepare' || workspace === 'motion') && liveToolpaths && (
+        <button className={`sh-ib ${threadView ? 'on' : ''}`} aria-pressed={threadView} onClick={() => set({ threadView: !threadView })}
+          title="Thick-thread view: draw every move at its real line width and layer height, as it looks when printed. Turn off for single lines.">
+          <Icon name="layers" size={16} />Thick thread
         </button>
       )}
       <button className={`sh-ib ${showOverhangs ? 'on' : ''}`} aria-pressed={showOverhangs} title="Highlight overhangs" onClick={() => set({ showOverhangs: !showOverhangs })}>
