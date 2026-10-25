@@ -26,17 +26,6 @@ export function assignMotion(sel: Map<string, ArrayLike<number>>, value: number,
 
 export const allTris = (o: SceneObject) => Uint32Array.from({ length: o.mesh.indices.length / 3 }, (_, t) => t);
 
-/** Triangles of the object whose world height range overlaps [lo, hi]. */
-export function trisInBand(o: SceneObject, lo: number, hi: number): number[] {
-  const v = transformVertices(o.mesh.vertices, objectMatrix(o).elements), ix = o.mesh.indices;
-  const out: number[] = [];
-  for (let t = 0; t < ix.length / 3; t++) {
-    const za = v[ix[t * 3] * 3 + 2], zb = v[ix[t * 3 + 1] * 3 + 2], zc = v[ix[t * 3 + 2] * 3 + 2];
-    if (Math.max(za, zb, zc) >= lo && Math.min(za, zb, zc) <= hi) out.push(t);
-  }
-  return out;
-}
-
 function inside(x: number, y: number, poly: [number, number][]): boolean {
   let r = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

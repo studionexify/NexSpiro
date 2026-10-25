@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import { box, cylinder, initKernel, loft, pieces, sphere, type V3 } from '../../src/plugins/flenex/csg';
+import { box, cylinder, initKernel, loft, sphere, type V3 } from '../../src/plugins/flenex/csg';
 import { buildFlexi, modelBvh, newCut } from '../../src/plugins/flenex/flexi';
 import { fitFor } from '../../src/plugins/flenex/fit';
 import { applyPaint, SCHEMES } from '../../src/plugins/flenex/paint';

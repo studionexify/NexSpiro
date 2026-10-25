@@ -108,7 +108,7 @@ function emptyResult(spec: ClickexSpec, msg: string): BuiltClicker {
 export function buildFromModel(spec: ClickexSpec, model: IndexedMesh | null): BuiltClicker {
   if (!model || !model.indices.length) return emptyResult(spec, 'Add a 3D model (STL, OBJ or 3MF), or pick a sample.');
   const mode = spec.model.cut;
-  const H = heightsOf(spec), sw = effectiveSwitch(spec);
+  const H = heightsOf(spec);
   const [mw, md, mh] = modelSize(model);
   const warnings: string[] = [];
   const travel = spec.sw.travel;

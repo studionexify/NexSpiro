@@ -99,8 +99,6 @@ export const FILAMENT_PARAMS: ParamDef[] = [
   // ---------------- Notes
   { key: 'filament_notes', label: 'Filament notes', tab: 'Notes', group: 'Notes', type: 'text', def: '', tip: 'Free text kept with the filament settings and written into the G-code config block.' },
 ];
-
-export const FILAMENT_PARAM_BY_KEY: Record<string, ParamDef> = Object.fromEntries(FILAMENT_PARAMS.map((p) => [p.key, p]));
 /** Keys only meaningful when the user sets them (Setting overrides page). */
 export const NULLABLE_FILAMENT_KEYS = new Set(FILAMENT_OVERRIDE_KEYS.map((k) => `filament_${k}`));
 

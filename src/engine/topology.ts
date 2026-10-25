@@ -152,11 +152,6 @@ export function faceGroupEdges(t: Topology, groups: ArrayLike<number> | undefine
   return out;
 }
 
-/** Triangles on both sides of each edge, as a list of per-edge tri pairs (for picking). */
-export function edgesOfTriangle(t: Topology, tri: number): [number, number, number] {
-  return [t.triEdges[tri * 3], t.triEdges[tri * 3 + 1], t.triEdges[tri * 3 + 2]];
-}
-
 const adjCache = new WeakMap<Topology, { start: Uint32Array; list: Uint32Array }>();
 /** Edges around each vertex, as a CSR table (edges of vertex i are list[start[i] .. start[i+1])). */
 export function vertexEdges(t: Topology) {
@@ -180,7 +175,6 @@ export function vertexEdges(t: Topology) {
  */
 export function edgeChain(m: IndexedMesh, t: Topology, start: number, allowed: (e: number) => boolean, maxTurnDeg = 40): number[] {
   const v = m.vertices;
-  const n = t.vertexCount;
   const adj = vertexEdges(t);
   const incident = (vtx: number) => { const out: number[] = []; for (let i = adj.start[vtx]; i < adj.start[vtx + 1]; i++) if (allowed(adj.list[i])) out.push(adj.list[i]); return out; };
   const cosMax = Math.cos((maxTurnDeg * Math.PI) / 180);

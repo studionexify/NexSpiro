@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { initKernel, pieces, volume } from '../../src/plugins/flenex/csg';
+import { initKernel, volume } from '../../src/plugins/flenex/csg';
 import { autoCuts, buildCreature, chainCuts } from '../../src/plugins/flenex/creature';
 import { buildFlexi } from '../../src/plugins/flenex/flexi';
 import { fitFor } from '../../src/plugins/flenex/fit';

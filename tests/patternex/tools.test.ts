@@ -97,7 +97,7 @@ describe('logos', () => {
   it('clean-up merges near colours, removes specks and simplifies', () => {
     const svg = '<svg viewBox="0 0 100 100" width="100mm" height="100mm"><rect width="50" height="50" fill="#ff0000"/><rect x="60" width="30" height="30" fill="#fe0101"/><rect x="95" y="95" width="0.5" height="0.5" fill="#00ff00"/><circle cx="50" cy="80" r="10" fill="#0000ff"/></svg>';
     const p = parseSvg(svg, { id: 's', tolerance_mm: 0.01 }).pattern;
-    const { pattern, report } = cleanupPattern(p, { mergeDeltaE: 3, simplifyMm: 0.2, speckMm2: 1 });
+    const { report } = cleanupPattern(p, { mergeDeltaE: 3, simplifyMm: 0.2, speckMm2: 1 });
     expect(report.colorsBefore).toBe(4);
     expect(report.colorsAfter).toBe(2);
     expect(report.specksRemoved).toBe(1);

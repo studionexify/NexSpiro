@@ -239,13 +239,6 @@ export function buildFeltPads(radius: number, count: number, padD: number, colou
   return g;
 }
 
-/** Steel ballast weight discs (visible in cutaways and in the parts flat-lay). */
-export function buildBallast(outer: number, inner: number, thickness: number): THREE.Mesh {
-  const m = new THREE.Mesh(latheZ([[inner / 2, 0], [outer / 2, 0], [outer / 2, thickness], [inner / 2, thickness], [inner / 2, 0]], 48), new THREE.MeshPhysicalMaterial({ color: '#7d7f82', metalness: 1, roughness: 0.45 }));
-  m.name = 'Ballast';
-  return m;
-}
-
 // ---------------------------------------------------------------------------------------------------
 // Planter fill
 

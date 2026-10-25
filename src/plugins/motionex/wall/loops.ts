@@ -188,14 +188,6 @@ export function layerEnd(L: LayerOps): (Pt & { z: number }) | null {
   return null;
 }
 
-/** Largest closed outer loop length per layer (NaN when the layer has none). */
-export function outerPerimeters(layers: LayerOps[], keep?: (li: number, p: Pt) => boolean): number[] {
-  return layers.map((L, li) => {
-    const loops = wallRuns(L, OUTER).filter((r) => r.closed && (!keep || keep(li, r.pts[0])));
-    return loops.length ? Math.max(...loops.map((r) => perimeter(r.pts.slice(0, -1)))) : NaN;
-  });
-}
-
 /** Picture row and column for a point: rows by distance up the band, columns round the part. */
 export interface BandMap {
   /** Picture rows counted from the bottom of the band (may exceed the picture height when tiling). */

@@ -105,9 +105,6 @@ export function shrink(r: Ring, gap: number): Ring {
   return r.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy) || 1, k = Math.max(0, (d - gap) / d); return [cx + (x - cx) * k, cy + (y - cy) * k] as [number, number]; });
 }
 
-/** Keep only rings whose points all lie in [0,W]×[0,H] (with slack), so tiles do not spill outside the pattern. */
-export const inside = (W: number, H: number, slack = 0) => (r: Ring) => r.length >= 3 && r.every(([x, y]) => x >= -slack && y >= -slack && x <= W + slack && y <= H + slack);
-
 /** Clip a ring to a rectangle (Sutherland–Hodgman). */
 export function clipRect(r: Ring, x0: number, y0: number, x1: number, y1: number): Ring {
   let poly = r;

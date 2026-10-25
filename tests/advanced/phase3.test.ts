@@ -10,7 +10,6 @@ import type { TechId } from '../../src/engine/advanced/types';
 
 const cfgFor = (printerId: string, overrides = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides });
 const square = (x0: number, y0: number, s: number) => [{ X: x0 * SCALE, Y: y0 * SCALE }, { X: (x0 + s) * SCALE, Y: y0 * SCALE }, { X: (x0 + s) * SCALE, Y: (y0 + s) * SCALE }, { X: x0 * SCALE, Y: (y0 + s) * SCALE }];
-const only = (ids: TechId[]) => Object.fromEntries(ids.map((id) => [id, { enabled: true }]));
 /** Advanced slice with every technology off except the listed ones. */
 function adv(mesh: ReturnType<typeof indexed>, printerId: string, on: TechId[], intent: 'aesthetic' | 'structural' = 'aesthetic', overrides = {}, params: Record<string, Record<string, number | boolean>> = {}) {
   const all = ['fea_stress', 'sdf_frep', 'eulerian_spiral', 'conformal_layers', 'hot_on_hot', 'kinematic_extrusion', 'z_weave', 'subvoxel_aa', 'turing_infill', 'corner_overshoot', 'spatial_lattice', 'metamaterial', 'dovetail', 'sgd_slicing', 'eikonal_offsets', 'inverse_warp', 'gloss_modulation', 'foam_control', 'knot_braiding', 'co_molding', 'thick_vase', 'tangent_entry', 'scarf_splice', 'harmonic_dome', 'conformal_ironing', 'perimeter_feathering', 'iso_gloss', 'quasicrystal', 'metric_morph', 'monge_ampere', 'symplectic_shaper', 'morse_router', 'spinor_fields', 'band_gap', 'homogenization'] as TechId[];

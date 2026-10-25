@@ -17,7 +17,7 @@ import { indexed, dome } from '../advanced/shapes';
 import { box, cylinder, tee } from '../fixtures';
 import type { Config } from '../../src/profiles/settings';
 import {
-  LINE_WIDTH_KEYS, PLANAR_THETA_MAX_DEG, PRINTER, PROFILE_BOUNDARY, PROFILE_DEFAULT, PROFILE_EXTREME, PROFILES,
+  LINE_WIDTH_KEYS, PLANAR_THETA_MAX_DEG, PRINTER, PROFILE_BOUNDARY, PROFILE_EXTREME, PROFILES,
   advRampLimit, plungeFor, cfgWith, errorRow, M, meshOf, outerWallWidth, pointsOf, REPORT_FIRST_FAILURES,
   specParams, standardRows, statusRow, toRows, type Profile, type Row, type VolCtx,
 } from './runner';

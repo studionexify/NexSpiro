@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
 import { repairObjects } from '../state/meshTools';
-import { dropToBed, objectPlate, slotColor, useStore, worldBounds, type SceneObject, type Tool } from '../state/store';
+import { slotColor, useStore, worldBounds, type Tool } from '../state/store';
 import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';

@@ -14,8 +14,6 @@ import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
 import { ParamRow } from './ParamRow';
-import { useAdvanced } from '../state/advanced';
-import { AdvancedPanel } from './advanced/AdvancedPanel';
 import { collapseAllObjects, expandAllObjects, toggleObjectRow, useTree } from '../state/tree';
 import { autoChanges, changerLabel } from '../profiles/changer';
 
@@ -39,38 +37,6 @@ export function CardTitle({ icon, label, closed, onToggle }: { icon: string; lab
 export const Body = ({ closed, children }: { closed: boolean; children: ReactNode }) => (closed ? null : <>{children}</>);
 
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
-
-export function Sidebar() {
-  const advanced = useAdvanced((a) => a.engineMode === 'advanced');
-  // Progressive disclosure: Basic shows the classic process settings; Advanced swaps them for the
-  // Intent Cards, Zone Inspector and technology graph (the base process stays one click away).
-  return (
-    <aside className={`sidebar ${advanced ? 'is-advanced' : ''}`}>
-      <PrinterCard />
-      <FilamentCard />
-      <ObjectsCard />
-      {advanced ? <><BaseProcessRow /><AdvancedPanel /></> : <ProcessCard />}
-    </aside>
-  );
-}
-
-/** Advanced mode: the base process preset, with the full Basic settings in a dialog. */
-export function BaseProcessRow() {
-  const s = useStore();
-  const [open, setOpen] = useState(false);
-  const n = Object.keys(s.overrides).length;
-  return (
-    <div className="base-process">
-      <Icon name="layers" size={15} />
-      <span className="muted">Base process</span>
-      <select className="select" value={currentPresetValue(s)} aria-label="Base process preset" onChange={(e) => selectPresetValue(e.target.value)}>
-        <PresetOptions modified={n > 0} />
-      </select>
-      <button className="icon-btn" title="Layer height, walls, speeds… (shared with Basic mode)" onClick={() => setOpen(true)}><Icon name="edit" size={15} /></button>
-      {open && <Modal title="Base process settings (shared with Basic mode)" onClose={() => setOpen(false)}><div className="base-process-modal"><ProcessCard /></div></Modal>}
-    </div>
-  );
-}
 
 export function PrinterCard() {
   const { printerId, plate, machineOverrides, set, markDirty, setMachine } = useStore();

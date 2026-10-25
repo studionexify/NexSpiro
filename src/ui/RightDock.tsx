@@ -1,6 +1,5 @@
-// Right-hand plugin dock (like Blender's side panel): one tab per installed plugin, collapses to a
-// thin strip on the right edge, and can be resized by dragging its left edge.
-import { useState } from 'react';
+// Right-hand plugin dock: shows the plugin opened from the left rail, hides when closed, and can be
+// resized by dragging its left edge.
 import { useStore } from '../state/store';
 import { PLUGINS } from '../plugins/registry';
 import { Modal } from './Modals';
@@ -64,16 +63,5 @@ export function PluginManager({ onClose }: { onClose: () => void }) {
         );
       })}
     </Modal>
-  );
-}
-
-export function PluginsButton() {
-  const [open, setOpen] = useState(false);
-  const plugins = useStore((s) => s.plugins);
-  return (
-    <>
-      <button className="btn-secondary btn-small" title="Plugins" onClick={() => setOpen(true)}>Plugins{plugins.length ? ` (${plugins.length})` : ''}</button>
-      {open && <PluginManager onClose={() => setOpen(false)} />}
-    </>
   );
 }

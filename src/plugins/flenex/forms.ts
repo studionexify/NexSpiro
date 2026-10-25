@@ -61,4 +61,3 @@ export function blade(outline: [number, number][], thick: number, origin: V3, ex
 export const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
 export const smooth = (x: number) => x * x * (3 - 2 * x);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-export { v as vec };

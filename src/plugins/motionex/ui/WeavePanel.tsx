@@ -153,7 +153,6 @@ export function WeaveCard() {
   const unit = unitName(cfg), purge = purgeTarget(cfg);
   const changeS = Number(cfg.filament_change_time) || (changer === 'toolchanger' ? 8 : 60);
   const colours = weaveColours(w);
-  const nCol = w.mode === 'colour' ? colourCount(w) : Math.max(2, w.picture?.levels ?? 2);
   const regen = (f: () => void) => upd(() => { f(); rebuildPicture(w); });
   const pickMotif = (id: string) => regen(() => { w.picture = { ...(w.picture ?? {}), kind: 'motif', motif: id }; });
   const onFile = async (f: File | undefined) => {

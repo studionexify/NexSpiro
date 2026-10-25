@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { slice } from '../../src/engine/slicer';
 import { PROCESS_PARAMS, type Config, type ParamDef } from '../../src/profiles/settings';
 import { box, cylinder, tee } from '../fixtures';
-import { cfgWith, mesh, PRINTER, rng } from './helpers';
+import { cfgWith, mesh, rng } from './helpers';
 import { describeIssues, validateSlice } from './gcodeValidator';
 
 const plate = () => [mesh(tee(128, 128), 'tee'), mesh(cylinder(128, 175, 8, 10, 48), 'cyl'), mesh(box(80, 80, 0, 0.8, 12, 6), 'thin')];
