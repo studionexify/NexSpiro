@@ -36,6 +36,11 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .dock-body .mx-head:not(:has(button, input)) { display: none; }
 .dock-body .mx-head .mx-badge { display: none; }
 
+.preset-row { display: flex; align-items: center; gap: 6px; }
+.preset-row .h-inline { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.preset-select { flex: 1; min-width: 0; height: 30px; }
+.preset-row .sh-ib { height: 28px; padding: 0 6px; font-size: 12px; }
+
 /* ---------- rail ---------- */
 .sh-rail { overflow-y: auto; scrollbar-width: none; background: var(--ns-panel, var(--surface-secondary)); border-right: 1px solid var(--ns-line, var(--border)); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; z-index: 6; }
 .sh-logo { width: 30px; height: 30px; margin-bottom: 12px; display: grid; place-items: center; }

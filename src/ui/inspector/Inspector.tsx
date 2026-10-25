@@ -73,26 +73,27 @@ function PresetSection() {
   const [saveOpen, setSaveOpen] = useState(false);
   return (
     <section>
-      <div className="h">Preset
-        {up && upMod && <a role="button" tabIndex={0} onClick={() => updateUserPreset(up.id)} title={`Overwrite "${up.name}" with the current settings`}>Update preset</a>}
-        <a role="button" tabIndex={0} onClick={() => setSaveOpen(true)} title="Save the current settings as your own preset, or manage presets">Save as…</a>
-      </div>
-      <div className="chips">
-        {INTENT_PRESETS.map((p) => (
-          <button key={p.id} className={`chip ${active === p.id && !up ? 'on' : ''}`} title={`${p.description}${p.engine === 'advanced' ? ' · uses the Physics Core (advanced engine)' : ''}`}
-            aria-pressed={active === p.id && !up} onClick={() => { applyIntentPreset(p.id); s.set({ userPresetId: null }); }}>
-            {p.engine === 'advanced' && <span aria-hidden>⚛</span>}{p.label}
-          </button>
-        ))}
-        {s.userPresets.map((p) => {
-          const on = up?.id === p.id;
-          return (
-            <button key={p.id} className={`chip user ${on ? 'on' : ''} ${on && upMod ? 'mod' : ''}`} aria-pressed={on}
-              title={`Your preset (on ${PROCESS_PRESETS.find((x) => x.id === p.basePresetId)?.name ?? p.basePresetId}, ${Object.keys(p.overrides).length} change${Object.keys(p.overrides).length === 1 ? '' : 's'})${on && upMod ? ' · modified since applied' : ''}`}
-              onClick={() => applyUserPreset(p.id)}>{p.name}</button>
-          );
-        })}
-        {!INTENT_PRESETS.length && !s.userPresets.length && <span className="muted-s">No presets available.</span>}
+      {/* one dropdown instead of a wall of chips: built-in presets, then the user's own */}
+      <div className="preset-row">
+        <span className="h-inline">Preset</span>
+        <select className="preset-select" aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
+          title={up && upMod ? 'Modified since applied' : undefined}
+          onChange={(e) => {
+            const [k, id] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
+            if (k === 'i') { applyIntentPreset(id); s.set({ userPresetId: null }); } else if (k === 'u') applyUserPreset(id);
+          }}>
+          {!up && !active && <option value="">Custom</option>}
+          <optgroup label="Presets">
+            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}</option>)}
+          </optgroup>
+          {s.userPresets.length > 0 && (
+            <optgroup label="My presets">
+              {s.userPresets.map((p) => <option key={p.id} value={`u:${p.id}`}>{p.name}{up?.id === p.id && upMod ? ' (modified)' : ''}</option>)}
+            </optgroup>
+          )}
+        </select>
+        {up && upMod && <button className="sh-ib" title={`Overwrite "${up.name}" with the current settings`} onClick={() => updateUserPreset(up.id)}>Update</button>}
+        <button className="sh-ib" title="Save the current settings as your own preset, or manage presets" onClick={() => setSaveOpen(true)}>Save as…</button>
       </div>
       {saveOpen && <PresetModal onClose={() => setSaveOpen(false)} />}
     </section>
