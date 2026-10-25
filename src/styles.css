@@ -402,6 +402,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dock-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 3; }
 .dock-resize:hover { background: var(--accent-tint); }
 .dock-tabs { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.dock-title { margin: 0; padding: 5px 4px; font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dock-tab { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-weight: 600; }
 .dock-tab.on { background: var(--accent-tint); color: var(--accent); }
 .dock-body { flex: 1; overflow-y: auto; padding: 8px; }

@@ -36,9 +36,8 @@ export function RightDock() {
     <aside className="dock sh-pdock" style={{ width: dock.width }} aria-label="Plugins">
       <div className="dock-resize" onPointerDown={startResize} title="Drag to resize" />
       <div className="dock-tabs">
-        {installed.map((p) => (
-          <button key={p.id} className={`dock-tab ${p.id === active.id ? 'on' : ''}`} onClick={() => setDock({ tab: p.id })}>{p.name}</button>
-        ))}
+        {/* the left rail switches plugins; the header only names the active one */}
+        <h2 className="dock-title">{active.name}</h2>
         <span className="spacer" />
         <button className="icon-btn" title="Collapse panel" aria-label="Collapse panel" onClick={() => setDock({ open: false })}>›</button>
       </div>
