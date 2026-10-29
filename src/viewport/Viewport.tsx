@@ -353,7 +353,7 @@ export function Viewport() {
       const s = useStore.getState();
       const o = s.objects.find((x) => x.id === s.selected[0]);
       clearCutPrev();
-      const pv = o && cutting() && s.cutMode === 'planar' ? cutPreview(o, s.cutPlane) : null;
+      const pv = o && cutting() ? cutPreview(o, s.cutPlane) : null;
       if (pv) {
         cutPrev.matrix.copy(pv.fromPlane);
         cutPrev.matrixWorldNeedsUpdate = true;
