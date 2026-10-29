@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState, type ReactNode } from 'react';
 import { FILAMENT_PAGES, FILAMENT_PARAMS, NULLABLE_FILAMENT_KEYS, filamentConfig } from '../profiles/filamentParams';
 import { MACHINE_PAGES, MACHINE_PARAMS } from '../profiles/machineParams';
@@ -10,14 +11,17 @@ import { useStore } from '../state/store';
 import { Icon } from './icons';
 
 export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
-  return (
+  // portalled to <body>: a modal opened from the rail would otherwise sit inside its scroll container and
+  // stacking layer, which iPad Safari clips so the dialog never shows
+  return createPortal(
     <div className="modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" role="dialog" aria-label={title}>
         <header>{title}<span className="spacer" /><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button></header>
         <div className="body">{children}</div>
         <footer>{footer ?? <button className="btn-secondary btn-small" onClick={onClose}>Close</button>}</footer>
       </div>
-    </div>
+    </div>,
+    document.querySelector('.sh-app') ?? document.body,
   );
 }
 
