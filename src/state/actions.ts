@@ -35,7 +35,8 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
   }
   if (!added.length) return;
   s.addObjects(added);
-  if (useStore.getState().objects.length > 1) arrange();
+  // new models land in the centre of the active plate; several at once are spread around it (the rest stay put)
+  if (added.length > 1) arrange(undefined, useStore.getState().activePlate, added.map((o) => o.id));
   s.set({ workspace: 'prepare' });
 }
 
@@ -116,8 +117,7 @@ export function addSample(id: string) {
   centreMesh(mesh);
   const s = useStore.getState();
   const o = centreOnBed({ id: newId(), name: sm.name, mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: 0 }, s.printerId);
-  s.addObjects([o]);
-  if (useStore.getState().objects.length > 1) arrange();
+  s.addObjects([o]); // centre of the active plate
   s.set({ workspace: 'prepare' });
 }
 

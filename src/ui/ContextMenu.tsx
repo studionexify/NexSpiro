@@ -43,7 +43,7 @@ function plateItems(m: ContextMenuState): MenuItem[] {
   const pl = s.plates[m.plate];
   return [
     { label: 'Add model…', icon: 'addCube', kbd: 'Ctrl+I', onClick: importDialog },
-    { label: 'Add Primitive', icon: 'primitives', sub: [...SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => addShape(k, m.world) })), { sep: true }, { label: 'Text shape…', icon: 'textB', kbd: 'T', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
+    { label: 'Add Primitive', icon: 'primitives', sub: [...SHAPES.map(([k, l]) => ({ label: l, shape: k, onClick: () => addShape(k) })), { sep: true }, { label: 'Text shape…', icon: 'textB', kbd: 'T', onClick: () => s.set({ tool: 'text', selected: [] }) }] },
     { label: 'Paste', icon: 'paste', kbd: 'Ctrl+V', disabled: !hasClipboard(), onClick: () => pasteObjects(m.world) },
     { sep: true },
     { label: 'Select All', icon: 'selectAll', kbd: 'Ctrl+A', disabled: !count, onClick: () => selectPlate(m.plate) },
