@@ -1,5 +1,6 @@
 // Right column (356px): inspector on top, action dock pinned at the bottom. While a plugin's settings bar
 // is open the column can be folded into a slim strip, so the plugin gets the room.
+import { useEffect } from 'react';
 import { Inspector } from '../inspector/Inspector';
 import { ActionDock } from './ActionDock';
 import { useStore } from '../../state/store';
@@ -12,10 +13,15 @@ export const useInspectorFolded = () => {
   return useUi((u) => u.inspectorCollapsed) && open;
 };
 
+/** Below this window width an opening plugin bar folds the print settings away by itself (tablets). */
+const NARROW_PX = 1280;
+
 export function RightColumn() {
   const open = useStore((s) => s.plugins.length > 0 && s.dock.open);
   const folded = useInspectorFolded();
   const set = useUi((u) => u.set);
+  // only when the bar opens, so "Show the print settings" still sticks while it stays open
+  useEffect(() => { if (open && window.innerWidth < NARROW_PX) set({ inspectorCollapsed: true }); }, [open, set]);
   if (folded) {
     return (
       <aside className="sh-right sh-right-folded" aria-label="Print settings (hidden)">
