@@ -32,7 +32,7 @@ describe('cut preview and piece swapping', () => {
   });
 
   it.each([
-    ['dovetail', { groove: { ...DEFAULT_GROOVE, depth: 1.5, width: 4, angle: 90 } }],
+    ['dovetail', { groove: { ...DEFAULT_GROOVE, depth: 1.5, width: 4 } }],
     ['connectors', { connectors: [{ x: 10, y: 0 }], connector: { ...DEFAULT_CONNECTOR, size: 3, depth: 3 } }],
   ])('keeps a swapped piece whole with %s', (_, extra) => {
     const o = objectFromWorld('U', mesh);

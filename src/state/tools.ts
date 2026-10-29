@@ -51,6 +51,38 @@ function cutFrame(obj: SceneObject, p: { height: number; tiltX: number; tiltY: n
   return { b, rot, toPlane, fromPlane: toPlane.clone().invert() };
 }
 
+/** Centre of the largest cross-section (plane coordinates) of the pieces below the plane: where the dovetail goes. */
+function sectionCentre(below: IndexedMesh): [number, number] {
+  let best = 0, c: [number, number] = [0, 0];
+  for (const m of shellsOf(below)) {
+    const v = m.vertices, ix = m.indices;
+    let a = 0, cx = 0, cy = 0;
+    for (let t = 0; t < ix.length; t += 3) {
+      const i = ix[t] * 3, j = ix[t + 1] * 3, k = ix[t + 2] * 3;
+      if (Math.max(Math.abs(v[i + 2]), Math.abs(v[j + 2]), Math.abs(v[k + 2])) > 1e-4) continue; // cap triangles only
+      const ar = Math.abs((v[j] - v[i]) * (v[k + 1] - v[i + 1]) - (v[k] - v[i]) * (v[j + 1] - v[i + 1])) / 2;
+      a += ar; cx += ar * (v[i] + v[j] + v[k]) / 3; cy += ar * (v[i + 1] + v[j + 1] + v[k + 1]) / 3;
+    }
+    if (a > best) { best = a; c = [cx / a, cy / a]; }
+  }
+  return c;
+}
+
+/** Dovetail key centred on the cross-section (plane coordinates). */
+function placedGroove(g: GrooveSettings, L: number, at: [number, number], grow = 0, growDepth = 0): IndexedMesh {
+  const k = grooveMesh(g, L, grow, growDepth);
+  const v = new Float32Array(k.vertices);
+  for (let i = 0; i < v.length; i += 3) { v[i] += at[0]; v[i + 1] += at[1]; }
+  return { ...k, vertices: v };
+}
+
+/** Dovetail key for the viewport overlay, centred like the cut will place it. */
+export function cutGrooveOverlay(obj: SceneObject, p: { height: number; tiltX: number; tiltY: number }, g: GrooveSettings, L: number): IndexedMesh {
+  const f = cutFrame(obj, p);
+  const r = cutAtZ0({ vertices: transformVertices(obj.mesh.vertices, f.toPlane.clone().multiply(objectMatrix(obj)).elements), indices: obj.mesh.indices });
+  return placedGroove(g, L, r.below ? sectionCentre(r.below) : [0, 0]);
+}
+
 export interface CutPreview { above: IndexedMesh[]; below: IndexedMesh[]; fromPlane: THREE.Matrix4 }
 
 /** The pieces a planar cut makes (plane coordinates), for the live two-colour preview. */
@@ -93,6 +125,7 @@ export function cutObject(id: string, o: CutOptions) {
   const local = transformVertices(obj.mesh.vertices, toPlane.clone().multiply(objectMatrix(obj)).elements);
   const r = cutAtZ0({ vertices: local, indices: obj.mesh.indices });
   if (!r.below || !r.above) { s.set({ toast: { kind: 'warn', text: 'The cut plane does not cross the object.' } }); return; }
+  const at = o.groove ? sectionCentre(r.below) : [0, 0] as [number, number];
   if (o.swap?.length) {
     // right-clicked fragments change sides: they stay whole with the other part instead of being cut off
     const sw = new Set(o.swap);
@@ -107,10 +140,10 @@ export function cutObject(id: string, o: CutOptions) {
     try {
       const L = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 2 + 10;
       // the tongue is the part of the lower half inside the key; the lower half keeps a slightly larger groove
-      const tongue = booleanMeshes(r.below, grooveMesh(o.groove, L), 'intersection');
+      const tongue = booleanMeshes(r.below, placedGroove(o.groove, L, at), 'intersection');
       if (!tongue.indices.length) throw new Error('the groove does not cross the object');
       r.above = booleanMeshes(r.above, tongue, 'union');
-      r.below = booleanMeshes(r.below, grooveMesh(o.groove, L, o.groove.widthTol, o.groove.depthTol), 'difference');
+      r.below = booleanMeshes(r.below, placedGroove(o.groove, L, at, o.groove.widthTol, o.groove.depthTol), 'difference');
     } catch (e: any) { s.set({ toast: { kind: 'error', text: `Dovetail cut failed: ${e?.message ?? e}` } }); return; }
   }
   if (o.connectors?.length && o.connector) {

@@ -7,8 +7,7 @@ import { featureLines, pairLines } from './edgeOverlay';
 import { edgeRun, nearestEdge, pickEdge } from '../state/meshTools';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { flatFaces } from './flatFaces';
-import { grooveMesh } from '../state/cutConnectors';
-import { cutPreview } from '../state/tools';
+import { cutGrooveOverlay, cutPreview } from '../state/tools';
 import type { IndexedMesh } from '../engine/mesh';
 import { BRUSHES, fillTriangles, gapFill, heightRangeTriangles, meshCache } from '../engine/brush';
 import { circleFeature, measure, pickFeature } from '../state/measure';
@@ -493,9 +492,10 @@ export function Viewport() {
         const c = s.cutConnector;
         const seg = { triangle: 3, square: 4, hexagon: 6, circle: 32 }[c.shape];
         if (s.cutMode === 'dovetail') {
-          const ob = worldBounds(s.objects.find((x) => x.id === s.selected[0])!);
+          const so = s.objects.find((x) => x.id === s.selected[0])!;
+          const ob = worldBounds(so);
           const L = Math.hypot(ob.max[0] - ob.min[0], ob.max[1] - ob.min[1]) + 4;
-          const key = grooveMesh(s.cutGroove, L);
+          const key = cutGrooveOverlay(so, s.cutPlane, s.cutGroove, L);
           const g = new THREE.BufferGeometry();
           g.setAttribute('position', new THREE.BufferAttribute(key.vertices, 3));
           g.setIndex(new THREE.BufferAttribute(key.indices, 1));
