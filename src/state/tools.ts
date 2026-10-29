@@ -37,6 +37,83 @@ export interface CutOptions {
   connector?: ConnectorSettings;
   /** Tongue and groove (dovetail) cut instead of a flat cut. */
   groove?: GrooveSettings;
+  /** Fragments moved to the other side (ids from cutPreview: 'a<k>' above, 'b<k>' below). */
+  swap?: string[];
+}
+
+/** Plane frame of a cut: plane-local ↔ world matrices and the rotation. */
+function cutFrame(obj: SceneObject, p: { height: number; tiltX: number; tiltY: number }) {
+  const d = Math.PI / 180;
+  const b = worldBounds(obj);
+  const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, p.height);
+  const rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.tiltX * d, p.tiltY * d, 0, 'XYZ'));
+  const toPlane = new THREE.Matrix4().compose(centre, rot, new THREE.Vector3(1, 1, 1)).invert();
+  return { b, rot, toPlane, fromPlane: toPlane.clone().invert() };
+}
+
+/** Centre of the largest cross-section (plane coordinates) of the pieces below the plane: where the dovetail goes. */
+function sectionCentre(below: IndexedMesh): [number, number] {
+  let best = 0, c: [number, number] = [0, 0];
+  for (const m of shellsOf(below)) {
+    const v = m.vertices, ix = m.indices;
+    let a = 0, cx = 0, cy = 0;
+    for (let t = 0; t < ix.length; t += 3) {
+      const i = ix[t] * 3, j = ix[t + 1] * 3, k = ix[t + 2] * 3;
+      if (Math.max(Math.abs(v[i + 2]), Math.abs(v[j + 2]), Math.abs(v[k + 2])) > 1e-4) continue; // cap triangles only
+      const ar = Math.abs((v[j] - v[i]) * (v[k + 1] - v[i + 1]) - (v[k] - v[i]) * (v[j + 1] - v[i + 1])) / 2;
+      a += ar; cx += ar * (v[i] + v[j] + v[k]) / 3; cy += ar * (v[i + 1] + v[j + 1] + v[k + 1]) / 3;
+    }
+    if (a > best) { best = a; c = [cx / a, cy / a]; }
+  }
+  return c;
+}
+
+/** Dovetail key centred on the cross-section (plane coordinates). */
+function placedGroove(g: GrooveSettings, L: number, at: [number, number], grow = 0, growDepth = 0): IndexedMesh {
+  const k = grooveMesh(g, L, grow, growDepth);
+  const v = new Float32Array(k.vertices);
+  for (let i = 0; i < v.length; i += 3) { v[i] += at[0]; v[i + 1] += at[1]; }
+  return { ...k, vertices: v };
+}
+
+/** Dovetail key for the viewport overlay, centred like the cut will place it. */
+export function cutGrooveOverlay(obj: SceneObject, p: { height: number; tiltX: number; tiltY: number }, g: GrooveSettings, L: number): IndexedMesh {
+  const f = cutFrame(obj, p);
+  const r = cutAtZ0({ vertices: transformVertices(obj.mesh.vertices, f.toPlane.clone().multiply(objectMatrix(obj)).elements), indices: obj.mesh.indices });
+  return placedGroove(g, L, r.below ? sectionCentre(r.below) : [0, 0]);
+}
+
+export interface CutPreview { above: IndexedMesh[]; below: IndexedMesh[]; fromPlane: THREE.Matrix4 }
+
+/** The pieces a planar cut makes (plane coordinates), for the live two-colour preview. */
+export function cutPreview(obj: SceneObject, p: { height: number; tiltX: number; tiltY: number }): CutPreview | null {
+  const f = cutFrame(obj, p);
+  const r = cutAtZ0({ vertices: transformVertices(obj.mesh.vertices, f.toPlane.clone().multiply(objectMatrix(obj)).elements), indices: obj.mesh.indices });
+  if (!r.below || !r.above) return null;
+  return { above: shellsOf(r.above), below: shellsOf(r.below), fromPlane: f.fromPlane };
+}
+
+/** Concatenate meshes (no welding). */
+function joinMeshes(ms: IndexedMesh[]): IndexedMesh {
+  const nv = ms.reduce((a, m) => a + m.vertices.length, 0), ni = ms.reduce((a, m) => a + m.indices.length, 0);
+  const vertices = new Float32Array(nv), indices = new Uint32Array(ni);
+  let v = 0, i = 0;
+  for (const m of ms) {
+    vertices.set(m.vertices, v);
+    for (let k = 0; k < m.indices.length; k++) indices[i + k] = m.indices[k] + v / 3;
+    v += m.vertices.length; i += m.indices.length;
+  }
+  return { vertices, indices } as IndexedMesh;
+}
+
+/** One side of a cut with the swapped fragments of the other side fused on (they touch at the cut face). */
+function sideWith(own: IndexedMesh[], moved: IndexedMesh[]): IndexedMesh | null {
+  if (!own.length && !moved.length) return null;
+  let m = joinMeshes(own);
+  for (const x of moved) {
+    try { m = m.indices.length ? booleanMeshes(m, x, 'union') : x; } catch { m = joinMeshes([m, x]); }
+  }
+  return m;
 }
 
 /** Cut the object with a plane through world height `height` (tilted by tiltX/tiltY degrees). */
@@ -44,24 +121,29 @@ export function cutObject(id: string, o: CutOptions) {
   const s = useStore.getState();
   const obj = s.objects.find((x) => x.id === id);
   if (!obj) return;
-  const d = Math.PI / 180;
-  const b = worldBounds(obj);
-  const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, o.height);
-  const rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(o.tiltX * d, o.tiltY * d, 0, 'XYZ'));
-  const toPlane = new THREE.Matrix4().compose(centre, rot, new THREE.Vector3(1, 1, 1)).invert();
-  const fromPlane = toPlane.clone().invert();
+  const { b, rot, toPlane, fromPlane } = cutFrame(obj, o);
   const local = transformVertices(obj.mesh.vertices, toPlane.clone().multiply(objectMatrix(obj)).elements);
   const r = cutAtZ0({ vertices: local, indices: obj.mesh.indices });
   if (!r.below || !r.above) { s.set({ toast: { kind: 'warn', text: 'The cut plane does not cross the object.' } }); return; }
+  const at = o.groove ? sectionCentre(r.below) : [0, 0] as [number, number];
+  if (o.swap?.length) {
+    // right-clicked fragments change sides: they stay whole with the other part instead of being cut off
+    const sw = new Set(o.swap);
+    const A = shellsOf(r.above), B = shellsOf(r.below);
+    const above = sideWith(A.filter((_, k) => !sw.has(`a${k}`)), B.filter((_, k) => sw.has(`b${k}`)));
+    const below = sideWith(B.filter((_, k) => !sw.has(`b${k}`)), A.filter((_, k) => sw.has(`a${k}`)));
+    if (!above || !below) { s.set({ toast: { kind: 'warn', text: 'Every piece is on one side: nothing to cut.' } }); return; }
+    r.above = above; r.below = below;
+  }
   let loose: IndexedMesh[] = [];
   if (o.groove) {
     try {
       const L = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 2 + 10;
       // the tongue is the part of the lower half inside the key; the lower half keeps a slightly larger groove
-      const tongue = booleanMeshes(r.below, grooveMesh(o.groove, L), 'intersection');
+      const tongue = booleanMeshes(r.below, placedGroove(o.groove, L, at), 'intersection');
       if (!tongue.indices.length) throw new Error('the groove does not cross the object');
       r.above = booleanMeshes(r.above, tongue, 'union');
-      r.below = booleanMeshes(r.below, grooveMesh(o.groove, L, o.groove.widthTol, o.groove.depthTol), 'difference');
+      r.below = booleanMeshes(r.below, placedGroove(o.groove, L, at, o.groove.widthTol, o.groove.depthTol), 'difference');
     } catch (e: any) { s.set({ toast: { kind: 'error', text: `Dovetail cut failed: ${e?.message ?? e}` } }); return; }
   }
   if (o.connectors?.length && o.connector) {
@@ -97,7 +179,7 @@ export function cutObject(id: string, o: CutOptions) {
     out.push(dw);
   });
   s.checkpoint();
-  s.set({ objects: [...s.objects.filter((x) => x.id !== id), ...out.map(dropToBed)], selected: out.map((x) => x.id), selectedPart: null, tool: 'select', cutConnectors: [] });
+  s.set({ objects: [...s.objects.filter((x) => x.id !== id), ...out.map(dropToBed)], selected: out.map((x) => x.id), selectedPart: null, tool: 'select', cutConnectors: [], cutSwap: [] });
   s.markDirty();
   if (r.openLoops) s.set({ toast: { kind: 'warn', text: `The mesh is not watertight at the cut: ${r.openLoops} section(s) could not be capped.` } });
 }
