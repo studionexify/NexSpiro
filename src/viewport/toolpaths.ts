@@ -24,6 +24,10 @@ export const FEATURE_COLORS: Record<FeatureType, string> = {
   travel: '#1976D2',
 };
 
+/** "Wave area" view: the plain print in light grey, the wall texture in one accent colour by its strength. */
+export const WAVE_PLAIN = '#C9CDD3';
+export const WAVE_ACCENT = '#0EA58F';
+
 const RAMP = ['#1A237E', '#1E5BD6', '#00BCD4', '#4CAF50', '#FFEB3B', '#FF9800', '#F44336'].map((c) => new THREE.Color(c));
 export const RAMP_CSS = 'linear-gradient(90deg,#1A237E,#1E5BD6,#00BCD4,#4CAF50,#FFEB3B,#FF9800,#F44336)';
 
@@ -230,6 +234,7 @@ export class ToolpathView {
       }
     };
     let min = Infinity, max = -Infinity;
+    if (scheme === 'wave') return this.colorizeWave(hidden);
     if (scheme !== 'feature' && scheme !== 'filament') {
       for (const i of this.extrIdx) { const v = val(i); if (v < min) min = v; if (v > max) max = v; }
     }
@@ -250,6 +255,22 @@ export class ToolpathView {
     // the log scale is coloured in log space but labelled in seconds
     if (scheme === 'layer_time_log') return { min: Math.exp(min), max: Math.exp(max), unit, log: true };
     return { min, max, unit };
+  }
+
+  /** Everything light grey, the moves a wall texture changed in the accent colour (stronger = more colour). */
+  private colorizeWave(hidden: Set<string>): null {
+    const r = this.result!, f = r.moveFeatures, wv = r.moveWave;
+    const arr = this.colorAttr!.array as Float32Array;
+    const plain = new THREE.Color(WAVE_PLAIN), accent = new THREE.Color(WAVE_ACCENT), c = new THREE.Color();
+    for (let k = 0; k < this.extrIdx.length; k++) {
+      const i = this.extrIdx[k];
+      const t = wv ? wv[i] / 255 : 0;
+      c.copy(plain).lerp(accent, t > 0 ? 0.35 + 0.65 * t : 0);
+      arr[k * 4] = c.r; arr[k * 4 + 1] = c.g; arr[k * 4 + 2] = c.b;
+      arr[k * 4 + 3] = hidden.has(FEATURE_ORDER[f[i]]) ? 0 : 1;
+    }
+    this.colorAttr!.needsUpdate = true;
+    return null;
   }
 
   setRange(lo: number, hi: number, cursor: number) {

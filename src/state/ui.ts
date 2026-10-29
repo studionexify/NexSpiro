@@ -9,6 +9,7 @@ import { PROCESS_PARAMS, type ProcessTab } from '../profiles/settings';
 import { TECHS } from '../engine/advanced/techs';
 import type { IntentId } from '../engine/advanced/types';
 import { PLUGINS } from '../plugins/registry';
+import { WAVE_PRESETS, presetOf } from '../plugins/motionex/weave/model';
 import { brushOf, changed as mxChanged, mx, surfaceOf, useMx } from '../plugins/motionex/ui/MotionexPanel';
 import { changed as pxChanged, px, usePatternex } from '../plugins/patternex/ui/PatternexPanel';
 import type { MotionApplication } from '../plugins/motionex/model';
@@ -104,7 +105,8 @@ export function applyIntentPreset(id: string): void {
   if (!p || !t) return;
   const a = useAdvanced.getState(), s = useStore.getState();
   // same actions as the mode toggle and the process preset select; the advanced store marks the slice dirty itself
-  a.set(p.engine === 'advanced' ? { engineMode: 'advanced', intent: t.intent! } : { engineMode: 'basic' });
+  // a woven print is judged by its colours: no analysis heat-map painted over the model
+  a.set(p.engine === 'advanced' ? { engineMode: 'advanced', intent: t.intent!, ...(t.weave ? { heatmap: false } : {}) } : { engineMode: 'basic' });
   if (s.presetId !== t.processPreset) { s.set({ presetId: t.processPreset }); s.markDirty(); }
   if (t.weave) {
     // the weave needs a picture, so it is not switched on blindly: open Motionex where Weave lives
@@ -162,10 +164,11 @@ export function objectEffects(objectId: string | null): ObjectEffect[] {
       });
     });
     if (mx.weave.enabled || weaveMuted) {
-      const w = mx.weave;
+      const w = mx.weave, pic = w.picture?.kind === 'none' ? 'no picture' : w.image.name ?? 'picture';
+      const tex = w.wave?.enabled ? WAVE_PRESETS.find((p) => p.id === presetOf(w.wave))?.name ?? 'custom texture' : '';
       out.push({
-        id: 'mx:weave', pluginId: 'motionex', badge: 'Mx', label: `Weave · ${w.image.name ?? 'picture'}`,
-        detail: `${w.mode} · ${w.slots.length} col · ${fmtMm(w.depth_mm)}`, enabled: w.enabled, status: w.enabled ? mxStatus : 'ok',
+        id: 'mx:weave', pluginId: 'motionex', badge: 'Mx', label: `Weave · ${tex && w.picture?.kind === 'none' ? tex : pic}`,
+        detail: [w.mode, `${w.slots.length} col`, ...(w.picture?.kind === 'none' ? [] : [fmtMm(w.depth_mm)]), ...(tex ? [`${tex} ${fmtMm(w.wave!.height_mm)}`] : [])].join(' · '), enabled: w.enabled, status: w.enabled ? mxStatus : 'ok',
       });
     }
   }

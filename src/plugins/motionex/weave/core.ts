@@ -88,7 +88,8 @@ export function offsetAt(w: WeaveSettings, L: WeaveLayer, u: number): number {
   const p = pixelAt(img, x, L.row), t = x - Math.floor(x);
   const D = w.depth_mm * L.depthMul;
   let off: number;
-  if (w.mode === 'colour') off = p === L.colour ? D * stitchShape(w.stitch, t) : -D * w.recess;
+  if (w.picture?.kind === 'none') off = 0;
+  else if (w.mode === 'colour') off = p === L.colour ? D * stitchShape(w.stitch, t) : -D * w.recess;
   else {
     // mono: palette index = darkness level
     const levels = levelsOf(img);
@@ -116,7 +117,27 @@ export function visibleAt(w: WeaveSettings, L: WeaveLayer, u: number): number {
 }
 
 export interface Pt { x: number; y: number }
-export interface WovenPoint { x: number; y: number; /** outward normal */ nx: number; ny: number; /** index of the source segment */ src: number; lat: number; /** fraction round the loop (picture column) */ u: number }
+export interface WovenPoint {
+  x: number; y: number; /** outward normal */ nx: number; ny: number; /** index of the source segment */ src: number; lat: number; /** fraction round the loop (picture column) */ u: number;
+  /** Strength of the wave texture here (0..1), when one was added. */
+  wave?: number;
+}
+
+/** The resampled loop handed to an extra offset term: positions, arc length and picture column of each sample. */
+export interface LoopSamples {
+  x: number[]; y: number[];
+  /** Arc length from the loop's first point (mm). */
+  s: number[];
+  /** Fraction round the loop from the +X direction, the same way up as the picture. */
+  u: Float64Array;
+  /** Loop length (mm). */
+  L: number;
+  /** Signed area (mm², + = counter-clockwise). */
+  area: number;
+}
+
+/** An offset added after the picture is eased (so short stitches keep their full height), with its strength. */
+export type ExtraOffset = (s: LoopSamples) => { off: Float64Array; strength: Float64Array } | null;
 
 /** Signed area of a closed polyline (last point may repeat the first). + = counter-clockwise. */
 export function signedArea(p: Pt[]): number {
@@ -129,9 +150,10 @@ export function signedArea(p: Pt[]): number {
  * Weave one closed loop. `pts` is the loop (first point not repeated at the end); `lat(u)` the target
  * offset at fraction u round the loop, measured from the point nearest the +X direction from the loop's
  * centre (so pixels stack straight from layer to layer whatever the seam). The result starts at the seam
- * (the point nearest `seamDeg`), and is closed: its last point equals its first.
+ * (the point nearest `seamDeg`), and is closed: its last point equals its first. `extra` (the wave texture)
+ * is added after the picture is eased.
  */
-export function weaveLoop(pts: Pt[], lat: ((u: number) => number) | null, step: number, smoothMm: number, seamDeg: number): WovenPoint[] {
+export function weaveLoop(pts: Pt[], lat: ((u: number) => number) | null, step: number, smoothMm: number, seamDeg: number, extra?: ExtraOffset): WovenPoint[] {
   const n = pts.length;
   if (n < 3) return [];
   // resample, remembering the source segment of each sample
@@ -183,6 +205,8 @@ export function weaveLoop(pts: Pt[], lat: ((u: number) => number) | null, step: 
       off.set(sm);
     }
   }
+  const add = extra ? extra({ x: sx, y: sy, s: ss, u: us, L, area: signedArea(pts) }) : null;
+  if (add) for (let i = 0; i < M; i++) off[i] += add.off[i];
   let maxOff = 0;
   for (let i = 0; i < M; i++) maxOff = Math.max(maxOff, Math.abs(off[i]));
   // tangent from the chord over ±R: turns gradually through corners so the offset line never folds
@@ -204,7 +228,9 @@ export function weaveLoop(pts: Pt[], lat: ((u: number) => number) | null, step: 
     tx /= l; ty /= l;
     // outward: right of travel on a counter-clockwise loop, left on a clockwise one
     const nx = ccw ? ty : -ty, ny = ccw ? -tx : tx;
-    out.push({ x: sx[i] + nx * off[i], y: sy[i] + ny * off[i], nx, ny, src: src[i], lat: off[i], u: us[i] });
+    const p: WovenPoint = { x: sx[i] + nx * off[i], y: sy[i] + ny * off[i], nx, ny, src: src[i], lat: off[i], u: us[i] };
+    if (add) p.wave = add.strength[i];
+    out.push(p);
   }
   return out;
 }

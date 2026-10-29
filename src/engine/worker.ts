@@ -8,7 +8,7 @@ self.onmessage = (ev: MessageEvent<{ id: number; meshes: MeshInput[]; cfg: Confi
   let stage = '';
   try {
     const out = slice(meshes, cfg, (st, pct) => { stage = st; (self as any).postMessage({ id, type: 'progress', stage: st, pct }); }, opts);
-    (self as any).postMessage({ id, type: 'done', out }, [out.moves.buffer, out.moveFeatures.buffer, ...(out.moveAux ? [out.moveAux.buffer] : []), ...(out.moveLines ? [out.moveLines.buffer] : [])]);
+    (self as any).postMessage({ id, type: 'done', out }, [out.moves.buffer, out.moveFeatures.buffer, ...(out.moveAux ? [out.moveAux.buffer] : []), ...(out.moveLines ? [out.moveLines.buffer] : []), ...(out.moveWave ? [out.moveWave.buffer] : [])]);
   } catch (e: any) {
     // the stage tells a bug report where the pipeline stopped; the stack goes to the worker console
     console.error(e);

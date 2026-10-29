@@ -12,6 +12,8 @@ import { ParamRow } from '../ParamRow';
 import { Icon } from '../icons';
 import { Modal } from '../Modals';
 import { FilamentCard, ObjectsCard, PART_HELP, PresetOptions, PrinterCard, useProcessModel } from '../Sidebar';
+import { isWaveZone } from '../../plugins/motionex/weave/zones';
+import { WeaveZoneSettings } from '../../plugins/motionex/ui/WeavePanel';
 import { activeUserPreset, applyUserPreset, currentPresetValue, deleteUserPreset, isActiveUserPresetModified, renameUserPreset, saveUserPreset, selectPresetValue, updateUserPreset } from '../../state/userPresets';
 import { AdvancedPanel } from '../advanced/AdvancedPanel';
 import { useTools, type ResolvedTool } from '../advanced/hooks';
@@ -300,6 +302,8 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
       )}
       {noSel ? (
         <div className="empty-hint">Select an object to give it its own settings.</div>
+      ) : objMode && (m.part ? m.part.type === 'modifier' && isWaveZone(m.part.overrides) : m.range && isWaveZone(m.range.overrides)) ? (
+        <WeaveZoneSettings objectId={m.selObjs[0].id} partId={m.part?.id} rangeId={m.range?.id} />
       ) : solidPart ? (
         <div className="empty-hint">{PART_HELP[m.part!.type]} It has no settings of its own; move, rotate or scale it with the toolbar.</div>
       ) : <>

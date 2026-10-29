@@ -18,7 +18,8 @@ import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
 export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges' | 'sculpt_pick';
 export type Theme = 'dark' | 'light';
-export type ColorScheme = 'feature' | 'filament' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
+export type ColorScheme = 'feature' | 'filament' | 'wave' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
+const COLOR_SCHEMES: unknown[] = ['feature', 'filament', 'wave', 'speed', 'height', 'width', 'flow', 'layer_time', 'layer_time_log', 'fan', 'temperature'] satisfies ColorScheme[];
 
 export type Vec3 = [number, number, number];
 export interface SceneEdgeSel { objectId: string; edges: [number, number][] }
@@ -336,7 +337,8 @@ export const useStore = create<State>((set, get) => ({
   overhangOnly: false,
 
   slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
-  colorScheme: 'feature',
+  // real filament colours by default: what the print will look like (line types are one click away)
+  colorScheme: COLOR_SCHEMES.includes(prefs.colorScheme) ? prefs.colorScheme : 'filament',
   hiddenFeatures: [],
   showTravel: false,
   layerRange: [0, 0],
@@ -417,7 +419,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, colorScheme: s.colorScheme, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
     }));
     if (s.userPresets !== lastUserPresets) {
       lastUserPresets = s.userPresets;

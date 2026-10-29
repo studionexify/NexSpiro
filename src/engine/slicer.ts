@@ -2,7 +2,7 @@
 import { smoothPaths } from './outlineSmooth';
 import { calibProgram } from './calibGcode';
 import { slice as advancedSlice } from './advanced/classic/slicer';
-import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, type Config } from '../profiles/settings';
+import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, WAVE_KEYS, type Config } from '../profiles/settings';
 import {
   area, bounds, clipLines, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
 } from './clipper';
@@ -262,7 +262,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const ranges = meshes[o].heightRanges;
     if (!ranges?.length || i < objStart) return objBase[o];
     const zm = zs[i] - shift - hs[i] / 2;
-    const r = ranges.findIndex((g) => zm >= g.z0 - 1e-6 && zm < g.z1 - 1e-6);
+    // ranges that only carry plugin keys (a Motionex wave band) never hide a range with settings under them
+    const r = ranges.findIndex((g) => zm >= g.z0 - 1e-6 && zm < g.z1 - 1e-6 && (!Object.keys(g.overrides).some((k) => WAVE_KEYS.includes(k)) || Object.keys(pick(g.overrides, HEIGHT_RANGE_KEYS)).length > 0));
     if (r < 0) return objBase[o];
     const key = `${o}:${r}`;
     let c = rangeCache.get(key);
