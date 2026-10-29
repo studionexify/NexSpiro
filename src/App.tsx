@@ -130,10 +130,11 @@ export default function App() {
   const Studio = workspace === 'motion' ? studio : undefined;
   const hasDock = useStore((st) => st.plugins.length > 0 && st.dock.open);
   const dockW = useStore((st) => st.dock.width);
-  // the work area keeps at least ~62% of the body; the inspector and plugin dock share the rest
+  // the work area keeps at least ~62% of the body; the inspector and plugin dock share the rest. With a plugin
+  // dock open the dock keeps a usable minimum (300px) so narrow/tablet windows don't crush it to a sliver.
   const folded = useInspectorFolded();
   const right = folded ? '34px' : 'clamp(260px, 22%, 340px)';
-  const bodyCols = is3d ? (hasDock ? `minmax(62%, 1fr) minmax(0, ${dockW}px) ${right}` : `minmax(62%, 1fr) ${right}`) : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
+  const bodyCols = is3d ? (hasDock ? `minmax(0, 1fr) minmax(${Math.min(300, dockW)}px, ${dockW}px) ${right}` : `minmax(62%, 1fr) ${right}`) : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
     <div className="app sh-app"
