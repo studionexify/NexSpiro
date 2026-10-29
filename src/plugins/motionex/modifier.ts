@@ -6,7 +6,7 @@ import type { PrintProfiles } from "./core/profiles";
 import { regionWeight, type PatternexRegion, type RegionRegistry } from "./core/regions";
 import { evalCurve, clamp } from "./curve";
 import { noise1d } from "./noise";
-import { DEFAULT_TIP, type CurveKey, wallMatches, type MotionApplication, type MotionBrush, type TipControl, type WaveShape } from "./model";
+import { DEFAULT_TIP, type CurveKey, wallMatches, type LayerEffect, type MotionApplication, type MotionBrush, type TipControl, type WaveShape } from "./model";
 import { offsetInnerWalls } from "./core/follow";
 
 export interface ModifierOptions {
@@ -55,7 +55,11 @@ export function waveValue(shape: WaveShape, t: number): number {
 
 /** Extra phase (degrees) for a layer, or null when the layer falls in an "off" band. */
 export function layerPhase(b: MotionBrush, layer: number): number | null {
-  const e = b.layers;
+  return effectPhase(b.layers, layer);
+}
+
+/** Extra phase (degrees) a layer effect gives a layer, or null when the layer falls in an "off" band. */
+export function effectPhase(e: LayerEffect | null | undefined, layer: number): number | null {
   if (!e) return 0;
   if (e.band_on > 0 && layer % (e.band_on + Math.max(0, e.band_off)) >= e.band_on) return null;
   const every = Math.max(1, Math.round(e.every));

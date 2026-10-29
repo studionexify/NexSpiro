@@ -7,7 +7,7 @@ import { useStore, type Tool } from '../../../state/store';
 import * as THREE from 'three';
 import { currentConfig, plateObjects } from '../../../state/slicing';
 import { transformVertices } from '../../../engine/mesh';
-import { objectMatrix } from '../../../state/store';
+import { objectMatrix, partWorldMatrix, type SceneObject } from '../../../state/store';
 import { buildPreview, type PreviewApp, type PreviewLines } from '../preview';
 import { allTris, assignMotion, clearMotionSet, motionCounts, SURFACE_COLORS } from '../../../state/motionPaint';
 import { createMotionexState, defaultApplication, saveMotionexState, toConfig, type MotionexState } from '../index';
@@ -22,6 +22,7 @@ import { WeaveCard, weaveColours } from './WeavePanel';
 import { PaintCard } from './PaintPanel';
 import { LaceCard } from './LacePanel';
 import { buildWeavePreview, buildWeaveThreads } from '../weave/preview';
+import { isWaveZone, type ZoneSource } from '../weave/zones';
 import { emptyDrool, linesToThreads, mergeThreads, type DroolReport, type ThreadData } from '../../threads';
 import { buildPaintPreview } from '../paint/preview';
 import { buildLacePreview } from '../lace/preview';
@@ -76,7 +77,7 @@ export function motionexPreview(): PreviewLines | null {
   const sculptOn = sculptActive(mx.sculpt);
   if (!apps.length && !weaveOn && !paintOn && !laceOn && !sculptOn) return null;
   const objs = plateObjects(s.activePlate).filter((o) => o.printable !== false)
-    .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion }));
+    .map((o) => ({ id: o.id, mesh: { vertices: transformVertices(o.mesh.vertices, objectMatrix(o).elements), indices: o.mesh.indices }, motion: o.paint?.motion, zones: weaveZonesOf(o) }));
   const profiles = profilesFromConfig(currentConfig(), s.printerId);
   const warp = makeWarp(mx.sculpt, objs);
   // sculpt alone: show the plain wall (a motion of size 0) so the moves have something to move
@@ -87,9 +88,10 @@ export function motionexPreview(): PreviewLines | null {
   const lh = Number(currentConfig().layer_height) || 0.2, lw = profiles.process.lineWidth || 0.42;
   // wall art drawn on the model: the woven picture in filament colours, the painted picture as sheen
   // (light to dark = slow to fast), the lace with its holes left out
+  const view = s.colorScheme === 'wave' ? 'wave' : 'real';
   const palette = weaveOn ? weaveColours().map((c): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255]) : [];
   const extra = [
-    weaveOn ? buildWeavePreview(objs, mx.weave, lh, palette) : null,
+    weaveOn ? buildWeavePreview(objs, mx.weave, lh, palette, view) : null,
     paintOn && !weaveOn ? buildPaintPreview(objs, mx.paint, lh) : null,
     laceOn && !weaveOn && !paintOn ? buildLacePreview(objs, mx.lace, lh, filamentRgb(0), currentConfig()) : null,
   ].filter((x): x is NonNullable<typeof x> => !!x);
@@ -103,11 +105,21 @@ export function motionexPreview(): PreviewLines | null {
   if (lastPreview?.threads) parts.push({ threads: lastPreview.threads, report: lastPreview.drool ?? emptyDrool(lw) });
   if (weaveOn) {
     const mono = filamentRgb(mx.weave.slots[0] ?? 0);
-    const t = buildWeaveThreads(objs, mx.weave, lh, lw, (P) => (mx.weave.mode === 'colour' ? palette[Math.min(P?.colour ?? 0, palette.length - 1)] ?? mono : mono), warp);
+    const t = buildWeaveThreads(objs, mx.weave, lh, lw, (P) => (mx.weave.mode === 'colour' ? palette[Math.min(P?.colour ?? 0, palette.length - 1)] ?? mono : mono), warp, view);
     if (t) parts.push(t);
   } else for (const e of extra) parts.push({ threads: linesToThreads(e.positions, e.colors, lw, lh), report: emptyDrool(lw) });
   const merged = mergeThreads(parts);
   return merged ? { ...res, threads: merged.threads, drool: merged.report } : res;
+}
+/** An object's wave zones for the preview: its modifier parts with a wave (in world space) and its height bands. */
+function weaveZonesOf(o: SceneObject): ZoneSource | undefined {
+  const parts = (o.parts ?? []).filter((p) => p.type === 'modifier' && isWaveZone(p.overrides));
+  const heightRanges = (o.heightRanges ?? []).filter((r) => isWaveZone(r.overrides));
+  if (!parts.length && !heightRanges.length) return undefined;
+  return {
+    parts: parts.map((p) => ({ type: p.type, overrides: p.overrides, indices: p.mesh.indices, vertices: transformVertices(p.mesh.vertices, partWorldMatrix(o, p).elements) })),
+    heightRanges,
+  };
 }
 const filamentRgb = (slot: number): [number, number, number] => { const c = parseHex(useStore.getState().filaments[slot]?.color ?? '#d8d4cc'); return [c[0] / 255, c[1] / 255, c[2] / 255]; };
 /** The last preview built, for the legend in the Motion tab. */

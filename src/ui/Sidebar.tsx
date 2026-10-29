@@ -10,6 +10,8 @@ import { amsUnavailableReason, syncAmsFromPrinter } from '../state/amsSync';
 import { useDevices } from '../state/devices';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
+import { isWaveZone } from '../plugins/motionex/weave/zones';
+import { WeaveZoneSettings } from '../plugins/motionex/ui/WeavePanel';
 import { renameObject } from '../state/objectOps';
 import { Icon } from './icons';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
@@ -290,6 +292,8 @@ export function ProcessCard() {
       </div>
       {objMode && !selObjs.length ? (
         <div className="empty-hint">Select an object in the object list or the 3D view to give it its own settings. Settings changed here apply to the selected objects only.</div>
+      ) : objMode && (part ? part.type === 'modifier' && isWaveZone(part.overrides) : range && isWaveZone(range.overrides)) ? (
+        <WeaveZoneSettings objectId={selObjs[0].id} partId={part?.id} rangeId={range?.id} />
       ) : objMode && part && part.type !== 'modifier' ? (
         <div className="empty-hint">{PART_HELP[part.type]} It has no settings of its own; move, rotate or scale it with the toolbar.</div>
       ) : <>
@@ -409,7 +413,7 @@ export function ObjectsCard() {
                     {!shut && (o.parts ?? []).map((p) => (
                       <div key={p.id} className={`objrow part ${s.selectedPart === p.id ? 'sel' : ''}`}
                         onClick={() => s.set({ selected: [o.id], selectedPart: p.id, activePlate: pi })} onContextMenu={(e) => menuAt(e, 'part', o.id, p.id)}>
-                        <span className="part-dot" style={{ background: PART_DOT[p.type] }} />
+                        <span className="part-dot" style={{ background: p.type === 'modifier' && isWaveZone(p.overrides) ? (p.overrides.wave_mode === 'plain' ? '#94A3B8' : '#14B8A6') : PART_DOT[p.type] }} />
                         <span className="name">{p.name}</span>
                         {Object.keys(p.overrides).length > 0 && <Icon name="gear" size={12} />}
                       </div>

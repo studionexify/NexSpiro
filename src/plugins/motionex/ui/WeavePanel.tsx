@@ -4,13 +4,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, worldBounds, type SceneObject } from '../../../state/store';
 import { currentConfig, plateObjects } from '../../../state/slicing';
-import { centreOnBed } from '../../../state/ops';
+import { centreOnBed, updateHeightRange } from '../../../state/ops';
 import { objectFromWorld } from '../../../state/tools';
 import { weld } from '../../../engine/mesh';
 import { effectiveFlush } from '../../../profiles/flush';
 import { changed, mx, useMx } from './MotionexPanel';
 import type { MotionexReport } from '../engine';
-import { colourCount, cycleLayers, defaultWeave, type ChangeMode, type WeaveSettings } from '../weave/model';
+import { colourCount, cycleLayers, defaultWave, defaultWeave, type ChangeMode, type WeaveSettings } from '../weave/model';
+import { pickStyle } from '../weave/wave';
+import { AddZone, WaveControls, WaveZoneEditor, zoneName, zonesOf } from './WaveControls';
 import { clampPalette, greyLevels, gridFor, parseHex, quantize, resampleRGB, suggestPalette, type Dither, type RGB } from '../weave/image';
 import { MOTIFS, motifImage } from '../weave/motifs';
 import { estimateWeave, formatDuration, weavePrintSettings } from '../weave/plan';
@@ -140,6 +142,48 @@ function addCalibrationRing() {
 
 const upd = (f: () => void) => { f(); changed(); };
 
+/** Colours of the layers in the texture strip: the weave's filaments in layer order (mono: its filament, then greys). */
+function stripColours(w: WeaveSettings): string[] {
+  const fils = useStore.getState().filaments;
+  return w.mode === 'colour' ? w.slots.map((k) => fils[k]?.color ?? '#888888') : [fils[w.slots[0] ?? 0]?.color ?? '#888888', '#9aa3ad', '#c4cad1'];
+}
+
+/** Settings of a selected wave zone (a modifier shape or a height band), for the Inspector and the process card. */
+export function WeaveZoneSettings({ objectId, partId, rangeId }: { objectId: string; partId?: string | null; rangeId?: string | null }) {
+  useMx();
+  const objects = useStore((s) => s.objects);
+  useStore((s) => s.filaments);
+  const obj = objects.find((o) => o.id === objectId);
+  const part = partId ? obj?.parts?.find((p) => p.id === partId) : undefined;
+  const range = !part && rangeId ? obj?.heightRanges?.find((r) => r.id === rangeId) : undefined;
+  if (!obj || (!part && !range)) return null;
+  const w = mx.weave, wave = { ...defaultWave(), ...(w.wave ?? {}) };
+  return (
+    <div className="mx-card" style={{ margin: '8px 0' }}>
+      <div className="mx-card-title">Wave zone</div>
+      <p className="mx-muted" style={{ margin: 0 }}>{w.enabled ? `Changes the wave texture where this ${part ? 'shape' : 'height band'} meets the wall. Infill and walls stay as they are.` : 'Turn on Motionex → Weave & texture for this zone to print.'}</p>
+      {range && (
+        <div className="mx-two">
+          <label className="mx-field">From (mm)<input className="input" type="number" min={0} step={0.2} value={range.z0} onChange={(e) => updateHeightRange(obj.id, range.id, { z0: Math.max(0, +e.target.value) })} /></label>
+          <label className="mx-field">To (mm)<input className="input" type="number" min={0} step={0.2} value={range.z1} onChange={(e) => updateHeightRange(obj.id, range.id, { z1: Math.max(0, +e.target.value) })} /></label>
+        </div>
+      )}
+      <WaveZoneEditor zone={part ? { obj, part } : { obj, range: range! }} base={pickStyle(wave)} colours={stripColours(w)} blendDefault={wave.blend_mm} />
+    </div>
+  );
+}
+
+/** Delete a wave zone (its modifier shape or height band). */
+function removeZone(z: ReturnType<typeof zonesOf>[number]) {
+  const s = useStore.getState();
+  if (z.part) {
+    s.updateObjects((o) => ({ ...o, parts: (o.parts ?? []).filter((p) => p.id !== z.part!.id) }), [z.obj.id]);
+    if (s.selectedPart === z.part.id) s.set({ selectedPart: null });
+    s.markDirty();
+  } else updateHeightRange(z.obj.id, z.range.id, null);
+  changed();
+}
+
 export function WeaveCard() {
   useMx();
   const w = mx.weave;
@@ -155,6 +199,12 @@ export function WeaveCard() {
   const changeS = Number(cfg.filament_change_time) || (changer === 'toolchanger' ? 8 : 60);
   const colours = weaveColours(w);
   const regen = (f: () => void) => upd(() => { f(); rebuildPicture(w); });
+  const { selectedPart, selectedRange, colorScheme } = useStore();
+  const wave = { ...defaultWave(), ...(w.wave ?? {}) };
+  const strip = stripColours(w);
+  const targets = targetObjects(w);
+  const zones = zonesOf(targets);
+  const zoneTarget = targets.find((o) => selected.includes(o.id)) ?? targets[0];
   const pickMotif = (id: string) => regen(() => { w.picture = { ...(w.picture ?? {}), kind: 'motif', motif: id }; });
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -170,17 +220,18 @@ export function WeaveCard() {
   if (!w.enabled) {
     return (
       <section className="mx-card">
-        <div className="mx-card-title">Weave a picture<span className="spacer" />
+        <div className="mx-card-title">Weave &amp; texture<span className="spacer" />
           <button className="toggle" aria-label="Turn on" title="Turn on" onClick={() => upd(() => { w.enabled = true; if (filaments.length < 2 || !ams) w.mode = 'mono'; fitToPart(w); })} />
         </div>
         <p className="mx-muted" style={{ margin: 0 }}>Weave a picture or motif into the wall: every layer is one colour and each line steps out where the picture shows its colour, like a woven vase. Or use one filament for relief only.</p>
+        <p className="mx-muted" style={{ margin: 0 }}>Add a knitted texture too: the line waves in and out and each layer waves the other way. Zones (shapes or height bands) give parts of the wall their own texture or keep them smooth.</p>
         <p className="mx-muted" style={{ margin: 0 }}>{changer === 'toolchanger' ? `This printer: ${toolheadCount(cfg)} toolheads, up to ${MAX_COLOURS} colours with quick head swaps.` : ams ? `This printer: ${unit}, up to ${MAX_COLOURS} colours, purging ${purge === 'chute' ? 'into the chute' : 'into a prime tower'} at every change.` : 'This printer changes filament by hand, so it starts in Mono relief (one filament, no changes).'}</p>
       </section>
     );
   }
   return (
     <section className="mx-card">
-      <div className="mx-card-title">Weave a picture<span className="spacer" />
+      <div className="mx-card-title">Weave &amp; texture<span className="spacer" />
         <button className={`toggle on`} aria-label="Weave on" title="Turn weave off" onClick={() => upd(() => { w.enabled = false; })} />
       </div>
       <div className="seg mx-seg">
@@ -197,16 +248,18 @@ export function WeaveCard() {
       {w.mode === 'colour' && changer === 'ams' && purge === 'chute' && <p className="mx-muted" style={{ margin: 0 }}>{unit}: each change cuts, unloads and loads the filament (~{Math.round(changeS)} s) and flushes the old colour out through the purge chute, so nothing lands on the plate. Small purge or Bleed cut the waste and time. Up to {MAX_COLOURS} colours, one per slot.</p>}
       {w.mode === 'colour' && changer === 'ams' && purge === 'tower' && <p className="mx-muted" style={{ margin: 0 }}>{unit}: each change unloads and loads the filament (~{Math.round(changeS)} s) and purges into a prime tower printed next to the part, so leave room on the plate. Bleed needs no tower (Set up print settings turns it off). Up to {MAX_COLOURS} colours, one per slot.</p>}
 
-      <div className="mx-label">Picture</div>
+      <div className="mx-label">1 · Colours and picture</div>
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
         <button className="btn-secondary btn-small" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Reading…' : 'Import picture…'}</button>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/bmp" style={{ display: 'none' }} onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
-        <select className="select" value={w.picture?.kind === 'motif' ? w.picture.motif : ''} onChange={(e) => e.target.value && pickMotif(e.target.value)} title="Built-in motifs">
+        <select className="select" value={w.picture?.kind === 'motif' ? w.picture.motif : w.picture?.kind === 'none' ? '__none' : ''} onChange={(e) => e.target.value === '__none' ? upd(() => { w.picture = { ...(w.picture ?? {}), kind: 'none' }; }) : e.target.value && pickMotif(e.target.value)} title="Built-in motifs, or no picture">
           <option value="">{w.picture?.kind === 'image' ? `Picture: ${w.image.name ?? 'imported'}` : 'Motif…'}</option>
+          <option value="__none" title="No picture: a plain wall (the texture alone, or colour stripes)">None (plain wall)</option>
           {MOTIFS.map((m) => <option key={m.id} value={m.id} title={m.description}>{m.name}</option>)}
         </select>
       </div>
       {w.picture?.kind === 'image' && !source && <p className="mx-muted" style={{ margin: 0 }}>Import the picture again to re-match it to new colours or a new size.</p>}
+      {w.picture?.kind === 'none' ? <p className="mx-muted" style={{ margin: 0 }}>No picture: {w.mode === 'colour' ? 'the colours make stripes, layer by layer' : 'one plain colour'}. Use the texture below for the knitted look.</p> : <>
       <PixelView w={w} colours={colours} />
       <div className="mx-two">
         <label className="mx-field">Pixels round<input className="input" type="number" min={4} max={2000} value={w.image.w} onChange={(e) => regen(() => { w.image = { ...w.image, w: Math.max(4, Math.round(+e.target.value || 4)) }; })} /></label>
@@ -217,6 +270,7 @@ export function WeaveCard() {
         <label className="mx-field">Times round<input className="input" type="number" min={1} max={24} value={w.tiles_around} onChange={(e) => upd(() => { w.tiles_around = Math.max(1, Math.round(+e.target.value || 1)); })} /></label>
       </div>
       <button className="btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} title="Pixels round and rows to fill the part at the pixel width, one row per turn of the colours" onClick={() => upd(() => fitToPart(w))}>Fit to part</button>
+      </>}
       {w.picture?.kind === 'image' && (
         <div className="mx-two">
           <label className="mx-field">Dithering
@@ -259,7 +313,7 @@ export function WeaveCard() {
             <input type="range" min={1} max={4} step={1} value={w.layers_per_colour} onChange={(e) => upd(() => { w.layers_per_colour = +e.target.value; })} />
           </label>
         </>
-      ) : (
+      ) : w.picture?.kind === 'none' ? null : (
         <>
           <div className="mx-two">
             <label className="mx-field">Grey levels
@@ -281,6 +335,64 @@ export function WeaveCard() {
         </>
       )}
 
+      <div className="mx-label">2 · Texture</div>
+      <WaveControls value={wave.enabled ? pickStyle(wave) : null} colours={strip} onChange={(st) => upd(() => { w.wave = st ? { ...wave, ...st, enabled: true } : { ...wave, enabled: false }; })} />
+      {(wave.enabled || zones.length > 0) && (
+        <label className="row" style={{ gap: 8, margin: 0, fontSize: 12 }} title="Thin fins, sharp ribs and tight corners stay smooth: the wave fades out over a stitch or two there">
+          <input type="checkbox" checked={wave.smooth_edges} onChange={(e) => upd(() => { w.wave = { ...wave, smooth_edges: e.target.checked }; })} /> Keep ribs and sharp edges smooth
+        </label>
+      )}
+
+      <div className="mx-label">3 · Where</div>
+      <div className="mx-app">
+        <div className="mx-app-top"><b style={{ fontSize: 12, flex: 1 }}>Whole part</b><span className="mx-muted" style={{ margin: 0 }}>{wave.enabled ? 'texture on' : 'no texture'}{w.picture?.kind === 'none' ? '' : ' · picture'}</span></div>
+        <div className="mx-two">
+          <label className="mx-field">From (mm)<input className="input" type="number" min={0} step={0.2} value={w.z_start} onChange={(e) => upd(() => { w.z_start = Math.max(0, +e.target.value); })} /></label>
+          <label className="mx-field">To (mm)<input className="input" type="number" min={0} step={0.2} value={w.z_end >= 1e4 ? '' : w.z_end} placeholder="top" onChange={(e) => upd(() => { w.z_end = e.target.value === '' ? 1e4 : +e.target.value; })} /></label>
+        </div>
+        {wave.enabled && (
+          <label className="mx-field">Soft edge: {wave.blend_mm.toFixed(1)} mm
+            <input type="range" min={0.5} max={15} step={0.5} value={wave.blend_mm} aria-label="Whole part soft edge" title="How long the wave takes to fade in at the From height and to fade at zone edges" onChange={(e) => upd(() => { w.wave = { ...wave, blend_mm: +e.target.value }; })} />
+          </label>
+        )}
+        <div className="seg mx-seg">
+          <button className={!w.objects?.length ? 'on' : ''} onClick={() => upd(() => { w.objects = []; })}>Every object</button>
+          <button className={w.objects?.length ? 'on' : ''} disabled={!selected.length} title="The selected objects only" onClick={() => upd(() => { w.objects = [...selected]; })}>Selected ({w.objects?.length || selected.length})</button>
+        </div>
+      </div>
+      {zones.map((z) => {
+        const id = z.part?.id ?? z.range!.id, on = z.part ? selectedPart === z.part.id : selectedRange === z.range!.id;
+        return (
+          <details key={id} className={`mx-app mx-more${on ? ' on' : ''}`} open={on || undefined}>
+            <summary className="mx-app-top" style={{ fontSize: 12 }}>
+              <b style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zoneName(z)}{targets.length > 1 ? ` · ${z.obj.name}` : ''}</b>
+              <span className="mx-muted" style={{ margin: 0 }}>{z.part ? z.part.overrides.wave_mode : z.range!.overrides.wave_mode === 'plain' ? 'plain' : 'wave'}</span>
+              <button className="icon-btn" title="Select it: move, turn and stretch it in the 3D view" onClick={(e) => { e.preventDefault(); set({ selected: [z.obj.id], selectedPart: z.part?.id ?? null, selectedRange: z.range?.id ?? null, processMode: 'objects' }); }}>◎</button>
+              <button className="icon-btn" title="Remove this zone" onClick={(e) => { e.preventDefault(); removeZone(z); }}>✕</button>
+            </summary>
+            {z.range && (
+              <div className="mx-two">
+                <label className="mx-field">From (mm)<input className="input" type="number" min={0} step={0.2} value={z.range.z0} onChange={(e) => updateHeightRange(z.obj.id, z.range!.id, { z0: Math.max(0, +e.target.value) })} /></label>
+                <label className="mx-field">To (mm)<input className="input" type="number" min={0} step={0.2} value={z.range.z1} onChange={(e) => updateHeightRange(z.obj.id, z.range!.id, { z1: Math.max(0, +e.target.value) })} /></label>
+              </div>
+            )}
+            <WaveZoneEditor zone={z} base={pickStyle(wave)} colours={strip} blendDefault={wave.blend_mm} />
+          </details>
+        );
+      })}
+      <div className="row" style={{ gap: 6, margin: 0 }}>
+        <AddZone obj={zoneTarget} />
+        <span className="mx-muted" style={{ margin: 0, flex: 1 }}>{zones.length ? 'Later zones win where they overlap.' : 'A zone changes the wave only where it meets the part.'}</span>
+      </div>
+
+      <div className="mx-label">Preview</div>
+      <div className="seg mx-seg" role="group" aria-label="Preview colours">
+        <button className={colorScheme !== 'wave' ? 'on' : ''} title="Lines in your filament colours: what the print will look like" onClick={() => set({ colorScheme: 'filament' })}>Real colours</button>
+        <button className={colorScheme === 'wave' ? 'on' : ''} title="The part in grey, the wave texture in colour: see where the wave goes" onClick={() => set({ colorScheme: 'wave' })}>Wave area</button>
+      </div>
+
+      <details className="mx-more">
+        <summary className="mx-label" style={{ cursor: 'pointer' }}>Advanced</summary>
       <details className="mx-more">
         <summary className="mx-label" style={{ cursor: 'pointer' }}>Wall</summary>
         <label className="mx-field">Stand out: {w.depth_mm.toFixed(2)} mm
@@ -309,18 +421,9 @@ export function WeaveCard() {
         <label className="row" style={{ gap: 8, margin: 0, fontSize: 12 }}>
           <input type="checkbox" checked={w.follow_curve} onChange={(e) => upd(() => { w.follow_curve = e.target.checked; })} /> Measure rows along the curve (bellies and flares keep the picture's shape)
         </label>
-        <div className="mx-two">
-          <label className="mx-field">From (mm)<input className="input" type="number" min={0} step={0.2} value={w.z_start} onChange={(e) => upd(() => { w.z_start = Math.max(0, +e.target.value); })} /></label>
-          <label className="mx-field">To (mm)<input className="input" type="number" min={0} step={0.2} value={w.z_end >= 1e4 ? '' : w.z_end} placeholder="top" onChange={(e) => upd(() => { w.z_end = e.target.value === '' ? 1e4 : +e.target.value; })} /></label>
-        </div>
-        <div className="mx-label">Goes on</div>
-        <div className="seg mx-seg">
-          <button className={!w.objects?.length ? 'on' : ''} onClick={() => upd(() => { w.objects = []; })}>Every object</button>
-          <button className={w.objects?.length ? 'on' : ''} disabled={!selected.length} title="The selected objects only" onClick={() => upd(() => { w.objects = [...selected]; })}>Selected ({w.objects?.length || selected.length})</button>
-        </div>
       </details>
 
-      <details className="mx-more" open>
+      <details className="mx-more">
         <summary className="mx-label" style={{ cursor: 'pointer' }}>Seam and colour change</summary>
         <label className="row" style={{ gap: 8, margin: 0, fontSize: 12 }}>
           <input type="checkbox" checked={w.seam.inward} onChange={(e) => upd(() => { w.seam.inward = e.target.checked; })} />
@@ -360,6 +463,7 @@ export function WeaveCard() {
       </details>
 
       <PathTool />
+      </details>
       <Estimate w={w} />
       <div className="row" style={{ gap: 6, margin: 0, flexWrap: 'wrap' }}>
         <button className="btn-secondary btn-small" title="1 wall, no infill or top skin, solid floor, spiral vase off, aligned seam, outer wall 80 mm/s, no prime tower when bleeding" onClick={() => {
@@ -441,6 +545,13 @@ function WeaveReport() {
     [rep.swing <= 0.6 * rep.lineWidth, `Steps ${rep.swing.toFixed(2)} mm in and out between layers (line ${rep.lineWidth.toFixed(2)} mm)`],
     [true, `${rep.changes} colour changes · ${rep.seamsTucked} seams tucked inside`],
   ];
+  const wv = rep.wave;
+  if (wv) {
+    rows.push([wv.layers > 0, wv.layers ? `Texture on ${wv.layers} layers${wv.stitch ? `, stitches from ${wv.stitch.toFixed(1)} mm` : ''}` : 'No layer got the texture: check the heights and zones']);
+    if (wv.zones) rows.push([wv.zonesUsed === wv.zones, `${wv.zonesUsed} of ${wv.zones} zone${wv.zones > 1 ? 's' : ''} meet the wall`]);
+    rows.push([wv.swing <= rep.lineWidth, `Layers swing up to ${wv.swing.toFixed(2)} mm apart (line ${rep.lineWidth.toFixed(2)} mm)${wv.swing > rep.lineWidth ? ': they only touch where the waves cross' : ''}`]);
+    if (wv.edgeLoops) rows.push([true, `Ribs and sharp edges kept smooth on ${wv.edgeLoops} loops`]);
+  }
   return (
     <div>
       <div className="mx-label">Last slice{dirty ? ' (out of date)' : ''}</div>

@@ -195,6 +195,8 @@ export interface SliceOutput {
   moveAux?: Float32Array;
   /** Per move: 0-based G-code line the move ends on. */
   moveLines?: Uint32Array;
+  /** Per move: wall texture strength 0..255 (Motionex weave wave), for the "Wave area" preview. */
+  moveWave?: Uint8Array;
   layers: LayerResult[];
   stats: SliceStats;
   warnings: string[];

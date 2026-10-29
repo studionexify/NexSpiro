@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FEATURE_LABELS, FEATURE_ORDER, type FeatureType } from '../engine/types';
 import { sliceAndPreview } from '../state/actions';
 import { exportPlateFile } from '../state/printjob';
@@ -6,7 +6,7 @@ import { cancelSlice } from '../state/slicing';
 import { openPrintDialog } from './PrintModal';
 import { printerById } from '../profiles/printers';
 import { useStore, type ColorScheme } from '../state/store';
-import { FEATURE_COLORS, RAMP_CSS } from '../viewport/toolpaths';
+import { FEATURE_COLORS, RAMP_CSS, WAVE_ACCENT, WAVE_PLAIN } from '../viewport/toolpaths';
 import { Icon } from './icons';
 
 export const fmtTime = (s: number) => {
@@ -14,9 +14,9 @@ export const fmtTime = (s: number) => {
   return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
 };
 
+/** Views behind "Advanced": the two everyday views (Real colours, Wave area) have their own buttons. */
 const SCHEMES: { id: ColorScheme; label: string }[] = [
   { id: 'feature', label: 'Line type' },
-  { id: 'filament', label: 'Filament' },
   { id: 'speed', label: 'Speed' },
   { id: 'height', label: 'Layer height' },
   { id: 'width', label: 'Line width' },
@@ -37,19 +37,60 @@ export function Legend() {
     return () => window.removeEventListener('nx-legend', f);
   }, []);
   const r = slice.result;
+  // share of the outer wall the wave texture changed
+  const waved = useMemo(() => {
+    if (!r?.moveWave) return 0;
+    const outerIdx = [FEATURE_ORDER.indexOf('outer_wall'), FEATURE_ORDER.indexOf('overhang_wall')];
+    let all = 0, on = 0;
+    for (let i = 0; i < r.moveFeatures.length; i++) if (outerIdx.includes(r.moveFeatures[i])) { all++; if (r.moveWave[i] > 0) on++; }
+    return all ? on / all : 0;
+  }, [r]);
   if (!r) return null;
   const st = r.stats;
   const feats = FEATURE_ORDER.filter((f) => f !== 'travel' && st.byFeature[f]);
   const toggle = (f: FeatureType) => set({ hiddenFeatures: hiddenFeatures.includes(f) ? hiddenFeatures.filter((x) => x !== f) : [...hiddenFeatures, f] });
+  const advanced = colorScheme !== 'filament' && colorScheme !== 'wave';
+  const lineTypes = (
+    <div style={{ marginTop: 8 }}>
+      <div className="lrow" style={{ color: 'var(--text-muted)', fontSize: 11 }}><span /><span /><span>Line type</span><span className="num">Time</span><span className="num">%</span><span className="num">Used</span></div>
+      {feats.map((f) => {
+        const off = hiddenFeatures.includes(f);
+        const b = st.byFeature[f]!;
+        return (
+          <div key={f} className={`lrow ${off ? 'off' : ''}`}>
+            <button className="eye" onClick={() => toggle(f)} aria-label={`Toggle ${FEATURE_LABELS[f]}`}><Icon name={off ? 'eyeOff' : 'eye'} size={15} /></button>
+            <span className="swatch" style={{ background: FEATURE_COLORS[f] }} />
+            <span>{FEATURE_LABELS[f]}</span>
+            <span className="num">{fmtTime(b.time)}</span>
+            <span className="num">{((b.time / st.timeSeconds) * 100).toFixed(1)}%</span>
+            <span className="num" title={`${(b.filamentMm / 1000).toFixed(2)} m`}>{b.grams !== undefined ? `${b.grams.toFixed(1)} g` : `${(b.filamentMm / 1000).toFixed(2)} m`}</span>
+          </div>
+        );
+      })}
+      <div className={`lrow ${showTravel ? '' : 'off'}`}>
+        <button className="eye" onClick={() => set({ showTravel: !showTravel })} aria-label="Toggle travel"><Icon name={showTravel ? 'eye' : 'eyeOff'} size={15} /></button>
+        <span className="swatch" style={{ background: FEATURE_COLORS.travel }} />
+        <span>Travel</span>
+        <span className="num">{fmtTime(st.byFeature.travel?.time ?? 0)}</span>
+        <span className="num">{(((st.byFeature.travel?.time ?? 0) / st.timeSeconds) * 100).toFixed(1)}%</span>
+        <span />
+      </div>
+    </div>
+  );
   return (
     <div className="float legend">
-      <div className="row" style={{ marginBottom: 8 }}>
-        <h4>Color scheme</h4><span className="spacer" />
-        <select className="select" style={{ flex: 'none', width: 140 }} value={colorScheme} onChange={(e) => set({ colorScheme: e.target.value as ColorScheme })}>
+      <div className="row" style={{ marginBottom: 8, gap: 6 }}>
+        <div className="seg legend-views" role="group" aria-label="Preview colours">
+          <button className={colorScheme === 'filament' ? 'on' : ''} title="Every line in its filament colour: what the print will look like" onClick={() => set({ colorScheme: 'filament' })}>Real colours</button>
+          <button className={colorScheme === 'wave' ? 'on' : ''} title="The part in grey and the wave texture in colour, so you can see where the wave goes" onClick={() => set({ colorScheme: 'wave' })}>Wave area</button>
+        </div>
+        <span className="spacer" />
+        <select className="select" aria-label="Advanced views" style={{ flex: 'none', width: 92 }} value={advanced ? colorScheme : ''} title="More views: line types, speed, line width, flow, fan, temperature, layer time" onChange={(e) => e.target.value && set({ colorScheme: e.target.value as ColorScheme })}>
+          <option value="">Advanced…</option>
           {SCHEMES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </div>
-      {colorScheme !== 'feature' && range && (
+      {advanced && colorScheme !== 'feature' && range && (
         <>
           <div className="ramp" style={{ background: RAMP_CSS }} />
           <div className="row" style={{ justifyContent: 'space-between', color: 'var(--text-muted)' }}>
@@ -59,31 +100,25 @@ export function Legend() {
           </div>
         </>
       )}
-      <div style={{ marginTop: 8 }}>
-        <div className="lrow" style={{ color: 'var(--text-muted)', fontSize: 11 }}><span /><span /><span>Line type</span><span className="num">Time</span><span className="num">%</span><span className="num">Used</span></div>
-        {feats.map((f) => {
-          const off = hiddenFeatures.includes(f);
-          const b = st.byFeature[f]!;
-          return (
-            <div key={f} className={`lrow ${off ? 'off' : ''}`}>
-              <button className="eye" onClick={() => toggle(f)} aria-label={`Toggle ${FEATURE_LABELS[f]}`}><Icon name={off ? 'eyeOff' : 'eye'} size={15} /></button>
-              <span className="swatch" style={{ background: FEATURE_COLORS[f] }} />
-              <span>{FEATURE_LABELS[f]}</span>
-              <span className="num">{fmtTime(b.time)}</span>
-              <span className="num">{((b.time / st.timeSeconds) * 100).toFixed(1)}%</span>
-              <span className="num" title={`${(b.filamentMm / 1000).toFixed(2)} m`}>{b.grams !== undefined ? `${b.grams.toFixed(1)} g` : `${(b.filamentMm / 1000).toFixed(2)} m`}</span>
+      {colorScheme === 'filament' && (
+        <div>
+          {st.perFilament.map((f, k) => (f.mm > 0.01 || st.perFilament.length === 1) && (
+            <div key={k} className="lrow" style={{ gridTemplateColumns: 'auto 1fr auto' }}>
+              <span className="swatch" style={{ background: filaments[k]?.color ?? '#888' }} />
+              <span>Filament {k + 1}</span>
+              <span className="num">{f.grams.toFixed(1)} g</span>
             </div>
-          );
-        })}
-        <div className={`lrow ${showTravel ? '' : 'off'}`}>
-          <button className="eye" onClick={() => set({ showTravel: !showTravel })} aria-label="Toggle travel"><Icon name={showTravel ? 'eye' : 'eyeOff'} size={15} /></button>
-          <span className="swatch" style={{ background: FEATURE_COLORS.travel }} />
-          <span>Travel</span>
-          <span className="num">{fmtTime(st.byFeature.travel?.time ?? 0)}</span>
-          <span className="num">{(((st.byFeature.travel?.time ?? 0) / st.timeSeconds) * 100).toFixed(1)}%</span>
-          <span />
+          ))}
         </div>
-      </div>
+      )}
+      {colorScheme === 'wave' && (
+        <div>
+          <div className="lrow" style={{ gridTemplateColumns: 'auto 1fr' }}><span className="swatch" style={{ background: WAVE_ACCENT }} /><span>Wave texture{r.moveWave ? ` · ${Math.round(waved * 100)}% of the outer wall` : ''}</span></div>
+          <div className="lrow" style={{ gridTemplateColumns: 'auto 1fr' }}><span className="swatch" style={{ background: WAVE_PLAIN }} /><span>Plain</span></div>
+          {!r.moveWave && <p className="mx-muted" style={{ margin: '4px 0 0' }}>No wave in this slice. Turn on a texture in Motionex → Weave.</p>}
+        </div>
+      )}
+      {colorScheme === 'feature' ? lineTypes : <details className="legend-details"><summary>Line types</summary>{lineTypes}</details>}
       {/* time, filament and cost also show under the inspector, so the full breakdown starts folded */}
       <details className="legend-details">
         <summary>Details</summary>

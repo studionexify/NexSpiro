@@ -61,6 +61,10 @@ const THEMES = {
 };
 
 const PART_COLORS: Record<string, string> = { negative: '#FF3B30', modifier: '#FFC107', support_enforcer: '#1E88E5', support_blocker: '#E53935' };
+/** Motionex weave zones: a modifier (or height band) that says "wave here" or "keep plain". */
+const WAVE_ZONE_COLOR = '#14B8A6', PLAIN_ZONE_COLOR = '#94A3B8';
+const zoneMode = (ov: Record<string, unknown>) => (ov.wave_mode === 'wave' || ov.wave_mode === 'plain' ? ov.wave_mode : null);
+const partColor = (p: ScenePart) => { const z = p.type === 'modifier' ? zoneMode(p.overrides) : null; return z === 'wave' ? WAVE_ZONE_COLOR : z === 'plain' ? PLAIN_ZONE_COLOR : PART_COLORS[p.type]; };
 const PAINT = { support: ['#1E88E5', '#E53935'], seam: ['#FFFFFF', '#E53935'], adv: ['#26A69A', '#FF7043', '#5B6770', '#FFFFFF'] };
 
 function backgroundTexture(theme: 'dark' | 'light') {
@@ -299,6 +303,9 @@ export function Viewport() {
     const partMeshes = new Map<string, { mesh: THREE.Mesh; src: ScenePart['mesh'] }>();
     const selBoxes = new THREE.Group();
     scene.add(selBoxes);
+    // weave wave bands (height ranges with a wave): translucent slabs round their object, not pickable
+    const waveBands = new THREE.Group();
+    scene.add(waveBands);
     const toolpaths = new ToolpathView();
     scene.add(toolpaths.group);
     // Patternex: placement outlines (prepare) and region/bleed/swap overlays (preview)
@@ -739,7 +746,7 @@ export function Viewport() {
             g.setAttribute('position', new THREE.BufferAttribute(p.mesh.vertices, 3));
             g.setIndex(new THREE.BufferAttribute(p.mesh.indices, 1));
             const flat = g.toNonIndexed(); flat.computeVertexNormals(); g.dispose();
-            const m = new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ color: PART_COLORS[p.type], transparent: true, opacity: 0.45, depthWrite: false, roughness: 0.6 }));
+            const m = new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ color: partColor(p), transparent: true, opacity: 0.45, depthWrite: false, roughness: 0.6 }));
             m.renderOrder = 2;
             m.userData = { id: o.id, partId: p.id };
             pe = { mesh: m, src: p.mesh };
@@ -747,7 +754,7 @@ export function Viewport() {
             objGroup.add(m);
           }
           const pm = pe.mesh.material as THREE.MeshStandardMaterial;
-          pm.color.set(PART_COLORS[p.type]);
+          pm.color.set(partColor(p));
           pm.opacity = s.selectedPart === p.id ? 0.7 : 0.4;
           pe.mesh.visible = !isPaintTool(s.tool) && s.workspace === 'prepare';
           if (!dragging || !s.selected.includes(o.id)) {
@@ -755,6 +762,25 @@ export function Viewport() {
             pe.mesh.matrix.copy(om.clone().multiply(trsMatrix(p)));
             pe.mesh.matrixWorldNeedsUpdate = true;
           }
+        }
+      }
+      waveBands.traverse((o: any) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      waveBands.clear();
+      if (s.workspace === 'prepare' && !isPaintTool(s.tool)) for (const o of s.objects) {
+        if (o.hidden) continue;
+        for (const r of o.heightRanges ?? []) {
+          const mode = zoneMode(r.overrides);
+          if (!mode) continue;
+          const b = worldBounds(o), top = b.max[2] - b.min[2];
+          const z0 = b.min[2] + Math.max(0, r.z0), z1 = b.min[2] + Math.min(top, r.z1);
+          if (!(z1 > z0)) continue;
+          const on = s.selectedRange === r.id;
+          const band = new THREE.Mesh(new THREE.BoxGeometry(b.max[0] - b.min[0] + 3, b.max[1] - b.min[1] + 3, z1 - z0),
+            new THREE.MeshStandardMaterial({ color: mode === 'wave' ? WAVE_ZONE_COLOR : PLAIN_ZONE_COLOR, transparent: true, opacity: on ? 0.3 : 0.16, depthWrite: false, roughness: 0.6 }));
+          band.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (z0 + z1) / 2);
+          band.renderOrder = 2;
+          band.raycast = () => {};
+          waveBands.add(band);
         }
       }
       selBoxes.traverse((o: any) => o.geometry?.dispose?.());
@@ -1870,14 +1896,14 @@ export function Viewport() {
         rebuildPlates();
         if (s.printerId !== prev.printerId || s.activePlate !== prev.activePlate || s.plates.length !== prev.plates.length) setView('iso');
       }
-      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
+      if (s.objects !== prev.objects || s.selected !== prev.selected || s.selectedPart !== prev.selectedPart || s.selectedRange !== prev.selectedRange || s.filaments !== prev.filaments || s.showOverhangs !== prev.showOverhangs || s.showEdges !== prev.showEdges || s.shadeSmooth !== prev.shadeSmooth || s.edgeAngle !== prev.edgeAngle || s.edgeSel !== prev.edgeSel || s.paintOverhangAngle !== prev.paintOverhangAngle
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.tool !== prev.tool || s.workspace !== prev.workspace || s.objects !== prev.objects) rebuildMarks();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
       if (s.cutPlane !== prev.cutPlane || s.cutConnectorMode !== prev.cutConnectorMode) { syncTools(); syncGizmo(); }
       if (s.cutPlane !== prev.cutPlane || s.cutSwap !== prev.cutSwap || s.cutMode !== prev.cutMode) syncCutPrev();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
-        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
+        || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView || s.colorScheme !== prev.colorScheme)) rebuildMotionPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }

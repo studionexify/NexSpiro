@@ -15,6 +15,10 @@ export type Op =
     fanSet?: number;
     /** Excluded from the cooling slowdown (outer walls when "Don't slow down outer walls" is on). */
     noSlow?: boolean;
+    /** Strength (0..1) of a wall texture a plugin put here (Motionex weave wave), for the "Wave area" preview. */
+    wave?: number;
+    /** Lead-in or tail tucked inside the wall at a loop's seam (Motionex weave): not part of the loop itself. */
+    tuck?: boolean;
   }
   | { k: 'retract'; len: number; speed: number }
   | { k: 'raw'; text: string; resetPos?: boolean; time?: number }
@@ -104,6 +108,8 @@ export interface EmitOutput {
   moveFeatures: Uint8Array;
   moveAux: Float32Array;
   moveLines: Uint32Array;
+  /** Per move: wall texture strength 0..255 (only when some move has one). */
+  moveWave?: Uint8Array;
   layers: LayerResult[];
   stats: SliceStats;
 }
@@ -248,6 +254,8 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   const aux = new TypedBuilder(Float32Array);
   const lines = new TypedBuilder(Uint32Array);
   const feats = new TypedBuilder(Uint8Array);
+  const waves = new TypedBuilder(Uint8Array);
+  let anyWave = false;
   const layerRes: LayerResult[] = [];
   let filamentMm = 0;
   let tool = 0;
@@ -291,11 +299,13 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   const a2d = cfg.accel_to_decel_enable === true ? num('accel_to_decel_factor') / 100 : 0;
   const fmtF = (v: number) => n(v * 60, 0);
   const eTok = (e: number) => { if (relE) return `E${n(e, 5)}`; eAbs += e; return `E${n(eAbs, 5)}`; };
-  const pushMove = (feature: FeatureType, w: number, h: number, speed: number, t: number, fan: number) => {
+  const pushMove = (feature: FeatureType, w: number, h: number, speed: number, t: number, fan: number, wave = 0) => {
     moves.push(x, y, z, w, h, speed, t, tool);
     aux.push(fan, temp);
     lines.push(lineNo - 1);
     feats.push(FEATURE_ORDER.indexOf(feature));
+    if (wave > 0) anyWave = true;
+    waves.push(Math.round(Math.max(0, Math.min(1, wave)) * 255));
   };
   const setFan = (pct: number) => {
     if (pct === fanOut) return;
@@ -354,7 +364,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
             x = mx; y = my;
             const t = m.t ?? 0;
             elapsed += t;
-            pushMove(m.feature, m.w, m.h, m.f, t, fanOut);
+            pushMove(m.feature, m.w, m.h, m.f, t, fanOut, m.wave);
             const bf = byFeature[m.feature] ?? (byFeature[m.feature] = { time: 0, filamentMm: 0 });
             bf.time += t; bf.filamentMm += m.e;
           }
@@ -436,7 +446,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
           if (op.feature === 'prime_tower') towerMm += op.e;
           const t = op.t ?? 0;
           elapsed += t;
-          if (moved) pushMove(op.travel ? 'travel' : op.feature, op.w, op.h, op.f, t, fanOut);
+          if (moved) pushMove(op.travel ? 'travel' : op.feature, op.w, op.h, op.f, t, fanOut, op.travel ? 0 : op.wave);
           const fk = op.travel ? 'travel' : op.feature;
           const bf = byFeature[fk] ?? (byFeature[fk] = { time: 0, filamentMm: 0 });
           bf.time += t; bf.filamentMm += op.e;
@@ -496,6 +506,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     moveFeatures: feats.toTyped(),
     moveAux: aux.toTyped(),
     moveLines: lines.toTyped(),
+    moveWave: anyWave ? waves.toTyped() : undefined,
     layers: layerRes,
     stats: {
       timeSeconds: total,

@@ -8,12 +8,16 @@
 import type { Config } from '../../../profiles/settings';
 import type { LayerOps, Op } from '../../../engine/gcode';
 import type { Paths } from '../../../engine/types';
-import { pointIn } from '../../../engine/clipper';
+import { offset, pointIn } from '../../../engine/clipper';
 import { objectMask } from '../wall/targets';
 import type { PluginSession, PrepareContext, RegionContribution, TransitionPlan } from '../../api';
 import { cycleLayers, type WeaveSettings } from './model';
-import { minMoveMm, outerLineWidth } from '../wall/machine';
+import { maxAccelOf, minMoveMm, outerLineWidth } from '../wall/machine';
 import { filamentAt, inBand, offsetAt, planLayers, signedArea, weaveLoop, type Pt, type WovenPoint } from './core';
+import { collectZones, type WaveZone } from './zones';
+import { WaveField } from './wave';
+import { limitCornerSpeeds } from '../modifier';
+import type { ToolpathPoint } from '../core/types';
 
 type Move = Extract<Op, { k: 'move' }>;
 const OUTER = new Set(['outer_wall', 'overhang_wall']);
@@ -30,10 +34,35 @@ export interface WeaveReport {
   /** Largest in-out step from one layer to the next (mm), against the line width. */
   swing: number;
   lineWidth: number;
+  /** The wave texture, when one was used. */
+  wave?: WaveReport;
+}
+
+export interface WaveReport {
+  /** Layers with a wave. */
+  layers: number;
+  /** Zones (modifier shapes, height bands) found, and how many changed some loop. */
+  zones: number;
+  zonesUsed: number;
+  /** Largest step between a layer's line and the one below where the wave is (mm, measured). */
+  swing: number;
+  /** Shortest stitch (mm). */
+  stitch: number;
+  /** Loops where ribs or sharp edges were kept smooth. */
+  edgeLoops: number;
+  /** Times the stitch count round a loop was re-picked as the part grew or shrank. */
+  repicks: number;
 }
 
 export interface WeaveSession extends PluginSession {
-  weave: { targets: (o: number) => boolean; maskAt(layer: number): Paths | null };
+  weave: {
+    targets: (o: number) => boolean; maskAt(layer: number): Paths | null;
+    /** Wave zones (modifier shapes and height bands with a wave), sliced at `planes`. */
+    zones?: WaveZone[];
+    planes?: number[];
+    /** Is (x, y) on object o at layer i? */
+    onObject?: (o: number, layer: number, x: number, y: number) => boolean;
+  };
 }
 
 const num = (cfg: Config, k: string, d: number) => { const v = parseFloat(String(cfg[k] ?? '')); return Number.isFinite(v) ? v : d; };
@@ -42,7 +71,14 @@ const num = (cfg: Config, k: string, d: number) => { const v = parseFloat(String
 export function weaveSession(w: WeaveSettings, ctx: PrepareContext): WeaveSession {
   const mask = objectMask(w.objects, ctx);
   const targets = mask.targets;
-  const session: WeaveSession = { weave: mask };
+  const outlines = new Map<string, Paths>();
+  const onObject = (o: number, layer: number, x: number, y: number) => {
+    const k = `${o}|${layer}`;
+    let m = outlines.get(k);
+    if (!m) { m = offset(ctx.sliceAt(o, layer), 0.8); outlines.set(k, m); }
+    return pointIn(x, y, m);
+  };
+  const session: WeaveSession = { weave: { ...mask, zones: collectZones(ctx.meshes, ctx.planes), planes: ctx.planes, onObject } };
   if (w.mode !== 'colour' || w.slots.length < 2) return session;
   const usable = w.slots.every((s) => s >= 0 && s < ctx.filamentCount);
   if (!usable) { ctx.warn(`Weave: the picture uses filament slots ${w.slots.map((s) => s + 1).join(', ')} but this print has ${ctx.filamentCount}. Add the missing filaments.`); return session; }
@@ -134,35 +170,74 @@ export function applyWeave(layers: LayerOps[], w: WeaveSettings, cfg: Config, se
   const zs = layers.map((L) => L.z);
   const per = found.map((ls) => (ls.length ? Math.max(...ls.map((l) => perimeter(l.pts))) : NaN));
   const plan = planLayers(w, zs, per);
-  // woven points: ~6 per picture column, but no closer than the firmware streams at the wall speed
-  const step = Math.max(0.08, Math.min(0.5, minMoveMm(cfg, num(cfg, 'outer_wall_speed', 80))), Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6));
+  // the wave texture: whole part plus zones, on the slicer's layer planes (by layer index)
+  let planes = session?.weave.planes;
+  if (!planes) { planes = []; layers.forEach((L, li) => { planes![idx(li)] = L.z - L.h / 2; }); }
+  const field = new WaveField(w, session?.weave.zones ?? [], { planes, onObject: session?.weave.onObject, cap: w.max_deviation_mm > 0 ? w.max_deviation_mm : undefined });
+  const stitch = field.shortestStitch;
+  // woven points: ~6 per picture column and 8 per stitch, but no closer than the firmware streams at the wall speed
+  const minMove = Math.min(0.5, minMoveMm(cfg, num(cfg, 'outer_wall_speed', 80)));
+  const pixelStep = w.picture?.kind === 'none' ? 0.25 : Math.min(0.25, (Math.min(...per.filter((p) => p > 0), 1e9) / Math.max(1, rep.columns)) / 6);
+  const step = Math.max(0.08, minMove, Math.min(pixelStep, stitch / 8));
+  if (Number.isFinite(stitch) && stitch / 8 < minMove - 1e-9) warn(`Weave: stitches of ${stitch.toFixed(1)} mm are short for this printer at the outer wall speed (its moves need ${minMove.toFixed(2)} mm each). Make the stitches longer or slow the outer wall down.`);
+  const accel = Math.min(num(cfg, 'outer_wall_acceleration', 0) || num(cfg, 'default_acceleration', 0) || 5000, maxAccelOf(cfg));
   const tuck = Math.max(0, w.seam.tuck_mm);
   let prevColour = -1;
+  // the wave's layer-to-layer step, measured on a fixed grid round the biggest loop
+  const GRID = 720;
+  let prevGrid: Float64Array | null = null, waveSwing = 0;
   for (let li = 1; li < layers.length; li++) {
     const P = plan[li];
     if (P) { rep.wovenLayers++; if (w.mode === 'colour' && prevColour >= 0 && P.colour !== prevColour) rep.changes++; prevColour = P.colour; }
-    if (!P && !w.seam.inward) continue;
+    const waved = field.activeAt(idx(li));
+    if (!P && !w.seam.inward && !waved) { prevGrid = null; continue; }
     const loops = found[li];
+    let grid: Float64Array | null = null, gridLen = 0;
     // from the last loop backwards so earlier op indices stay valid
     for (let n = loops.length - 1; n >= 0; n--) {
       const lp = loops[n];
-      const woven = weaveLoop(lp.pts, P ? (u) => offsetAt(w, P, u) : null, step, w.smooth_mm, w.seam.angle_deg);
+      const woven = weaveLoop(lp.pts, P ? (u) => offsetAt(w, P, u) : null, step, w.smooth_mm, w.seam.angle_deg, waved ? field.term(idx(li)) : undefined);
       if (woven.length < 4) continue;
-      writeLoop(layers[li].ops, lp, woven, w.seam.inward ? tuck : 0, cfg);
+      const hasWave = woven.some((q) => (q.wave ?? 0) > 0);
+      // pointed and square stitches: slow into their turns, as the firmware will
+      const speeds = hasWave ? cornerSpeeds(woven, lp, accel) : undefined;
+      writeLoop(layers[li].ops, lp, woven, w.seam.inward ? tuck : 0, cfg, speeds);
       if (P) rep.loops++;
       if (w.seam.inward && tuck > 0) rep.seamsTucked++;
+      const L = perimeter(lp.pts);
+      if (hasWave && L > gridLen) {
+        gridLen = L;
+        grid = new Float64Array(GRID).fill(NaN);
+        for (const q of woven) grid[Math.min(GRID - 1, Math.floor(q.u * GRID))] = q.lat;
+      }
     }
+    if (grid && prevGrid) for (let g = 0; g < GRID; g++) if (Number.isFinite(grid[g]) && Number.isFinite(prevGrid[g])) waveSwing = Math.max(waveSwing, Math.abs(grid[g] - prevGrid[g]));
+    prevGrid = grid;
   }
   // biggest out-to-in step between neighbouring layers: a showing line over a hidden one
   const maxMul = w.calibration ? 1.5 : 1;
-  rep.swing = w.depth_mm * maxMul * (1 + w.recess);
+  rep.swing = w.picture?.kind === 'none' ? 0 : w.depth_mm * maxMul * (1 + w.recess);
   if (rep.swing > 0.6 * lw) warn(`Weave: lines step ${rep.swing.toFixed(2)} mm in and out between layers, more than 60% of the ${lw.toFixed(2)} mm line, so layers may not bond. Lower the depth or the pull-in.`);
+  const st = field.stats;
+  if (field.zones.length || st.layers.size) {
+    rep.wave = { layers: st.layers.size, zones: field.zones.length, zonesUsed: st.zones.size, swing: waveSwing, stitch: Number.isFinite(stitch) ? stitch : 0, edgeLoops: st.edgeLoops, repicks: st.repicks };
+    if (waveSwing > lw) warn(`Weave: the wave puts neighbouring layers up to ${waveSwing.toFixed(2)} mm apart, more than the ${lw.toFixed(2)} mm line, so they only touch where the waves cross and the wall may be weak. Lower the wave height.`);
+    if (field.zones.length && !st.zones.size) warn('Weave: no wave zone touches the woven wall. Move the zone shapes onto the part, or check their heights.');
+  }
   if (w.mode === 'colour' && rep.wovenLayers && cycleLayers(w) > rep.wovenLayers) warn('Weave: the woven band is shorter than one row of the picture.');
   return rep;
 }
 
+/** Speed at each woven point (mm/s) with the turns of the wave slowed within the printer's acceleration. */
+function cornerSpeeds(woven: WovenPoint[], lp: Loop, accel: number): number[] {
+  const f0 = lp.f[0] ?? 60;
+  const pts: ToolpathPoint[] = woven.map((q) => ({ x: q.x, y: q.y, z: lp.z, f: lp.f[q.src] ?? f0, flow: 1, e: 0 }));
+  limitCornerSpeeds(pts, accel);
+  return pts.map((q) => q.f);
+}
+
 /** Replace a loop's moves with the woven loop, a lead-in from inside, a tail and wipe going inside. */
-function writeLoop(ops: Op[], lp: Loop, woven: WovenPoint[], tuck: number, cfg: Config) {
+function writeLoop(ops: Op[], lp: Loop, woven: WovenPoint[], tuck: number, cfg: Config, speeds?: number[]) {
   const first = ops[lp.start] as Move;
   const P0 = woven[0], n0x = P0.nx, n0y = P0.ny;
   // tangent at the seam (direction of travel)
@@ -187,14 +262,17 @@ function writeLoop(ops: Op[], lp: Loop, woven: WovenPoint[], tuck: number, cfg: 
   }
   if (!fixed) out.push({ k: 'move', x: round(S.x), y: round(S.y), z: lp.z, e: 0, f: travelF, feature: 'travel', w: 0, h: lp.h, travel: true, noArc: true });
   const f0 = lp.f[0] ?? first.f;
-  if (T) out.push(mv(P0.x, P0.y, Math.hypot(P0.x - S.x, P0.y - S.y) * lp.ePerMm, Math.min(f0, 30), lp.feat[0] ?? 'outer_wall'));
+  // lead-in and tail are marked, so later passes (motions) see the loop itself as one closed line
+  if (T) out.push({ ...mv(P0.x, P0.y, Math.hypot(P0.x - S.x, P0.y - S.y) * lp.ePerMm, Math.min(f0, 30), lp.feat[0] ?? 'outer_wall'), tuck: true });
   for (let k = 1; k < woven.length; k++) {
     const a = woven[k - 1], b = woven[k];
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     if (len < 1e-6) continue;
-    out.push(mv(b.x, b.y, len * lp.ePerMm, lp.f[b.src] ?? f0, lp.feat[b.src] ?? 'outer_wall'));
+    const m = mv(b.x, b.y, len * lp.ePerMm, speeds?.[k] ?? lp.f[b.src] ?? f0, lp.feat[b.src] ?? 'outer_wall');
+    if (b.wave) m.wave = Math.round(b.wave * 100) / 100;
+    out.push(m);
   }
-  if (T) out.push(mv(T.x, T.y, Math.hypot(T.x - P0.x, T.y - P0.y) * lp.ePerMm * 0.5, Math.min(f0, 30), lp.feat[0] ?? 'outer_wall'));
+  if (T) out.push({ ...mv(T.x, T.y, Math.hypot(T.x - P0.x, T.y - P0.y) * lp.ePerMm * 0.5, Math.min(f0, 30), lp.feat[0] ?? 'outer_wall'), tuck: true });
   ops.splice(lp.start, lp.end - lp.start, ...out);
   // the slicer's wipe after the loop ran back along the outside: send it further inside instead
   if (!T) return;

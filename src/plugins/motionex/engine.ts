@@ -107,14 +107,15 @@ export function opsToLayers(layers: LayerOps[]): { layers: Layer[]; runs: Run[] 
       const op = L.ops[i];
       if (op.k === 'raw' && op.resetPos) { last = null; i++; continue; }
       if (op.k !== 'move') { i++; continue; }
-      if (op.travel || op.e <= 0 || !last) { last = { x: op.x, y: op.y, z: op.z }; i++; continue; }
+      // a woven loop's lead-in and tail (tucked inside the wall) are left out: the loop itself is then closed
+      if (op.travel || op.e <= 0 || !last || op.tuck) { last = { x: op.x, y: op.y, z: op.z }; i++; continue; }
       const feature = op.feature;
       let j = i;
       const pts: ToolpathPoint[] = [{ x: last.x, y: last.y, z: last.z, f: op.f, flow: 1, e: 0 }];
       let eSum = 0, lenSum = 0;
       while (j < L.ops.length) {
         const m = L.ops[j];
-        if (m.k !== 'move' || m.travel || m.e <= 0 || m.feature !== feature) break;
+        if (m.k !== 'move' || m.travel || m.e <= 0 || m.feature !== feature || m.tuck) break;
         const p = pts[pts.length - 1];
         lenSum += Math.hypot(m.x - p.x, m.y - p.y, m.z - p.z);
         eSum += m.e;

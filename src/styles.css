@@ -273,6 +273,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- preview */
 .legend { right: 12px; top: 12px; width: 300px; max-height: calc(100% - 110px); overflow-y: auto; padding: 10px 12px; }
 .legend h4 { margin: 0; font-size: 13px; color: var(--text-strong); }
+.legend-views button { white-space: nowrap; padding: 4px 8px; }
 .lrow { display: grid; grid-template-columns: 16px 14px 1fr auto auto auto; align-items: center; gap: 6px; padding: 3px 0; }
 .lrow.off { opacity: 0.4; }
 .swatch { width: 14px; height: 14px; border-radius: 3px; }
@@ -466,6 +467,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mx-more[open] > summary { margin-bottom: 4px; }
 .mx-more .ok { color: var(--accent); }
 .mx-more .bad { color: var(--warning); }
+/* wave texture: the line seen from above with the next layers over it */
+.wave-strip-box { border: 1px solid var(--border); border-radius: 6px; background: var(--surface-primary); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
+.wave-strip { width: 100%; height: 56px; display: block; }
+.mx-app.on { border-color: var(--accent); }
+.mx-app > summary.mx-app-top { list-style: none; cursor: pointer; }
 
 /* Motion tab: editor beside the 3D view */
 .studio { width: var(--studio-w, 440px); min-height: 0; overflow-y: auto; background: var(--surface-primary); border-left: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }

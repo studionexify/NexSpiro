@@ -379,6 +379,12 @@ export const OBJECT_KEYS = PROCESS_PARAMS.map((p) => p.key).filter((k) => !GLOBA
 export const HEIGHT_RANGE_KEYS = OBJECT_KEYS.filter((k) => k !== 'flush_into_objects' && k !== 'slicing_mode');
 /** Settings a modifier volume may change inside its region. */
 export const MODIFIER_KEYS = ['sparse_infill_density', 'sparse_infill_pattern', 'infill_direction', 'sparse_infill_speed'];
+/**
+ * Wave texture of a weave zone (a modifier volume or a height range): Motionex reads them, the core slicer
+ * never does, so a zone with only these keys leaves infill and walls alone. wave_mode: 'wave' | 'plain';
+ * the style keys, when missing, follow the weave's whole-part wave.
+ */
+export const WAVE_KEYS = ['wave_mode', 'wave_shape', 'wave_height', 'wave_length', 'wave_flip_every', 'wave_flip_deg', 'wave_flip_mode', 'wave_blend'];
 
 /**
  * Brings settings saved by older NexSpiro versions up to date: renamed keys and changed enum values.

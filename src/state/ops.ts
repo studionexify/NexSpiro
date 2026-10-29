@@ -464,6 +464,41 @@ export function setPartWall(objectId: string, partId: string, wall: number, wall
   updatePart(objectId, partId, (q) => ({ ...q, mesh: m, name: q.name.replace(/, [\d.]+ mm\)$/, `, ${wall} mm)`), prim: { ...q.prim!, wall, wallOut: wo, tess: meanScale(eff), tris: m.indices.length / 3, innerFrom } }));
 }
 
+/**
+ * Add a weave wave zone: a modifier shape that carries only the wave keys (Motionex Weave), so infill and
+ * walls stay as they are. It starts straddling the +X side of the wall at mid height, where it meets the
+ * woven skin, and is selected so the move / scale / rotate handles appear.
+ */
+export function addWaveZone(objectId: string, shape: ShapeKind, overrides: Config = { wave_mode: 'wave' }) {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === objectId);
+  if (!o) return;
+  const b = worldBounds(o);
+  const size = Math.max(6, Math.min(b.max[2] - b.min[2], b.max[0] - b.min[0], b.max[1] - b.min[1]) * 0.4);
+  const at = new THREE.Vector3(b.max[0], (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2).applyMatrix4(objectMatrix(o).invert());
+  const mesh = primitive(shape, size);
+  const n = (o.parts ?? []).filter((p) => p.type === 'modifier' && (p.overrides.wave_mode === 'wave' || p.overrides.wave_mode === 'plain')).length + 1;
+  const part: ScenePart = {
+    id: newId('part'), name: `Wave zone ${n} (${shape})`, type: 'modifier', mesh, position: [at.x, at.y, at.z], rotation: [0, 0, 0],
+    scale: [1 / o.scale[0], 1 / o.scale[1], 1 / o.scale[2]], overrides, prim: { shape, size, tess: 1, tris: mesh.indices.length / 3 },
+  };
+  s.updateObjects((x) => ({ ...x, parts: [...(x.parts ?? []), part] }), [objectId]);
+  s.set({ selectedPart: part.id, selected: [objectId], selectedRange: null, processMode: 'objects' });
+  s.markDirty();
+}
+
+/** Add a weave wave band: a height range (start and end height) that carries only the wave keys. */
+export function addWaveBand(objectId: string, overrides: Config = { wave_mode: 'wave' }) {
+  const s = useStore.getState();
+  const o = s.objects.find((x) => x.id === objectId);
+  if (!o) return;
+  const h = objectHeight(o);
+  const r = { id: newId('range'), z0: +(h / 3).toFixed(2), z1: +((2 * h) / 3).toFixed(2), overrides };
+  s.updateObjects((x) => ({ ...x, heightRanges: [...(x.heightRanges ?? []), r] }), [objectId]);
+  s.set({ selected: [objectId], selectedPart: null, selectedRange: r.id, processMode: 'objects' });
+  s.markDirty();
+}
+
 export function updatePart(objectId: string, partId: string, fn: (p: ScenePart) => ScenePart, record = true) {
   useStore.getState().updateObjects((o) => ({ ...o, parts: (o.parts ?? []).map((p) => (p.id === partId ? fn(p) : p)) }), [objectId], record);
 }
