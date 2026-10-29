@@ -181,6 +181,8 @@ interface State {
   cutConnectors: { x: number; y: number }[];
   cutConnector: ConnectorSettings;
   cutConnectorMode: boolean;
+  /** Cut preview fragments right-clicked over to the other side ('a<k>' / 'b<k>'). */
+  cutSwap: string[];
   cutMode: 'planar' | 'dovetail';
   cutGroove: GrooveSettings;
   /** Measure tool: picked world points (up to 2). */
@@ -288,6 +290,7 @@ export const useStore = create<State>((set, get) => ({
   cutConnectors: [],
   cutConnector: DEFAULT_CONNECTOR,
   cutConnectorMode: false,
+  cutSwap: [],
   cutMode: 'planar',
   cutGroove: DEFAULT_GROOVE,
   measureFeatures: [],

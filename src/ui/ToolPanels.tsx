@@ -33,7 +33,7 @@ function Seg({ label, value, options, onChange }: { label: string; value: string
 }
 
 export function CutPanel() {
-  const { tool, objects, selected, cutPlane, cutConnectors, cutConnector: cc, cutConnectorMode, cutMode, cutGroove: gv, set } = useStore();
+  const { tool, objects, selected, cutPlane, cutConnectors, cutConnector: cc, cutConnectorMode, cutMode, cutGroove: gv, cutSwap, set } = useStore();
   const setG = (p: Partial<GrooveSettings>) => set({ cutGroove: { ...gv, ...p } });
   const o = objects.find((x) => x.id === selected[0]);
   const setC = (p: Partial<ConnectorSettings>) => set({ cutConnector: { ...cc, ...p } });
@@ -88,12 +88,13 @@ export function CutPanel() {
           </>}
         </>}
         </>}
+        <p className="muted" style={{ fontSize: 12, margin: '8px 0 4px' }}>Drag the plane to move it. Right-click a piece to move it to the other side{cutSwap.length ? ` (${cutSwap.length} moved)` : ''}.</p>
         <label className="row"><input type="checkbox" checked={keepAbove} onChange={(e) => setAbove(e.target.checked)} />Keep upper part</label>
         <label className="row" style={{ marginLeft: 20 }}><input type="checkbox" checked={flip} disabled={!keepAbove} onChange={(e) => setFlip(e.target.checked)} />Place on cut face</label>
         <label className="row"><input type="checkbox" checked={keepBelow} onChange={(e) => setBelow(e.target.checked)} />Keep lower part</label>
         <div className="row" style={{ marginTop: 10 }}>
-          <button className="btn-secondary btn-small" onClick={() => set({ cutPlane: { height: +((b.min[2] + b.max[2]) / 2).toFixed(2), tiltX: 0, tiltY: 0 } })}>Reset</button>
-          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip, ...(cutMode === 'dovetail' ? { groove: gv } : { connectors: cutConnectors, connector: cc }) })}><Icon name="cut" size={14} />Perform cut</button>
+          <button className="btn-secondary btn-small" onClick={() => set({ cutPlane: { height: +((b.min[2] + b.max[2]) / 2).toFixed(2), tiltX: 0, tiltY: 0 }, cutSwap: [] })}>Reset</button>
+          <button className="btn-primary btn-small" disabled={!keepAbove && !keepBelow} onClick={() => cutObject(o.id, { ...cutPlane, keepAbove, keepBelow, flipAbove: flip, swap: cutSwap, ...(cutMode === 'dovetail' ? { groove: gv } : { connectors: cutConnectors, connector: cc }) })}><Icon name="cut" size={14} />Perform cut</button>
         </div>
       </>}
     </div>

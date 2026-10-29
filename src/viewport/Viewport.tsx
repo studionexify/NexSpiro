@@ -8,6 +8,8 @@ import { edgeRun, nearestEdge, pickEdge } from '../state/meshTools';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { flatFaces } from './flatFaces';
 import { grooveMesh } from '../state/cutConnectors';
+import { cutPreview } from '../state/tools';
+import type { IndexedMesh } from '../engine/mesh';
 import { BRUSHES, fillTriangles, gapFill, heightRangeTriangles, meshCache } from '../engine/brush';
 import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -338,6 +340,70 @@ export function Viewport() {
     cutPlaneMesh.add(cutEdge);
     cutPlaneMesh.visible = false;
     scene.add(cutPlaneMesh);
+    // live cut preview: the pieces above (cyan) and below (magenta) the plane; the object being cut is shown alone
+    const cutPrev = new THREE.Group();
+    cutPrev.matrixAutoUpdate = false;
+    scene.add(cutPrev);
+    const cutMats = { a: new THREE.MeshStandardMaterial({ color: '#3cc8d2', roughness: 0.6 }), b: new THREE.MeshStandardMaterial({ color: '#d43cd4', roughness: 0.6 }) };
+    let cutPrevKey = '';
+    let cutPrevTimer = 0;
+    const cutting = () => { const s = useStore.getState(); return s.workspace === 'prepare' && s.tool === 'cut' && !!s.objects.find((x) => x.id === s.selected[0]); };
+    const clearCutPrev = () => { for (const c of cutPrev.children) (c as THREE.Mesh).geometry.dispose(); cutPrev.clear(); };
+    const buildCutPrev = () => {
+      const s = useStore.getState();
+      const o = s.objects.find((x) => x.id === s.selected[0]);
+      clearCutPrev();
+      const pv = o && cutting() && s.cutMode === 'planar' ? cutPreview(o, s.cutPlane) : null;
+      if (pv) {
+        cutPrev.matrix.copy(pv.fromPlane);
+        cutPrev.matrixWorldNeedsUpdate = true;
+        const sw = new Set(s.cutSwap);
+        const add = (m: IndexedMesh, id: string, side: 'a' | 'b') => {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(m.vertices, 3));
+          g.setIndex(new THREE.BufferAttribute(m.indices, 1));
+          const flat = g.toNonIndexed(); flat.computeVertexNormals(); g.dispose();
+          const mesh = new THREE.Mesh(flat, cutMats[sw.has(id) ? (side === 'a' ? 'b' : 'a') : side]);
+          mesh.userData.cutFrag = id;
+          cutPrev.add(mesh);
+        };
+        pv.above.forEach((m, k) => add(m, `a${k}`, 'a'));
+        pv.below.forEach((m, k) => add(m, `b${k}`, 'b'));
+      }
+      applyCutIsolation();
+      invalidate();
+    };
+    /** While cutting, only the object being cut is shown (as its preview pieces when the plane crosses it). */
+    const applyCutIsolation = () => {
+      const s = useStore.getState();
+      const on = cutting();
+      cutPrev.visible = on && cutPrev.children.length > 0;
+      if (!on) return;
+      for (const [id, e] of meshes) e.mesh.visible = id === s.selected[0] && !cutPrev.visible && !s.objects.find((x) => x.id === id)?.hidden;
+      for (const pe of partMeshes.values()) pe.mesh.visible = false;
+      selBoxes.visible = false;
+    };
+    const syncCutPrev = () => {
+      const s = useStore.getState();
+      const o = s.objects.find((x) => x.id === s.selected[0]);
+      const key = cutting() && o ? JSON.stringify([o.id, s.cutPlane, s.cutMode, o.position, o.rotation, o.scale]) + (o.mesh.vertices.length) : '';
+      if (key !== cutPrevKey) {
+        cutPrevKey = key;
+        if (s.cutSwap.length) s.set({ cutSwap: [] }); // pieces are renumbered when the plane moves
+        clearTimeout(cutPrevTimer);
+        if (!key) { clearCutPrev(); applyCutIsolation(); return; }
+        cutPrevTimer = window.setTimeout(buildCutPrev, 60);
+        return;
+      }
+      // only the swapped pieces changed: recolour
+      const sw = new Set(s.cutSwap);
+      for (const c of cutPrev.children) {
+        const id = c.userData.cutFrag as string, side = id[0] as 'a' | 'b';
+        (c as THREE.Mesh).material = cutMats[sw.has(id) ? (side === 'a' ? 'b' : 'a') : side];
+      }
+      applyCutIsolation();
+      invalidate();
+    };
     const measureGroup = new THREE.Group();
     scene.add(measureGroup);
     // cut connectors on the plane (plane frame without the plane's display scale)
@@ -709,6 +775,8 @@ export function Viewport() {
       applyHover();
       syncPatternex();
       if (!isPaintTool(s.tool)) brush.visible = false;
+      selBoxes.visible = s.workspace === 'prepare';
+      syncCutPrev();
       syncGizmo();
       invalidate();
     };
@@ -1097,6 +1165,13 @@ export function Viewport() {
     const onMove = (ev: PointerEvent) => {
       if (sculpting) { if (ev.buttons === 1) sculptPickAt(ev, ev.shiftKey); return; }
       if (objDrag) { moveObjectDrag(ev); return; }
+      if (cutDrag) { moveCutDrag(ev); return; }
+      if (ev.buttons === 0 && cutPlaneMesh.visible && !useStore.getState().cutConnectorMode) {
+        ray.setFromCamera(ndc(ev), camera);
+        const over = ray.intersectObject(cutPlaneMesh, false).length > 0;
+        renderer.domElement.style.cursor = over ? 'ns-resize' : '';
+        renderer.domElement.title = over ? 'Drag to move the cut plane\nRight-click a piece to assign it to the other side' : '';
+      }
       if (boxSel) { boxSel.x1 = ev.clientX; boxSel.y1 = ev.clientY; showBox(); return; }
       if (pressedIcon) return;
       {
@@ -1150,6 +1225,7 @@ export function Viewport() {
         if (iconAt(ev) === pi) runIcon(pi);
         return;
       }
+      if (cutDrag) { cutDrag = null; downAt = null; renderer.domElement.style.cursor = ''; return; }
       if (boxSel && finishBoxSelect(ev)) return;
       if (endObjectDrag()) return;
       if (placeUp()) { downAt = null; return; }
@@ -1195,6 +1271,12 @@ export function Viewport() {
           if (moved <= 4 && s.tool !== 'lasso_motion' && s.tool !== 'band_motion') { startPaint(ev, true, false); endPaint(); }
           return;
         }
+        if (s.tool === 'cut' && s.workspace === 'prepare' && Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) <= 4) {
+          const f = cutFragAt(ev);
+          downAt = null;
+          if (f) s.set({ cutSwap: s.cutSwap.includes(f) ? s.cutSwap.filter((x) => x !== f) : [...s.cutSwap, f] });
+          return;
+        }
         openMenu(ev);
         return;
       }
@@ -1220,8 +1302,9 @@ export function Viewport() {
         const fh = ray.intersectObjects(faceGroup.children, false)[0];
         if (fh) { layOnFace(fh.object.userData.id, (fh.object.userData.normal as THREE.Vector3).clone()); faceKey = ''; return; }
       }
+      if (s.tool === 'cut' && cutFragAt(ev)) return;
       const parts = [...partMeshes.values()].map((p) => p.mesh);
-      const hit = ray.intersectObjects([...parts, ...objectMeshes()], false)[0];
+      const hit = ray.intersectObjects([...parts, ...objectMeshes()].filter((m) => m.visible), false)[0];
       if (!hit) {
         const plates = plateGroup.children.flatMap((g) => g.children.filter((c) => c.userData.plateIndex !== undefined));
         const ph = ray.intersectObjects(plates, false)[0];
@@ -1505,6 +1588,42 @@ export function Viewport() {
       }
     };
 
+    // ---------------- cut tool: left drag on the plane slides it along its normal; right click on a piece swaps its side
+    let cutDrag: { n: THREE.Vector3; p0: THREE.Vector3; h0: number; lo: number; hi: number } | null = null;
+    const startCutDrag = (ev: PointerEvent): boolean => {
+      const s = useStore.getState();
+      if (ev.button !== 0 || s.tool !== 'cut' || s.cutConnectorMode || !cutPlaneMesh.visible) return false;
+      ray.setFromCamera(ndc(ev), camera);
+      const hit = ray.intersectObject(cutPlaneMesh, false)[0];
+      const o = s.objects.find((x) => x.id === s.selected[0]);
+      if (!hit || !o) return false;
+      const b = worldBounds(o);
+      cutDrag = { n: new THREE.Vector3(0, 0, 1).applyQuaternion(cutPlaneMesh.quaternion), p0: hit.point.clone(), h0: s.cutPlane.height, lo: b.min[2], hi: b.max[2] };
+      renderer.domElement.style.cursor = 'grabbing';
+      capture(ev);
+      return true;
+    };
+    const moveCutDrag = (ev: PointerEvent) => {
+      const d = cutDrag!;
+      ray.setFromCamera(ndc(ev), camera);
+      // the drag line runs along the plane normal; intersect the ray with the plane through that line facing the camera
+      const view = ray.ray.direction.clone();
+      const pn = d.n.clone().cross(view.clone().cross(d.n));
+      if (pn.lengthSq() < 1e-8) return;
+      const p = ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(pn.normalize(), d.p0), new THREE.Vector3());
+      if (!p) return;
+      const t = p.sub(d.p0).dot(d.n);
+      const nz = Math.abs(d.n.z) < 0.2 ? Math.sign(d.n.z || 1) * 0.2 : d.n.z;
+      const h = Math.min(d.hi, Math.max(d.lo, d.h0 + t / nz));
+      const s = useStore.getState();
+      if (Math.abs(h - s.cutPlane.height) > 1e-3) s.set({ cutPlane: { ...s.cutPlane, height: +h.toFixed(2) } });
+    };
+    const cutFragAt = (ev: PointerEvent): string | null => {
+      if (!cutPrev.visible) return null;
+      ray.setFromCamera(ndc(ev), camera);
+      return (ray.intersectObjects(cutPrev.children, false)[0]?.object.userData.cutFrag as string | undefined) ?? null;
+    };
+
     const onPressCapture = (ev: PointerEvent) => {
       const s = useStore.getState();
       let paints = false;
@@ -1515,12 +1634,23 @@ export function Viewport() {
       } else if (ev.button === 0 && (isPaintTool(s.tool) || s.tool === 'place_pattern' || s.tool === 'sculpt_pick') && s.workspace === 'prepare' && ev.target === renderer.domElement) {
         if (s.tool === 'lasso_motion') paints = true;
         else { ray.setFromCamera(ndc(ev), camera); paints = ray.intersectObjects(objectMeshes(), false).length > 0; }
-      } else if (ev.target === renderer.domElement && (startBoxSelect(ev) || startObjectDrag(ev))) paints = true;
+      } else if (ev.target === renderer.domElement && (startCutDrag(ev) || startBoxSelect(ev) || startObjectDrag(ev))) paints = true;
       controls.mouseButtons = paints ? { ...paintButtons } : { ...normalButtons };
     };
     el.addEventListener('pointerdown', onPressCapture, true);
     const onLeave = () => { brush.visible = false; setIconHover(null); if (hoverId) { hoverId = null; applyHover(); } invalidate(); };
+    // double click on empty space: drop the selection and leave the active tool
+    const onDouble = (ev: MouseEvent) => {
+      const s = useStore.getState();
+      if (s.workspace !== 'prepare' || isPaintTool(s.tool)) return;
+      ray.setFromCamera(ndc(ev as PointerEvent), camera);
+      const vis = [...[...partMeshes.values()].map((p) => p.mesh), ...objectMeshes(), ...cutPrev.children].filter((m) => m.visible && (m.parent?.visible ?? true));
+      if (ray.intersectObjects(vis, false).length) return;
+      s.set({ selected: [], selectedPart: null, tool: 'select', cutConnectorMode: false, cutSwap: [], surfacePick: null });
+    };
+    renderer.domElement.addEventListener('dblclick', onDouble);
     const onCancel = () => {
+      cutDrag = null;
       drawing = null; band = null; boxSel = null; pressedIcon = null; showOutline(); showBand();
       if (objDrag) { objDrag = null; dragging = false; renderer.domElement.style.cursor = ''; syncObjects(); }
     };
@@ -1709,6 +1839,7 @@ export function Viewport() {
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.tool !== prev.tool || s.workspace !== prev.workspace || s.objects !== prev.objects) rebuildMarks();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
+      if (s.cutPlane !== prev.cutPlane || s.cutSwap !== prev.cutSwap || s.cutMode !== prev.cutMode) syncCutPrev();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
       if (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.slice.result !== prev.slice.result || s.layerRange !== prev.layerRange || s.moveCursor !== prev.moveCursor
