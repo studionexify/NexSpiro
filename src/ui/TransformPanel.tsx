@@ -111,8 +111,8 @@ function AlignSection({ ids }: { ids: string[] }) {
 
 /** Numeric transform panel for the active tool: the selected objects or the selected part. */
 export function TransformPanel() {
-  const { tool, objects, selected, updateObjects, selectedPart } = useStore();
-  const [uniform, setUniform] = useState(true);
+  const { tool, objects, selected, updateObjects, selectedPart, uniformScale: uniform, set } = useStore();
+  const setUniform = (v: boolean) => set({ uniformScale: v });
   const [space, setSpace] = useState<'world' | 'object'>('world');
   const o = objects.find((x) => x.id === selected[0]);
   if (!o || !['move', 'rotate', 'scale'].includes(tool)) return null;

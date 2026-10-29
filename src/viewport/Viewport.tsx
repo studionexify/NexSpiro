@@ -792,6 +792,21 @@ export function Viewport() {
     const syncGizmo = () => {
       const s = useStore.getState();
       const t = gizmoTarget();
+      // cut tool: X / Y rings tilt the cut plane (the plane itself is dragged to move it)
+      const cutRings = s.tool === 'cut' && s.workspace === 'prepare' && cutPlaneMesh.visible && !s.cutConnectorMode;
+      gizmo.showZ = !cutRings;
+      if (cutRings) {
+        if (!dragging) {
+          proxy.position.copy(cutPlaneMesh.position);
+          proxy.quaternion.copy(cutPlaneMesh.quaternion);
+          proxy.scale.set(1, 1, 1);
+          proxy.updateMatrixWorld();
+        }
+        gizmo.setMode('rotate');
+        gizmo.setSpace('world');
+        if (gizmo.object !== proxy) gizmo.attach(proxy);
+        return;
+      }
       const mode = s.tool === 'move' ? 'translate' : s.tool === 'rotate' ? 'rotate' : s.tool === 'scale' ? 'scale' : null;
       if (!t || !mode || s.workspace !== 'prepare') { gizmo.detach(); return; }
       if (!dragging) {
@@ -804,7 +819,7 @@ export function Viewport() {
       if (gizmo.object !== proxy) gizmo.attach(proxy);
     };
 
-    // Shift while dragging a handle snaps (1 mm, 5°, 5 %); Alt on a scale handle scales uniformly
+    // Shift while dragging a handle snaps (1 mm, 5°, 5 %); Alt on a scale handle inverts the uniform-scale toggle
     let altDown = false;
     let scaleStart = new THREE.Vector3(1, 1, 1);
     const setSnap = (on: boolean) => {
@@ -824,6 +839,7 @@ export function Viewport() {
       dragging = e.value;
       if (e.value) { scaleStart = proxy.scale.clone(); return; }
       const s = useStore.getState();
+      if (s.tool === 'cut') { commitCutTilt(); return; }
       const t = gizmoTarget();
       if (!t) return;
       const D = 180 / Math.PI;
@@ -852,11 +868,29 @@ export function Viewport() {
       if (pi !== s.activePlate) s.set({ activePlate: pi });
     });
     let applyRing: (() => void) | null = null; // rotate rings: replaces three's angle before the meshes follow the proxy
+    /** Plane tilt from the gizmo: the tiltX / tiltY (Euler XYZ, no Z) that give the same plane normal. */
+    const cutTiltOf = () => {
+      const n = new THREE.Vector3(0, 0, 1).applyQuaternion(proxy.quaternion);
+      const D = 180 / Math.PI, c = (v: number) => Math.max(-90, Math.min(90, +v.toFixed(1)));
+      return { tiltX: c(Math.atan2(-n.y, n.z) * D), tiltY: c(Math.asin(Math.max(-1, Math.min(1, n.x))) * D) };
+    };
+    const commitCutTilt = () => {
+      const s = useStore.getState();
+      s.set({ cutPlane: { ...s.cutPlane, ...cutTiltOf() } });
+    };
     gizmo.addEventListener('objectChange', () => {
       applyRing?.();
+      if (useStore.getState().tool === 'cut') {
+        proxy.updateMatrixWorld();
+        cutPlaneMesh.quaternion.copy(proxy.quaternion);
+        connGroup.quaternion.copy(proxy.quaternion);
+        invalidate();
+        return;
+      }
       const t = gizmoTarget();
       if (!t) return;
-      if (gizmo.mode === 'scale' && altDown && gizmo.axis) {
+      // uniform scale (panel toggle; Alt inverts it): every axis follows the dragged one
+      if (gizmo.mode === 'scale' && useStore.getState().uniformScale !== altDown && gizmo.axis && gizmo.axis !== 'XYZ') {
         const k = 'XYZ'.indexOf(gizmo.axis[0]);
         const f = proxy.scale.getComponent(k) / (scaleStart.getComponent(k) || 1);
         proxy.scale.copy(scaleStart).multiplyScalar(f);
@@ -1593,6 +1627,7 @@ export function Viewport() {
     const startCutDrag = (ev: PointerEvent): boolean => {
       const s = useStore.getState();
       if (ev.button !== 0 || s.tool !== 'cut' || s.cutConnectorMode || !cutPlaneMesh.visible) return false;
+      if (gizmo.object && gizmo.axis) return false; // a tilt ring under the cursor wins
       ray.setFromCamera(ndc(ev), camera);
       const hit = ray.intersectObject(cutPlaneMesh, false)[0];
       const o = s.objects.find((x) => x.id === s.selected[0]);
@@ -1839,6 +1874,7 @@ export function Viewport() {
         || s.tool !== prev.tool || s.printerId !== prev.printerId || s.theme !== prev.theme || s.overrides !== prev.overrides || s.plates !== prev.plates || s.workspace !== prev.workspace || s.plugins !== prev.plugins || s.slice.result !== prev.slice.result || s.slice.status !== prev.slice.status) syncObjects();
       if (s.tool !== prev.tool || s.workspace !== prev.workspace || s.objects !== prev.objects) rebuildMarks();
       if (s.liveToolpaths !== prev.liveToolpaths) syncObjects();
+      if (s.cutPlane !== prev.cutPlane || s.cutConnectorMode !== prev.cutConnectorMode) { syncTools(); syncGizmo(); }
       if (s.cutPlane !== prev.cutPlane || s.cutSwap !== prev.cutSwap || s.cutMode !== prev.cutMode) syncCutPrev();
       if (showsMotion(s) && (s.liveToolpaths !== prev.liveToolpaths || s.workspace !== prev.workspace || s.objects !== prev.objects || s.activePlate !== prev.activePlate
         || s.printerId !== prev.printerId || s.presetId !== prev.presetId || s.overrides !== prev.overrides || s.plugins !== prev.plugins || s.filaments !== prev.filaments || s.threadView !== prev.threadView)) rebuildMotionPreview();
@@ -1846,7 +1882,7 @@ export function Viewport() {
         || s.colorScheme !== prev.colorScheme || s.hiddenFeatures !== prev.hiddenFeatures || s.showTravel !== prev.showTravel || s.filaments !== prev.filaments) syncPreview();
       if (s.brushSize !== prev.brushSize) { brush.scale.setScalar(s.brushSize / 2); invalidate(); }
       if (s.workspace !== prev.workspace || s.objects !== prev.objects) syncVoxels();
-      if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.cutMode !== prev.cutMode || s.cutGroove !== prev.cutGroove || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); }
+      if (s.cutPlane !== prev.cutPlane || s.cutConnectors !== prev.cutConnectors || s.cutConnector !== prev.cutConnector || s.cutMode !== prev.cutMode || s.cutGroove !== prev.cutGroove || s.measureFeatures !== prev.measureFeatures || s.surfacePick !== prev.surfacePick || s.overrides !== prev.overrides || s.plates !== prev.plates || s.activePlate !== prev.activePlate || s.machineOverrides !== prev.machineOverrides || s.tool !== prev.tool || s.selected !== prev.selected || s.objects !== prev.objects || s.workspace !== prev.workspace) { syncTools(); syncFaces(); syncGizmo(); }
     });
 
     let raf = 0;
