@@ -239,7 +239,7 @@ body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-selec
 .insp-plugin:not(.expert) details.px-more, .insp-plugin:not(.expert) details.mx-more { display: none; }
 .insp-plugin.expert details.px-more > summary, .insp-plugin.expert details.mx-more > summary { pointer-events: none; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 /* centred picker for long dropdowns */
-.bigpick { display: flex; flex-direction: column; gap: 10px; width: min(820px, 86vw); max-height: 70vh; overflow-y: auto; }
+.bigpick { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
 .bigpick .grp { margin: 6px 0 4px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
 .bigpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
 .bigpick-grid button { text-align: left; padding: 8px 10px; border: 1px solid var(--ns-line, var(--border)); border-radius: 8px; background: var(--surface-primary); color: var(--text); cursor: pointer; font: inherit; font-size: 12.5px; }
@@ -262,3 +262,19 @@ body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-selec
 .insp-plugin input[type=checkbox]:disabled { opacity: .45; cursor: not-allowed; }
 .insp-plugin label:not(.mx-field):has(> input[type=checkbox]) { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
 .insp-plugin label:not(.mx-field):has(> input[type=checkbox]) > input[type=checkbox] { order: 2; }
+
+/* folded pickers: the tab shows one button with the current choice; the window shows them all */
+.insp-plugin .bp-hidden { display: none !important; }
+.bp-trigger { width: 100%; height: 30px; text-align: left; cursor: pointer; padding: 0 28px 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: var(--surface-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center; }
+.bigpick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bigpick-chips button { padding: 5px 12px; border: 1px solid var(--ns-line, var(--border)); border-radius: 99px; background: var(--surface-primary); color: var(--text); cursor: pointer; font: inherit; font-size: 12.5px; }
+.bigpick-chips button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.bigpick-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.bigpick-lib button { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--ns-line, var(--border)); border-radius: 8px; background: var(--surface-primary); color: var(--text); cursor: pointer; font: inherit; font-size: 12px; text-align: center; }
+.bigpick-lib button:hover, .bigpick-chips button:hover { border-color: var(--accent); }
+.bigpick-lib button.on { border-color: var(--accent); background: var(--accent-tint); font-weight: 600; }
+.bigpick-lib button img, .bigpick-lib button canvas, .bigpick-lib button svg { width: 100%; height: auto; border-radius: 6px; }
+.bigpick-lib button .muted { display: none; }
+.modal:has(.bigpick) { width: min(880px, 92vw); max-width: none; }
+.modal .bigpick { width: 100%; box-sizing: border-box; }
