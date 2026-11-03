@@ -303,7 +303,7 @@ export function WeaveCard() {
               <select className="select" style={{ flex: 1 }} value={slot} onChange={(e) => regen(() => { w.slots[i] = +e.target.value; })}>
                 {filaments.map((f, k) => <option key={k} value={k}>Slot {k + 1} · {f.color}</option>)}
               </select>
-              {w.slots.length > 2 && <button className="icon-btn" title="Remove colour" onClick={() => regen(() => { w.slots.splice(i, 1); })}>✕</button>}
+              {w.slots.length > 2 && <button className="btn-secondary btn-small" onClick={() => regen(() => { w.slots.splice(i, 1); })}>Remove</button>}
             </div>
           ))}
           {w.slots.length < Math.min(MAX_COLOURS, filaments.length) && <button className="btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => regen(() => { w.slots.push(filaments.findIndex((_, k) => !w.slots.includes(k))); })}>+ Colour</button>}
@@ -367,8 +367,8 @@ export function WeaveCard() {
             <summary className="mx-app-top" style={{ fontSize: 12 }}>
               <b style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zoneName(z)}{targets.length > 1 ? ` · ${z.obj.name}` : ''}</b>
               <span className="mx-muted" style={{ margin: 0 }}>{z.part ? z.part.overrides.wave_mode : z.range!.overrides.wave_mode === 'plain' ? 'plain' : 'wave'}</span>
-              <button className="icon-btn" title="Select it: move, turn and stretch it in the 3D view" onClick={(e) => { e.preventDefault(); set({ selected: [z.obj.id], selectedPart: z.part?.id ?? null, selectedRange: z.range?.id ?? null, processMode: 'objects' }); }}>◎</button>
-              <button className="icon-btn" title="Remove this zone" onClick={(e) => { e.preventDefault(); removeZone(z); }}>✕</button>
+              <button className="btn-secondary btn-small" title="Select it: move, turn and stretch it in the 3D view" onClick={(e) => { e.preventDefault(); set({ selected: [z.obj.id], selectedPart: z.part?.id ?? null, selectedRange: z.range?.id ?? null, processMode: 'objects' }); }}>Select</button>
+              <button className="btn-secondary btn-small" onClick={(e) => { e.preventDefault(); removeZone(z); }}>Remove</button>
             </summary>
             {z.range && (
               <div className="mx-two">

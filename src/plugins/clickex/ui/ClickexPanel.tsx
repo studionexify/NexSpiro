@@ -24,7 +24,7 @@ export function ClickexPanel() {
         <div className="cx-btns">
           <button className="btn-secondary btn-small" onClick={() => { const p = transferToPlate(); if (p) say(`${p.count} parts placed on ${p.plate}.`); }}>Send to plate</button>
           <button className="btn-secondary btn-small" onClick={() => download3mf()}>Download 3MF</button>
-          <button className="btn-secondary btn-small" onClick={saveDesign}><Ico name="save" size={13} /> Save</button>
+          <button className="btn-secondary btn-small" onClick={saveDesign}>Save</button>
         </div>
         <button className="btn-secondary btn-small" style={{ marginTop: 6 }} title="A small plain clicker to test how the switch and button fit" onClick={() => { const p = transferFitTest(); if (p) say(`Fit test placed on ${p.plate}.`); }}>Send a fit test to the plate</button>
       </section>
@@ -34,7 +34,7 @@ export function ClickexPanel() {
           {saved.map((d) => (
             <div key={d.name} className="cx-saved">
               <button className="btn-secondary btn-small" style={{ flex: 1, textAlign: 'left' }} onClick={() => { openSaved(d); openStudio(true); }}>{d.name}</button>
-              <button className="btn-secondary btn-small" onClick={() => deleteSaved(d.name)} aria-label={`Delete ${d.name}`}><Ico name="trash" size={13} /></button>
+              <button className="btn-secondary btn-small" onClick={() => deleteSaved(d.name)} aria-label={`Delete ${d.name}`}>Delete</button>
             </div>
           ))}
         </section>

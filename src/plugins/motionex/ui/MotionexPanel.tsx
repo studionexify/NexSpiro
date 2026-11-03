@@ -341,7 +341,7 @@ function LayerRow({ a, i, active, onChange }: { a: MotionApplication; i: number;
         <div className="mx-muted" style={{ margin: 0 }}>{coverage(a, objects)}</div>
       </div>
       {b && <Wave b={b} small />}
-      <button className="icon-btn" title="Remove" onClick={(e) => { e.stopPropagation(); remove(); }}>✕</button>
+      <button className="btn-secondary btn-small" onClick={(e) => { e.stopPropagation(); remove(); }}>Remove</button>
     </div>
   );
 }

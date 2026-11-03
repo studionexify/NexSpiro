@@ -438,7 +438,7 @@ function BrandKit() {
           <div key={b.id} className="px-brand-item" title={b.name}>
             <button className="px-brand-thumb" onClick={() => armGenerated({ ...b.pattern, id: gid('logo') }, b.relief ? { kind: b.relief.mode, height: b.relief.height_mm } : { kind: 'ink' }, b.inks)} dangerouslySetInnerHTML={{ __html: fitSvg(b.pattern, {}, '#f4f4f6', 8000) }} />
             <span className="px-brand-name">{b.name}</span>
-            <button className="icon-btn" title="Remove from brand kit" onClick={() => { px.brandKit = px.brandKit.filter((x) => x !== b); changed(false); }}>✕</button>
+            <button className="btn-secondary btn-small" onClick={() => { px.brandKit = px.brandKit.filter((x) => x !== b); changed(false); }}>Remove</button>
           </div>
         ))}
       </div>

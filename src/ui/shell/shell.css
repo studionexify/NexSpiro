@@ -216,3 +216,49 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-grip span { width: 4px; height: 36px; border-radius: 4px; background: var(--ns-line, var(--border)); transition: background .12s, height .12s; }
 .sh-grip:hover span { background: var(--ns-primary, var(--accent)); height: 56px; }
 body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-select: none !important; }
+
+/* ---------- plugin tabs laid out like the process tabs ---------- */
+.insp-plugin .dock-body { font-size: 12.5px; }
+.insp-plugin .mx-panel { display: flex; flex-direction: column; gap: 4px; }
+/* cards become flat groups with a small heading, like .grp */
+.insp-plugin .mx-card { background: none; border: 0; border-radius: 0; padding: 0; gap: 2px; margin-top: 6px; }
+.insp-plugin .mx-card-title { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: .02em; padding: 6px 0 2px; border-bottom: 1px solid var(--ns-line, var(--border)); margin-bottom: 2px; gap: 6px; }
+.insp-plugin .mx-label { margin-top: 6px; }
+/* every field is one row: name on the left, control(s) on the right */
+.insp-plugin .mx-two { display: flex; flex-direction: column; gap: 2px; }
+.insp-plugin .mx-field { display: grid; grid-auto-flow: column; grid-template-columns: minmax(0, 1fr); grid-auto-columns: auto; align-items: center; column-gap: 8px; min-height: 28px; color: var(--text); font-size: 12.5px; }
+.insp-plugin .mx-field > .input, .insp-plugin .mx-two input.input { width: 76px !important; min-width: 0; height: 26px; text-align: right; padding: 2px 6px !important; box-sizing: border-box; }
+.insp-plugin .mx-field > .select, .insp-plugin .mx-field > select { width: 150px; max-width: 100%; height: 26px; }
+.insp-plugin .mx-field > input[type=range] { width: 110px; }
+.insp-plugin .mx-field > .seg, .insp-plugin .mx-field > .mx-seg { width: auto; }
+.insp-plugin > .dock-body .mx-card > .select, .insp-plugin > .dock-body .mx-card > select { height: 28px; }
+.insp-plugin .mx-check { min-height: 26px; }
+.insp-plugin .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.insp-plugin .mx-chips { gap: 6px; }
+/* advanced folds follow the Expert switch */
+.insp-plugin:not(.expert) details.px-more, .insp-plugin:not(.expert) details.mx-more { display: none; }
+.insp-plugin.expert details.px-more > summary, .insp-plugin.expert details.mx-more > summary { pointer-events: none; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+/* centred picker for long dropdowns */
+.bigpick { display: flex; flex-direction: column; gap: 10px; width: min(820px, 86vw); max-height: 70vh; overflow-y: auto; }
+.bigpick .grp { margin: 6px 0 4px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.bigpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.bigpick-grid button { text-align: left; padding: 8px 10px; border: 1px solid var(--ns-line, var(--border)); border-radius: 8px; background: var(--surface-primary); color: var(--text); cursor: pointer; font: inherit; font-size: 12.5px; }
+.bigpick-grid button:hover { border-color: var(--accent); }
+.bigpick-grid button.on { border-color: var(--accent); background: var(--accent-tint); font-weight: 600; }
+/* plugin tabs: words instead of icons */
+.insp-plugin .mx-card .mx-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.insp-plugin .mx-tool { padding: 6px 4px; }
+.insp-plugin .mx-tool .ic { display: none; }
+.insp-plugin .mx-tool .lbl { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* explanatory copy hidden in plugin tabs */
+.insp-plugin div.mx-muted:not(.px-warn):not(.bad) { display: none !important; }
+/* checkbox fields: name left, a switch on the right (like the process tabs) */
+.insp-plugin .mx-field:has(> input[type=checkbox]) { grid-template-columns: minmax(0, 1fr) auto; }
+.insp-plugin .mx-field > input[type=checkbox] { grid-column: 2; grid-row: 1; }
+.insp-plugin input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 28px; height: 16px; margin: 0; border-radius: 99px; background: var(--ns-line, var(--border)); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+.insp-plugin input[type=checkbox]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s; }
+.insp-plugin input[type=checkbox]:checked { background: var(--ns-ok, var(--success)); }
+.insp-plugin input[type=checkbox]:checked::after { left: 14px; }
+.insp-plugin input[type=checkbox]:disabled { opacity: .45; cursor: not-allowed; }
+.insp-plugin label:not(.mx-field):has(> input[type=checkbox]) { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
+.insp-plugin label:not(.mx-field):has(> input[type=checkbox]) > input[type=checkbox] { order: 2; }

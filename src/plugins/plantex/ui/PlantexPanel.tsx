@@ -359,7 +359,7 @@ function FilamentSelect({ value, set, allowBody }: { value: number; set: (v: num
           <i style={{ background: fils[k]?.color ?? '#999' }} />{k + 1}
         </button>
       ))}
-      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>+</button>
+      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>Add slot</button>
     </div>
   );
 }

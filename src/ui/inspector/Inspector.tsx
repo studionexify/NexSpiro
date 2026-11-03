@@ -2,7 +2,7 @@
 // Plate view → printer, filament / AMS, inline process settings, objects tree.
 // Object view → pinned params, effects stack, Physics Core (advanced), inline per-object settings.
 // Replaces the old left Sidebar; it reuses the Sidebar's cards and process model so behaviour is identical.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PARAM_BY_KEY, PROCESS_PRESETS, PROCESS_TABS, type ProcessTab } from '../../profiles/settings';
 import { useStore } from '../../state/store';
 import { useAdvanced } from '../../state/advanced';
@@ -358,15 +358,85 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
   );
 }
 
-/** A plugin's settings, shown as a tab beside Quality / Strength / … */
+/** Dropdowns with more options than this open a big centred picker instead of a long native list. */
+const BIG_SELECT = 10;
+
+/** Sets a <select>'s value the way a user would, so React's onChange fires. */
+function pickOption(sel: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  setter?.call(sel, value);
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * A plugin's settings, shown as a tab beside Quality / Strength / … and laid out like them: one row per setting
+ * (name left, control right) under small group headings. Its "More settings" folds follow the Expert switch.
+ */
 function PluginTab({ id }: { id: string }) {
   const p = PLUGINS.find((x) => x.id === id)!;
+  // Plantex, Lumonex, Clickex and Flenex show their own Studio button; Motionex gets one here
   const studio = studioOf(id);
   const Panel = p.Panel;
+  const expert = useStore((s) => s.showAdvanced);
+  const box = useRef<HTMLDivElement>(null);
+  const [pick, setPick] = useState<{ sel: HTMLSelectElement; label: string } | null>(null);
+  // Expert on: every advanced fold shown open; off: hidden
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const apply = () => el.querySelectorAll<HTMLDetailsElement>('details.px-more, details.mx-more').forEach((d) => { if (expert && !d.open) d.open = true; });
+    apply();
+    const mo = new MutationObserver(apply);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [expert, id]);
+  // long dropdowns open a centred picker window
+  const onDown = (e: React.MouseEvent) => {
+    const sel = (e.target as HTMLElement).closest('select');
+    if (!sel || sel.disabled || sel.options.length <= BIG_SELECT) return;
+    e.preventDefault();
+    const label = sel.getAttribute('aria-label') || sel.closest('label')?.firstChild?.textContent?.trim() || 'Choose';
+    setPick({ sel, label });
+  };
   return (
-    <div className="insp-plugin">
-      {studio && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
+    <div className={`insp-plugin ${expert ? 'expert' : ''}`} ref={box} onMouseDown={onDown}>
+      {studio && id === 'motionex' && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
       <div className="dock-body"><Panel /></div>
+      {pick && <BigPicker sel={pick.sel} title={pick.label} onClose={() => setPick(null)} />}
     </div>
+  );
+}
+
+/** Centred window listing every option of a long dropdown, grouped like its optgroups, with a filter box. */
+function BigPicker({ sel, title, onClose }: { sel: HTMLSelectElement; title: string; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const groups: [string, HTMLOptionElement[]][] = [];
+  for (const o of Array.from(sel.options)) {
+    const g = o.parentElement instanceof HTMLOptGroupElement ? o.parentElement.label : '';
+    const last = groups[groups.length - 1];
+    if (last && last[0] === g) last[1].push(o); else groups.push([g, [o]]);
+  }
+  const f = q.trim().toLowerCase();
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div className="bigpick">
+        <input className="input" autoFocus placeholder="Filter…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Filter options" />
+        {groups.map(([g, os]) => {
+          const shown = os.filter((o) => !f || o.text.toLowerCase().includes(f));
+          if (!shown.length) return null;
+          return (
+            <div key={g || '_'}>
+              {g && <div className="grp">{g}</div>}
+              <div className="bigpick-grid">
+                {shown.map((o) => (
+                  <button key={o.value} disabled={o.disabled} className={o.value === sel.value ? 'on' : ''}
+                    onClick={() => { pickOption(sel, o.value); onClose(); }}>{o.text}</button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
