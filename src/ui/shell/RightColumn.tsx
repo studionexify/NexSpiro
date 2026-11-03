@@ -1,7 +1,6 @@
 // Right column (356px): inspector on top, action dock pinned at the bottom. While a plugin's settings bar
 // is open the column can be folded into a slim strip, so the plugin gets the room.
 import { Inspector } from '../inspector/Inspector';
-import { ActionDock } from './ActionDock';
 import { useStore } from '../../state/store';
 import { useUi } from '../../state/ui';
 import { Icon } from '../icons';
@@ -33,7 +32,6 @@ export function RightColumn() {
         </button>
       )}
       <div className="sh-inspector"><Inspector /></div>
-      <ActionDock />
     </aside>
   );
 }

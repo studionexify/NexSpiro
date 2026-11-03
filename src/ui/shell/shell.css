@@ -83,7 +83,7 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-pill-name { font-weight: 600; padding: 0 8px 0 10px; display: flex; align-items: center; gap: 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes sh-pill-in { from { opacity: 0; transform: translateX(-50%) translateY(-6px); } }
 
-.sh-stage .sh-viewbar { left: 14px; bottom: 14px; }
+.sh-stage .sh-viewbar { left: calc(14px + var(--sh-dock-w) + 10px); bottom: 14px; }
 .sh-stage .sh-camera { right: 14px; bottom: 14px; flex-direction: column; }
 .sh-switch { width: 28px; height: 16px; border-radius: 99px; background: var(--ns-line, var(--border)); position: relative; transition: .15s; flex: none; display: inline-block; }
 .sh-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
@@ -91,7 +91,7 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-switch.on::after { left: 14px; }
 
 /* existing overlays, re-positioned */
-.sh-stage .toolbar { top: 14px; left: 14px; transform: none; flex-direction: column; height: auto; width: auto; padding: 4px; gap: 2px; max-height: calc(100% - 84px); overflow-y: auto; overflow-x: hidden; max-width: none;
+.sh-stage .toolbar { top: 14px; left: 14px; transform: none; flex-direction: column; height: auto; width: auto; padding: 4px; gap: 2px; max-height: calc(100% - 128px); overflow-y: auto; overflow-x: hidden; max-width: none;
   background: var(--ns-panel, var(--surface-secondary)); border: 1px solid var(--ns-line, var(--border)); border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); scrollbar-width: none; }
 .sh-stage .toolbar .tb-group { flex-direction: column; gap: 2px; }
 .sh-stage .toolbar .icon-btn { height: 34px; min-width: 34px; width: 34px; padding: 0; border-radius: var(--ns-r-inner, 8px); }
@@ -99,18 +99,18 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-stage .toolbar .icon-btn.active { background: var(--ns-active, var(--accent-tint)); color: var(--ns-on-active, var(--accent)); box-shadow: none; }
 .sh-stage .toolbar .sep { width: 24px; height: 1px; margin: 3px auto; }
 /* tool panels dock beside the strip instead of floating over the model */
-.sh-stage .float.panel { left: 62px; top: 14px; max-height: calc(100% - 84px); overflow-y: auto; border-radius: var(--ns-r-outer, 12px); }
-.sh-stage .live-chip { top: auto; bottom: 62px; }
+.sh-stage .float.panel { left: 62px; top: 14px; max-height: calc(100% - 128px); overflow-y: auto; border-radius: var(--ns-r-outer, 12px); }
+.sh-stage .live-chip { top: auto; bottom: 108px; }
 .sh-stage .viewcube { left: auto; right: 62px; bottom: 14px; }
-.sh-stage .object-info { left: 62px; right: auto; top: auto; bottom: 66px; }
+.sh-stage .object-info { left: 62px; right: auto; top: auto; bottom: 108px; }
 .sh-stage.ws-prepare .plate-list { right: 14px; top: auto; bottom: 140px; max-height: calc(100% - 360px); }
 /* preview */
-.sh-stage.ws-preview .legend { left: 14px; right: auto; top: 14px; max-height: calc(100% - 140px); }
+.sh-stage.ws-preview .legend { left: 14px; right: auto; top: 14px; max-height: calc(100% - 128px); }
 .sh-stage.ws-preview .vslider { right: 14px; top: 14px; bottom: 150px; }
-.sh-stage.ws-preview .hslider { bottom: 14px; }
+.sh-stage.ws-preview .hslider { bottom: 14px; left: calc(14px + var(--sh-dock-w) + 12px); right: 70px; transform: none; width: auto; max-width: 560px; }
 .sh-stage.ws-preview .plate-list { right: 92px; top: 14px; }
 .sh-stage.ws-preview .viewcube { right: 62px; bottom: 70px; }
-.sh-stage.ws-preview .sh-viewbar { bottom: 70px; }
+.sh-stage.ws-preview .sh-viewbar { left: calc(14px + var(--sh-dock-w) + 12px); bottom: 70px; }
 
 /* summary labels stay on one line; the long value wraps instead */
 .legend .summary { grid-template-columns: max-content minmax(0, 1fr); }
@@ -125,8 +125,16 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 /* ---------- right column ---------- */
 .sh-right { display: flex; flex-direction: column; min-height: 0; background: var(--ns-panel, var(--surface-secondary)); border-left: 1px solid var(--ns-line, var(--border)); }
 .sh-inspector { flex: 1; min-height: 0; overflow-y: auto; }
-.sh-actiondock { padding: 12px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--ns-line, var(--border)); }
+.sh-stage { --sh-dock-w: min(470px, calc(100% - 100px)); }
+/* the slice bar: pinned to the stage's bottom-left corner, above the tool strip and panels */
+.sh-stage .float.sh-actiondock { position: absolute; left: 14px; bottom: 14px; z-index: 7; width: var(--sh-dock-w); box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--ns-panel, var(--surface-secondary)); border: 1px solid var(--ns-line, var(--border)); border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); }
+.sh-actiondock .sh-cta-row { align-items: center; }
+.sh-actiondock .sh-metrics { flex: 1.2; min-width: 0; }
+.sh-actiondock .sh-cta { flex: 1; min-width: 132px; }
 .sh-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.sh-metric { min-width: 0; }
+.sh-metric .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sh-metric .k { font-size: 11px; color: var(--text-muted); }
 .sh-metric .v { font: 500 15px var(--ns-font-mono, monospace); }
 .sh-metric .v.dim { color: var(--text-muted); }
@@ -189,3 +197,15 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-fold:hover { background: var(--accent-tint, rgba(37,99,235,.08)); color: var(--text); }
 .sh-fold svg { transform: rotate(180deg); }
 .sh-fold span { writing-mode: vertical-rl; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+/* narrow windows: the layer slider and view toggles stack above the slice bar instead of squeezing beside it */
+@media (max-width: 1200px) {
+  .sh-stage.ws-preview .hslider { left: 14px; right: 70px; bottom: 100px; max-width: none; }
+  .sh-stage.ws-preview .viewcube { bottom: 150px; }
+  .sh-stage.ws-preview .sh-viewbar { left: 14px; bottom: 154px; }
+  .sh-stage.ws-preview .legend { max-height: calc(100% - 216px); }
+  .sh-stage.ws-prepare .sh-viewbar { left: 14px; bottom: 100px; }
+  .sh-stage .object-info { bottom: 150px; }
+  .sh-stage .live-chip { bottom: 150px; }
+  .sh-stage .toolbar, .sh-stage .float.panel { max-height: calc(100% - 172px); }
+}

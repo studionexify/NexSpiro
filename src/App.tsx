@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, ViewBar } from './ui/shell';
+import { ActionDock, CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, ViewBar } from './ui/shell';
 import { useInspectorFolded } from './ui/shell/RightColumn';
 import './ui/shell/shell.css';
 import { useStore, type Workspace } from './state/store';
@@ -152,6 +152,7 @@ export default function App() {
           {workspace === 'prepare' && <><Toolbar /><ObjectPill /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
+          {is3d && <ActionDock />}
           <ViewCube />
           <CameraBar />
           <SliceProgress />

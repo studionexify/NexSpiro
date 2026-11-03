@@ -1,4 +1,5 @@
-// Bottom of the right column: slice summary, clearance status and the primary Slice / Export CTA.
+// Pinned to the bottom-left of the 3D stage (Prepare and Preview): slice summary, clearance status and the primary
+// Slice / Export CTA, always in view whatever the right column shows or whether it is folded.
 import { exportGcode, sliceAndPreview } from '../../state/actions';
 import { useStore } from '../../state/store';
 import { useState } from 'react';
@@ -31,8 +32,7 @@ export function ActionDock() {
   // lowers the motion / weave and re-slices until the print head clears (see autoFixUntilClear)
   const fix = () => { setFixing(true); void autoFixUntilClear().finally(() => setFixing(false)); };
   return (
-    <div className="sh-actiondock">
-      <div className="sh-metrics">{metric('Time', sum.time)}{metric('Filament', sum.weight)}{metric('Cost', sum.cost)}</div>
+    <div className="float sh-actiondock" role="region" aria-label="Slice">
       {clr.state !== 'none' && (
         <div className="sh-status" role="status">
           <span className="sh-dot" style={{ background: DOT[clr.state] }} />
@@ -42,6 +42,7 @@ export function ActionDock() {
       )}
       <div className={`sh-progress ${busy ? 'show' : ''}`}><i style={{ width: `${progress * 100}%` }} /></div>
       <div className="sh-cta-row">
+        <div className="sh-metrics">{metric('Time', sum.time)}{metric('Filament', sum.weight)}{metric('Cost', sum.cost)}</div>
         <button className="sh-cta" disabled={busy || fixing || collision || (!ready && !hasWork)} onClick={run}
           title={collision ? 'The print head would hit the print: use Auto-fix or lower the motion, then slice again' : ready ? 'Export G-code (Ctrl+G)' : 'Slice plate (Ctrl+R)'}>
           <Icon name={ready ? 'download' : 'slice'} size={16} />{label}
