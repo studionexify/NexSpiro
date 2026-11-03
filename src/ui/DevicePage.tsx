@@ -363,7 +363,9 @@ function Controls({ dev, st, online, printing }: { dev: SavedDevice; st: Printer
   return (
     <div className="tile">
       <h3 style={{ marginTop: 0 }}>Controls</h3>
-      <TempRow label="Nozzle" cur={st.nozzleTemp} target={st.nozzleTarget} online={online} max={320} onSet={(v) => g(`M104 S${v}`)} />
+      {st.heads && st.heads.length > 1
+        ? st.heads.map((h, k) => <TempRow key={k} label={`T${k}${st.activeHead === k ? ' ●' : ''}`} cur={h.temp} target={h.target} online={online} max={320} onSet={(v) => g(`M104 T${k} S${v}`)} />)
+        : <TempRow label="Nozzle" cur={st.nozzleTemp} target={st.nozzleTarget} online={online} max={320} onSet={(v) => g(`M104 S${v}`)} />}
       <TempRow label="Bed" cur={st.bedTemp} target={st.bedTarget} online={online} max={120} onSet={(v) => g(`M140 S${v}`)} />
       {st.chamberTemp != null && <div className="row" style={{ marginBottom: 6 }}><span style={{ width: 64 }}>Chamber</span><b className="mono">{st.chamberTemp.toFixed(0)}°</b></div>}
       <FanRow label="Part fan" pct={st.fanPercent} online={online} onSet={(v) => g(`M106 S${Math.round((v / 100) * 255)}`)} />

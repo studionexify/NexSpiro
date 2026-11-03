@@ -1,6 +1,8 @@
 // Builds the file sent to a printer for the sliced plate: .gcode.3mf for A1/P1/X1/H2 printers,
 // G-code with embedded thumbnails for everything else. Also used by "Export plate".
 import { buildGcode3mf, gcodeThumbnailBlock } from '../io/gcode3mf';
+import { parseToolMap, remapTools } from '../engine/toolmap';
+import { changerOf } from '../profiles/changer';
 import { filamentById } from '../profiles/filaments';
 import { printerById } from '../profiles/printers';
 import { saveFile } from '../platform';
@@ -42,7 +44,10 @@ async function postProcess(gcode: string, cfg: Record<string, unknown>, outputNa
   catch (e: any) { useStore.getState().set({ toast: { kind: 'error', text: `Post-processing failed: ${e?.message ?? e}` } }); throw e; }
 }
 
-export async function buildPrintJob(format?: '3mf' | 'gcode'): Promise<PrintJob | null> {
+/** Options for a print job: `toolMap` sends filament slot n to physical head toolMap[n] (tool changers). */
+export interface PrintJobOptions { toolMap?: number[] }
+
+export async function buildPrintJob(format?: '3mf' | 'gcode', jo: PrintJobOptions = {}): Promise<PrintJob | null> {
   const r = await ensureSliced();
   if (!r) return null;
   const s = useStore.getState();
@@ -52,7 +57,9 @@ export async function buildPrintJob(format?: '3mf' | 'gcode'): Promise<PrintJob 
   const kind = format ?? (p.flavor === 'bbl' ? '3mf' : 'gcode');
   const cfgOut = currentConfig(s.slice.plate);
   const fname = (ext: string) => formatFilename(String(cfgOut.filename_format ?? ''), { base, plate: s.plates[s.slice.plate]?.name ?? 'plate', cfg: cfgOut, seconds: r.stats.timeSeconds, grams: r.stats.filamentGrams }, ext);
-  const gcodeOut = await postProcess(r.gcode, cfgOut, fname('gcode'));
+  // tool changer: the dialog's mapping, else the printer setting (slot n → head n when neither is set)
+  const toolMap = changerOf(cfgOut) === 'toolchanger' ? jo.toolMap ?? parseToolMap(cfgOut.tool_map) : [];
+  const gcodeOut = await postProcess(remapTools(r.gcode, toolMap), cfgOut, fname('gcode'));
   const usedSlots = r.stats.perFilament.map((f, k) => (f.mm > 0 ? k : -1)).filter((k) => k >= 0);
   if (kind === '3mf') {
     const thumb = await renderThumbnail(objs, 512);

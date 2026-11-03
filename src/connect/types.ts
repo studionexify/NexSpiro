@@ -22,6 +22,9 @@ export interface PrinterStatus {
   remainingSeconds?: number;
   fileName?: string;
   nozzleTemp?: number; nozzleTarget?: number;
+  /** Tool changers / IDEX: every head's temperature (T0, T1, …) and the head in use. */
+  heads?: { temp?: number; target?: number }[];
+  activeHead?: number;
   bedTemp?: number; bedTarget?: number;
   chamberTemp?: number;
   fanPercent?: number;

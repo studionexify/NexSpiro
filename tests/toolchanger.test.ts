@@ -8,6 +8,7 @@ import { resolveConfig } from '../src/profiles/resolve';
 import { printerById, PRINTERS } from '../src/profiles/printers';
 import { changerOf, toolheadCount, autoChanges } from '../src/profiles/changer';
 import { cylinder } from './fixtures';
+import { parseToolMap, remapTools, toolMapProblems } from '../src/engine/toolmap';
 import { defaultToolhead } from '../src/plugins/motionex/core/toolhead';
 import { DEFAULT_OPTIONS } from '../src/plugins/motionex/modifier';
 import type { MotionexConfig, MotionexReport } from '../src/plugins/motionex/engine';
@@ -74,5 +75,49 @@ describe('filament changers', () => {
   it('warns when a colour needs a head the printer does not have', () => {
     const { out } = run('generic-idex', 3, weave({ slots: [0, 2] }));
     expect(out.warnings.some((w) => /need 3 heads, the tool changer has 2/.test(w))).toBe(true);
+  });
+
+  it('keeps later heads at standby from the start and switches every head off after its last use', () => {
+    // three colours, each used once: T0 for the base, then T1, then T2 on top
+    const c = cfg('snapmaker-u1');
+    const a = slotFromConfig(c);
+    const filaments = [0, 1, 2].map((k) => ({ ...a, name: `PLA ${k + 1}`, color: ['#ffffff', '#cc2222', '#2222cc'][k], nozzleTemp: 210 + k * 5 }));
+    const tower = { id: 't', name: 't', ...weld(cylinder(128, 128, 10, 12, 48)) };
+    const colourAt = (z1: number, z2: number) => [{ z: z1, type: 'color' as const, filament: 1 }, { z: z2, type: 'color' as const, filament: 2 }];
+    const out = slice([tower], c, () => {}, { filaments, layerActions: colourAt(4, 8) });
+    const L = out.gcode.split('\n');
+    const first = (re: RegExp) => L.findIndex((l) => re.test(l));
+    const sel = (t: number) => first(new RegExp(`^T${t} ; park the head in use`));
+    // T1 and T2 wait at standby (40 °C below) before the first head prints, not cold
+    expect(first(/^M104 T1 S175 ; T1 waits at standby/)).toBeGreaterThan(0);
+    expect(first(/^M104 T2 S180 ; T2 waits at standby/)).toBeGreaterThan(0);
+    expect(first(/^M104 T1 S175 ; T1 waits/)).toBeLessThan(first(/^G1 .*E[0-9.]+/));
+    // each is preheated before its pick-up
+    expect(first(/^M104 T1 S215 ; preheat T1/)).toBeLessThan(sel(1));
+    expect(first(/^M104 T2 S220 ; preheat T2/)).toBeLessThan(sel(2));
+    // T0 and T1 are not used again: switched off when parked; T2 prints to the end
+    expect(first(/^M104 T0 S0 ; T0 is not used again/)).toBeGreaterThan(0);
+    expect(first(/^M104 T1 S0 ; T1 is not used again/)).toBeGreaterThan(sel(1));
+    expect(first(/^M104 T2 S0 ; T2 is not used again/)).toBe(-1);
+    // off after the standby line, so it is what sticks
+    expect(first(/^M104 T0 S0/)).toBeGreaterThan(first(/^M104 T0 S\d+ ; park T0 at standby/));
+    // the setting turns it off
+    const keep = slice([tower], resolveConfig({ printerId: 'snapmaker-u1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {}, machineOverrides: { tool_off_after_last_use: false } } as never), () => {}, { filaments, layerActions: colourAt(4, 8) });
+    expect(keep.gcode).not.toMatch(/is not used again/);
+  });
+
+  it('maps filament slots to physical heads in the finished G-code', () => {
+    const g = ['T0 ; park the head in use, pick up the next one', 'M104 T1 S175 ; park T1 at standby', 'M109 T0 S215', 'G1 X10 Y10 E0.5 ; T1 stays', 'T1', '  T2 ; indented'].join('\n');
+    const out = remapTools(g, [2, 0, 1]).split('\n');
+    expect(out).toEqual(['T2 ; park the head in use, pick up the next one', 'M104 T0 S175 ; park T1 at standby', 'M109 T2 S215', 'G1 X10 Y10 E0.5 ; T1 stays', 'T0', '  T1 ; indented']);
+    expect(remapTools(g, [0, 1, 2])).toBe(g);
+    expect(parseToolMap('2, 0,,x')).toEqual([2, 0, 2, 3]);
+    expect(toolMapProblems([1, 1], [0, 1], 4)).toEqual(['Filaments 1 and 2 are both mapped to head T1.']);
+    expect(toolMapProblems([5], [0], 4)[0]).toMatch(/head T5, the printer has 4 heads/);
+    expect(toolMapProblems([3, 2], [0, 1], 4)).toEqual([]);
+  });
+
+  it('the Snapmaker U1 sends over LAN (Moonraker)', () => {
+    expect(printerById('snapmaker-u1').connections).toContain('moonraker');
   });
 });

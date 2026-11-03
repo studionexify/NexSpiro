@@ -78,9 +78,25 @@ export class MoonrakerConnection extends HttpPrinter {
   readonly kind = 'moonraker' as const;
   protected defaultPort = 7125;
 
+  /** Extruder objects Klipper reports (extruder, extruder1…): read once, a tool changer has one per head. */
+  private extruders: string[] | null = null;
+
   protected async poll(): Promise<PrinterStatus> {
-    const r = await this.req('/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks');
+    if (!this.extruders) {
+      try {
+        const l = await this.req('/printer/objects/list');
+        const names = ((l.result?.objects ?? []) as string[]).filter((o) => /^extruder\d*$/.test(o));
+        this.extruders = names.sort((a, b) => (Number(a.slice(8)) || 0) - (Number(b.slice(8)) || 0));
+        if (!this.extruders.length) this.extruders = ['extruder'];
+      } catch { /* older Moonraker or not reachable yet: single extruder for now, asked again next poll */ }
+    }
+    const exts = this.extruders ?? ['extruder'];
+    const extra = exts.filter((e) => e !== 'extruder').join('&');
+    const r = await this.req(`/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks&toolhead${extra ? `&${extra}` : ''}`);
     const s = r.result.status;
+    const heads = exts.length > 1 ? exts.map((e) => ({ temp: s[e]?.temperature, target: s[e]?.target })) : undefined;
+    const activeName = String(s.toolhead?.extruder ?? '');
+    const active = heads ? exts.indexOf(activeName) : -1;
     const ps = s.print_stats ?? {};
     const map: Record<string, PrinterStatus['state']> = { standby: 'idle', printing: 'printing', paused: 'paused', complete: 'finished', cancelled: 'idle', error: 'error' };
     const progress = Number(s.virtual_sdcard?.progress ?? 0);
@@ -94,7 +110,8 @@ export class MoonrakerConnection extends HttpPrinter {
       layer: ps.info?.current_layer ?? undefined,
       totalLayers: ps.info?.total_layer ?? undefined,
       remainingSeconds: progress > 0.01 && dur > 0 ? Math.max(0, dur / progress - dur) : undefined,
-      nozzleTemp: s.extruder?.temperature, nozzleTarget: s.extruder?.target,
+      nozzleTemp: (active >= 0 ? s[activeName] : s.extruder)?.temperature, nozzleTarget: (active >= 0 ? s[activeName] : s.extruder)?.target,
+      heads, activeHead: active >= 0 ? active : undefined,
       bedTemp: s.heater_bed?.temperature, bedTarget: s.heater_bed?.target,
       fanPercent: s.fan ? Math.round(Number(s.fan.speed) * 100) : undefined,
       speedPercent: s.gcode_move ? Math.round(Number(s.gcode_move.speed_factor) * 100) : undefined,
