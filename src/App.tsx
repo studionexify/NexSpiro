@@ -4,6 +4,7 @@ import { autoOrient, exportGcode, importBuffers, importDialog, newProject, slice
 import { useUi } from './state/ui';
 import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, ObjectPill, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
+import { useRightWidth } from './ui/shell/RightColumn';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
@@ -126,7 +127,8 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
-  const bodyCols = is3d ? 'minmax(0, 1fr) clamp(300px, 24%, 380px)' : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
+  const rightW = useRightWidth();
+  const bodyCols = is3d ? `minmax(0, 1fr) ${rightW}px` : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
     <div className="app sh-app"

@@ -209,3 +209,10 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 /* ---------- plugin studios open full screen ---------- */
 .lx-studio, .cx-studio, .mxw { width: 100vw !important; height: 100vh !important; max-width: none !important; border-radius: 0 !important; border: 0 !important; }
 .mxw-back { padding: 0; }
+
+/* right column resize grip */
+.sh-right { position: relative; }
+.sh-grip { position: absolute; left: -5px; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 20; display: grid; place-items: center; touch-action: none; }
+.sh-grip span { width: 4px; height: 36px; border-radius: 4px; background: var(--ns-line, var(--border)); transition: background .12s, height .12s; }
+.sh-grip:hover span { background: var(--ns-primary, var(--accent)); height: 56px; }
+body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-select: none !important; }
