@@ -18,6 +18,8 @@ import { activeUserPreset, applyUserPreset, currentPresetValue, deleteUserPreset
 import { AdvancedPanel } from '../advanced/AdvancedPanel';
 import { useTools, type ResolvedTool } from '../advanced/hooks';
 import { HINTS } from './hints';
+import { PLUGINS } from '../../plugins/registry';
+import { studioOf } from '../../plugins/studios';
 import './inspector.css';
 
 export function Inspector() {
@@ -71,21 +73,25 @@ function PresetSection() {
   const s = useStore();
   const up = activeUserPreset(s);
   const upMod = isActiveUserPresetModified(s);
+  const nChanged = Object.keys(s.overrides).length;
+  // like Bambu Studio / Orca: a changed preset turns orange, says "(modified)" and gets a restore arrow
+  const modified = up ? upMod : nChanged > 0;
+  const restore = () => { if (up) applyUserPreset(up.id); else { s.set({ overrides: {} }); s.markDirty(); } };
   const [saveOpen, setSaveOpen] = useState(false);
   return (
     <section>
       {/* one dropdown instead of a wall of chips: built-in presets, then the user's own */}
       <div className="preset-row">
         <span className="h-inline">Preset</span>
-        <select className="preset-select" aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
-          title={up && upMod ? 'Modified since applied' : undefined}
+        <select className={`preset-select ${modified ? 'modified' : ''}`} aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
+          title={modified ? 'Modified: settings differ from the preset' : undefined}
           onChange={(e) => {
             const [k, id] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
             if (k === 'i') { applyIntentPreset(id); s.set({ userPresetId: null }); } else if (k === 'u') applyUserPreset(id);
           }}>
           {!up && !active && <option value="">Custom</option>}
           <optgroup label="Presets">
-            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}</option>)}
+            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}{!up && active === p.id && modified ? ' (modified)' : ''}</option>)}
           </optgroup>
           {s.userPresets.length > 0 && (
             <optgroup label="My presets">
@@ -93,6 +99,9 @@ function PresetSection() {
             </optgroup>
           )}
         </select>
+        {modified
+          ? <button className="preset-reset" aria-label="Restore the preset values" title={up ? `Restore "${up.name}": discard the changes made since it was applied` : `Restore the preset: discard ${nChanged} changed setting${nChanged === 1 ? '' : 's'}`} onClick={restore}><Icon name="reset" size={14} /></button>
+          : <span className="preset-lock" title="All settings use the preset values"><Icon name="lock" size={12} /></span>}
         {up && upMod && <button className="sh-ib" title={`Overwrite "${up.name}" with the current settings`} onClick={() => updateUserPreset(up.id)}>Update</button>}
         <button className="sh-ib" title="Save the current settings as your own preset, or manage presets" onClick={() => setSaveOpen(true)}>Save as…</button>
       </div>
@@ -268,7 +277,11 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
   const pool = changedOnly ? m.visible.filter((p) => m.changed(p.key)) : m.visible;
   const tabs = PROCESS_TABS.filter((t) => m.visible.some((p) => p.tab === t));
   const tab = tabs.includes(s.processTab) ? s.processTab : tabs[0];
-  const flat = !!q || changedOnly;
+  // plugins turned on in File → Plugins sit after the process tabs; s.dock.tab / open say which one is shown
+  const plugins = PLUGINS.filter((p) => s.plugins.includes(p.id));
+  const plugin = s.dock.open ? plugins.find((p) => p.id === s.dock.tab) : undefined;
+  const showTab = (t: ProcessTab) => s.set({ processTab: t, dock: { ...s.dock, open: false } });
+  const flat = !plugin && (!!q || changedOnly);
   const list = q
     ? pool.filter((p) => `${p.label} ${p.group} ${p.key} ${p.tab} ${HINTS[p.key] ?? ''}`.toLowerCase().includes(q))
     : changedOnly ? pool : pool.filter((p) => p.tab === tab);
@@ -310,12 +323,17 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         {!flat && (
           <div className="stabs" role="tablist">
             {tabs.map((t) => (
-              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} title={TAB_HINT[t]} onClick={() => s.set({ processTab: t })}>
+              <button key={t} role="tab" aria-selected={!plugin && tab === t} className={!plugin && tab === t ? 'on' : ''} title={TAB_HINT[t]} onClick={() => showTab(t)}>
                 {t}{tabCount(t) > 0 && <span className="c" title={`${tabCount(t)} changed`}>{tabCount(t)}</span>}
               </button>
             ))}
+            {plugins.map((p) => (
+              <button key={p.id} role="tab" aria-selected={plugin?.id === p.id} className={`ptab ${plugin?.id === p.id ? 'on' : ''}`} title={p.name}
+                onClick={() => s.set({ dock: { ...s.dock, open: true, tab: p.id } })}>{p.name}</button>
+            ))}
           </div>
         )}
+        {plugin ? <PluginTab id={plugin.id} /> : <>
         <div className="ssearch">
           <Icon name="search" size={14} />
           <input id="param-search" placeholder={`Search ${m.visible.length} settings (Ctrl+F)`} value={s.search} aria-label="Search settings"
@@ -334,7 +352,21 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
           ))}
           {!list.length && <div className="muted-s" style={{ padding: 16, textAlign: 'center' }}>{changedOnly && !q ? 'Nothing changed — everything uses the preset.' : 'No matching settings.'}</div>}
         </div>
+        </>}
       </>}
     </section>
+  );
+}
+
+/** A plugin's settings, shown as a tab beside Quality / Strength / … */
+function PluginTab({ id }: { id: string }) {
+  const p = PLUGINS.find((x) => x.id === id)!;
+  const studio = studioOf(id);
+  const Panel = p.Panel;
+  return (
+    <div className="insp-plugin">
+      {studio && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
+      <div className="dock-body"><Panel /></div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 // outside the left edge of those panels, over the 3D view, so it never covers the controls.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-interface Tip { text: string; r: DOMRect; /** Left edge of the side panels the element sits in, when it sits in one. */ edge: number | null }
+interface Tip { text: string; r: DOMRect; /** Left edge of the side panels the element sits in, when it sits in one. */ edge: number | null; /** Right edge of the tool strip, for its buttons. */ bar: number | null }
 
 /** Delay before a tooltip opens (ms). */
 const DELAY = 1000;
@@ -13,6 +13,12 @@ function panelEdge(el: HTMLElement): number | null {
   if (!el.closest('.sh-pdock, .sh-right')) return null;
   const panel = document.querySelector('.sh-pdock') ?? document.querySelector('.sh-right');
   return panel ? panel.getBoundingClientRect().left : null;
+}
+
+/** Right edge of the Prepare tool strip when `el` is one of its buttons: those tips open at once, just outside it. */
+function barEdge(el: HTMLElement): number | null {
+  const bar = el.closest('.sh-stage .toolbar');
+  return bar ? bar.getBoundingClientRect().right : null;
 }
 
 export function InstantTooltips() {
@@ -30,7 +36,9 @@ export function InstantTooltips() {
       if (t) { el.dataset.tip = t; el.removeAttribute('title'); }
       const text = el.dataset.tip;
       if (!text) return;
-      timer = setTimeout(() => { timer = null; if (el.isConnected) setTip({ text, r: el.getBoundingClientRect(), edge: panelEdge(el) }); }, DELAY);
+      const bar = barEdge(el);
+      const open = () => { timer = null; if (el.isConnected) setTip({ text, r: el.getBoundingClientRect(), edge: panelEdge(el), bar }); };
+      if (bar !== null) open(); else timer = setTimeout(open, DELAY);
     };
     const over = (e: PointerEvent) => {
       const el = (e.target as Element | null)?.closest?.('[title],[data-tip]') as HTMLElement | null;
@@ -56,9 +64,13 @@ export function InstantTooltips() {
   useLayoutEffect(() => {
     const el = box.current;
     if (!el || !tip) return;
-    const w = el.offsetWidth, h = el.offsetHeight, { r, edge } = tip;
+    const w = el.offsetWidth, h = el.offsetHeight, { r, edge, bar } = tip;
     let x: number, y: number;
-    if (edge !== null && edge - w - 10 >= 4) {
+    if (bar !== null) {
+      // tool strip: right beside it, level with the button, never over the strip
+      x = bar + 8;
+      y = Math.max(4, Math.min(r.top + r.height / 2 - h / 2, innerHeight - h - 4));
+    } else if (edge !== null && edge - w - 10 >= 4) {
       // outside the panel's left edge, level with the element
       x = edge - w - 10;
       y = Math.max(4, Math.min(r.top + r.height / 2 - h / 2, innerHeight - h - 4));

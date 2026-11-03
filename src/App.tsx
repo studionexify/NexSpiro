@@ -1,10 +1,8 @@
 import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
-import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { ActionDock, CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, ViewBar } from './ui/shell';
-import { useInspectorFolded } from './ui/shell/RightColumn';
+import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, ObjectPill, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
@@ -128,12 +126,7 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
   const Studio = workspace === 'motion' ? studio : undefined;
-  const hasDock = useStore((st) => st.plugins.length > 0 && st.dock.open);
-  const dockW = useStore((st) => st.dock.width);
-  // the work area keeps at least ~62% of the body; the inspector and plugin dock share the rest
-  const folded = useInspectorFolded();
-  const right = folded ? '34px' : 'clamp(260px, 22%, 340px)';
-  const bodyCols = is3d ? (hasDock ? `minmax(62%, 1fr) minmax(0, ${dockW}px) ${right}` : `minmax(62%, 1fr) ${right}`) : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
+  const bodyCols = is3d ? 'minmax(0, 1fr) clamp(300px, 24%, 380px)' : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
     <div className="app sh-app"
@@ -145,7 +138,6 @@ export default function App() {
         if (files.length) importBuffers(files);
       }}>
       <MenuBar />
-      <Rail />
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
@@ -158,13 +150,13 @@ export default function App() {
           <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
-        {is3d && <RightDock />}
         {is3d && <RightColumn />}
         {Studio && <Studio />}
         {workspace === 'home' && <HomePage />}
         {workspace === 'device' && <DevicePage />}
         {workspace === 'project' && <ProjectPage />}
         {workspace === 'calibration' && <CalibrationPage />}
+        {!is3d && <div className="float sh-modes-float"><ModeTabs /></div>}
       </div>
       <Toast />
       <ContextMenu />

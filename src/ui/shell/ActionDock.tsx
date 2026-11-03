@@ -1,4 +1,4 @@
-// Pinned to the bottom-left of the 3D stage (Prepare and Preview): slice summary, clearance status and the primary
+// Pinned to the bottom-left of the 3D stage (Prepare and Preview): workspace tabs on top, then the slice summary, clearance status and the primary
 // Slice / Export CTA, always in view whatever the right column shows or whether it is folded.
 import { exportGcode, sliceAndPreview } from '../../state/actions';
 import { useStore } from '../../state/store';
@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { autoFixUntilClear, useClearanceStatus, useSliceSummary } from '../../state/ui';
 import { Icon } from '../icons';
 import { openPrintDialog } from '../PrintModal';
+import { ModeTabs } from './Rail';
 
 const DOT: Record<string, string> = { collision: 'var(--ns-err, var(--error))', warn: 'var(--ns-warn, var(--warning))', ok: 'var(--ns-ok, var(--success))' };
 
@@ -32,7 +33,9 @@ export function ActionDock() {
   // lowers the motion / weave and re-slices until the print head clears (see autoFixUntilClear)
   const fix = () => { setFixing(true); void autoFixUntilClear().finally(() => setFixing(false)); };
   return (
-    <div className="float sh-actiondock" role="region" aria-label="Slice">
+    <div className="float sh-actiondock" role="region" aria-label="Workspace and slice">
+      <ModeTabs />
+      <div className="sh-slicebar">
       {clr.state !== 'none' && (
         <div className="sh-status" role="status">
           <span className="sh-dot" style={{ background: DOT[clr.state] }} />
@@ -50,6 +53,7 @@ export function ActionDock() {
         <button className="sh-cta-2" disabled={!ready} onClick={() => void openPrintDialog()} title={ready ? 'Print plate (Ctrl+P)' : 'Slice the plate first'}>
           <Icon name="print" size={16} />Print
         </button>
+      </div>
       </div>
     </div>
   );

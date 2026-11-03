@@ -13,13 +13,14 @@ import { openPrintDialog } from '../PrintModal';
 import { openPlateSettings } from '../PlateControls';
 import { openFillBed } from '../FillBedDialog';
 import { Modal } from '../Modals';
-import { PluginManager } from '../RightDock';
+import { PLUGINS } from '../../plugins/registry';
+import { togglePlugin } from './Rail';
 import { useSliced } from './FileMenu';
 import { PlateSelect } from './TopRight';
 import { ModeToggle } from '../advanced/ModeToggle';
 import { Icon } from '../icons';
 
-interface Item { label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
+interface Item { head?: string; keep?: boolean; label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
 
 /** Auto scale: shrink everything a little on smaller windows so the panels never collide. */
 function autoScale(w: number, h: number) {
@@ -44,7 +45,7 @@ export function useUiScale() {
 
 const go = (workspace: Workspace) => useStore.getState().set({ workspace });
 
-function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item[]][] {
+function useMenus(openPrefs: () => void): [string, Item[]][] {
   const s = useStore();
   const sliced = useSliced();
   const sel = s.selected.length > 0;
@@ -65,6 +66,9 @@ function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item
       { label: 'Export G-code…', kbd: 'Ctrl+G', onClick: exportGcode, disabled: !sliced },
       { label: 'Export sliced plate (.gcode.3mf)…', onClick: () => void exportPlateFile('3mf'), disabled: !sliced },
       { label: 'Print plate…', kbd: 'Ctrl+P', onClick: () => void openPrintDialog(), disabled: !sliced },
+      { sep: true },
+      { head: 'Plugins' },
+      ...PLUGINS.map((p): Item => ({ label: p.name, checked: s.plugins.includes(p.id), keep: true, onClick: () => togglePlugin(p.id) })),
       { sep: true },
       { label: 'Preferences…', kbd: 'Ctrl+,', onClick: openPrefs },
     ]],
@@ -138,7 +142,6 @@ function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item
       { label: 'Brim ears', kbd: 'E', onClick: tool('brim_ears'), checked: prep && s.tool === 'brim_ears' },
       { sep: true },
       { label: 'Calibration…', onClick: () => go('calibration') },
-      { label: 'Plugins…', onClick: openPlugins },
     ]],
     ['Help', [
       { label: 'Keyboard shortcuts', kbd: '?', onClick: () => s.set({ shortcutsOpen: true }) },
@@ -175,9 +178,8 @@ function Preferences({ onClose }: { onClose: () => void }) {
 export function MenuBar() {
   const [open, setOpen] = useState<string | null>(null);
   const [prefs, setPrefs] = useState(false);
-  const [plugins, setPlugins] = useState(false);
-  const menus = useMenus(() => setPrefs(true), () => setPlugins(true));
-  const { undo, redo, undoStack, redoStack, workspace } = useStore();
+  const menus = useMenus(() => setPrefs(true));
+  const { undo, redo, undoStack, redoStack, workspace, theme } = useStore();
   const is3d = workspace === 'prepare' || workspace === 'preview';
   useUiScale();
   useEffect(() => {
@@ -197,14 +199,16 @@ export function MenuBar() {
   const stop = (e: React.PointerEvent) => e.stopPropagation();
   return (
     <nav className="sh-menubar" role="menubar" aria-label="Main menu">
+      <img className="sh-mb-logo" src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="NexSpiro" />
       {menus.map(([name, items]) => (
         <div key={name} className="menu">
           <button role="menuitem" aria-haspopup="menu" aria-expanded={open === name} className={`sh-mb ${open === name ? 'on' : ''}`}
             onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={() => open && setOpen(name)}>{name}</button>
           {open === name && (
             <div className="menu-pop sh-mb-pop" role="menu" onPointerDown={stop}>
-              {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : (
-                <button key={i} role="menuitem" className="menu-item" disabled={it.disabled} onClick={() => { setOpen(null); it.onClick?.(); }}>
+              {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (
+                <button key={i} role={it.keep ? 'menuitemcheckbox' : 'menuitem'} aria-checked={it.keep ? !!it.checked : undefined} className="menu-item" disabled={it.disabled}
+                  onClick={() => { if (!it.keep) setOpen(null); it.onClick?.(); }}>
                   <span className="sh-mb-check">{it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span><kbd>{it.kbd ?? ''}</kbd>
                 </button>
               ))}
@@ -222,7 +226,6 @@ export function MenuBar() {
       <button className="sh-ib" title="Search (Ctrl+K)" aria-label="Search" onClick={() => useUi.getState().set({ paletteOpen: true })}><Icon name="search" size={15} /></button>
       {is3d && <PlateSelect />}
       {prefs && <Preferences onClose={() => setPrefs(false)} />}
-      {plugins && <PluginManager onClose={() => setPlugins(false)} />}
     </nav>
   );
 }
