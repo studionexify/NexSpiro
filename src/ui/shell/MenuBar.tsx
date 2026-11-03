@@ -20,7 +20,7 @@ import { PlateSelect } from './TopRight';
 import { ModeToggle } from '../advanced/ModeToggle';
 import { Icon } from '../icons';
 
-interface Item { head?: string; keep?: boolean; label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
+interface Item { switch?: boolean; head?: string; keep?: boolean; label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
 
 /** Auto scale: shrink everything a little on smaller windows so the panels never collide. */
 function autoScale(w: number, h: number) {
@@ -66,9 +66,6 @@ function useMenus(openPrefs: () => void): [string, Item[]][] {
       { label: 'Export G-code…', kbd: 'Ctrl+G', onClick: exportGcode, disabled: !sliced },
       { label: 'Export sliced plate (.gcode.3mf)…', onClick: () => void exportPlateFile('3mf'), disabled: !sliced },
       { label: 'Print plate…', kbd: 'Ctrl+P', onClick: () => void openPrintDialog(), disabled: !sliced },
-      { sep: true },
-      { head: 'Plugins' },
-      ...PLUGINS.map((p): Item => ({ label: p.name, checked: s.plugins.includes(p.id), keep: true, onClick: () => togglePlugin(p.id) })),
       { sep: true },
       { label: 'Preferences…', kbd: 'Ctrl+,', onClick: openPrefs },
     ]],
@@ -143,6 +140,7 @@ function useMenus(openPrefs: () => void): [string, Item[]][] {
       { sep: true },
       { label: 'Calibration…', onClick: () => go('calibration') },
     ]],
+    ['Plugins', PLUGINS.map((p): Item => ({ label: p.name, switch: true, checked: s.plugins.includes(p.id), keep: true, onClick: () => togglePlugin(p.id) }))],
     ['Help', [
       { label: 'Keyboard shortcuts', kbd: '?', onClick: () => s.set({ shortcutsOpen: true }) },
       { label: 'Search everything', kbd: 'Ctrl+K', onClick: () => useUi.getState().set({ paletteOpen: true }) },
@@ -209,7 +207,8 @@ export function MenuBar() {
               {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (
                 <button key={i} role={it.keep ? 'menuitemcheckbox' : 'menuitem'} aria-checked={it.keep ? !!it.checked : undefined} className="menu-item" disabled={it.disabled}
                   onClick={() => { if (!it.keep) setOpen(null); it.onClick?.(); }}>
-                  <span className="sh-mb-check">{it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span><kbd>{it.kbd ?? ''}</kbd>
+                  <span className="sh-mb-check">{!it.switch && it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span>
+                  {it.switch ? <span className={`sh-switch ${it.checked ? 'on' : ''}`} aria-hidden /> : <kbd>{it.kbd ?? ''}</kbd>}
                 </button>
               ))}
             </div>
