@@ -1,8 +1,8 @@
 // Builds the file sent to a printer for the sliced plate: .gcode.3mf for A1/P1/X1/H2 printers,
 // G-code with embedded thumbnails for everything else. Also used by "Export plate".
 import { buildGcode3mf, gcodeThumbnailBlock } from '../io/gcode3mf';
-import { parseToolMap, remapTools } from '../engine/toolmap';
-import { changerOf } from '../profiles/changer';
+import { remapTools } from '../engine/toolmap';
+import { changerOf, toolMapOf } from '../profiles/changer';
 import { filamentById } from '../profiles/filaments';
 import { printerById } from '../profiles/printers';
 import { saveFile } from '../platform';
@@ -58,7 +58,7 @@ export async function buildPrintJob(format?: '3mf' | 'gcode', jo: PrintJobOption
   const cfgOut = currentConfig(s.slice.plate);
   const fname = (ext: string) => formatFilename(String(cfgOut.filename_format ?? ''), { base, plate: s.plates[s.slice.plate]?.name ?? 'plate', cfg: cfgOut, seconds: r.stats.timeSeconds, grams: r.stats.filamentGrams }, ext);
   // tool changer: the dialog's mapping, else the printer setting (slot n → head n when neither is set)
-  const toolMap = changerOf(cfgOut) === 'toolchanger' ? jo.toolMap ?? parseToolMap(cfgOut.tool_map) : [];
+  const toolMap = changerOf(cfgOut) === 'toolchanger' ? jo.toolMap ?? toolMapOf(cfgOut) : [];
   const gcodeOut = await postProcess(remapTools(r.gcode, toolMap), cfgOut, fname('gcode'));
   const usedSlots = r.stats.perFilament.map((f, k) => (f.mm > 0 ? k : -1)).filter((k) => k >= 0);
   if (kind === '3mf') {

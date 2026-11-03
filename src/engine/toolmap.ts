@@ -2,10 +2,10 @@
 // at send time the user may have loaded the colours on other heads (the Print dialog, like Bambu's AMS mapping),
 // so the tool numbers in the finished G-code are rewritten. Only the command part of a line is touched.
 
+import { toolMapOf } from '../profiles/changer';
+
 /** Parses "2,0,1,3" into [2,0,1,3]; blanks and junk keep the identity for that slot. */
-export function parseToolMap(v: unknown): number[] {
-  return String(v ?? '').split(',').map((x, k) => { const n = Number(x.trim()); return x.trim() !== '' && Number.isInteger(n) && n >= 0 ? n : k; });
-}
+export const parseToolMap = (v: unknown): number[] => toolMapOf({ changer_type: 'toolchanger', tool_map: String(v ?? '') });
 
 /** True when the map sends every slot to its own head. */
 export const isIdentityMap = (map: number[]) => map.every((h, k) => h === k);

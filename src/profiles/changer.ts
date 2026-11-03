@@ -48,3 +48,10 @@ export function slotCount(cfg: Config | undefined): number {
   if (k === 'manual') return 1;
   return Math.max(0, Math.round(Number(cfg?.filament_slots) || 0));
 }
+
+/** Tool changers: physical head for each filament slot, from the printer's tool_map setting ("2,0,1,3");
+ *  [] for every other printer and when unset (slot n prints with head n). Applied to the finished G-code at send time. */
+export function toolMapOf(cfg: Config | undefined): number[] {
+  if (changerOf(cfg) !== 'toolchanger') return [];
+  return String(cfg?.tool_map ?? '').split(',').map((x, k) => { const n = Number(x.trim()); return x.trim() !== '' && Number.isInteger(n) && n >= 0 ? n : k; });
+}
