@@ -21,6 +21,8 @@ import { pointIn } from '../../engine/clipper';
 import type { SculptSettings } from './sculpt/model';
 import { applySculpt, type SculptReport } from './sculpt/engine';
 import { objectMask, type ObjectMask } from './wall/targets';
+import type { SelectRule } from './select/model';
+import { applyRulePass, ruleMotions, rulesPrepare, type RuleReport, type RuleSession } from './select/engine';
 
 /** Everything the worker needs, as plain data. */
 export interface MotionexConfig {
@@ -38,10 +40,12 @@ export interface MotionexConfig {
   /** Lace: holes cut into the walls (openwork). */
   lace?: LaceSettings;
   sculpt?: SculptSettings;
+  /** Select & apply rules (only switched-on ones are sent). */
+  rules?: SelectRule[];
 }
 
 /** What prepare() hands to postToolpath: the weave's hooks and the object masks of each wall-art mode. */
-export type MotionexSession = Partial<WeaveSession> & { masks?: { paint?: ObjectMask; lace?: ObjectMask; sculpt?: ObjectMask } };
+export type MotionexSession = Partial<WeaveSession> & { masks?: { paint?: ObjectMask; lace?: ObjectMask; sculpt?: ObjectMask }; rules?: RuleSession };
 
 export interface MotionexReport {
   check: PrintCheck;
@@ -51,6 +55,7 @@ export interface MotionexReport {
   paint?: PaintReport;
   lace?: LaceReport;
   sculpt?: SculptReport;
+  select?: RuleReport;
 }
 
 type Move = Extract<Op, { k: 'move' }>;
@@ -177,8 +182,14 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     const paint = config.paint?.enabled ? objectMask(config.paint.objects, ctx) : undefined;
     const lace = config.lace?.enabled ? objectMask(config.lace.objects, ctx) : undefined;
     const sculpt = config.sculpt?.enabled ? objectMask(config.sculpt.objects, ctx) : undefined;
-    if (!weave && !paint && !lace && !sculpt) return undefined;
-    const session: MotionexSession = { ...(weave ?? {}), masks: { paint, lace, sculpt } };
+    const rules = config.rules?.length ? rulesPrepare(config.rules, ctx) : undefined;
+    if (!weave && !paint && !lace && !sculpt && !rules) return undefined;
+    const session: MotionexSession = { ...(weave ?? {}), masks: { paint, lace, sculpt }, rules: rules?.session };
+    if (rules?.regionsAt) {
+      // the weave's colour regions first, the selections over them (later contributions win)
+      const own = weave?.regionsAt, sel = rules.regionsAt;
+      session.regionsAt = (o, l) => [...(own ? own(o, l) : []), ...sel(o, l)];
+    }
     return session;
   },
   postToolpath(layerOps, config, ctx: PluginContext) {
@@ -192,8 +203,11 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     // velocity paint sets the outer wall speeds on whole loops, then lace cuts the walls (its pieces keep their speed)
     const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
     const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn, config.printerId) : undefined;
-    const apps = config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } }));
-    if (!apps.length) return { check, movedPaths: 0, weave, paint, lace, sculpt };
+    const picked = config.rules?.length ? ruleMotions(config.rules, layerOps, session?.rules) : { apps: [], regions: [] };
+    const apps = [...config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } })), ...picked.apps];
+    // speed, flow and temperature of the selections go last, over every motion
+    const finish = <T extends MotionexReport>(r: T): T => (config.rules?.length ? { ...r, select: applyRulePass(layerOps, config.rules, ctx, session?.rules) } : r);
+    if (!apps.length) return finish({ check, movedPaths: 0, weave, paint, lace, sculpt });
     const profiles = profilesFromConfig(ctx.cfg, config.printerId);
     const regions = new RegionRegistry();
     for (const f of ctx.faceRegions) {
@@ -201,13 +215,14 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     }
     // Regions owned by Patternex (spec §8): Motionex only edits toolpaths inside their masks.
     for (const r of ctx.sharedRegions ?? []) regions.set(r);
+    for (const r of picked.regions) regions.set(r);
     // A picked-surface number means that surface set on every object; a shared region id is used as is.
     for (const a of apps) if (a.target.type === 'faces')
       a.target = {
         ...a.target,
         faces: [
           ...ctx.faceRegions.filter((f) => (a.target.faces ?? []).some((n) => f.id === n || f.id.endsWith(`:${n}`))).map((f) => f.id),
-          ...(a.target.faces ?? []).filter((n) => regions.get(n)?.attributes.source === 'patternex'),
+          ...(a.target.faces ?? []).filter((n) => ['patternex', 'select'].includes(String(regions.get(n)?.attributes.source))),
         ],
       };
     const { layers, runs } = opsToLayers(layerOps);
@@ -245,7 +260,7 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
       layerOps[r.layer].ops.splice(r.start, r.end - r.start, ...runToOps(r, originals[k], ctx.cfg));
       moved++;
     }
-    return { check, movedPaths: moved, weave, paint, lace, sculpt };
+    return finish({ check, movedPaths: moved, weave, paint, lace, sculpt });
   },
   gcodeHeader(config) {
     const names = new Map(config.brushes.map((b) => [b.id, b]));
@@ -254,7 +269,8 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     const p = config.paint, l = config.lace;
     const paint = p?.enabled ? [`; motionex velocity paint: ${p.calibration ? 'speed ladder' : `${p.image.name ?? 'picture'} ${p.image.w}x${p.image.h}`} ${p.projection}${p.projection === 'front' ? ` from ${p.front_deg}deg` : ` x${p.tiles_around} round`}, ${p.speed_light}-${p.speed_dark}mm/s, z ${p.z_start}-${p.z_end}${p.accel ? `, accel ${p.accel}` : ''}`] : [];
     const lace = l?.enabled ? [`; motionex lace: ${l.source === 'image' ? `picture ${l.image.w}x${l.image.h}` : `${l.pattern} ${l.cell_w}x${l.cell_h}mm strand ${l.strand_mm}mm open ${l.open}`}, ${l.walls} walls, overhang ${l.overhang_deg}deg, bridge ${l.bridge_mm}mm, z ${l.z_start}-${l.z_end} rim ${l.rim_mm}mm`] : [];
-    return [...weave, ...lace, ...paint, ...config.applications.filter((a) => a.enabled).map((a) => {
+    const sel = (config.rules ?? []).map((r) => `; motionex select: ${r.name} (${r.pick.kind}) ${[r.apply.filament !== undefined ? `filament ${r.apply.filament + 1}` : '', r.apply.motion ? `motion ${r.apply.motion.brush_id} x${r.apply.motion.scale}` : '', r.apply.speed !== undefined ? `speed ${r.apply.speed}%` : '', r.apply.flow !== undefined ? `flow ${r.apply.flow}%` : '', r.apply.temp !== undefined ? `temp ${r.apply.temp}C` : ''].filter(Boolean).join(', ')}${r.lines.length ? ` on ${r.lines.join('/')}` : ''}, blend ${r.blend_mm}mm`);
+    return [...weave, ...lace, ...paint, ...sel, ...config.applications.filter((a) => a.enabled).map((a) => {
       const b = a.brush ?? names.get(a.brush_id);
       const where = a.target.type === 'faces' ? `${(a.target.faces ?? []).length} picked surface(s)` : 'whole body';
       return `; motionex: ${b?.name ?? a.brush_id} v${b?.version ?? '?'} on ${where}, ${a.target.walls} walls, z ${a.mask.z_start}-${a.mask.z_end}${a.scale && a.scale !== 1 ? ` size x${a.scale}` : ''}${a.blend === 'override' ? ' replace' : ''}${a.round_mm ? ` round ${a.round_mm}mm` : ''}${a.tip ? ` tip ${a.tip.mode} ${a.tip.share}` : ''}`;

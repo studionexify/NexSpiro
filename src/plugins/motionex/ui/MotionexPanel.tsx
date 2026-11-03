@@ -27,12 +27,15 @@ import { emptyDrool, linesToThreads, mergeThreads, type DroolReport, type Thread
 import { buildPaintPreview } from '../paint/preview';
 import { buildLacePreview } from '../lace/preview';
 import { loadLace, loadPaint, loadSculpt, loadWeave, motionexActive } from '../index';
+import { loadRules } from '../select/model';
 import { parseHex } from '../weave/image';
 import { DroolCheck } from './DroolCheck';
 import { SculptCard } from './PathTool';
 import { makeWarp, warpArray } from '../sculpt/preview';
 import { sculptActive } from '../sculpt/model';
 import { openMotionStudio } from './studioWindow';
+import { openSelectWindow } from './SelectWindow';
+import { ruleActive } from '../select/model';
 import './editor.css';
 
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -137,8 +140,8 @@ export function motionexProject() {
   const used = new Set(mx.applications.map((a) => a.brush_id));
   return {
     applications: structuredClone(mx.applications), options: { ...mx.options }, collisionMode: mx.collisionMode, weave: structuredClone(mx.weave),
-    paint: structuredClone(mx.paint), lace: structuredClone(mx.lace), sculpt: structuredClone(mx.sculpt),
-    brushes: [...used].map((id) => mx.library.get(id)).filter((b) => !!b).map((b) => structuredClone(b)),
+    paint: structuredClone(mx.paint), lace: structuredClone(mx.lace), sculpt: structuredClone(mx.sculpt), rules: structuredClone(mx.rules),
+    brushes: [...used, ...mx.rules.flatMap((r) => (r.apply.motion ? [r.apply.motion.brush_id] : []))].map((id) => mx.library.get(id)).filter((b) => !!b).map((b) => structuredClone(b)),
   };
 }
 
@@ -153,6 +156,7 @@ export function loadMotionexProject(data: unknown) {
   mx.paint = loadPaint(d.paint);
   mx.lace = loadLace(d.lace);
   mx.sculpt = loadSculpt(d.sculpt);
+  mx.rules = loadRules(d.rules);
   changed();
 }
 const WALLS: [WallChoice, string][] = [['outer', 'Outer wall'], ['inner', 'Inner walls'], ['all', 'All walls']];
@@ -264,6 +268,11 @@ export function MotionexPanel() {
         <div style={{ flex: 1 }}><div className="mx-title">Motionex</div><div className="mx-sub">Waves, loops and textures on your walls</div></div>
       </div>
       {/* toolpath view toggle lives in the top bar (shared by all plugins) */}
+      <section className="mx-card">
+        <div className="mx-card-title">Select &amp; apply</div>
+        <div className="mx-field"><span className="mx-label">Rules</span><span>{mx.rules.length ? `${mx.rules.filter(ruleActive).length} of ${mx.rules.length} on` : 'None yet'}</span></div>
+        <button className="btn-secondary btn-small mx-add" onClick={() => openSelectWindow(true)} title="Pick layers, single lines or a brushed area on the sliced print and change filament, motion, speed, flow or temperature there">Open Select &amp; apply…</button>
+      </section>
       <section className="mx-card">
         <div className="mx-card-title">Motions<span className="spacer" />
           <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own motions">Edit library…</button>
