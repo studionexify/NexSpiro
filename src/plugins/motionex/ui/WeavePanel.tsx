@@ -498,7 +498,7 @@ function PixelView({ w, colours }: { w: WeaveSettings; colours: RGB[] }) {
   }, [w.image, colours.map((c) => c.join()).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div style={{ background: 'var(--panel-2, #222)', borderRadius: 6, padding: 4 }}>
-      <canvas ref={ref} style={{ width: '100%', imageRendering: 'pixelated', aspectRatio: `${w.image.w} / ${Math.max(1, w.image.h * 0.45)}`, display: 'block' }} title={`${w.image.w} × ${w.image.h} pixels`} />
+      <canvas ref={ref} style={{ width: '100%', height: 150, objectFit: 'contain', imageRendering: 'pixelated', display: 'block' }} title={`${w.image.w} × ${w.image.h} pixels`} />
     </div>
   );
 }
