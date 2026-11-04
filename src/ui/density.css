@@ -200,7 +200,6 @@ button, [role='button'], a, label, .select { touch-action: manipulation; }
   .insp .prow .pinb { opacity: 1; }           /* pin buttons were hover-revealed */
   .sh-grip { display: none; }                  /* drag-to-resize column is a mouse affordance */
   .nsk-tip { display: none; }                  /* hover tooltips: labels carry the meaning on touch */
-  .select, .input { min-height: 32px; font-size: 16px; } /* 16px stops iOS zoom-on-focus */
   .icon-btn, .sh-ib, .nsk-ib { min-width: 36px; min-height: 36px; }
 }
 .touch-mods { display: none; }
@@ -222,3 +221,39 @@ button, [role='button'], a, label, .select { touch-action: manipulation; }
   .touch-mods { top: 56px; }
 }
 @media (max-width: 767px) { .sh-stage .float.viewcube { display: none; } } /* camera bar + touch orbit cover it on phones */
+
+@media (max-width: 767px) and (hover: none) { .select, .input { min-height: 32px; font-size: 16px; } } /* stops iOS zoom-on-focus */
+
+/* ---------- Phone: clear canvas, three edge arrows (left tools, bottom slice, right settings) ---------- */
+.ph-arrow { display: none; }
+@media (max-width: 767px) {
+  .sh-dock-handle { display: none !important; }
+  .ph-arrow, .sh-dock-toggle {
+    display: grid; place-items: center; position: fixed; z-index: 46; border: 1px solid var(--ns-line); background: var(--ns-panel);
+    color: var(--ns-text-2); box-shadow: var(--ns-shadow); cursor: pointer; padding: 0;
+  }
+  .ph-arrow-left { left: 0; top: 50%; width: 26px; height: 56px; margin-top: -28px; border-left: 0; border-radius: 0 10px 10px 0; }
+  .ph-arrow-bottom { left: 50%; bottom: 0; width: 56px; height: 26px; margin-left: -28px; border-bottom: 0; border-radius: 10px 10px 0 0; }
+  .sh-dock-toggle, .sh-dock-toggle.on { right: 0 !important; left: auto; top: 50% !important; bottom: auto !important; width: 26px !important; height: 56px !important; margin-top: -28px; border-right: 0; border-radius: 10px 0 0 10px !important; }
+  .sh-dock-toggle.on { display: none; } /* the sheet's scrim closes it */
+  body.ph-tools .ph-arrow-left { left: 92px; }
+  body.ph-slice .ph-arrow-bottom { bottom: var(--ph-dock-h, 168px); }
+
+  /* closed by default: tools, camera bar, touch modifiers */
+  body:not(.ph-tools) .sh-stage .toolbar,
+  body:not(.ph-tools) .sh-stage .sh-camera,
+  body:not(.ph-tools) .touch-mods { display: none !important; }
+  /* closed by default: slice bar and the view toggles */
+  body:not(.ph-slice) .sh-stage .float.sh-actiondock,
+  body:not(.ph-slice) .sh-stage .sh-viewbar { display: none !important; }
+  .sh-stage .float.sh-actiondock { left: 8px !important; right: 8px; width: auto !important; bottom: 8px; }
+  .sh-stage .sh-viewbar { bottom: calc(var(--ph-dock-h, 168px) + 32px) !important; left: 8px !important; }
+  .sh-stage .toolbar { top: 12px !important; max-height: calc(100dvh - 120px); }
+  .sh-stage .sh-camera { top: 12px !important; }
+  .touch-mods { top: 48px; bottom: auto; }
+  body.ph-slice .touch-mods { display: none !important; }
+}
+@media (max-width: 767px) {
+  :root { --ph-dock-h: 124px; }
+  body.ph-slice .sh-stage .toolbar { max-height: calc(100dvh - 36px - 24px - var(--ph-dock-h) - 96px); }
+}

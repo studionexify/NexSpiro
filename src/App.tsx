@@ -5,6 +5,7 @@ import { autoOrient, exportGcode, importBuffers, importDialog, newProject, slice
 import { useUi } from './state/ui';
 import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, ObjectPill, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
+import { PhoneArrows } from './ui/shell/PhoneArrows';
 import { TouchMods } from './ui/TouchMods';
 import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
 import { useStore, type Workspace } from './state/store';
@@ -151,6 +152,7 @@ export default function App() {
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
           {is3d && <ActionDock />}
+          {is3d && <PhoneArrows />}
           <ViewCube />
           <CameraBar />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
