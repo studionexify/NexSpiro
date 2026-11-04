@@ -114,7 +114,7 @@ function Studio() {
             </footer>
           </aside>
           <main className="cx-centre"><Live3D><Viewer /><Overlay /></Live3D></main>
-          <aside className="cx-right">
+          <aside className="cx-right" tabIndex={0} aria-label="Details panel (tap to open)">
             <div className="cx-rightbody"><SourcePanel /></div>
             <footer className="cx-actions">
               <button className="cx-btn primary big" onClick={() => download3mf().catch((e) => say(`Download failed: ${(e as Error).message}`))}>Download 3MF</button>

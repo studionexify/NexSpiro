@@ -4,7 +4,7 @@
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
   /* --ui-zoom (Preferences → Interface size, 'auto' follows the window) shrinks the whole UI evenly */
   zoom: var(--ui-zoom, 1); width: calc(100vw / var(--ui-zoom, 1)); height: calc(100vh / var(--ui-zoom, 1));
-  min-width: 960px; font-family: var(--ns-font-ui, inherit);
+  min-width: min(960px, calc(100vw / var(--ui-zoom, 1))); font-family: var(--ns-font-ui, inherit);
   background: var(--ns-canvas-b, var(--surface-primary));
 }
 .sh-body { display: grid; min-width: 0; min-height: 0; }

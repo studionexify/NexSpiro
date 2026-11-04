@@ -50,7 +50,8 @@ export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onRes
     <div className={`prow ${pin ? 'has-pin' : ''} ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''} ${def.type === 'text' ? 'wide' : ''}`}>
       <span className="plabel"
         onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); setTip({ x: r.right + 8, y: r.top }); }}
-        onMouseLeave={() => setTip(null)}>
+        onMouseLeave={() => setTip(null)}
+        onPointerUp={(e) => { if (e.pointerType === 'mouse') return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setTip((t) => (t ? null : { x: Math.min(r.left, window.innerWidth - 280), y: r.bottom + 4 })); }}>
         {nullable && (
           <input type="checkbox" className="ovr-check" checked={!off} aria-label={`Override ${def.label}`}
             onChange={(e) => (e.target.checked ? onCommit(nullable.inherited ?? def.def) : onReset())} onClick={(e) => e.stopPropagation()} />

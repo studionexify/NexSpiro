@@ -352,7 +352,7 @@ function Studio() {
         <div className="lx-body">
           <aside className="lx-col lx-left"><div className="mx-panel"><EditorColumn onToast={say} /></div></aside>
           <main className="lx-centre"><Live3D><Viewer /></Live3D></main>
-          <aside className="lx-col lx-right"><div className="mx-panel"><Report /></div></aside>
+          <aside className="lx-col lx-right" tabIndex={0} aria-label="Details panel (tap to open)"><div className="mx-panel"><Report /></div></aside>
         </div>
         {toast && <div className="lx-toast">{toast}</div>}
       </div>

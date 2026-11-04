@@ -26,6 +26,7 @@ interface Item { switch?: boolean; head?: string; keep?: boolean; label?: string
 
 /** Auto scale: shrink everything a little on smaller windows so the panels never collide. */
 function autoScale(w: number, h: number) {
+  if (w <= 1024) return 1; // tablet / phone: full-size touch targets, no shrinking
   const fw = w >= 1760 ? 1 : w >= 1500 ? 0.92 : w >= 1320 ? 0.86 : 0.8;
   const fh = h >= 900 ? 1 : h >= 780 ? 0.92 : 0.85;
   return Math.min(fw, fh);

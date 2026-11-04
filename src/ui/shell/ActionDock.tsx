@@ -32,9 +32,14 @@ export function ActionDock() {
   else if (ready) label = 'Export G-code';
   const run = () => { if (ready) void exportGcode(); else void sliceAndPreview(); };
   // lowers the motion / weave and re-slices until the print head clears (see autoFixUntilClear)
+  const [min, setMin] = useState(false);
   const fix = () => { setFixing(true); void autoFixUntilClear().finally(() => setFixing(false)); };
   return (
-    <div className="float sh-actiondock" role="region" aria-label="Workspace and slice">
+    <div className={`float sh-actiondock${min ? ' sh-actiondock-min' : ''}`} role="region" aria-label="Workspace and slice">
+      <button className="sh-dock-handle" onClick={() => setMin(!min)} aria-expanded={!min} aria-label={min ? 'Show slice controls' : 'Hide slice controls'}>
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden><path d={min ? 'M3 10l5-5 5 5' : 'M3 6l5 5 5-5'} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        {min && <span>{busy ? label : 'Slice'}</span>}
+      </button>
       <ModeTabs />
       <div className="sh-slicebar">
       {clr.state !== 'none' && (

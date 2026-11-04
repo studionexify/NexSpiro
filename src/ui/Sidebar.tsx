@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
+import { touchAdd } from './TouchMods';
 import { arcSupportNote, PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
 import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
@@ -344,7 +345,7 @@ export function ObjectsCard() {
   const [closed, toggle] = useCollapsed('objects');
   const rowsClosed = useTree((t) => t.collapsed);
   const pick = (e: React.MouseEvent, id: string, pi: number) => {
-    const toggle = e.ctrlKey || e.metaKey;
+    const toggle = e.ctrlKey || e.metaKey || touchAdd();
     s.set({ selected: toggle ? (s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id]) : [id], selectedPart: null, selectedRange: null, activePlate: pi });
   };
   return (

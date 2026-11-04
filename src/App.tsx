@@ -5,6 +5,7 @@ import { autoOrient, exportGcode, importBuffers, importDialog, newProject, slice
 import { useUi } from './state/ui';
 import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, ObjectPill, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
+import { TouchMods } from './ui/TouchMods';
 import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
@@ -173,6 +174,7 @@ export default function App() {
       <MotionStudioHost />
       <SelectWindowHost />
       <ImportDialogHost />
+      <TouchMods />
       <InstantTooltips />
       <ShortcutsHost />
       <CommandPalette />

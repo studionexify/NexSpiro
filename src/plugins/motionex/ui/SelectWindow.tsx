@@ -3,6 +3,7 @@
 // brush an area, then choose what changes there: filament, a motion, speed, flow, temperature. Every rule lives
 // here; the slicer applies them (select/engine.ts) and the window shows the same selection the slicer uses.
 import { createPortal } from 'react-dom';
+import { touchAdd, touchErase, TouchMods } from '../../../ui/TouchMods';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from 'react';
 import * as THREE from 'three';
 import { useStore } from '../../../state/store';
@@ -179,8 +180,8 @@ function SelectWindow() {
     if (tool === 'brush') {
       const r = target();
       if (!ensureKind(r, 'brush')) return;
-      painting.current = { erase: e.altKey, last: hit?.point ?? null };
-      if (hit) dab(r, hit.point, e.altKey);
+      painting.current = { erase: e.altKey || touchErase(), last: hit?.point ?? null };
+      if (hit) dab(r, hit.point, e.altKey || touchErase());
       (e.target as Element).setPointerCapture?.(e.pointerId);
       changed();
       return;
@@ -191,7 +192,7 @@ function SelectWindow() {
     if (tool === 'layers') {
       if (!ensureKind(r, 'layers') || r.pick.kind !== 'layers') return;
       const obj = oneObject ? objAt(info.boxes, hit.point.x, hit.point.y, hit.point.z) : undefined;
-      if (e.shiftKey && !pickEmpty(r.pick)) { r.pick.z0 = Math.min(r.pick.z0, L.z); r.pick.z1 = Math.max(r.pick.z1, L.z); }
+      if ((e.shiftKey || touchAdd()) && !pickEmpty(r.pick)) { r.pick.z0 = Math.min(r.pick.z0, L.z); r.pick.z1 = Math.max(r.pick.z1, L.z); }
       else { r.pick.z0 = L.z; r.pick.z1 = L.z; }
       r.pick.obj = obj;
       anchor(r, obj);
@@ -218,7 +219,7 @@ function SelectWindow() {
   };
   const onMove = (e: RPointerEvent<HTMLDivElement>) => {
     if (tool !== 'brush' || !view.current) return;
-    const x = e.clientX, y = e.clientY, down = painting.current, alt = e.altKey;
+    const x = e.clientX, y = e.clientY, down = painting.current, alt = e.altKey || touchErase();
     cancelAnimationFrame(hoverRaf.current);
     hoverRaf.current = requestAnimationFrame(() => {
       const v = view.current;
@@ -312,6 +313,7 @@ function SelectWindow() {
               <button className="sxw-tool" onClick={() => view.current?.frame()}>Fit</button>
             </div>
             <div className="sxw-stage">
+              <TouchMods erase />
               <div ref={host} className={`sxw-canvas tool-${tool}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={() => view.current?.showBrush(null)} onContextMenu={(e) => e.preventDefault()} />
               {!result && <div className="sxw-empty">{status === 'slicing' ? 'Slicing the plate to show its lines…' : 'Nothing sliced yet. Add a model to the plate, then Re-slice.'}</div>}
               <div className="sxw-rails">
