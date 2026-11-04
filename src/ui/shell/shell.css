@@ -342,3 +342,4 @@ body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-selec
 .imp-bar { height: 6px; border-radius: 3px; background: var(--ns-panel-2, var(--surface-tertiary)); overflow: hidden; }
 .imp-bar i { display: block; height: 100%; background: var(--ns-primary, var(--accent)); transition: width .15s; }
 .imp-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 16px 16px; flex-wrap: wrap; }
+.imp-dont { margin-right: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
