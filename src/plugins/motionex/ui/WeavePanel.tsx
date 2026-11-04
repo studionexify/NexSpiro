@@ -234,10 +234,13 @@ export function WeaveCard() {
       <div className="mx-card-title">Weave &amp; texture<span className="spacer" />
         <button className={`toggle on`} aria-label="Weave on" title="Turn weave off" onClick={() => upd(() => { w.enabled = false; })} />
       </div>
-      <div className="seg mx-seg">
-        <button className={w.mode === 'colour' ? 'on' : ''} title="One filament per layer, the colours take turns (AMS)" onClick={() => regen(() => { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; })}>Colour weave</button>
-        <button className={w.mode === 'mono' ? 'on' : ''} title="One filament: the picture is relief only, no filament changes" onClick={() => regen(() => { w.mode = 'mono'; })}>Mono relief</button>
-      </div>
+      <label className="mx-field">Weave type
+        <select className="select" value={w.mode} title={w.mode === 'colour' ? 'One filament per layer, the colours take turns (AMS)' : 'One filament: the picture is relief only, no filament changes'}
+          onChange={(e) => regen(() => { if (e.target.value === 'colour') { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; } else w.mode = 'mono'; })}>
+          <option value="colour">Colour weave · filaments take turns</option>
+          <option value="mono">Mono relief · one filament, no changes</option>
+        </select>
+      </label>
       {w.mode === 'colour' && !ams && (
         <div className="mx-card" style={{ padding: 8, gap: 6 }}>
           <p className="mx-muted bad" style={{ margin: 0 }}>This printer changes filament by hand (M600 / pause): colour weave would stop the print for a spool swap every {w.layers_per_colour === 1 ? 'layer' : `${w.layers_per_colour} layers`}, hundreds of times. Use Mono relief, which weaves the picture with one filament and no changes, or pick a printer with a filament unit (AMS, MMU3, CFS, ACE) or a tool changer.</p>
