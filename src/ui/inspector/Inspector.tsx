@@ -26,14 +26,12 @@ import './inspector.css';
 export function Inspector() {
   const ctx = useUi((u) => u.inspectorCtx);
   const s = useStore();
-  const objView = ctx === 'object' && s.selected.length > 0;
-  // per-object settings are opened on purpose (gear in Objects); clearing the selection returns to the static plate view
-  useEffect(() => { if (!s.selected.length && ctx === 'object') useUi.getState().set({ inspectorCtx: 'plate' }); }, [s.selected.length, ctx]);
+  void ctx; void s;
   return (
     <div className="panel insp" aria-label="Inspector">
-      <Crumb objView={objView} />
+      <Crumb objView={false} />
       <div className="iscroll">
-        {objView ? <ObjectView /> : <PlateView />}
+        <PlateView />
       </div>
     </div>
   );
@@ -161,11 +159,19 @@ function PresetModal({ onClose }: { onClose: () => void }) {
 
 function PlateView() {
   const advanced = useAdvanced((a) => a.engineMode === 'advanced');
+  const objMode = useUi((u) => u.inspectorCtx) === 'object';
+  const setUi = useUi((u) => u.set);
   return <>
     <div className="insp-cards"><PrinterCard /><FilamentCard /></div>
     <PresetSection />
     {advanced && <PhysicsCore />}
-    <InlineSettings objMode={false} title="Process · whole plate" />
+    <InlineSettings objMode={objMode} title={
+      <span className="proc-mode">Process
+        <span className="seg proc-seg" role="tablist" aria-label="Process settings for">
+          <button role="tab" aria-selected={!objMode} className={!objMode ? 'on' : ''} title="Settings for the whole plate" onClick={() => setUi({ inspectorCtx: 'plate' })}>Global</button>
+          <button role="tab" aria-selected={objMode} className={objMode ? 'on' : ''} title="Settings for the selected object only; the object keeps them when you switch back to Global" onClick={() => setUi({ inspectorCtx: 'object' })}>Objects</button>
+        </span>
+      </span>} />
     <div className="insp-cards"><ObjectsCard /></div>
   </>;
 }
@@ -270,7 +276,7 @@ const TAB_HINT: Record<ProcessTab, string> = {
   Others: 'Brim, prime tower, special modes and G-code',
 };
 
-function InlineSettings({ objMode, title }: { objMode: boolean; title: string }) {
+function InlineSettings({ objMode, title }: { objMode: boolean; title: React.ReactNode }) {
   const s = useStore();
   const m = useProcessModel(objMode);
   const { pinnedParams, togglePinParam } = useUi();
@@ -299,7 +305,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         {!objMode && m.modifiedCount > 0 && (
           <button className="icon-btn" title={`${m.modifiedCount} changed from the preset: reset all`} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={13} /></button>
         )}
-        {!objMode && (
+        {(
           <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
             <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
           </label>
@@ -316,7 +322,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         </div>
       )}
       {noSel ? (
-        <div className="empty-hint">Select an object to give it its own settings.</div>
+        <div className="proc-nosel">Select an object on the plate or in Objects to give it its own settings. Objects keep their own settings when you switch back to Global.</div>
       ) : objMode && (m.part ? m.part.type === 'modifier' && isWaveZone(m.part.overrides) : m.range && isWaveZone(m.range.overrides)) ? (
         <WeaveZoneSettings objectId={m.selObjs[0].id} partId={m.part?.id} rangeId={m.range?.id} />
       ) : solidPart ? (

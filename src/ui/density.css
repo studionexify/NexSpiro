@@ -345,3 +345,10 @@ body:has(.sh-msheet) .ph-arrow, body:has(.sh-msheet) .sh-dock-toggle { display: 
 @media (max-width: 767px) { .object-info { font-size: 11px; } .object-info .oi-head { margin-bottom: 2px; } }
 /* active tool stays solid even while hovered / after a tap (touch keeps :hover) */
 .sh-stage .toolbar .icon-btn.active, .sh-stage .toolbar .icon-btn.active:hover:not(:disabled) { background: var(--ns-active); color: var(--ns-on-active); }
+/* Process: Global | Objects switch (Bambu-style) */
+.proc-mode { display: inline-flex; align-items: center; gap: 8px; }
+.proc-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px; background: var(--ns-panel-2); border: 1px solid var(--ns-line); text-transform: none; letter-spacing: 0; }
+.proc-seg button { height: 20px; padding: 0 9px; border: 0; border-radius: 999px; background: none; font-size: 11px; font-weight: 600; color: var(--ns-text-2); cursor: pointer; }
+.proc-seg button.on { background: var(--ns-ok); color: #fff; }
+.proc-nosel { padding: 14px 4px; color: var(--ns-text-2); font-size: 12px; }
+.insp-settings > .h { flex-wrap: wrap; row-gap: 4px; }
