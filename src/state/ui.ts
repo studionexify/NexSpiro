@@ -39,7 +39,7 @@ const LS = 'nexspiro.ui.v1';
 const prefs: Partial<UiState> = (() => { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } })();
 
 export const useUi = create<UiState>((set, get) => ({
-  inspectorCtx: 'object',
+  inspectorCtx: 'plate',
   pinnedParams: Array.isArray(prefs.pinnedParams) ? prefs.pinnedParams : ['wall_loops', 'sparse_infill_density', 'outer_wall_speed'],
   pinnedPlugins: Array.isArray(prefs.pinnedPlugins) ? prefs.pinnedPlugins : [],
   inspectorCollapsed: !!prefs.inspectorCollapsed,

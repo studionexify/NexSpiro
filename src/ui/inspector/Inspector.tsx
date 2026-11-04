@@ -27,6 +27,8 @@ export function Inspector() {
   const ctx = useUi((u) => u.inspectorCtx);
   const s = useStore();
   const objView = ctx === 'object' && s.selected.length > 0;
+  // per-object settings are opened on purpose (gear in Objects); clearing the selection returns to the static plate view
+  useEffect(() => { if (!s.selected.length && ctx === 'object') useUi.getState().set({ inspectorCtx: 'plate' }); }, [s.selected.length, ctx]);
   return (
     <div className="panel insp" aria-label="Inspector">
       <Crumb objView={objView} />
@@ -51,7 +53,6 @@ function Crumb({ objView }: { objView: boolean }) {
         <b>{plateName}</b>
         <span className="tag">{s.objects.length ? `${s.objects.length} object${s.objects.length > 1 ? 's' : ''}` : 'empty'}</span>
         {n > 0 && <span className="tag warn" title="Settings changed from the preset for the whole plate">{n} changed</span>}
-        {s.selected.length > 0 && <button className="crumb-go" title="Show the selected object's settings" onClick={() => setUi({ inspectorCtx: 'object' })}>Selection<Icon name="chevron" size={12} /></button>}
       </div>
     );
   }

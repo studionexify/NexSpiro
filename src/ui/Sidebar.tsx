@@ -1,3 +1,4 @@
+import { useUi } from '../state/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 import { FILAMENTS, filamentById } from '../profiles/filaments';
 import { touchAdd } from './TouchMods';
@@ -386,7 +387,7 @@ export function ObjectsCard() {
                       {o.openEdges > 0 && <span className="warn" title={`${o.openEdges} open edges — mesh is not watertight`}><Icon name="warn" size={14} /></span>}
                       {isOutOfBounds(o, s.printerId, plates) && <span className="warn" title="Outside the printable area" style={{ color: 'var(--error)' }}><Icon name="warn" size={14} /></span>}
                       <button className={`obj-edit ${own ? 'has' : ''}`} title={own ? `${own} own setting${own > 1 ? 's' : ''} — edit` : 'Edit this object\'s settings'}
-                        onClick={(e) => { e.stopPropagation(); s.set({ selected: [o.id], selectedPart: null, processMode: 'objects' }); }}>
+                        onClick={(e) => { e.stopPropagation(); s.set({ selected: [o.id], selectedPart: null, processMode: 'objects' }); useUi.getState().set({ inspectorCtx: 'object' }); }}>
                         <Icon name="gear" size={13} />
                       </button>
                       <select className="fil-pick" value={o.filament ?? 0} title="Filament" onClick={(e) => e.stopPropagation()}
