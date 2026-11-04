@@ -70,3 +70,38 @@ export function textureThumb(L: Partial<TextureLayer>, size = 56): string {
   cache.set(key, url);
   return url;
 }
+
+/** Flat outline of a design: the side profile drawn as a line drawing (no shading, no texture). Cheap and crisp. */
+export function designOutline(spec: Partial<PlantexSpec>, key = JSON.stringify(spec), size = 84, dark = false): string {
+  const k = `ol:${dark ? 1 : 0}:${size}:${key}`;
+  const hit = cache.get(k);
+  if (hit) return hit;
+  const s = normalizeSpec(spec);
+  const b = bodyFn(s);
+  const H = s.height, N = 48;
+  const rs: number[] = [];
+  let rMax = 1;
+  for (let i = 0; i <= N; i++) { const r = b.radius(Math.PI / 2, (H * i) / N); rs.push(r); rMax = Math.max(rMax, r); }
+  const span = Math.max(H, rMax * 2) * 1.12;
+  const dpr = 2, px = size * dpr;
+  const [c, g] = canvas(px, px);
+  const sc = px / span, cx = px / 2, base = px - (px - H * sc) / 2;
+  const X = (r: number) => r * sc, Y = (z: number) => base - z * sc;
+  g.beginPath();
+  g.moveTo(cx - X(rs[0]), Y(0));
+  for (let i = 0; i <= N; i++) g.lineTo(cx - X(rs[i]), Y((H * i) / N));
+  for (let i = N; i >= 0; i--) g.lineTo(cx + X(rs[i]), Y((H * i) / N));
+  g.closePath();
+  g.fillStyle = dark ? 'rgba(255,255,255,.06)' : 'rgba(24,24,27,.04)';
+  g.fill();
+  g.lineJoin = 'round'; g.lineWidth = 1.5 * dpr;
+  g.strokeStyle = dark ? '#E4E4E7' : '#27272A';
+  g.stroke();
+  // rim ellipse hint
+  const rt = X(rs[N]);
+  g.beginPath(); g.ellipse(cx, Y(H), rt, Math.max(1, rt * 0.12), 0, 0, Math.PI * 2);
+  g.lineWidth = 1 * dpr; g.stroke();
+  const url = c.toDataURL();
+  cache.set(k, url);
+  return url;
+}

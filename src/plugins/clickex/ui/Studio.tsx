@@ -2,6 +2,7 @@
 // Left: icon rail and the settings of the selected tab. Centre: the live 3D view (assembled, exploded, or as
 // it prints) with the real switch. Right: where the design comes from, and the ways out.
 import { useEffect, useState } from 'react';
+import { Live3D } from '../../../ui/Live3D';
 import { createPortal } from 'react-dom';
 import { PRINTERS, printerById } from '../../../profiles/printers';
 import { useStore } from '../../../state/store';
@@ -112,7 +113,7 @@ function Studio() {
               <button onClick={redo} disabled={!canRedo()} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><Ico name="redo-2" size={18} /></button>
             </footer>
           </aside>
-          <main className="cx-centre"><Viewer /><Overlay /></main>
+          <main className="cx-centre"><Live3D><Viewer /><Overlay /></Live3D></main>
           <aside className="cx-right">
             <div className="cx-rightbody"><SourcePanel /></div>
             <footer className="cx-actions">

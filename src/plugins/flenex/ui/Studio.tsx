@@ -1,6 +1,7 @@
 // Flenex Studio: a 98% window over NexSpiro. Left: design, cuts, paint and print tabs. Centre: live 3D view of
 // the flexi on the selected printer's bed, where cuts are placed and colours painted. Right: report.
 import { useEffect, useRef, useState } from 'react';
+import { Live3D } from '../../../ui/Live3D';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -350,7 +351,7 @@ function Studio() {
         </header>
         <div className="lx-body">
           <aside className="lx-col lx-left"><div className="mx-panel"><EditorColumn onToast={say} /></div></aside>
-          <main className="lx-centre"><Viewer /></main>
+          <main className="lx-centre"><Live3D><Viewer /></Live3D></main>
           <aside className="lx-col lx-right"><div className="mx-panel"><Report /></div></aside>
         </div>
         {toast && <div className="lx-toast">{toast}</div>}

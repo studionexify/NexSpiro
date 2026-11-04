@@ -116,3 +116,54 @@
   .sh-stage .toolbar .icon-btn { width: 36px; height: 36px; } /* 36px min touch target on phones */
 }
 @keyframes ns-sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- Live 3D / Flat switch ---------- */
+.live3d-toggle { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--ns-panel); border: 1px solid var(--ns-line); }
+.live3d-toggle button { height: 22px; padding: 0 8px; font-size: 11px; border: 0; border-radius: 5px; background: none; color: var(--ns-text-2); cursor: pointer; }
+.live3d-toggle button.on { background: var(--ns-active); color: var(--ns-on-active); }
+.live3d-float { position: absolute; top: 8px; right: 8px; z-index: 6; box-shadow: var(--ns-shadow); }
+.live3d-off { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
+.live3d-off > img { max-width: min(70%, 420px); max-height: 80%; object-fit: contain; }
+.live3d-msg { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--ns-text-2); text-align: center; }
+.live3d-msg b { color: var(--ns-text); font-weight: 600; }
+
+/* ---------- Motion Studio: 3-pane ---------- */
+.mxw.mxw3 { width: min(98vw, 1920px); height: min(96vh, 1200px); }
+.mxw3 .mxw-head { height: var(--ns-studio-head); min-height: var(--ns-studio-head); padding: 0 10px; gap: 8px; }
+.mxw3 .crumbs { font-size: 12px; color: var(--ns-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mxw3 .crumbs b { color: var(--ns-text); font-weight: 600; }
+.mxw3 .mxw-body { display: grid; grid-template-columns: var(--ns-studio-left) minmax(0, 1fr) var(--ns-studio-right); }
+.ms-pane { min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.ms-left { border-right: 1px solid var(--ns-line); background: var(--ns-panel); }
+.ms-right { border-left: 1px solid var(--ns-line); background: var(--ns-panel); }
+.ms-centre {
+  background-color: var(--ns-canvas-b);
+  background-image: linear-gradient(var(--ns-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ns-grid) 1px, transparent 1px);
+  background-size: 24px 24px; padding: 12px;
+}
+.ms-centre .studio-canvas { flex: 1; min-height: 160px; height: auto !important; background: var(--ns-panel); border-radius: 8px; border: 1px solid var(--ns-line); }
+.ms-lib { display: flex; flex-direction: column; gap: 1px; }
+.ms-lib .ms-group { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ns-label); padding: 6px 4px 2px; }
+.ms-lib button { text-align: left; height: 26px; padding: 0 8px; border: 0; border-radius: 5px; background: none; font-size: 12px; cursor: pointer; color: var(--ns-text); }
+.ms-lib button:hover { background: var(--ns-hover); }
+.ms-lib button.on { background: var(--ns-active); color: var(--ns-on-active); }
+@media (max-width: 1024px) {
+  .mxw3 .mxw-body { grid-template-columns: 220px minmax(0, 1fr); }
+  .mxw3 .ms-right { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--ns-line); max-height: 40vh; }
+  .mxw3 .mxw-body { grid-template-rows: minmax(0, 1fr) auto; }
+}
+@media (max-width: 767px) {
+  .mxw.mxw3 { width: 100vw; height: 100dvh; border-radius: 0; }
+  .mxw3 .mxw-body { grid-template-columns: 1fr; grid-template-rows: none; overflow-y: auto; display: flex; flex-direction: column; }
+  .mxw3 .ms-centre { order: -1; min-height: 50dvh; }
+  .mxw3 .ms-pane { overflow: visible; border: 0; border-top: 1px solid var(--ns-line); max-height: none; }
+}
+.ms-centre .studio-closeups { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.ms-scrub { display: flex; align-items: center; gap: 8px; }
+.ms-scrub input { flex: 1; }
+.ms-scrub span { font-size: 12px; min-width: 72px; text-align: right; }
+.mxw3 .mxw-body .studio-empty { grid-column: 1 / -1; }
+.mxw3 .mxw-body > .studio { grid-column: 1 / -1; }
+.ms-lib > div { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 2px; }
+.ms-lib > div > .ms-group { grid-column: 1 / -1; }
+.ms-lib button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

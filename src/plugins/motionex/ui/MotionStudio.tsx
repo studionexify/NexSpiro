@@ -72,7 +72,7 @@ const CURVE_HINT: Record<CurveKey, string> = {
   speed_mult: 'How fast each spot prints. The model is coloured by speed.',
 };
 
-export function MotionStudio() {
+export function MotionStudio({ layout = 'dock' }: { layout?: 'dock' | 'three' } = {}) {
   useMx();
   const set = useStore((s) => s.set);
   const printerId = useStore((s) => s.printerId);
@@ -112,6 +112,109 @@ export function MotionStudio() {
     changed();
     useStore.getState().set({ toast: { kind: 'info', text: `Saved “${name}” under My motions.` } });
   };
+
+  if (layout === 'three') {
+    const pick = (id: string) => { if (id === a.brush_id) return; if (a.brush && !confirm('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = id; a.brush = undefined; changed(); };
+    return (
+      <>
+        <aside className="ms-pane ms-left" aria-label="Motion library">
+        {apps.length > 1 && (
+          <div className="studio-places">
+            {apps.map((x, i) => (
+              <button key={i} className={`studio-place ${x === a ? 'on' : ''}`} onClick={() => activate(i)} title={brushOf(x)?.name}>
+                <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(x) - 1] }} />{brushOf(x)?.name ?? x.brush_id}
+              </button>
+            ))}
+          </div>
+        )}
+          <div className="ms-lib" role="listbox" aria-label="Motion">
+            {[...libGroups].map(([g, bs]) => (
+              <div key={g}>
+                <div className="ms-group">{g}</div>
+                {bs.map((b) => <button key={b.id} role="option" aria-selected={a.brush_id === b.id} className={a.brush_id === b.id ? 'on' : ''} onClick={() => pick(b.id)}>{b.name}</button>)}
+              </div>
+            ))}
+          </div>
+      <section className="mx-card">
+        <div className="mx-card-title">Wave shape</div>
+        <div className="studio-shapes">
+          {SHAPES.map((sh) => {
+            const demo = { ...draft, curves: { ...draft.curves, lateral_offset: sh.make() }, layers: null, noise: null, z_amplitude: 0, repeat_mode: 'tile' as const };
+            return (
+              <button key={sh.id} className="mx-lib-card" title={sh.label} onClick={() => edit((b) => { b.curves.lateral_offset = sh.make(); })}>
+                <Wave b={demo} small /><span>{sh.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <CurveBox b={draft} k="lateral_offset" onEdit={edit} />
+      </section>
+
+      <section className="mx-card">
+        <div className="mx-card-title">Layer stacking</div>
+        <div className="studio-shapes">
+          {STACKS.map((st) => (
+            <button key={st.id} className={`mx-tool ${stackId(draft) === st.id ? 'on' : ''}`} title={st.hint} onClick={() => edit((b) => { b.layers = st.make(b); })}>{st.label}</button>
+          ))}
+        </div>
+        <p className="mx-muted" style={{ margin: 0 }}>{STACKS.find((s) => s.id === stackId(draft))?.hint ?? 'Your own stacking.'}</p>
+        {draft.layers && (
+          <>
+            <div className="mx-label">How the lead changes from step to step</div>
+            <div className="seg mx-seg">
+              {MODES.map(([m, l, hint]) => <button key={m} title={hint} className={draft.layers!.mode === m ? 'on' : ''} onClick={() => edit((b) => { b.layers = { ...b.layers!, mode: m }; })}>{l}</button>)}
+            </div>
+            {draft.layers.mode !== 'alternate' && (
+              <label className="row" style={{ gap: 8, margin: 0 }}>
+                <span style={{ flex: 1, fontSize: 12 }}>Slant both ways (diamonds and cells)</span>
+                <button className={`toggle ${draft.layers.cross ? 'on' : ''}`} aria-label="Slant both ways" onClick={() => edit((b) => { b.layers = { ...b.layers!, cross: !b.layers!.cross }; })} />
+              </label>
+            )}
+          </>
+        )}
+        <div className="mx-two">
+          <label className="mx-field">Motion on for (layers)
+            <input className="input" type="number" min={0} step={1} value={draft.layers?.band_on ?? 0} title="0 = on all the time"
+              onChange={(e) => edit((b) => { b.layers = { shift_deg: 0, mode: 'steady', every: 1, band_off: 0, ...b.layers, band_on: Math.max(0, Math.round(+e.target.value)) }; })} />
+          </label>
+          <label className="mx-field">then plain for (layers)
+            <input className="input" type="number" min={0} step={1} value={draft.layers?.band_off ?? 0} disabled={!draft.layers?.band_on}
+              onChange={(e) => edit((b) => { b.layers = { ...b.layers!, band_off: Math.max(0, Math.round(+e.target.value)) }; })} />
+          </label>
+        </div>
+      </section>
+
+        </aside>
+        <main className="ms-pane ms-centre" aria-label="Preview">
+          <CloseUps b={draft} profiles={profiles} layer={layer} setLayer={setLayer} />
+          <ViewPicker />
+        </main>
+        <aside className="ms-pane ms-right" aria-label="Motion parameters">
+          <section className="mx-card">
+        <div className="row" style={{ gap: 6, margin: 0, alignItems: 'center' }}>
+          <span className="mx-muted" style={{ flex: 1, margin: 0 }}>{a.brush ? `Changed for this placement · library “${base?.name ?? a.brush_id}” is unchanged` : 'As in the library · any change applies to this placement only'}</span>
+          <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (confirm('Go back to the library motion?')) { a.brush = undefined; changed(); } }}>Reset</button>
+          <button className="btn-secondary btn-small" onClick={saveToLibrary} title="Keep these changes as a new motion in My motions">Save to library</button>
+        </div>
+          </section>
+      <section className="mx-card">
+        <div className="mx-card-title">Depth and spacing</div>
+        <Slider label="Depth (in and out)" unit="mm" min={0} max={Math.max(3, draft.amplitude * 1.5)} step={0.05} value={draft.amplitude} onChange={(v) => edit((b) => { b.amplitude = v; })} />
+        <Slider label="Spacing (one repeat)" unit="mm" min={0.4} max={Math.max(30, draft.period_mm * 1.5)} step={0.1} value={draft.period_mm} onChange={(v) => edit((b) => { b.period_mm = v; })} />
+        <Slider label="Start shift along the wall" unit="mm" min={0} max={draft.period_mm} step={0.05} value={r3((draft.phase_deg / 360) * draft.period_mm)}
+          onChange={(v) => edit((b) => { b.phase_deg = r3((v / b.period_mm) * 360) % 360; })} />
+        <label className="row" style={{ gap: 8, margin: 0 }}>
+          <span style={{ flex: 1, fontSize: 12 }}>Fit a whole number of repeats round each loop<div className="mx-muted" style={{ margin: 0 }}>Stretches the spacing a little so there is no seam where a loop closes.</div></span>
+          <button className={`toggle ${draft.repeat_mode === 'stretch' ? 'on' : ''}`} aria-label="Fit evenly" onClick={() => edit((b) => { b.repeat_mode = b.repeat_mode === 'stretch' ? 'tile' : 'stretch'; })} />
+        </label>
+      </section>
+
+          <LeadLag b={draft} layerHeight={profiles.process.layerHeight || 0.2} onEdit={edit} />
+          <Advanced b={draft} onEdit={edit} profiles={profiles} />
+        </aside>
+      </>
+    );
+  }
 
   return (
     <aside className="studio" aria-label="Motion editor">
@@ -479,6 +582,7 @@ function CloseUps({ b, profiles, layer, setLayer }: { b: MotionBrush; profiles: 
       <canvas ref={top} className="studio-canvas" style={{ height: 150 }} />
       <div className="studio-legend"><i className="lg cur" />layer {layer}{off ? ' (plain)' : ''} · line thickness = plastic<i className="lg below" />layer below<i className="lg above" />layer above<span className="spacer" />seen from above</div>
       <canvas ref={side} className="studio-canvas" style={{ height: 110 }} />
+      <div className="ms-scrub"><input type="range" min={1} max={300} step={1} value={layer} onChange={(e) => setLayer(+e.target.value)} aria-label="Layer" /><span className="mono">Layer {layer}</span></div>
       <div className="studio-legend"><i className="lg out" />{sideLegend[0]}<i className="lg in" />{sideLegend[1]}<span className="spacer" />{(layerHeight * 36).toFixed(1)} mm of wall seen from the side · {lineWidth.toFixed(2)} mm line</div>
     </section>
   );

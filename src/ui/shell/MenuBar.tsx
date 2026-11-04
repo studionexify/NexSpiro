@@ -1,3 +1,4 @@
+import { Live3DToggle } from '../Live3D';
 import { printerSwitchChoice, resetPrinterSwitchChoice } from '../ImportDialog';
 // Top menu bar (File / Edit / View / Add / Tools / Help) like a desktop app, plus the Preferences
 // dialog and the interface scale that keeps the layout fitting smaller windows.
@@ -169,6 +170,7 @@ function Preferences({ onClose }: { onClose: () => void }) {
         </label>
         <label className="row"><input type="checkbox" checked={liveToolpaths} onChange={() => set({ liveToolpaths: !liveToolpaths })} />Show toolpath view while preparing</label>
         <label className="row"><input type="checkbox" checked={showOverhangs} onChange={() => set({ showOverhangs: !showOverhangs })} />Highlight overhangs</label>
+        <div className="row" style={{ gap: 8 }}><span style={{ flex: 1 }}>Studio previews (Plantex, Lumonex, Flenex, Clickex)</span><Live3DToggle /></div>
         <PrinterSwitchReset />
       </div>
     </Modal>
