@@ -257,3 +257,13 @@ button, [role='button'], a, label, .select { touch-action: manipulation; }
   :root { --ph-dock-h: 124px; }
   body.ph-slice .sh-stage .toolbar { max-height: calc(100dvh - 36px - 24px - var(--ph-dock-h) - 96px); }
 }
+@media (max-width: 767px) {
+  /* settings sheet open: a down-arrow tab sits on top of the sheet and closes it */
+  .sh-dock-toggle.on {
+    display: grid !important; z-index: 46; left: 50% !important; right: auto !important; top: auto !important;
+    bottom: 72dvh !important; width: 56px !important; height: 26px !important; margin: 0 0 0 -28px;
+    border: 1px solid var(--ns-line); border-bottom: 0; border-radius: 10px 10px 0 0 !important;
+  }
+  .sh-dock-toggle.on svg { transform: rotate(90deg); }
+}
+@media (max-width: 767px) { body:has(.sh-right-sheet:not(.sh-right-closed)) .ph-arrow { display: none; } }
