@@ -3,7 +3,7 @@
 import { createPortal } from 'react-dom';
 import { useSyncExternalStore } from 'react';
 import { useStore } from '../../../state/store';
-import { MotionStudio } from './MotionStudio';
+import { MotionStudio, StudioToolbar } from './MotionStudio';
 
 let isOpen = false;
 const listeners = new Set<() => void>();
@@ -19,6 +19,7 @@ export function MotionStudioHost() {
       <div className="mxw mxw3">
         <header className="mxw-head">
           <span className="crumbs" style={{ flex: 1 }}>Plugins / Motionex / <b>Motion Studio</b></span>
+          <StudioToolbar />
           <button className="btn-primary btn-small" onClick={() => openMotionStudio(false)}>Done</button>
         </header>
         <div className="mxw-body"><MotionStudio layout="three" /></div>

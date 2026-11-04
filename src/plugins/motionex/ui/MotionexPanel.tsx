@@ -269,29 +269,29 @@ export function MotionexPanel() {
         <button className="btn-secondary btn-small" onClick={() => openMotionStudio(true)} title="The motion editor (was the Motion tab): shape, depth, spacing and layer stacking, live on the model">Motion editor ↗</button>
       </div>
       {/* toolpath view toggle lives in the top bar (shared by all plugins) */}
-      <section className="mx-card">
-        <div className="mx-card-title">Select &amp; apply</div>
-        <div className="mx-field"><span className="mx-label">Rules</span><span>{mx.rules.length ? `${mx.rules.filter(ruleActive).length} of ${mx.rules.length} on` : 'None yet'}</span></div>
-        <button className="btn-secondary btn-small mx-add" onClick={() => openSelectWindow(true)} title="Pick layers, single lines or a brushed area on the sliced print and change filament, motion, speed, flow or temperature there">Open Select &amp; apply…</button>
-      </section>
-      <section className="mx-card">
-        <div className="mx-card-title">Motions<span className="spacer" />
+      <section className="mx-card mx-flow">
+        <div className="mx-card-title">Layer motion<span className="spacer" />
           <button className="btn-secondary btn-small" onClick={() => setEditing(act?.brush_id ?? null)} title="Make or edit your own motions">Edit library…</button>
         </div>
-        {!apps.length && !picking && <p className="mx-muted">Pick a motion, or go straight to a tool below: it starts with a Wave you can change later.</p>}
+        <div className="mx-step"><span className="mx-step-n">1</span>Choose a motion</div>
+        {!apps.length && !picking && <p className="mx-muted" style={{ margin: 0 }}>Pick a motion from the library, then place it on the model in step 2.</p>}
         <div className="mx-layers">
           {apps.map((a, i) => <LayerRow key={i} a={a} i={i} active={a === act} onChange={() => setPicking('change')} />)}
         </div>
-        {act && !picking && <button className="btn-secondary btn-small mx-add" onClick={() => openMotionStudio(true)} title="Change the shape, depth, spacing and layer stacking, and see it on the model as you go">Open {brushOf(act)?.name ?? 'motion'} in Motion Studio ↗</button>}
         {picking ? <Library current={picking === 'change' ? act?.brush_id : undefined} onPick={choose} onCancel={() => setPicking(null)} />
-          : <button className="btn-primary btn-small mx-add" disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add motion</button>}
+          : <div className="row" style={{ gap: 6, margin: 0 }}>
+              <button className="btn-primary btn-small" style={{ flex: 1 }} disabled={apps.length >= MAX_SURFACES} onClick={() => setPicking('add')}>+ Add motion</button>
+              {act && <button className="btn-secondary btn-small" onClick={() => openMotionStudio(true)} title="Shape, depth, spacing, stops and layer stacking, live on the model">Edit in Studio ↗</button>}
+            </div>}
+        {!picking && <>
+          <div className="mx-step"><span className="mx-step-n">2</span>Place it on the model</div>
+          <Placement a={act} />
+          <div className="mx-step"><span className="mx-step-n">3</span>Or change it by layer <span className="mx-muted" style={{ margin: '0 0 0 auto', fontWeight: 400 }}>{mx.rules.length ? `${mx.rules.filter(ruleActive).length} of ${mx.rules.length} rules on` : 'no rules yet'}</span></div>
+          <button className="btn-secondary btn-small" onClick={() => openSelectWindow(true)} title="Pick layers, single lines or a brushed area on the sliced print and change filament, motion, speed, flow or temperature there">Open layer rules…</button>
+        </>}
       </section>
-      {!picking && <Placement a={act} />}
+      {!picking && <SurfaceEffect />}
       {act && !picking && <MoreOptions a={act} first={apps.indexOf(act) === 0} />}
-      {!picking && <WeaveCard />}
-      {!picking && <PaintCard />}
-      {!picking && <LaceCard />}
-      {!picking && <SculptCard />}
       <DroolCheck />
       <Report />
       {editing !== undefined && <EditorHost startId={editing} onClose={() => setEditing(undefined)} />}
@@ -413,8 +413,8 @@ export function Wave({ b, small }: { b: MotionBrush; small?: boolean }) {
   }, [b]);
   return (
     <svg className={`mx-wave ${small ? 'sm' : ''}`} viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
-      <path d={d.lat} />
-      {d.z && <path d={d.z} className="z" />}
+      <path d={d.lat} pathLength={100} />
+      {d.z && <path d={d.z} className="z" pathLength={100} />}
     </svg>
   );
 }
@@ -525,7 +525,7 @@ function MoreOptions({ a, first }: { a: MotionApplication; first: boolean }) {
   const printerId = useStore((s) => s.printerId);
   return (
     <details className="mx-card mx-more">
-      <summary className="mx-card-title">More options</summary>
+      <summary className="mx-card-title">Advanced settings</summary>
       <div className="mx-label">Walls</div>
       <select className="select mx-select" aria-label="Walls" value={a.target.walls ?? 'outer'} onChange={(e) => upd(() => { a.target = { ...a.target, walls: e.target.value as WallChoice }; })}>
         {WALLS.map(([w, l]) => <option key={w} value={w}>{l}</option>)}
@@ -608,4 +608,39 @@ function EditorHost({ startId, onClose }: { startId: string | null; onClose: () 
     openMotionexEditor(ref.current, mx, () => profilesFromConfig(currentConfig(), printerId), startId, (didChange) => { if (didChange) changed(); onClose(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return createPortal(<div className="mx-modal" ref={ref} />, document.body);
+}
+
+const EFFECT_KEY = 'nexspiro.motionex.surface';
+const EFFECTS = [
+  ['weave', 'Weave & texture', () => mx.weave.enabled],
+  ['paint', 'Velocity paint', () => mx.paint.enabled],
+  ['lace', 'Lace', () => mx.lace.enabled],
+  ['sculpt', 'Path sculpt', () => mx.sculpt.enabled],
+] as const;
+type EffectId = (typeof EFFECTS)[number][0];
+
+/** One switch for the effects that change the wall surface; only the chosen one's settings show. */
+function SurfaceEffect() {
+  useMx();
+  const [id, setId] = useState<EffectId>(() => {
+    try { const v = localStorage.getItem(EFFECT_KEY); if (EFFECTS.some(([k]) => k === v)) return v as EffectId; } catch { /* storage off */ }
+    return (EFFECTS.find(([, , on]) => on())?.[0] ?? 'weave') as EffectId;
+  });
+  const pick = (v: EffectId) => { setId(v); try { localStorage.setItem(EFFECT_KEY, v); } catch { /* storage off */ } };
+  const onCount = EFFECTS.filter(([, , on]) => on()).length;
+  return (
+    <div className="mx-surface">
+      <div className="mx-surface-h">
+        <span className="mx-card-title" style={{ margin: 0 }}>Surface effect</span>
+        <select className="select" value={id} aria-label="Surface effect" onChange={(e) => pick(e.target.value as EffectId)}>
+          {EFFECTS.map(([k, l, on]) => <option key={k} value={k}>{l}{on() ? ' · on' : ''}</option>)}
+        </select>
+      </div>
+      {onCount > 1 && <p className="mx-muted" style={{ margin: 0 }}>{onCount} surface effects are on; they stack on the same wall.</p>}
+      {id === 'weave' && <WeaveCard />}
+      {id === 'paint' && <PaintCard />}
+      {id === 'lace' && <LaceCard />}
+      {id === 'sculpt' && <SculptCard />}
+    </div>
+  );
 }

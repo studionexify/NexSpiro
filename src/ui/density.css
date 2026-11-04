@@ -352,3 +352,101 @@ body:has(.sh-msheet) .ph-arrow, body:has(.sh-msheet) .sh-dock-toggle { display: 
 .proc-seg button.on { background: var(--ns-ok); color: #fff; }
 .proc-nosel { padding: 14px 4px; color: var(--ns-text-2); font-size: 12px; }
 .insp-settings > .h { flex-wrap: wrap; row-gap: 4px; }
+
+/* ===== Motionex panel: guided flow + surface effect ===== */
+.mx-flow { gap: 8px; }
+.mx-flow > .mx-card { border: 0; padding: 0; margin: 0; background: none; box-shadow: none; }
+.mx-flow > .mx-card > .mx-card-title { display: none; }
+.mx-step { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ns-text); padding-top: 6px; border-top: 1px solid var(--ns-line); }
+.mx-flow > .mx-card-title + .mx-step { border-top: 0; padding-top: 0; }
+.mx-step-n { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; background: var(--ns-active); color: var(--ns-on-active); flex: none; }
+.mx-surface { display: flex; flex-direction: column; gap: 6px; }
+.mx-surface-h { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
+.mx-surface-h .select { flex: 1; }
+
+/* ===== Motion Studio (three-pane) ===== */
+.ms-tools { display: flex; align-items: center; gap: 4px; }
+.ms-tools .icon-btn { width: 28px; height: 28px; font-size: 15px; }
+.ms-snap { height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--ns-line); background: none; color: var(--ns-text-2); font-size: 12px; cursor: pointer; }
+.ms-snap.on { background: var(--ns-active); color: var(--ns-on-active); border-color: transparent; }
+.ms-axdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ax); margin-right: 6px; flex: none; vertical-align: middle; }
+
+.ms-rail { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1; }
+.ms-search { width: 100%; }
+.ms-cats { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.ms-cat > summary { list-style: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ns-text); user-select: none; }
+.ms-cat > summary::-webkit-details-marker { display: none; }
+.ms-cat > summary::before { content: '▸'; font-size: 10px; color: var(--ns-label); transition: transform .15s; }
+.ms-cat[open] > summary::before { transform: rotate(90deg); }
+.ms-cat > summary:hover { background: var(--ns-hover); }
+.ms-count { margin-left: auto; font-size: 10px; font-weight: 500; color: var(--ns-label); }
+.ms-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; padding: 4px 2px 8px; }
+.ms-card { position: relative; border: 1px solid var(--ns-line); border-radius: 8px; background: var(--ns-panel); transition: border-color .12s, box-shadow .12s; }
+.ms-card:hover { border-color: var(--ns-text-2); }
+.ms-card.on { border-color: #13b5c8; box-shadow: 0 0 0 1px #13b5c8 inset; }
+.ms-card-main { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 6px 6px 5px; border: 0; background: none; cursor: pointer; text-align: left; color: var(--ns-text); }
+.ms-card-main span { font-size: 11px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-card .mx-wave { height: 30px; }
+.ms-card .mx-wave path { stroke: #13b5c8; }
+.ms-card .mx-wave path.z { stroke: #d63fb5; }
+.ms-card:hover .mx-wave path, .ms-card:focus-within .mx-wave path { stroke-dasharray: 100; animation: ms-trace 1.4s linear infinite; }
+@keyframes ms-trace { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .ms-card:hover .mx-wave path { animation: none; stroke-dasharray: none; } }
+.ms-fav, .ms-del { position: absolute; top: 2px; width: 20px; height: 20px; border: 0; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: var(--ns-label); opacity: 0; border-radius: 4px; }
+.ms-fav { right: 2px; } .ms-del { right: 22px; font-size: 11px; }
+.ms-card:hover .ms-fav, .ms-card:hover .ms-del, .ms-fav.on, .ms-card:focus-within .ms-fav { opacity: 1; }
+.ms-fav.on { color: #f2a516; }
+@media (hover: none) { .ms-fav, .ms-del { opacity: 1; } }
+.ms-save { width: 100%; }
+
+.ms-centre { gap: 8px; }
+.ms-axes { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--ns-text-2); flex-wrap: wrap; }
+.ms-axes i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.ms-planes { display: grid; grid-template-rows: 1fr 1fr; gap: 8px; flex: 1.4; min-height: 300px; }
+.ms-plane { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--ns-line); border-top: 2px solid var(--ax); border-radius: 8px; background: var(--ns-panel); }
+.ms-plane-h { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; font-size: 12px; }
+.ms-plane-h .mx-muted { margin: 0; }
+.ms-interp { width: auto; height: 24px; font-size: 11px; }
+.ms-plane-host { flex: 1; min-height: 110px; position: relative; }
+.ms-plane-host canvas { position: absolute; inset: 0; outline: none; touch-action: none; }
+
+.ms-timeline { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--ns-line); border-radius: 8px; background: var(--ns-panel); }
+.ms-track { position: relative; height: 30px; border-radius: 6px; background: linear-gradient(var(--ns-line), var(--ns-line)) 0 50% / 100% 2px no-repeat; cursor: ew-resize; touch-action: none; outline: none; }
+.ms-track:focus-visible { box-shadow: 0 0 0 2px var(--ns-active); }
+.ms-tick { position: absolute; bottom: -2px; transform: translateX(-50%); font-size: 9px; color: var(--ns-label); pointer-events: none; }
+.ms-head { position: absolute; top: 2px; bottom: 10px; width: 2px; margin-left: -1px; background: var(--ns-text); border-radius: 1px; pointer-events: none; }
+.ms-head::before { content: ''; position: absolute; top: -2px; left: -4px; border: 5px solid transparent; border-top-color: var(--ns-text); }
+.ms-pin { position: absolute; top: 50%; transform: translate(-50%, -60%); min-width: 10px; min-height: 10px; border-radius: 50%; border: 1.5px solid #f2a516; background: rgba(242,165,22,.3); cursor: grab; padding: 0; }
+.ms-pin.on { border-width: 2.5px; background: rgba(242,165,22,.5); }
+.ms-readout { display: flex; gap: 8px; font-size: 11px; color: var(--ns-text-2); white-space: nowrap; }
+.ms-centre .studio-closeups { flex: 1; }
+
+.ms-status { gap: 6px; }
+.ms-status-name { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ms-chip { font-size: 10px; padding: 1px 6px; border-radius: 9px; background: rgba(242,165,22,.18); color: #b77800; }
+.ms-stops { border-top: 2px solid #f2a516; }
+.ms-stop { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 6px; border: 1px solid var(--ns-line); cursor: pointer; }
+.ms-stop.on { border-color: #f2a516; background: rgba(242,165,22,.07); }
+.ms-stop-h { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.ms-blob { display: inline-block; min-width: 8px; min-height: 8px; border-radius: 50%; border: 1.5px solid #f2a516; background: rgba(242,165,22,.3); }
+.ms-adv { border: 1px solid var(--ns-line); border-radius: 8px; background: var(--ns-panel); }
+.ms-adv > summary { list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.ms-adv > summary::-webkit-details-marker { display: none; }
+.ms-adv > summary::before { content: '▸'; font-size: 10px; color: var(--ns-label); }
+.ms-adv[open] > summary::before { content: '▾'; }
+.ms-adv > summary .mx-muted { margin: 0; font-weight: 400; font-size: 11px; }
+.ms-adv[open] { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+.ms-adv > .mx-card { margin: 0 8px; }
+.studio-slider-label { display: inline-flex; align-items: center; }
+@media (max-width: 767px) {
+  .ms-planes { flex: none; min-height: 0; grid-template-rows: 200px 200px; }
+  .ms-plane { overflow: hidden; }
+  .mxw3 .mxw-body > .ms-pane { flex: none; }
+  .ms-cats { max-height: 55dvh; }
+  .ms-timeline { grid-template-columns: auto 1fr; }
+  .ms-readout, .ms-addstop { grid-column: 1 / -1; }
+  .ms-cards { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .mxw3 .crumbs { display: none; }
+}
+.ms-centre .studio-closeups .studio-canvas { min-height: 100px; }
+.ms-centre .studio-closeups { flex: none; min-height: auto; }
