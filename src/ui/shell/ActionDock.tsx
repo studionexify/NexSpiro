@@ -1,6 +1,7 @@
 // Pinned to the bottom-left of the 3D stage (Prepare and Preview): workspace tabs on top, then the slice summary, clearance status and the primary
 // Slice / Export CTA, always in view whatever the right column shows or whether it is folded.
 import { exportGcode, sliceAndPreview } from '../../state/actions';
+import { cancelSlice } from '../../state/slicing';
 import { useStore } from '../../state/store';
 import { useState } from 'react';
 import { autoFixUntilClear, useClearanceStatus, useSliceSummary } from '../../state/ui';
@@ -53,9 +54,11 @@ export function ActionDock() {
           title={collision ? 'The print head would hit the print: use Auto-fix or lower the motion, then slice again' : ready ? 'Export G-code (Ctrl+G)' : 'Slice plate (Ctrl+R)'}>
           <Icon name={ready ? 'download' : 'slice'} size={16} />{label}
         </button>
-        <button className="sh-cta-2" disabled={!ready} onClick={() => void openPrintDialog()} title={ready ? 'Print plate (Ctrl+P)' : 'Slice the plate first'}>
+        {busy ? (
+          <button className="sh-cta-2" onClick={() => cancelSlice()} title="Cancel slicing (Esc)"><Icon name="cancel" size={16} />Cancel</button>
+        ) : <button className="sh-cta-2" disabled={!ready} onClick={() => void openPrintDialog()} title={ready ? 'Print plate (Ctrl+P)' : 'Slice the plate first'}>
           <Icon name="print" size={16} />Print
-        </button>
+        </button>}
       </div>
       </div>
     </div>

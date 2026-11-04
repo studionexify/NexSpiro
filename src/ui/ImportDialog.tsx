@@ -5,6 +5,8 @@ import { create } from 'zustand';
 
 const KEY = 'nexspiro.printerSwitchChoice';
 const saved = (): Choice | null => { try { const v = localStorage.getItem(KEY); return v === 'switch' || v === 'keep' ? v : null; } catch { return null; } };
+/** The remembered answer to the different-printer question, or null when it asks. */
+export const printerSwitchChoice = saved;
 /** Forget the remembered answer (asks again on the next import). */
 export function resetPrinterSwitchChoice() { try { localStorage.removeItem(KEY); } catch { /* storage off */ } }
 

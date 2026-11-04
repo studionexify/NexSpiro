@@ -1,3 +1,4 @@
+import { printerSwitchChoice, resetPrinterSwitchChoice } from '../ImportDialog';
 // Top menu bar (File / Edit / View / Add / Tools / Help) like a desktop app, plus the Preferences
 // dialog and the interface scale that keeps the layout fitting smaller windows.
 import { useEffect, useState } from 'react';
@@ -168,6 +169,7 @@ function Preferences({ onClose }: { onClose: () => void }) {
         </label>
         <label className="row"><input type="checkbox" checked={liveToolpaths} onChange={() => set({ liveToolpaths: !liveToolpaths })} />Show toolpath view while preparing</label>
         <label className="row"><input type="checkbox" checked={showOverhangs} onChange={() => set({ showOverhangs: !showOverhangs })} />Highlight overhangs</label>
+        <PrinterSwitchReset />
       </div>
     </Modal>
   );
@@ -226,5 +228,16 @@ export function MenuBar() {
       {is3d && <PlateSelect />}
       {prefs && <Preferences onClose={() => setPrefs(false)} />}
     </nav>
+  );
+}
+
+/** "Don't show again" on the different-printer question: shows the remembered answer and brings the question back. */
+function PrinterSwitchReset() {
+  const [v, setV] = useState(() => printerSwitchChoice());
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <span style={{ flex: 1 }}>File made for another printer: {v === 'switch' ? 'always switch' : v === 'keep' ? 'always keep current' : 'ask each time'}</span>
+      <button className="btn-secondary btn-small" disabled={!v} onClick={() => { resetPrinterSwitchChoice(); setV(null); }}>Reset</button>
+    </div>
   );
 }

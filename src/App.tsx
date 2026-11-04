@@ -14,7 +14,7 @@ import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './u
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { openProjectDialog, saveProject } from './state/project';
 import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
-import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
+import { LayerSlider, Legend, MoveSlider, PreviewEmpty } from './ui/PreviewOverlays';
 import { ContextMenu } from './ui/ContextMenu';
 import { FillBedHost } from './ui/FillBedDialog';
 import { PlateList, PlateSettingsHost } from './ui/PlateControls';
@@ -150,7 +150,6 @@ export default function App() {
           {is3d && <ActionDock />}
           <ViewCube />
           <CameraBar />
-          <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
         {is3d && <RightColumn />}
