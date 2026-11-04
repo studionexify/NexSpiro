@@ -330,3 +330,15 @@ body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-selec
 .sxw-warn { color: #e2a400; }
 .sxw-actual { color: var(--text-secondary); }
 @media (max-width: 800px) { .sxw-body { grid-template-columns: 1fr; grid-template-rows: 40% 60%; } .sxw-side { border-right: 0; border-bottom: 1px solid var(--border); } }
+
+/* import: loading window and printer question */
+.imp-back { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; background: rgba(0,0,0,.28); }
+.imp-win { width: min(480px, calc(100vw - 32px)); background: var(--ns-panel, var(--surface)); color: var(--text); border-radius: 12px; box-shadow: 0 18px 48px rgba(0,0,0,.28); overflow: hidden; border: 1px solid var(--ns-line, var(--border)); }
+.imp-head { display: flex; align-items: center; padding: 12px 16px; font-weight: 600; border-bottom: 1px solid var(--ns-line, var(--border)); }
+.imp-x { margin-left: auto; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
+.imp-body { padding: 16px; display: grid; gap: 10px; font-size: 13px; }
+.imp-body p { margin: 0; overflow-wrap: anywhere; }
+.imp-muted { color: var(--text-muted); font-size: 12px; }
+.imp-bar { height: 6px; border-radius: 3px; background: var(--ns-panel-2, var(--surface-tertiary)); overflow: hidden; }
+.imp-bar i { display: block; height: 100%; background: var(--ns-primary, var(--accent)); transition: width .15s; }
+.imp-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 16px 16px; flex-wrap: wrap; }

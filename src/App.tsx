@@ -1,3 +1,4 @@
+import { ImportDialogHost } from './ui/ImportDialog';
 import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
@@ -170,6 +171,7 @@ export default function App() {
       <FlenexStudioHost />
       <MotionStudioHost />
       <SelectWindowHost />
+      <ImportDialogHost />
       <InstantTooltips />
       <ShortcutsHost />
       <CommandPalette />

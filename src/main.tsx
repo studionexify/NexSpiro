@@ -10,6 +10,17 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
 import { installErrorReporting } from './state/errors';
+
+// Orbit controls release pointer capture on every pointer-up; when the capture was already lost (the pointer
+// went down on a panel or tool that took it, a window closed mid-drag) the browser throws NotFoundError and the
+// app showed "Something went wrong". Releasing a capture that is gone is harmless, so it is ignored.
+{
+  const release = Element.prototype.releasePointerCapture;
+  Element.prototype.releasePointerCapture = function (id: number) {
+    if (this.hasPointerCapture && !this.hasPointerCapture(id)) return;
+    try { release.call(this, id); } catch { /* capture already gone */ }
+  };
+}
 import { preloadWorkers } from './workers';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 

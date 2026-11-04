@@ -1,7 +1,7 @@
 // 3MF import: plain, Orca / Bambu style (components in separate files, painted colour, per-part filament), core materials.
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import { parse3MF, paintState } from '../src/io/threemf';
+import { parse3MF, paintState, paintSplit } from '../src/io/threemf';
 import { loadModelFile } from '../src/io/load';
 
 const cube = (s = 10) => {
@@ -29,6 +29,16 @@ describe('3MF import', () => {
     expect(paintState('1C')).toBe(4);
     // split in 2: children 8 and 8 → 2
     expect(paintState('881')).toBe(2);
+  });
+
+  it('splits a painted triangle into its painted pieces', () => {
+    const area = (p: number[][]) => { const u = [0, 1, 2].map((k) => p[1][k] - p[0][k]), v = [0, 1, 2].map((k) => p[2][k] - p[0][k]); return Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2; };
+    const out: { p: [number, number, number][]; st: number }[] = [];
+    // 3-side split: children (read last-first) 4, 8, 4, 0C → states 1, 2, 1, 3; the second child read splits again in 2
+    paintSplit('4' + '0C' + '4' + '84' + '1' + '3', [0, 0, 0], [8, 0, 0], [0, 8, 0], out as never);
+    expect(out.length).toBe(5);
+    expect(out.reduce((s, l) => s + area(l.p), 0)).toBeCloseTo(32, 6);
+    expect(new Set(out.map((l) => l.st))).toEqual(new Set([1, 2, 3]));
   });
 
   it('opens a plain 3MF with a transform', async () => {

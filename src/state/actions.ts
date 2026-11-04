@@ -1,45 +1,91 @@
 // User-level actions shared by menus, toolbar and keyboard shortcuts.
 import { weld } from '../engine/mesh';
-import { loadModelFile } from '../io/load';
+import { ImportCancelled, loadModelFile } from '../io/load';
+import { askPrinterSwitch, importCancelled, importDone, importProgress, importStart } from '../ui/ImportDialog';
 import { openModelFiles, saveFile } from '../platform';
-import { printerById } from '../profiles/printers';
+import { PRINTERS, printerById } from '../profiles/printers';
 import { arrange, autoOrient, centreOnBed } from './ops';
 import { sliceNow } from './slicing';
-import { emptyProject, newId, useStore, type SceneObject } from './store';
+import { emptyProject, newId, plateOrigin, useStore, type SceneObject } from './store';
 import { centreMesh } from '../io/load';
 
 export async function importBuffers(files: { name: string; data: ArrayBuffer }[]) {
   const s = useStore.getState();
   const added: SceneObject[] = [];
+  let placedExactly = false;
   for (const f of files) {
+    importStart(f.name);
     try {
       if (/\.3mf$/i.test(f.name)) {
         const { isProject, loadProject } = await import('./project');
         if (await isProject(f.data)) {
+          importDone();
           if (s.objects.length && !confirm(`Open project ${f.name}? The current plate will be replaced.`)) continue;
           await loadProject(f.data);
           useStore.getState().set({ toast: { kind: 'info', text: `Opened project ${f.name}` } });
           return;
         }
       }
-      const models = /\.(step|stp|iges|igs|brep)$/i.test(f.name) ? await (await import('../io/cad')).loadCadFile(f.name, f.data) : await loadModelFile(f.name, f.data);
+      const models = /\.(step|stp|iges|igs|brep)$/i.test(f.name)
+        ? await (await import('../io/cad')).loadCadFile(f.name, f.data)
+        : await loadModelFile(f.name, f.data, importProgress, importCancelled);
+      await importProgress(0.98, 'Placing on the plate');
+      // the printer the file was made for (Bambu / Orca projects): ask to switch, like Bambu Studio
+      const info = models[0]?.file;
+      let exact = !!info?.bed && models.some((m) => m.local);
+      if (info?.printerModel) {
+        const want = PRINTERS.find((p) => `${p.vendor} ${p.model}`.toLowerCase() === info.printerModel!.toLowerCase() || p.model.toLowerCase() === info.printerModel!.toLowerCase());
+        const cur = printerById(useStore.getState().printerId);
+        if (want && want.id !== cur.id) {
+          const c = await askPrinterSwitch(f.name, `${want.vendor} ${want.model}`, `${cur.vendor} ${cur.model}`);
+          if (c === 'cancel') continue;
+          if (c === 'switch') {
+            const st = useStore.getState();
+            st.set({ printerId: want.id, plate: want.plates.some((x) => x.type === st.plate) ? st.plate : want.plates[0].type, machineOverrides: {} });
+          } else {
+            // another bed: positions only carry over when the beds are the same size
+            const nb = printerById(useStore.getState().printerId).bed;
+            exact = exact && Math.abs(nb.x - info.bed![0]) < 1 && Math.abs(nb.y - info.bed![1]) < 1;
+          }
+        }
+      }
+      const pid = useStore.getState().printerId;
+      // file plates go on fresh plates: from plate 1 on an empty project, after the last plate otherwise
+      const st0 = useStore.getState();
+      const firstPlate = st0.objects.length || added.length ? st0.plates.length : 0;
+      if (exact) {
+        const need = firstPlate + (info?.plateCount ?? 1);
+        if (st0.plates.length < need) {
+          const plates = st0.plates.slice();
+          for (let i = plates.length; i < need; i++) plates.push({ id: newId(), name: `Plate ${i + 1}`, layerActions: [] });
+          st0.set({ plates });
+        }
+      }
       for (const m of models) {
         let o: SceneObject = { id: newId(), name: m.name, mesh: m.mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: m.openEdges };
         if (m.filament) o.filament = m.filament;
         if (m.color) o.paint = { color: m.color };
         ensureSlots(m);
-        o = centreOnBed(o, s.printerId);
+        if (exact && m.local) {
+          const [ox, oy] = plateOrigin(firstPlate + (m.plate ?? 0), pid);
+          o.position = [ox + m.local[0], oy + m.local[1], m.local[2]];
+          placedExactly = true;
+        } else o = centreOnBed(o, pid);
         added.push(o);
-        if (m.openEdges) s.set({ toast: { kind: 'warn', text: `${m.name}: mesh has ${m.openEdges} open edges and may not slice cleanly. Fix it with Fix model.` } });
+        if (m.openEdges && !m.color) s.set({ toast: { kind: 'warn', text: `${m.name}: mesh has ${m.openEdges} open edges and may not slice cleanly. Fix it with Fix model.` } });
       }
     } catch (e: any) {
-      s.set({ toast: { kind: 'error', text: e?.message ?? `Could not open ${f.name}` } });
+      if (e instanceof ImportCancelled) s.set({ toast: { kind: 'info', text: `Import of ${f.name} cancelled.` } });
+      else s.set({ toast: { kind: 'error', text: e?.message ?? `Could not open ${f.name}` } });
+    } finally {
+      importDone();
     }
   }
   if (!added.length) return;
   s.addObjects(added);
-  // new models land in the centre of the active plate; several at once are spread around it (the rest stay put)
-  if (added.length > 1) arrange(undefined, useStore.getState().activePlate, added.map((o) => o.id));
+  // new models land in the centre of the active plate; several at once are spread around it (the rest stay put).
+  // Objects placed from a project file keep their plates and positions.
+  if (!placedExactly && added.length > 1) arrange(undefined, useStore.getState().activePlate, added.map((o) => o.id));
   s.set({ workspace: 'prepare' });
 }
 

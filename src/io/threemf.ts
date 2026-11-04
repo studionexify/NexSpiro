@@ -36,12 +36,22 @@ export interface ThreeMFObject {
   color?: Uint8Array;
   /** The object's filament, 0-based. */
   filament?: number;
+  /** Plate the object sits on in the file (0-based), from Bambu / Orca plate settings. */
+  plate?: number;
 }
 export interface ThreeMFResult {
   objects: ThreeMFObject[];
   /** Filament colours stored in the file (Orca / Bambu / Prusa project settings, or the 3MF materials), slot order. */
   filamentColors: string[];
+  /** Printer the file was made for, e.g. "Bambu Lab A1" (Bambu / Orca project settings). */
+  printerModel?: string;
+  /** That printer's bed, mm (from printable_area). */
+  bed?: [number, number];
+  /** Number of plates in the file (1 when it has none). */
+  plateCount: number;
 }
+export type Progress = (fraction: number, stage: string) => void | Promise<void>;
+export class ImportCancelled extends Error { constructor() { super('Import cancelled'); } }
 
 // ---------- tiny XML scanning ----------
 const ATTR = /([\w:.-]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
@@ -105,11 +115,45 @@ export function paintState(code: string): number {
   return best;
 }
 
+type V3 = [number, number, number];
+const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+/** A painted triangle cut the way the painting slicer cut it (PrusaSlicer / Orca TriangleSelector): each leaf
+ *  comes back as its own triangle with its own colour. Splits, after rotating the corners so the special side
+ *  comes first [v0 v1 v2]:
+ *   1 side:  m = mid(v1,v2) → (v0,v1,m) (m,v2,v0)
+ *   2 sides: a = mid(v0,v1), b = mid(v2,v0) → (v0,a,b) (a,v1,b) (v1,v2,b)
+ *   3 sides: a = mid(v0,v1), b = mid(v1,v2), c = mid(v2,v0) → (v0,a,c) (a,v1,b) (b,v2,c) (a,b,c)
+ *  Children are stored last-first, so the first one read is the last child. */
+export function paintSplit(code: string, v0: V3, v1: V3, v2: V3, out: { p: V3[]; st: number }[]) {
+  let pos = code.length - 1;
+  const next = () => (pos >= 0 ? parseInt(code[pos--], 16) || 0 : 0);
+  const walk = (a: V3, b: V3, c: V3, depth: number) => {
+    const d = next();
+    const split = d & 3;
+    if (!split) {
+      let st = d >> 2;
+      if (st === 3) { let x; st = 3; do { x = next(); st += x; } while (x === 15 && pos >= 0); }
+      out.push({ p: [a, b, c], st });
+      return;
+    }
+    const sp = d >> 2;
+    const r = [a, b, c];
+    const [w0, w1, w2] = [r[sp % 3], r[(sp + 1) % 3], r[(sp + 2) % 3]];
+    let kids: [V3, V3, V3][];
+    if (split === 1) { const m = mid(w1, w2); kids = [[w0, w1, m], [m, w2, w0]]; }
+    else if (split === 2) { const m0 = mid(w0, w1), m1 = mid(w2, w0); kids = [[w0, m0, m1], [m0, w1, m1], [w1, w2, m1]]; }
+    else { const m0 = mid(w0, w1), m1 = mid(w1, w2), m2 = mid(w2, w0); kids = [[w0, m0, m2], [m0, w1, m1], [m1, w2, m2], [m0, m1, m2]]; }
+    for (let k = kids.length - 1; k >= 0; k--) walk(...kids[k], depth + 1);
+  };
+  walk(v0, v1, v2, 0);
+}
+
 // ---------- reader ----------
 interface ObjDef { a: Record<string, string>; body: [number, number] | null }
 interface Doc { xml: string; objects: Map<string, ObjDef>; materials: Map<string, string[]> }
 
-export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
+export async function parse3MF(buf: ArrayBuffer, progress?: Progress): Promise<ThreeMFResult> {
+  await progress?.(0.02, 'Unpacking');
   const zip = await JSZip.loadAsync(buf);
   const find = (p: string) => {
     const key = p.replace(/^\//, '');
@@ -124,12 +168,16 @@ export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
 
   // colours from the slicer's own project settings
   const filamentColors: string[] = [];
+  let printerModel: string | undefined, bed: [number, number] | undefined;
   const proj = await text('Metadata/project_settings.config');
   if (proj) {
     try {
       const j = JSON.parse(proj);
       const c = j.filament_colour ?? j.filament_color;
       if (Array.isArray(c)) filamentColors.push(...c.map(String));
+      if (typeof j.printer_model === 'string' && j.printer_model) printerModel = j.printer_model;
+      const area = Array.isArray(j.printable_area) ? j.printable_area.map((p: string) => String(p).split('x').map(Number)) : null;
+      if (area?.length) bed = [Math.max(...area.map((p: number[]) => p[0])) - Math.min(...area.map((p: number[]) => p[0])), Math.max(...area.map((p: number[]) => p[1])) - Math.min(...area.map((p: number[]) => p[1]))];
     } catch { /* not JSON */ }
   }
   if (!filamentColors.length) {
@@ -159,7 +207,20 @@ export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
   // per-object / per-part filament from the slicer's model settings (1-based there)
   const objFil = new Map<string, number>(), partFil = new Map<string, number>(), skipPart = new Set<string>(), objName = new Map<string, string>();
   const ms = (await text('Metadata/model_settings.config')) ?? (await text('Metadata/Slic3r_PE_model.config'));
+  const objPlate = new Map<string, number>();
+  let plateCount = 1;
   if (ms) {
+    for (const pl of elements(ms, 'plate')) {
+      if (!pl.inner) continue;
+      let idx = -1;
+      for (const md of elements(ms, 'metadata', ...pl.inner)) if (md.a.key === 'plater_id' || md.a.key === 'index') { idx = +(md.a.value ?? 0) - 1; break; }
+      if (idx < 0) continue;
+      plateCount = Math.max(plateCount, idx + 1);
+      for (const mi of elements(ms, 'model_instance', ...pl.inner)) {
+        if (!mi.inner) continue;
+        for (const md of elements(ms, 'metadata', ...mi.inner)) if (md.a.key === 'object_id' && md.a.value && !objPlate.has(md.a.value)) objPlate.set(md.a.value, idx);
+      }
+    }
     for (const o of elements(ms, 'object')) {
       if (!o.inner) continue;
       const id = o.a.id;
@@ -223,19 +284,29 @@ export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
       }
       const TRE = /<(?:[\w.-]+:)?triangle\s([^>]*)>/g;
       TRE.lastIndex = vEnd < 0 ? b0 : vEnd;
-      const tp: number[] = [0, 0, 0];
       for (let t; (t = TRE.exec(doc.xml)) && t.index < b1; ) {
         const a = attrs(t[1]);
-        for (let c = 0; c < 3; c++) {
+        const corner = (c: number): V3 => {
           const i = +a[`v${c + 1}`] * 3;
           const x = vs[i], y = vs[i + 1], z = vs[i + 2];
-          tp[0] = x * m[0] + y * m[3] + z * m[6] + m[9];
-          tp[1] = x * m[1] + y * m[4] + z * m[7] + m[10];
-          tp[2] = x * m[2] + y * m[5] + z * m[8] + m[11];
-          pos.push(tp[0], tp[1], tp[2]);
-        }
-        let c = 0;
+          return [x * m[0] + y * m[3] + z * m[6] + m[9], x * m[1] + y * m[4] + z * m[7] + m[10], x * m[2] + y * m[5] + z * m[8] + m[11]];
+        };
+        const p0 = corner(0), p1 = corner(1), p2 = corner(2);
         const paint = at(a, 'paint_color') ?? at(a, 'mmu_segmentation');
+        if (paint && paint.length > 1) {
+          // detailed painting: every painted piece becomes its own triangle
+          const leaves: { p: V3[]; st: number }[] = [];
+          paintSplit(paint, p0, p1, p2, leaves);
+          for (const l of leaves) {
+            for (const q of l.p) pos.push(q[0], q[1], q[2]);
+            const c = l.st || base;
+            if (c) anyColor = true;
+            col.push(Math.min(255, c));
+          }
+          continue;
+        }
+        pos.push(...p0, ...p1, ...p2);
+        let c = 0;
         if (paint) c = paintState(paint);
         else if (a.pid && doc.materials.has(a.pid)) { const g = doc.materials.get(a.pid)!; const hex = g[+(a.p1 ?? pindex ?? 0)]; if (hex) c = slotOfColor(hex); }
         if (!c) c = base;
@@ -251,7 +322,9 @@ export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
     return unesc(obj.a.name ?? '');
   };
 
-  for (const it of elements(root.xml, 'item')) {
+  const items = [...elements(root.xml, 'item')];
+  for (const [n, it] of items.entries()) {
+    await progress?.(0.1 + 0.85 * (n / items.length), `Reading object ${n + 1} of ${items.length}`);
     if (it.a.printable === '0') continue;
     const id = it.a.objectid;
     const pos: number[] = [], col: number[] = [];
@@ -265,8 +338,9 @@ export async function parse3MF(buf: ArrayBuffer): Promise<ThreeMFResult> {
       if (used.size === 1) o.filament = Math.max(0, [...used][0] - 1);
       else o.color = Uint8Array.from(col);
     }
+    if (objPlate.has(id)) o.plate = objPlate.get(id);
     result.push(o);
   }
   if (!result.length) throw new Error('3MF contains no printable meshes.');
-  return { objects: result, filamentColors: filamentColors.map((c) => (/^#[0-9a-f]{6}/i.test(c) ? c.slice(0, 7) : '#808080')) };
+  return { objects: result, printerModel, bed, plateCount, filamentColors: filamentColors.map((c) => (/^#[0-9a-f]{6}/i.test(c) ? c.slice(0, 7) : '#808080')) };
 }
