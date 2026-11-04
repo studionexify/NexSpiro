@@ -56,9 +56,9 @@ void main() {
   vec3 fwd = len > 1e-6 ? vec3(d.xy / len, 0.0) : vec3(1.0, 0.0, 0.0);
   vec3 side = vec3(-fwd.y, fwd.x, 0.0);
   vec3 up = vec3(0.0, 0.0, 1.0);
-  float ext = aWH.x * 0.5;
+  // body from start to end; the round end caps reach half a width past each end (normal.x = how far, in half widths)
   float t = position.x;
-  vec3 p = aStart + fwd * (-ext + t * (len + 2.0 * ext)) + vec3(0.0, 0.0, d.z * t)
+  vec3 p = aStart + fwd * (t * len + normal.x * aWH.x * 0.5) + vec3(0.0, 0.0, d.z * t)
          + side * (position.y * aWH.x) + up * (position.z * aWH.y);
   vec3 n = fwd * normal.x + side * normal.y + up * normal.z;
   vNormal = normalize(normalMatrix * n);
@@ -98,27 +98,32 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-/** One extrusion bead: x ∈ [0,1] along the move, a rounded (stadium) cross-section y ∈ [-0.5,0.5], z ∈ [-1,0]
- *  with the top of the bead at move z. Round normals make consecutive beads shade as one continuous strand. */
-export function unitBead(segs = 12): THREE.BufferGeometry {
+/** One extrusion bead: x ∈ [0,1] along the move, a round cross-section y ∈ [-0.5,0.5], z ∈ [-1,0] with the top
+ *  of the bead at move z, and a half-dome at each end. Every normal is the true surface normal, so where the next
+ *  bead starts its dome sits inside this one's dome with the same shading: the strand reads as one unbroken line
+ *  (flat end caps showed a tick at every joint). normal.x doubles as the cap's reach past the end, in half widths. */
+export function unitBead(segs = 12, rings = 4): THREE.BufferGeometry {
   const P: number[] = [], N: number[] = [], I: number[] = [];
-  const ring: [number, number, number, number][] = []; // y, z, ny, nz
+  const ring: [number, number][] = []; // cos, sin
+  for (let k = 0; k < segs; k++) { const t = (k / segs) * Math.PI * 2; ring.push([Math.cos(t), Math.sin(t)]); }
   for (let k = 0; k < segs; k++) {
-    const t = (k / segs) * Math.PI * 2;
-    ring.push([0.5 * Math.cos(t), -0.5 + 0.5 * Math.sin(t), Math.cos(t), Math.sin(t)]);
-  }
-  for (let k = 0; k < segs; k++) {
-    const [y0, z0, ny0, nz0] = ring[k], [y1, z1, ny1, nz1] = ring[(k + 1) % segs];
+    const [c0, s0] = ring[k], [c1, s1] = ring[(k + 1) % segs];
     const o = P.length / 3;
-    P.push(0, y0, z0, 1, y0, z0, 1, y1, z1, 0, y1, z1);
-    N.push(0, ny0, nz0, 0, ny0, nz0, 0, ny1, nz1, 0, ny1, nz1);
+    P.push(0, 0.5 * c0, -0.5 + 0.5 * s0, 1, 0.5 * c0, -0.5 + 0.5 * s0, 1, 0.5 * c1, -0.5 + 0.5 * s1, 0, 0.5 * c1, -0.5 + 0.5 * s1);
+    N.push(0, c0, s0, 0, c0, s0, 0, c1, s1, 0, c1, s1);
     I.push(o, o + 1, o + 2, o, o + 2, o + 3);
   }
-  for (const [x, nx] of [[0, -1], [1, 1]] as const) { // end caps
-    const c = P.length / 3;
-    P.push(x, 0, -0.5); N.push(nx, 0, 0);
-    for (const [y, z] of ring) { P.push(x, y, z); N.push(nx, 0, 0); }
-    for (let k = 0; k < segs; k++) { const p = c + 1 + k, q = c + 1 + ((k + 1) % segs); if (nx > 0) I.push(c, p, q); else I.push(c, q, p); }
+  for (const [x, dir] of [[0, -1], [1, 1]] as const) {
+    const o = P.length / 3;
+    // latitude rings from the body edge (φ = 0) to the tip (φ = π/2)
+    for (let r = 0; r <= rings; r++) {
+      const phi = (r / rings) * (Math.PI / 2), cp = Math.cos(phi), sp = Math.sin(phi);
+      for (const [c, s2] of ring) { P.push(x, 0.5 * c * cp, -0.5 + 0.5 * s2 * cp); N.push(dir * sp, c * cp, s2 * cp); }
+    }
+    for (let r = 0; r < rings; r++) for (let k = 0; k < segs; k++) {
+      const a0 = o + r * segs + k, a1 = o + r * segs + ((k + 1) % segs), b0 = a0 + segs, b1 = a1 + segs;
+      if (dir > 0) I.push(a0, b0, b1, a0, b1, a1); else I.push(a0, b1, b0, a0, a1, b1);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));

@@ -266,6 +266,7 @@ export function MotionexPanel() {
       <div className="mx-head">
         <span className="mx-badge">M</span>
         <div style={{ flex: 1 }}><div className="mx-title">Motionex</div><div className="mx-sub">Waves, loops and textures on your walls</div></div>
+        <button className="btn-secondary btn-small" onClick={() => openMotionStudio(true)} title="The motion editor (was the Motion tab): shape, depth, spacing and layer stacking, live on the model">Motion editor ↗</button>
       </div>
       {/* toolpath view toggle lives in the top bar (shared by all plugins) */}
       <section className="mx-card">

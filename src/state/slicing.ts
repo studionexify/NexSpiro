@@ -109,7 +109,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
       else if (m.type === 'done') {
         const out = m.out as SliceOutput;
         st.set({
-          slice: { status: 'done', stage: 'Done', progress: 1, result: out, error: null, dirty: st.slice.dirty, plate },
+          slice: { status: 'done', stage: 'Done', progress: 1, result: out, error: null, dirty: st.slice.dirty, plate }, showGcode: false,
           layerRange: [0, out.layers.length - 1], moveCursor: -1,
           toast: out.warnings.length ? { kind: 'warn', text: out.warnings.join(' ') } : null,
         });

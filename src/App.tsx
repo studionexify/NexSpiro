@@ -120,14 +120,13 @@ function useShortcuts() {
 
 export default function App() {
   const { theme, workspace: ws } = useStore();
-  const studio = useStore((s) => PLUGINS.find((p) => p.Studio && s.plugins.includes(p.id))?.Studio);
-  // the Motion tab needs a plugin that has one; without it, fall back to Prepare
-  const workspace = ws === 'motion' && !studio ? 'prepare' : ws;
+  // the old Motion tab is gone (its editor opens from the Motionex tab on the right): a saved 'motion' opens Prepare
+  const workspace = ws === 'motion' ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
-  const Studio = workspace === 'motion' ? studio : undefined;
+  const Studio = undefined as undefined | (() => JSX.Element);
   const rightW = useRightWidth();
   const bodyCols = is3d ? `minmax(0, 1fr) ${rightW}px` : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 

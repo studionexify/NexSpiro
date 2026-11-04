@@ -44,8 +44,11 @@ export function ActionDock() {
         </div>
       )}
       <div className={`sh-progress ${busy ? 'show' : ''}`}><i style={{ width: `${progress * 100}%` }} /></div>
+      {/* the numbers only show for a slice that matches the plate */}
+      {sum.status === 'done' && (
+        <div className="sh-metrics">{metric('Time', sum.time)}{metric('Filament', sum.weight)}{metric('Layers', sum.layers)}{sum.changes !== undefined && metric('Changes', sum.changes)}</div>
+      )}
       <div className="sh-cta-row">
-        <div className="sh-metrics">{metric('Time', sum.time)}{metric('Filament', sum.weight)}{metric('Cost', sum.cost)}</div>
         <button className="sh-cta" disabled={busy || fixing || collision || (!ready && !hasWork)} onClick={run}
           title={collision ? 'The print head would hit the print: use Auto-fix or lower the motion, then slice again' : ready ? 'Export G-code (Ctrl+G)' : 'Slice plate (Ctrl+R)'}>
           <Icon name={ready ? 'download' : 'slice'} size={16} />{label}

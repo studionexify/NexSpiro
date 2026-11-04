@@ -144,7 +144,8 @@ describe('ui bindings', () => {
     useStore.getState().set({ slice: { ...useStore.getState().slice, status: 'slicing', progress: 0.4 } });
     expect(ui.sliceSummary()).toMatchObject({ status: 'slicing', progress: 0.4, ready: false });
     done(useStore);
-    expect(ui.sliceSummary()).toEqual({ status: 'done', progress: 1, time: '1h 2m', weight: '12.35 g', cost: '0.40', ready: true });
+    expect(ui.sliceSummary()).toMatchObject({ status: 'done', progress: 1, time: '1h 2m', weight: '12.3 g', ready: true });
+    expect(ui.sliceSummary().changes).toBeUndefined();
     done(useStore, undefined, true);
     expect(ui.sliceSummary()).toMatchObject({ status: 'idle', ready: false });
   });

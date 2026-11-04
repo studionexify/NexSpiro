@@ -25,6 +25,9 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
       const models = /\.(step|stp|iges|igs|brep)$/i.test(f.name) ? await (await import('../io/cad')).loadCadFile(f.name, f.data) : await loadModelFile(f.name, f.data);
       for (const m of models) {
         let o: SceneObject = { id: newId(), name: m.name, mesh: m.mesh, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], openEdges: m.openEdges };
+        if (m.filament) o.filament = m.filament;
+        if (m.color) o.paint = { color: m.color };
+        ensureSlots(m);
         o = centreOnBed(o, s.printerId);
         added.push(o);
         if (m.openEdges) s.set({ toast: { kind: 'warn', text: `${m.name}: mesh has ${m.openEdges} open edges and may not slice cleanly. Fix it with Fix model.` } });
@@ -39,6 +42,29 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
   if (added.length > 1) arrange(undefined, useStore.getState().activePlate, added.map((o) => o.id));
   s.set({ workspace: 'prepare' });
 }
+
+/** A coloured 3MF needs as many filament slots as its colours use; new slots take the file's colours.
+ *  Slots the user already has keep their filament; empty slots of a fresh plate take the file's colours. */
+function ensureSlots(m: { color?: Uint8Array; filament?: number; filamentColors?: string[] }) {
+  const s = useStore.getState();
+  let need = (m.filament ?? 0) + 1;
+  if (m.color) for (let i = 0; i < m.color.length; i++) if (m.color[i] > need) need = m.color[i];
+  const cols = m.filamentColors ?? [];
+  if (need <= 1 && !cols.length) return;
+  const fresh = !s.objects.length;
+  const base = s.filaments[0];
+  const next = s.filaments.slice();
+  for (let k = 0; k < Math.max(need, next.length); k++) {
+    const c = cols[k];
+    if (k >= next.length) next.push({ presetId: base?.presetId ?? 'generic-pla', color: c ?? PALETTE[k % PALETTE.length] });
+    else if (fresh && c && k < need) next[k] = { ...next[k], color: c };
+  }
+  if (next.length !== s.filaments.length || next.some((f, k) => f !== s.filaments[k])) {
+    s.set({ filaments: next, flushMatrix: null });
+    if (next.length > s.filaments.length) s.set({ toast: { kind: 'info', text: `${next.length} filament slots set up for the colours in this file.` } });
+  }
+}
+const PALETTE = ['#5DBE7A', '#E04B4B', '#3B7DD8', '#F2C230', '#222222', '#FFFFFF', '#9B59B6', '#F28C28'];
 
 export async function importDialog() {
   const files = await openModelFiles();

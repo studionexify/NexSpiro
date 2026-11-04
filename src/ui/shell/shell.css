@@ -113,9 +113,9 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-stage .float.sh-actiondock { position: absolute; left: 14px; bottom: 14px; z-index: 7; width: var(--sh-dock-w); box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px;
   background: var(--ns-panel, var(--surface-secondary)); border: 1px solid var(--ns-line, var(--border)); border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); }
 .sh-actiondock .sh-cta-row { align-items: center; }
-.sh-actiondock .sh-metrics { flex: 1.2; min-width: 0; }
-.sh-actiondock .sh-cta { flex: 1; min-width: 132px; }
-.sh-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.sh-actiondock .sh-metrics { padding: 0 2px; }
+.sh-actiondock .sh-cta { flex: 1; min-width: 132px; justify-content: center; }
+.sh-metrics { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
 .sh-metric { min-width: 0; }
 .sh-metric .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sh-metric .k { font-size: 11px; color: var(--text-muted); }

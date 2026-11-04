@@ -1,4 +1,4 @@
-// Workspace tabs (Prepare / Preview / Device / Motion) shown bottom-left above the slice bar, and the plugin
+// Workspace tabs (Prepare / Preview / Device; the motion editor lives in the Motionex tab) shown bottom-left above the slice bar, and the plugin
 // helpers. The old left rail is gone: plugins are switched on in File → Plugins and open as inspector tabs.
 import { useStore, type Workspace } from '../../state/store';
 import { PLUGINS } from '../../plugins/registry';
@@ -32,9 +32,7 @@ export function togglePlugin(id: string) {
 export function ModeTabs() {
   const workspace = useStore((s) => s.workspace);
   const set = useStore((s) => s.set);
-  const motion = useStore((s) => PLUGINS.some((p) => p.Studio && s.plugins.includes(p.id)));
   const tabs: [Workspace, string, string][] = [['prepare', 'cube', 'Prepare'], ['preview', 'layers', 'Preview'], ['device', 'device', 'Device']];
-  if (motion) tabs.push(['motion', 'motion', 'Motion']);
   return (
     <div className="sh-modes" role="tablist" aria-label="Workspace">
       {tabs.map(([w, icon, label]) => (
