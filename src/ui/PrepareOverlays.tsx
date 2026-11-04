@@ -11,7 +11,7 @@ import { useDrool } from '../plugins/droolState';
 
 /** The Prepare toolbar: object commands, then the gizmos and tools (large Bambu-style icons). */
 export function Toolbar() {
-  const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates } = useStore();
+  const { tool, set, selected, objects, showOverhangs, selectedPart, activePlate, plates, duplicateSelected, removeSelected } = useStore();
   const has = selected.length > 0 || !!selectedPart;
   const one = selected.length === 1 && !selectedPart;
   const T = (t: Tool, icon: string, label: string, key: string, disabled = false) => (
@@ -53,6 +53,14 @@ export function Toolbar() {
         {T('measure', 'measureB', 'Measure', 'U')}
         {T('brim_ears', 'earsB', 'Brim ears', 'E')}
         {T('edges', 'edgesB', 'Edges: chamfer, fillet, smooth', 'G', !objects.length)}
+      </div>
+      <span className="sep" />
+      <div className="tb-group">
+        <button className="icon-btn" title="Duplicate (Ctrl+D)" aria-label="Duplicate" disabled={!selected.length} onClick={duplicateSelected}><Icon name="duplicate" /></button>
+        <button className="icon-btn" title="Delete (Del)" aria-label="Delete" disabled={!selected.length} onClick={removeSelected}><Icon name="deleteB" /></button>
+        {objects.some((o) => selected.includes(o.id) && o.openEdges > 0) && (
+          <button className="icon-btn" style={{ color: 'var(--ns-warn, var(--warning))' }} title="Fix model: this model has open edges — close holes and repair the mesh" aria-label="Fix model" onClick={() => repairObjects(selected)}><Icon name="warn" /></button>
+        )}
       </div>
       <span className="sep" />
       <button className={`icon-btn ${showOverhangs ? 'active' : ''}`} title="Highlight overhangs" aria-label="Highlight overhangs" aria-pressed={showOverhangs} onClick={() => set({ showOverhangs: !showOverhangs })}><Icon name="overhangB" /></button>
@@ -148,7 +156,7 @@ export function ViewCube() {
 export function ObjectInfo() {
   const { objects, selected, selectedPart } = useStore();
   const [closedFor, setClosedFor] = useState<string | null>(null);
-  const [mini, setMini] = useState(false);
+  const [mini, setMini] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 767px)').matches);
   const o = selected.length === 1 && !selectedPart ? objects.find((x) => x.id === selected[0]) : undefined;
   const volume = useMemo(() => (o ? Math.abs(signedVolume(o.mesh) * o.scale[0] * o.scale[1] * o.scale[2]) : 0), [o?.mesh, o?.scale]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!o || closedFor === o.id) return null;

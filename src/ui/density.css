@@ -343,3 +343,5 @@ body:has(.sh-msheet) .ph-arrow, body:has(.sh-msheet) .sh-dock-toggle { display: 
   body:not(:has(.sh-pill)) .touch-mods { top: 52px !important; }
 }
 @media (max-width: 767px) { .object-info { font-size: 11px; } .object-info .oi-head { margin-bottom: 2px; } }
+/* active tool stays solid even while hovered / after a tap (touch keeps :hover) */
+.sh-stage .toolbar .icon-btn.active, .sh-stage .toolbar .icon-btn.active:hover:not(:disabled) { background: var(--ns-active); color: var(--ns-on-active); }

@@ -3,7 +3,7 @@ import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, ObjectPill, RightColumn, ViewBar } from './ui/shell';
+import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
 import { PhoneArrows } from './ui/shell/PhoneArrows';
 import { TouchMods } from './ui/TouchMods';
@@ -148,7 +148,7 @@ export default function App() {
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><ObjectPill /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
           {is3d && <ActionDock />}
