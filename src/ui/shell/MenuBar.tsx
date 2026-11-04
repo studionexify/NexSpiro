@@ -206,7 +206,7 @@ export function MenuBar() {
       {menus.map(([name, items]) => (
         <div key={name} className="menu">
           <button role="menuitem" aria-haspopup="menu" aria-expanded={open === name} className={`sh-mb ${open === name ? 'on' : ''}`}
-            onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={() => open && setOpen(name)}>{name}</button>
+            onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={(e) => e.pointerType === 'mouse' && open && setOpen(name)}>{name}</button>
           {open === name && (
             <div className="menu-pop sh-mb-pop" role="menu" onPointerDown={stop}>
               {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (

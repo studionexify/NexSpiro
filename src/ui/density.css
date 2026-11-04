@@ -267,3 +267,11 @@ button, [role='button'], a, label, .select { touch-action: manipulation; }
   .sh-dock-toggle.on svg { transform: rotate(90deg); }
 }
 @media (max-width: 767px) { body:has(.sh-right-sheet:not(.sh-right-closed)) .ph-arrow { display: none; } }
+@media (max-width: 767px) {
+  /* the menu bar scrolls sideways on phones, which clipped its drop-downs: pin them to the viewport instead */
+  .sh-mb-pop { position: fixed !important; top: 40px !important; left: 8px !important; right: 8px; min-width: 0; max-height: calc(100dvh - 56px); z-index: 1000; }
+}
+@media (max-width: 767px) {
+  body:has(.sh-mb-pop) .ph-arrow, body:has(.sh-mb-pop) .sh-dock-toggle { display: none !important; }
+}
+@media (hover: none) { .sh-mb-pop kbd, .menu-item kbd { display: none; } } /* no keyboard shortcuts on touch */
