@@ -185,6 +185,8 @@ export function MenuBar() {
   const { undo, redo, undoStack, redoStack, workspace, theme } = useStore();
   const is3d = workspace === 'prepare' || workspace === 'preview';
   useUiScale();
+  const compact = useCompactMenu();
+  const [sheet, setSheet] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === ',') { setPrefs(true); e.preventDefault(); }
@@ -203,7 +205,31 @@ export function MenuBar() {
   return (
     <nav className="sh-menubar" role="menubar" aria-label="Main menu">
       <img className="sh-mb-logo" src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="NexSpiro" />
-      {menus.map(([name, items]) => (
+      {compact && (
+        <button className={`sh-mb sh-mb-burger ${sheet ? 'on' : ''}`} aria-label="Menu" aria-expanded={sheet} onClick={() => setSheet(!sheet)}>
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        </button>
+      )}
+      {compact && sheet && (
+        <>
+          <div className="sh-msheet-scrim" onClick={() => setSheet(false)} />
+          <div className="sh-msheet" role="menu" aria-label="Main menu">
+            {menus.map(([name, items]) => (
+              <details key={name} className="sh-msec" open={name === 'File'}>
+                <summary>{name}</summary>
+                {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (
+                  <button key={i} role={it.keep ? 'menuitemcheckbox' : 'menuitem'} aria-checked={it.keep ? !!it.checked : undefined} className="menu-item" disabled={it.disabled}
+                    onClick={() => { if (!it.keep) setSheet(false); it.onClick?.(); }}>
+                    <span className="sh-mb-check">{!it.switch && it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span>
+                    {it.switch ? <span className={`sh-switch ${it.checked ? 'on' : ''}`} aria-hidden /> : null}
+                  </button>
+                ))}
+              </details>
+            ))}
+          </div>
+        </>
+      )}
+      {!compact && menus.map(([name, items]) => (
         <div key={name} className="menu">
           <button role="menuitem" aria-haspopup="menu" aria-expanded={open === name} className={`sh-mb ${open === name ? 'on' : ''}`}
             onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={(e) => e.pointerType === 'mouse' && open && setOpen(name)}>{name}</button>
@@ -243,4 +269,12 @@ function PrinterSwitchReset() {
       <button className="btn-secondary btn-small" disabled={!v} onClick={() => { resetPrinterSwitchChoice(); setV(null); }}>Reset</button>
     </div>
   );
+}
+
+/** Tablets and phones (≤1024px or no hover-capable pointer) get one Menu button with a full-height sheet. */
+function useCompactMenu() {
+  const q = '(max-width: 1024px), (hover: none)';
+  const [c, set] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(q).matches);
+  useEffect(() => { const m = matchMedia(q); const f = () => set(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  return c;
 }
