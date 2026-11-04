@@ -9,6 +9,7 @@ import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
+import './ui/density.css';
 import { installErrorReporting } from './state/errors';
 
 // Orbit controls release pointer capture on every pointer-up; when the capture was already lost (the pointer

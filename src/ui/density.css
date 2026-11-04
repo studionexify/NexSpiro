@@ -1,0 +1,118 @@
+/* NexSpiro density layer — CAD-grade type ramp, 28px controls, unified 3-pane plugin studios, breakpoints.
+   Loaded last so it normalises sizes across the shell and every plugin studio without touching their markup. */
+:root {
+  --ns-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, system-ui, sans-serif;
+  --ns-label: #71717A;
+  --ns-ctl-h: 28px;
+  --ns-btn-h: 30px;
+  --ns-studio-head: 40px;
+  --ns-studio-left: clamp(240px, 20vw, 280px);
+  --ns-studio-right: clamp(280px, 24vw, 320px);
+}
+:root[data-theme='dark'] { --ns-label: #8B8B94; }
+
+/* ---------- Type ramp ---------- */
+.mono, .input[type='number'], .pinput .input, .tabular, [class*='-value'], [class*='-readout'] {
+  font-variant-numeric: tabular-nums;
+}
+.mono { font-family: var(--ns-font-mono); }
+.section-label, .ns-section, .mx-section-title, .insp-section > h3, .sh-right h3, .lx-col h3, .cx-left h3, .cx-right h3, .studio h3 {
+  font-size: 11px !important; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ns-label);
+}
+
+/* ---------- Controls: 26–28px inputs, 28–32px buttons ---------- */
+.select, .input { height: var(--ns-ctl-h); font-size: 12px; }
+.btn-primary, .btn-secondary {
+  height: var(--ns-btn-h); min-width: 0; padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 6px; text-shadow: none;
+}
+.btn-primary.big, .sh-dock .btn-primary { height: 32px; }
+.btn-small { height: 26px; padding: 0 10px; }
+
+/* Unit nested inside the field container: <span class="ns-field"><input class="input"><i>mm</i></span> */
+.ns-field { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.ns-field > .input { width: 100%; padding-right: 30px; text-align: right; }
+.ns-field > i { position: absolute; right: 7px; font-style: normal; font-size: 11px; color: var(--ns-label); pointer-events: none; }
+
+/* Compact native tab strips (process tabs, plugin tabs) */
+.sh-right .tabs, .sh-right [role='tablist'] { min-height: 28px; }
+.sh-right [role='tab'] { height: 28px; font-size: 12px; padding: 0 10px; }
+
+/* ---------- Right dock: collapsible on desktop, slide-over sheet on tablet/phone ---------- */
+.sh-dock-toggle {
+  position: fixed; right: 8px; top: 44px; z-index: 45; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 6px; border: 1px solid var(--ns-line); background: var(--ns-panel); color: var(--ns-text-2); cursor: pointer;
+  box-shadow: var(--ns-shadow);
+}
+.sh-dock-toggle:hover { color: var(--ns-text); }
+.sh-dock-toggle.on { right: calc(var(--dock-w, 340px) + 8px); }
+.sh-right-closed { display: none !important; }
+.sh-right-sheet {
+  position: fixed !important; top: 36px; right: 0; bottom: 0; z-index: 44; max-width: calc(100vw - 24px);
+  box-shadow: var(--ns-shadow-lg); animation: ns-sheet-in .18s ease-out;
+}
+.sh-right-sheet .sh-grip { display: none; }
+.sh-dock-scrim { position: fixed; inset: 36px 0 0 0; z-index: 43; background: rgba(0,0,0,.25); }
+@keyframes ns-sheet-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* 3D viewports never fight page scrolling / pinch */
+.sh-stage canvas, .lx-canvas canvas, .cx-centre canvas, .studio-canvas, .studio-curve-host canvas { touch-action: none; }
+
+/* ---------- Unified 3-pane plugin studios (Lumonex, Flenex, Clickex, Plantex) ---------- */
+.lx-studio, .cx-studio { width: min(98vw, 1920px); height: min(96vh, 1200px); font-size: 12px; border-radius: 10px; }
+.lx-top, .cx-top {
+  height: var(--ns-studio-head); min-height: var(--ns-studio-head); padding: 0 10px; gap: 8px; flex-wrap: nowrap;
+}
+.lx-top button, .cx-top button { height: 28px; font-size: 12px; }
+.cx-back { font-size: 13px; }
+.cx-name { height: 28px; padding: 0 8px; width: 200px; }
+.lx-body, .cx-body {
+  grid-template-columns: var(--ns-studio-left) minmax(0, 1fr) var(--ns-studio-right) !important;
+}
+.lx-col, .cx-left, .cx-right { padding: 8px; }
+.cx-left { padding: 0; }
+.cx-rail { padding: 8px 4px; }
+.cx-rail button { padding: 6px 2px; font-size: 10px; border-radius: 6px; }
+.cx-leftbody { grid-template-columns: 56px minmax(0, 1fr); }
+.lx-centre, .cx-centre {
+  background-color: var(--ns-canvas-b);
+  background-image: linear-gradient(var(--ns-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ns-grid) 1px, transparent 1px);
+  background-size: 24px 24px; background-position: -1px -1px;
+}
+.lx-centre > *, .cx-centre > * { background-clip: padding-box; }
+
+/* Motion Studio (single inspector column): denser, cards max 48px */
+.studio { padding: 8px; }
+.studio-shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 4px; }
+.studio-shapes > button { min-height: 0; max-height: 56px; font-size: 10px; padding: 4px; border-radius: 6px; }
+.studio-slider { min-height: 28px; font-size: 12px; }
+.studio-slider-label { font-size: 12px; }
+.studio-unit { font-size: 11px; color: var(--ns-label); font-variant-numeric: tabular-nums; }
+
+/* ---------- Tablet (768–1024): side panes become toggleable drawers over the canvas ---------- */
+@media (max-width: 1024px) {
+  .lx-body, .cx-body { grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) !important; }
+  .lx-right, .cx-right {
+    position: absolute; right: 0; top: var(--ns-studio-head); bottom: 0; width: min(300px, 80vw); z-index: 5;
+    background: var(--ns-panel); box-shadow: var(--ns-shadow-lg); transform: translateX(calc(100% - 14px)); transition: transform .18s;
+  }
+  .lx-right:hover, .lx-right:focus-within, .cx-right:hover, .cx-right:focus-within { transform: none; }
+}
+
+/* ---------- Phone (<768): stacked steps, canvas first; bottom-anchored primary actions ---------- */
+@media (max-width: 767px) {
+  .lx-studio, .cx-studio { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+  .lx-body, .cx-body {
+    grid-template-columns: 1fr !important; grid-template-rows: 46dvh auto auto; overflow-y: auto;
+    scroll-snap-type: y proximity;
+  }
+  .lx-centre, .cx-centre { order: -1; min-height: 46dvh; scroll-snap-align: start; }
+  .lx-col, .cx-left, .cx-right { position: static; transform: none; width: auto; box-shadow: none; scroll-snap-align: start; border: 0; border-top: 1px solid var(--ns-line); }
+  .lx-top, .cx-top { overflow-x: auto; scrollbar-width: none; }
+  .cx-name { width: 120px; }
+  .sh-right-sheet { top: auto; left: 0; right: 0; width: auto !important; max-width: none; height: 72dvh; border-radius: 12px 12px 0 0; border-left: 0; animation-name: ns-sheet-up; }
+  .sh-dock-scrim { inset: 0; }
+  .sh-dock-toggle { top: auto; bottom: 76px; right: 12px; width: 36px; height: 36px; border-radius: 18px; }
+  .sh-dock-toggle.on { right: 12px; bottom: calc(72dvh + 8px); }
+  .sh-stage .toolbar .icon-btn { width: 36px; height: 36px; } /* 36px min touch target on phones */
+}
+@keyframes ns-sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
