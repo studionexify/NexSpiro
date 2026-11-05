@@ -109,4 +109,16 @@ describe('select & apply in the slicer', () => {
     expect(spread(out, L.z)).toBeGreaterThan(spread(base, L.z) + 0.2);
     expect(spread(out, 7)).toBeCloseTo(spread(base, 7), 2);
   });
+
+  it('a single-layer rule with a motion changes that layer, and pause motions leave marks for the preview', () => {
+    const base = run([]).out;
+    const r = (m: number[]) => Math.hypot(m[0] - CX, m[1] - CY);
+    const spread = (o: typeof base) => { const rs = movesAt(o, 4).filter((m) => m[4] === 0).map(r); return Math.max(...rs) - Math.min(...rs); };
+    const one = (brush: string) => run([rule({ pick: { kind: 'layers', z0: 4, z1: 4 }, lines: ['outer'], apply: { motion: { brush_id: brush, scale: 2.5 } }, blend_mm: 2 })]).out;
+    expect(spread(one(PRESETS[0].id))).toBeGreaterThan(spread(base) + 0.5);
+    const dots = one(PRESETS.find((b) => b.name === 'Big dots')!.id);
+    expect(dots.pauses?.length).toBeGreaterThan(0);
+    for (let k = 2; k < dots.pauses!.length; k += 4) expect(Math.abs(dots.pauses![k] - 4)).toBeLessThan(1.5);
+    expect(base.pauses).toBeUndefined();
+  });
 });

@@ -1,5 +1,5 @@
 import { BRUSHES, BRUSH_LABELS, type BrushType } from '../engine/brush';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
 import { repairObjects } from '../state/meshTools';
@@ -92,7 +92,7 @@ export function LiveChip() {
   );
 }
 
-type CubeFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
+export type CubeFace = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
 // Each face in world space (Z up, front = -Y): screen-right, screen-down and outward normal.
 const FACES: [CubeFace, string, number[], number[], number[]][] = [
   ['top', 'Top', [1, 0, 0], [0, -1, 0], [0, 0, 1]],
@@ -104,8 +104,23 @@ const FACES: [CubeFace, string, number[], number[], number[]][] = [
 ];
 const CUBE = 62;
 
+/** What a view cube drives: the main plate view by default, or another 3D view (the Select window). */
+export interface CubeApi {
+  /** Calls back with the camera's world-to-view matrix (column-major) after each frame; returns the unsubscribe. */
+  listen(l: (m: ArrayLike<number>) => void): () => void;
+  setView(face: CubeFace): void;
+  orbit(dAzimuth: number, dPolar: number): void;
+  fit(): void;
+}
+const plateCube: CubeApi = {
+  listen: (l) => { viewApi.cameraListeners.add(l); viewApi.current?.emitCamera(); return () => { viewApi.cameraListeners.delete(l); }; },
+  setView: (f) => viewApi.current?.setView(f),
+  orbit: (a, b) => viewApi.current?.orbit(a, b),
+  fit: () => viewApi.current?.fit(),
+};
+
 /** View cube: turns with the camera, click a face to look at it, drag to orbit. */
-export function ViewCube() {
+export function ViewCube({ api = plateCube, className = '', children }: { api?: CubeApi; className?: string; children?: ReactNode } = {}) {
   const cube = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   useEffect(() => {
@@ -113,13 +128,11 @@ export function ViewCube() {
       // camera rotation, with y flipped into CSS's y-down screen space
       if (cube.current) cube.current.style.transform = `matrix3d(${[e[0], -e[1], e[2], 0, e[4], -e[5], e[6], 0, e[8], -e[9], e[10], 0, 0, 0, 0, 1].join(',')})`;
     };
-    viewApi.cameraListeners.add(on);
-    viewApi.current?.emitCamera();
-    return () => { viewApi.cameraListeners.delete(on); };
-  }, []);
+    return api.listen(on);
+  }, [api]);
   const h = CUBE / 2;
   return (
-    <div className="float viewcube" aria-label="View cube">
+    <div className={`float viewcube ${className}`} aria-label="View cube">
       <div className="cube-stage" title="Click a face to view from that side · drag to rotate"
         onPointerDown={(e) => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }}
         onPointerMove={(e) => {
@@ -128,14 +141,14 @@ export function ViewCube() {
           const dx = e.clientX - d.x, dy = e.clientY - d.y;
           if (!d.moved && Math.hypot(dx, dy) < 3) return;
           d.moved = true; d.x = e.clientX; d.y = e.clientY;
-          viewApi.current?.orbit(-dx * 0.012, -dy * 0.012);
+          api.orbit(-dx * 0.012, -dy * 0.012);
         }}
         onPointerUp={(e) => {
           const d = drag.current;
           drag.current = null;
           if (d && !d.moved) {
             const face = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.dataset.face as CubeFace | undefined;
-            if (face) viewApi.current?.setView(face);
+            if (face) api.setView(face);
           }
         }}>
         <div className="cube" ref={cube}>
@@ -147,7 +160,8 @@ export function ViewCube() {
           ))}
         </div>
       </div>
-      <button className="icon-btn cube-fit" title="Zoom to fit the plate (Z) · 0: default view" aria-label="Zoom to fit" onClick={() => viewApi.current?.fit()}><Icon name="fit" size={16} /></button>
+      <button className="icon-btn cube-fit" title="Zoom to fit the plate (Z) · 0: default view" aria-label="Zoom to fit" onClick={() => api.fit()}><Icon name="fit" size={16} /></button>
+      {children}
     </div>
   );
 }

@@ -16,6 +16,8 @@ import { describePick, featuresOf, LINE_GROUPS, newRule, pickEmpty, ruleActive, 
 import { piecesAt, weightAt, type Piece } from '../select/geometry';
 import { objectAnchors } from '../select/engine';
 import { FEATURE_RGB, featureName, hexRgb, runOf, segmentsOf, SelectView } from './selectView';
+import { classifyLines, SHOW_ALL, visibleMask, type LineClasses, type LineFilter } from './lineClasses';
+import { ViewCube, type CubeApi } from '../../../ui/PrepareOverlays';
 
 let isOpen = false;
 const listeners = new Set<() => void>();
@@ -38,6 +40,10 @@ const TOOLS: [Tool, string, string][] = [
 ];
 const KIND_OF: Record<Exclude<Tool, 'orbit'>, PickKind> = { layers: 'layers', lines: 'lines', brush: 'brush' };
 const ACTIVE = hexRgb('#ff3d7f'), OTHER = hexRgb('#4f8cff');
+// kept while the app runs, so the window opens again with the same lines shown and the same projection
+let lastFilter: LineFilter = { ...SHOW_ALL };
+let lastOrtho = false;
+const cubeListeners = new Set<(m: ArrayLike<number>) => void>();
 
 interface ObjBox { id: string; name: string; min: [number, number, number]; max: [number, number, number] }
 
@@ -81,6 +87,9 @@ function SelectWindow() {
   const [cutLayer, setCutLayer] = useState<number>(Infinity);
   const [oneObject, setOneObject] = useState(false);
   const [info, setInfo] = useState(objectInfo);
+  const [filter, setFilterState] = useState<LineFilter>(lastFilter);
+  const setFilter = (f: LineFilter) => { lastFilter = f; setFilterState(f); };
+  const [ortho, setOrthoState] = useState(lastOrtho);
   const rule = mx.rules.find((r) => r.id === activeId) ?? null;
 
   // slice when the window opens with nothing (or something out of date) to show
@@ -95,6 +104,8 @@ function SelectWindow() {
   useEffect(() => {
     const v = new SelectView(host.current!);
     view.current = v;
+    v.onProjection = (o) => { lastOrtho = o; setOrthoState(o); };
+    v.cameraListeners.add((m) => { for (const l of cubeListeners) l(m); });
     return () => { v.dispose(); view.current = null; };
   }, []);
   useEffect(() => { view.current?.setBackground(getComputedStyle(document.body).getPropertyValue('--surface-primary').trim() || (theme === 'light' ? '#f4f4f6' : '#16181d')); }, [theme]);
@@ -105,9 +116,23 @@ function SelectWindow() {
   useEffect(() => {
     if (!segs || !view.current) return;
     view.current.setData(segs, had.current);
+    if (!had.current && lastOrtho) view.current.setOrtho(true);
     had.current = true;
     setInfo(objectInfo());
   }, [segs]);
+
+  // which lines are drawn: hidden lines can't be clicked, brushed or chosen by layer either
+  const classes = useMemo<LineClasses | null>(() => (segs && result ? classifyLines(segs, result.layers.length, (k) => result.moves[segs.move[k] * MOVE_STRIDE + 3]) : null), [segs, result]);
+  useEffect(() => { if (classes) view.current?.setShown(visibleMask(classes, filter)); }, [classes, filter, segs]);
+  useEffect(() => { view.current?.setPauses(result?.pauses, ACTIVE); }, [result]);
+  const cubeApi = useMemo<CubeApi>(() => ({
+    // the cube mounts before the 3D view exists, so it listens through a set the view forwards to
+    listen: (l) => { cubeListeners.add(l); return () => { cubeListeners.delete(l); }; },
+    // a face of the cube gives a straight-on orthographic view of that side; the toggle beside it switches back
+    setView: (f) => { const v = view.current; if (!v) return; v.setOrtho(true); v.look(f, true); },
+    orbit: (a, b) => view.current?.orbit(a, b),
+    fit: () => view.current?.frame(),
+  }), []);
 
   const layers = result?.layers ?? [];
   const top = Math.max(0, layers.length - 1);
@@ -150,6 +175,14 @@ function SelectWindow() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segs, rulesKey, activeId, colorBy, filaments, info]);
+
+  // re-slice by itself a moment after a rule changes, so motions, speeds and blobs show on the lines
+  const firstRules = useRef(true);
+  useEffect(() => {
+    if (firstRules.current) { firstRules.current = false; return; }
+    const t = setTimeout(() => { if (useStore.getState().slice.status !== 'slicing') void sliceNow(); }, 700);
+    return () => clearTimeout(t);
+  }, [rulesKey]);
 
   const addRule = () => {
     const r = newRule(mx.rules.length + 1);
@@ -298,6 +331,7 @@ function SelectWindow() {
                 ))}
               </div>
             </div>
+            <ShowLines f={filter} set={setFilter} lc={classes} />
             {rule && <RuleEditor r={rule} oneObject={oneObject} setOneObject={setOneObject} />}
           </aside>
           <main className="sxw-main">
@@ -309,12 +343,16 @@ function SelectWindow() {
               <label className="sxw-inline">Colour by
                 <select className="select" value={colorBy} onChange={(e) => setColorBy(e.target.value as 'feature' | 'filament')}><option value="feature">Line kind</option><option value="filament">Filament</option></select>
               </label>
-              {(['front', 'right', 'back', 'left', 'top'] as const).map((s) => <button key={s} className="sxw-tool" onClick={() => view.current?.look(s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}
-              <button className="sxw-tool" onClick={() => view.current?.frame()}>Fit</button>
             </div>
             <div className="sxw-stage">
               <TouchMods erase />
               <div ref={host} className={`sxw-canvas tool-${tool}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={() => view.current?.showBrush(null)} onContextMenu={(e) => e.preventDefault()} />
+              <ViewCube api={cubeApi} className="sxw-cube">
+                <div className="sxw-proj" role="group" aria-label="Projection">
+                  <button className={ortho ? 'on' : ''} onClick={() => view.current?.setOrtho(true)} title="Orthographic: true sizes, parallel lines stay parallel">Ortho</button>
+                  <button className={!ortho ? 'on' : ''} onClick={() => view.current?.setOrtho(false)} title="Perspective: far lines look smaller, like a photo">Persp</button>
+                </div>
+              </ViewCube>
               {!result && <div className="sxw-empty">{status === 'slicing' ? 'Slicing the plate to show its lines…' : 'Nothing sliced yet. Add a model to the plate, then Re-slice.'}</div>}
               <div className="sxw-rails">
                 <div className="sxw-rail">
@@ -446,6 +484,43 @@ function RuleEditor({ r, oneObject, setOneObject }: { r: SelectRule; oneObject: 
       <Num label="Temperature" value={r.apply.temp} unit="°C" min={150} max={320} onChange={(v) => set(() => { r.apply.temp = v; })} title="Set per layer: a hotend needs 10–30 s to settle, so it cannot change for single lines" />
       <div className="sxw-row" title="Speed, flow and motion fade in and out over this distance around the selection, along the layer and up and down. Filament changes are always sharp."><span className="sxw-lbl">Soft edge</span><input className="input" type="number" min={0} max={20} step={0.5} value={r.blend_mm} onChange={(e) => set(() => { r.blend_mm = Math.max(0, Math.min(20, +e.target.value || 0)); })} /><span className="sxw-unit">mm</span></div>
       <p className="sxw-muted">Rules lower in the list win where two set the same thing; different changes add up.</p>
+    </div>
+  );
+}
+
+/** "Show lines": a checkbox per line kind, and for walls and top/bottom skins how many to show, counted from the outside in. */
+function ShowLines({ f, set, lc }: { f: LineFilter; set(f: LineFilter): void; lc: LineClasses | null }) {
+  const n = (c: keyof LineClasses['count']) => (lc ? lc.count[c] : 0);
+  const row = (key: 'outer' | 'infill' | 'solid' | 'support' | 'other', label: string, tip: string) => (n(key) > 0 || key === 'outer') && (
+    <label className="sxw-check sxw-show" title={tip}><input type="checkbox" checked={f[key]} onChange={(e) => set({ ...f, [key]: e.target.checked })} />{label}</label>
+  );
+  const counted = (key: 'inner' | 'top' | 'bottom', upKey: 'innerUpTo' | 'topUpTo' | 'bottomUpTo', label: string, tip: string) => {
+    const most = lc?.max[key] ?? 0;
+    if (!most) return null;
+    const v = Math.min(f[upKey], most);
+    return (
+      <div className="sxw-row sxw-show" title={tip}>
+        <label className="sxw-check"><input type="checkbox" checked={f[key]} onChange={(e) => set({ ...f, [key]: e.target.checked })} />{label}</label>
+        <input className="input" type="number" min={1} max={most} step={1} disabled={!f[key]} value={v} aria-label={`${label}: how many`}
+          onChange={(e) => { const x = Math.round(+e.target.value); if (x >= 1) set({ ...f, [upKey]: x >= most ? 99 : x }); }} />
+        <span className="sxw-unit">of {most}</span>
+      </div>
+    );
+  };
+  return (
+    <div className="sxw-sec">
+      <div className="sxw-title">Show lines<span style={{ flex: 1 }} />
+        <button className="btn-secondary btn-small" onClick={() => set({ ...SHOW_ALL })} title="Show every line again">All</button>
+      </div>
+      {row('outer', 'Outer wall', 'The wall you see from outside')}
+      {counted('inner', 'innerUpTo', 'Inner walls', 'Walls inside the outer wall, counted inwards: 1 is the wall right behind the outer wall')}
+      {row('infill', 'Infill', 'Sparse infill inside the part')}
+      {counted('top', 'topUpTo', 'Top layers', 'Solid skin under a top surface, counted down: 1 is the top surface itself')}
+      {counted('bottom', 'bottomUpTo', 'Bottom layers', 'Solid skin over a bottom surface, counted up: 1 is the bottom surface itself')}
+      {row('solid', 'Other solid infill', 'Solid infill that is not part of a top or bottom skin')}
+      {row('support', 'Support', 'Support and support interface')}
+      {row('other', 'Other lines', 'Anything else that prints')}
+      <p className="sxw-muted">Hidden lines can't be picked or brushed, so you can hide the rest and work on one kind at a time.</p>
     </div>
   );
 }

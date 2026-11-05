@@ -59,7 +59,16 @@ export const isTravel = (f: number) => f === TRAVEL;
 export class SelectView {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(40, 1, 0.1, 5000);
+  readonly persp = new THREE.PerspectiveCamera(40, 1, 0.1, 5000);
+  readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 5000);
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = this.persp;
+  /** Called after each frame with the camera's world-to-view matrix (for the view cube). */
+  readonly cameraListeners = new Set<(m: ArrayLike<number>) => void>();
+  /** Called when the view switches between orthographic and perspective. */
+  onProjection: ((ortho: boolean) => void) | null = null;
+  /** Per segment: 1 = drawn and pickable. Null = all. */
+  private shown: Uint8Array | null = null;
+  private dots: THREE.Points | null = null;
   readonly controls: OrbitControls;
   private lines: THREE.LineSegments | null = null;
   private colors: Float32Array | null = null;
@@ -74,7 +83,8 @@ export class SelectView {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     this.renderer.localClippingEnabled = true;
     host.appendChild(this.renderer.domElement);
-    this.camera.up.set(0, 0, 1);
+    this.persp.up.set(0, 0, 1);
+    this.ortho.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.zoomToCursor = true;
@@ -83,7 +93,12 @@ export class SelectView {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
     this.resize();
-    const loop = () => { this.raf = requestAnimationFrame(loop); this.controls.update(); this.renderer.render(this.scene, this.camera); };
+    const loop = () => {
+      this.raf = requestAnimationFrame(loop);
+      this.controls.update();
+      this.renderer.render(this.scene, this.camera);
+      if (this.cameraListeners.size) { this.camera.updateMatrixWorld(); for (const l of this.cameraListeners) l(this.camera.matrixWorldInverse.elements); }
+    };
     loop();
   }
 
@@ -92,8 +107,52 @@ export class SelectView {
   private resize() {
     const w = this.host.clientWidth || 1, h = this.host.clientHeight || 1;
     this.renderer.setSize(w, h);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this.persp.aspect = w / h;
+    this.persp.updateProjectionMatrix();
+    this.fitOrthoFrustum();
+  }
+
+  /** The orthographic frustum keeps its height (zoom 1) and follows the canvas shape. */
+  private fitOrthoFrustum(halfH = this.ortho.top) {
+    const a = (this.host.clientWidth || 1) / (this.host.clientHeight || 1);
+    Object.assign(this.ortho, { top: halfH, bottom: -halfH, left: -halfH * a, right: halfH * a });
+    this.ortho.updateProjectionMatrix();
+  }
+
+  get isOrtho() { return this.camera === this.ortho; }
+
+  /** Switch between an orthographic view (true sizes, no vanishing) and a perspective one; the framing stays the same. */
+  setOrtho(on: boolean) {
+    if (on === this.isOrtho) return;
+    const t = this.controls.target, from = this.camera, to = on ? this.ortho : this.persp;
+    const dir = from.position.clone().sub(t).normalize(), half = Math.tan(THREE.MathUtils.degToRad(this.persp.fov) / 2);
+    if (on) {
+      const d = this.persp.position.distanceTo(t);
+      this.ortho.zoom = 1;
+      this.fitOrthoFrustum(d * half);
+      this.ortho.position.copy(t).addScaledVector(dir, d);
+    } else {
+      const d = this.ortho.top / this.ortho.zoom / half;
+      this.persp.position.copy(t).addScaledVector(dir, d);
+    }
+    to.near = from.near; to.far = from.far;
+    to.updateProjectionMatrix();
+    this.camera = to;
+    this.controls.object = to;
+    this.controls.update();
+    this.onProjection?.(on);
+  }
+
+  /** Turn the view about the target: azimuth round the up axis, then tilt (radians), as when dragging the view cube. */
+  orbit(dAz: number, dPolar: number) {
+    const c = this.camera, t = this.controls.target, off = c.position.clone().sub(t);
+    off.applyAxisAngle(new THREE.Vector3(0, 0, 1), dAz);
+    const right = new THREE.Vector3().crossVectors(off, new THREE.Vector3(0, 0, 1)).normalize();
+    const tilted = off.clone().applyAxisAngle(right, dPolar);
+    const polar = Math.acos(THREE.MathUtils.clamp(tilted.z / tilted.length(), -1, 1));
+    if (polar > 0.01 && polar < Math.PI - 0.01) off.copy(tilted);
+    c.position.copy(t).add(off);
+    c.lookAt(t);
   }
 
   /** Left button picks (true) or orbits (false); the right button orbits and the middle one pans while picking. */
@@ -112,6 +171,7 @@ export class SelectView {
     g.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
     const m = new THREE.LineBasicMaterial({ vertexColors: true, clippingPlanes: [this.cut] });
     this.lines = new THREE.LineSegments(g, m);
+    this.shown = null;
     this.scene.add(this.lines);
     g.computeBoundingBox();
     if (!keepCamera && g.boundingBox) this.frame(g.boundingBox);
@@ -121,16 +181,46 @@ export class SelectView {
     const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
     const r = Math.max(size.x, size.y, size.z, 5);
     this.controls.target.copy(c);
-    this.camera.position.set(c.x, c.y - r * 2.2, c.z + r * 0.35);
-    this.camera.near = r / 200; this.camera.far = r * 50;
-    this.camera.updateProjectionMatrix();
+    for (const cam of [this.persp, this.ortho]) { cam.position.set(c.x, c.y - r * 2.2, c.z + r * 0.35); cam.near = r / 200; cam.far = r * 50; }
+    this.ortho.zoom = 1;
+    this.fitOrthoFrustum(r * 2.2 * Math.tan(THREE.MathUtils.degToRad(this.persp.fov) / 2));
+    this.persp.updateProjectionMatrix();
   }
 
-  /** Views from a side: front / right / back / left / top. */
-  look(side: 'front' | 'right' | 'back' | 'left' | 'top') {
-    const t = this.controls.target, d = this.camera.position.distanceTo(t);
-    const v = { front: [0, -1, 0.15], right: [1, 0, 0.15], back: [0, 1, 0.15], left: [-1, 0, 0.15], top: [0, -0.001, 1] }[side];
-    this.camera.position.set(t.x + v[0] * d, t.y + v[1] * d, t.z + v[2] * d);
+  /** Views from a side. `square`: straight on (for the orthographic face views); otherwise a little from above. */
+  look(side: 'front' | 'right' | 'back' | 'left' | 'top' | 'bottom', square = this.isOrtho) {
+    const t = this.controls.target, d = this.camera.position.distanceTo(t), z = square ? 0 : 0.15;
+    const v = { front: [0, -1, z], right: [1, 0, z], back: [0, 1, z], left: [-1, 0, z], top: [0, -0.001, 1], bottom: [0, -0.001, -1] }[side];
+    const l = Math.hypot(v[0], v[1], v[2]);
+    this.camera.position.set(t.x + (v[0] / l) * d, t.y + (v[1] / l) * d, t.z + (v[2] / l) * d);
+    this.camera.lookAt(t);
+  }
+
+  /** Pauses (blobs) as dots: x, y, z, seconds; a longer pause makes a bigger dot. */
+  setPauses(p: Float32Array | undefined, rgb: [number, number, number]) {
+    if (this.dots) { this.scene.remove(this.dots); this.dots.geometry.dispose(); (this.dots.material as THREE.Material).dispose(); this.dots = null; }
+    if (!p?.length) return;
+    const n = p.length / 4, pos = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) { pos[k * 3] = p[k * 4]; pos[k * 3 + 1] = p[k * 4 + 1]; pos[k * 3 + 2] = p[k * 4 + 2]; }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.PointsMaterial({ color: new THREE.Color(...rgb), size: 7, sizeAttenuation: false, clippingPlanes: [this.cut] });
+    this.dots = new THREE.Points(g, m);
+    this.scene.add(this.dots);
+  }
+
+  /** Draw (and pick) only the segments with mask 1; null shows every segment. */
+  setShown(mask: Uint8Array | null) {
+    this.shown = mask;
+    const g = this.lines?.geometry;
+    if (!g || !this.segs) return;
+    if (!mask) { g.setIndex(null); return; }
+    let k = 0;
+    for (let s = 0; s < mask.length; s++) if (mask[s]) k++;
+    const idx = new Uint32Array(k * 2);
+    let j = 0;
+    for (let s = 0; s < mask.length; s++) if (mask[s]) { idx[j++] = s * 2; idx[j++] = s * 2 + 1; }
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
   }
 
   /** Writes per-segment colours (rgb per segment, both ends the same). */
@@ -158,13 +248,16 @@ export class SelectView {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
     const o = ray.ray.origin, d = ray.ray.direction;
-    const pxWorld = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / rect.height;
+    // world size of one pixel: grows with distance in perspective, fixed in orthographic
+    const ortho = this.isOrtho, pxOrtho = (this.ortho.top - this.ortho.bottom) / this.ortho.zoom / rect.height;
+    const pxWorld = (2 * Math.tan(THREE.MathUtils.degToRad(this.persp.fov) / 2)) / rect.height;
+    const shown = this.shown;
     const P = segs.pos;
     let best = -1, bestT = Infinity, bx = 0, by = 0, bz = 0;
     for (let s = 0; s < segs.count; s++) {
       const i = s * 6;
       const az = P[i + 2];
-      if (az > cutZ + 1e-3) continue;
+      if (az > cutZ + 1e-3 || (shown && !shown[s])) continue;
       const ax = P[i], ay = P[i + 1], ex = P[i + 3] - ax, ey = P[i + 4] - ay, ez = P[i + 5] - az;
       // closest points between the ray and the segment
       const wx = o.x - ax, wy = o.y - ay, wz = o.z - az;
@@ -178,7 +271,7 @@ export class SelectView {
       if (t <= 0 || t > bestT + 0.3) continue;
       const rx = o.x + d.x * t - qx, ry = o.y + d.y * t - qy, rz = o.z + d.z * t - qz;
       const dist2 = rx * rx + ry * ry + rz * rz;
-      const tol = Math.max(0.2, 5 * pxWorld * t);
+      const tol = Math.max(0.2, 5 * (ortho ? pxOrtho : pxWorld * t));
       if (dist2 > tol * tol) continue;
       // front-most wins; lines at nearly the same depth go to the one nearest the ray
       if (t < bestT - 0.3 || dist2 < 0.01) { best = s; bestT = t; bx = qx; by = qy; bz = qz; }

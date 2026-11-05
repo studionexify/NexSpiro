@@ -110,6 +110,8 @@ export interface EmitOutput {
   moveLines: Uint32Array;
   /** Per move: wall texture strength 0..255 (only when some move has one). */
   moveWave?: Uint8Array;
+  /** Pauses on the part (dwells from motions such as Dots): x, y, z, seconds per pause. */
+  pauses?: Float32Array;
   layers: LayerResult[];
   stats: SliceStats;
 }
@@ -279,6 +281,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   const aux = new TypedBuilder(Float32Array);
   const lines = new TypedBuilder(Uint32Array);
   const feats = new TypedBuilder(Uint8Array);
+  const pauses: number[] = [];
   const waves = new TypedBuilder(Uint8Array);
   let anyWave = false;
   const layerRes: LayerResult[] = [];
@@ -405,6 +408,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
           push(op.text);
           tempIn(op.text);
           if (op.time) elapsed += op.time;
+          if (op.time && /^\s*G4\b/.test(op.text) && Number.isFinite(x) && Number.isFinite(y)) pauses.push(x, y, Number.isFinite(z) ? z : L.z, op.time);
           if (op.resetPos) { x = NaN; y = NaN; z = NaN; f = NaN; accel = -1; }
           // a macro that touched the part fan (filament change): put the layer's fan speed back right away
           if (op.resetPos && /^\s*M10[67](?!\s*P[2-9])/m.test(op.text)) { fanOut = -1; setFan(layerFan); }
@@ -532,6 +536,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     moveAux: aux.toTyped(),
     moveLines: lines.toTyped(),
     moveWave: anyWave ? waves.toTyped() : undefined,
+    pauses: pauses.length ? new Float32Array(pauses) : undefined,
     layers: layerRes,
     stats: {
       timeSeconds: total,

@@ -197,6 +197,8 @@ export interface SliceOutput {
   moveLines?: Uint32Array;
   /** Per move: wall texture strength 0..255 (Motionex weave wave), for the "Wave area" preview. */
   moveWave?: Uint8Array;
+  /** Pauses on the part (x, y, z, seconds), for the Select window's blob marks. */
+  pauses?: Float32Array;
   layers: LayerResult[];
   stats: SliceStats;
   warnings: string[];

@@ -343,3 +343,13 @@ body.sh-resizing, body.sh-resizing * { cursor: col-resize !important; user-selec
 .imp-bar i { display: block; height: 100%; background: var(--ns-primary, var(--accent)); transition: width .15s; }
 .imp-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 16px 16px; flex-wrap: wrap; }
 .imp-dont { margin-right: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+/* Select window: view cube with the projection toggle, bottom of the view */
+.sxw-stage .sxw-cube { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
+.sxw-proj { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface-overlay); }
+.sxw-proj button { padding: 5px 9px; font-size: 12px; background: none; border: 0; color: var(--text-secondary); cursor: pointer; }
+.sxw-proj button.on { background: var(--accent); color: var(--accent-ink); }
+.sxw-show .input { width: 52px; }
+.sxw-show + .sxw-show { margin-top: 2px; }
+label.sxw-show { display: flex; padding: 3px 0; }
+.sxw-row.sxw-show { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.sxw-row.sxw-show .sxw-check { flex: 1; }
