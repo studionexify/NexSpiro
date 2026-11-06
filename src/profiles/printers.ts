@@ -503,12 +503,19 @@ for (const p of PRINTERS) {
   p.bed = { ...p.bed, ...v.bed };
   if (v.excluded_areas.length) p.excludedAreas = v.excluded_areas;
   p.flavor = v.flavor;
+  // the profile's layer height range is for its own process presets; NexSpiro's presets (0.08–0.28 mm) keep theirs
+  const { min_layer_height: _min, max_layer_height: _max, ...values } = v.machine;
   p.machine = {
-    ...p.machine, ...v.machine, ...v.templates, gcode_templates: 'vendor',
+    ...p.machine, ...values, ...v.templates, gcode_templates: 'vendor',
     gcode_template_source: `${v.vendor}: ${v.repo}@${v.commit.slice(0, 10)} ${v.profile}`,
     head_wrap_detect_zone: (v.head_wrap_detect_zone ?? []).join(','),
     ...(v.template_vars && Object.keys(v.template_vars).length ? { vendor_template_vars: JSON.stringify(v.template_vars) } : {}),
   };
+  // a filament unit: OrcaSlicer flushes on the prime tower (purge_in_prime_tower, on by default) or leaves the purge to the
+  // firmware's change command over its chute (Creality K2 / Hi CFS, Anycubic ACE Pro)
+  if (p.machine.changer_type === 'ams' && !/flush_length/.test(String(v.templates.change_filament_gcode ?? '')) && v.templates.change_filament_gcode) {
+    p.machine.purge_target = v.machine.purge_in_prime_tower === false ? 'chute' : 'tower';
+  }
   const accel = Number(p.machine.max_acceleration);
   if (accel > 0 && Number(p.processOverrides.default_acceleration) > accel) p.processOverrides = { ...p.processOverrides, default_acceleration: accel };
 }

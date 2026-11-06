@@ -4,7 +4,7 @@ import { slice, slotFromConfig } from '../../src/engine/slicer';
 import { weld } from '../../src/engine/mesh';
 import { resolveConfig } from '../../src/profiles/resolve';
 import { TRANSITION_MARKER } from '../../src/plugins/api';
-import { cylinder } from '../fixtures';
+import { bambuFlushes, cylinder } from '../fixtures';
 import { defaultToolhead } from '../../src/plugins/motionex/core/toolhead';
 import { DEFAULT_OPTIONS } from '../../src/plugins/motionex/modifier';
 import type { MotionexConfig, MotionexReport } from '../../src/plugins/motionex/engine';
@@ -175,17 +175,20 @@ describe('weave in the slicer', () => {
     const out = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx(w, 'bbl-a1mini') } });
     expect(out.gcode).toMatch(/mode=none/);
     expect(out.gcode).not.toMatch(/mode=full/);
-    expect(out.gcode).toMatch(/G1 E0(\.0+)? F240 ; flush the previous colour/);
+    // Bambu Studio's A1 mini change G-code: nothing in its FLUSH blocks
+    const flushed = (g: string) => bambuFlushes(g).slice(1);
+    expect(flushed(out.gcode).length).toBeGreaterThan(0);
+    expect(Math.max(...flushed(out.gcode))).toBe(0);
     expect(out.gcode).not.toMatch(/;TYPE:Prime tower/i);
     const reduced = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx({ ...w, change: { mode: 'reduced', volume_mm3: 20 } }, 'bbl-a1mini') } });
     expect(reduced.gcode).toMatch(/mode=reduced/);
-    expect(reduced.gcode).toMatch(/G1 E8\.3\d F240 ; flush the previous colour/); // 20 mm³ of 1.75 mm filament
+    expect(Math.max(...flushed(reduced.gcode))).toBeCloseTo(20 / (Math.PI * 0.875 ** 2), 1); // 20 mm³ of 1.75 mm filament
   });
 
   it('three colours take turns; mono relief makes no filament change', () => {
     const c = cfg('bbl-x1c', settings()); // T lines of the print only (Bambu's own start / end G-code on the P1S also select tools)
     const three = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx(weave({ image: motifImage('kilim', 64, 20, 3), slots: [0, 1, 2] })) } });
-    const tools = [...three.gcode.matchAll(/^T(\d)/gm)].map((m) => +m[1]);
+    const tools = [...three.gcode.matchAll(/^T(\d)$/gm)].map((m) => +m[1]);
     expect(new Set(tools)).toEqual(new Set([0, 1, 2]));
     // taking turns: no colour repeats on the next layer
     for (let k = 1; k < tools.length; k++) expect(tools[k]).not.toBe(tools[k - 1]);

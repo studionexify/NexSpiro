@@ -9,7 +9,7 @@ import { printerById, PRINTERS } from '../src/profiles/printers';
 import { changerOf, flushesIntoTower, purgeTarget, slotCount } from '../src/profiles/changer';
 import type { Config } from '../src/profiles/settings';
 import type { MeshInput } from '../src/engine/types';
-import { box, cylinder } from './fixtures';
+import { bambuFlushes, box, cylinder } from './fixtures';
 import { defaultToolhead } from '../src/plugins/motionex/core/toolhead';
 import { DEFAULT_OPTIONS } from '../src/plugins/motionex/modifier';
 import type { MotionexConfig } from '../src/plugins/motionex/engine';
@@ -22,13 +22,17 @@ const UNITS: { id: string; purge: 'chute' | 'tower'; slots: number }[] = [
   { id: 'prusa-coreone-mmu3', purge: 'tower', slots: 5 },
   { id: 'prusa-mk3s-mmu3', purge: 'tower', slots: 5 },
   { id: 'creality-k2plus-cfs', purge: 'chute', slots: 4 },
-  { id: 'creality-k1c-cfs', purge: 'chute', slots: 4 },
-  { id: 'creality-k1max-cfs', purge: 'chute', slots: 4 },
+  { id: 'creality-k1c-cfs', purge: 'tower', slots: 4 },
+  { id: 'creality-k1max-cfs', purge: 'tower', slots: 4 },
   { id: 'creality-hi-cfs', purge: 'chute', slots: 4 },
   { id: 'anycubic-kobra3-ace', purge: 'chute', slots: 4 },
   { id: 'anycubic-kobras1-ace', purge: 'chute', slots: 4 },
   { id: 'generic-klipper-mmu', purge: 'tower', slots: 8 },
 ];
+
+/** The unit runs NexSpiro's own change G-code (the maker's profile has none); else the maker's (OrcaSlicer: Creality CFS,
+ *  Anycubic Kobra S1 ACE), which leaves the purge to the tower or to the firmware's change command over its chute. */
+const ownChange = (id: string) => /NexSpiro filament change/.test(String(printerById(id).machine.change_filament_gcode));
 
 const cfg = (printerId: string, machine: Config = {}, o: Config = {}) =>
   resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: o as never, machineOverrides: machine });
@@ -62,7 +66,8 @@ describe('filament units', () => {
       expect(purgeTarget(p.machine)).toBe(u.purge);
       expect(slotCount(p.machine)).toBe(u.slots);
       expect(Number(p.machine.filament_change_time)).toBeGreaterThan(20);
-      expect(String(p.machine.change_filament_gcode)).toMatch(/T\[next_extruder\]/);
+      if (ownChange(u.id)) expect(String(p.machine.change_filament_gcode)).toMatch(/T\[next_extruder\]/);
+      else expect(p.machine.gcode_templates).toBe('vendor');
       expect(p.note).toBeTruthy();
     }
     // Bambu: chute, from the printer (no purge_target in the profile)
@@ -87,8 +92,15 @@ describe('filament units', () => {
     const g = out.gcode;
     expect(g).not.toMatch(/NaN|Infinity|\[next_extruder\]|\[previous_extruder\]|\[flush_length\]|\[wipe_tower_[xy]\]|\[new_filament_temp\]/);
     expect(out.stats.toolChanges).toBeGreaterThan(10);
-    expect(g).toMatch(/^T1 ; /m);
+    expect(g).toMatch(/^T1\b/m);
     expect(out.warnings.some((w) => /slots/.test(w))).toBe(false);
+    if (!ownChange(u.id)) {
+      // the maker's change G-code: OrcaSlicer writes the T command after it; the tower or the firmware takes the flush
+      const other = run(u.id, { purge_target: u.purge === 'tower' ? 'chute' : 'tower' });
+      if (u.purge === 'tower') expect(towerMm(g)).toBeGreaterThan(towerMm(other.gcode) * 2.5);
+      else expect(towerMm(other.gcode)).toBeGreaterThan(towerMm(g) * 2.5);
+      return;
+    }
     const fl = flushes(g);
     expect(fl.length).toBeGreaterThan(10);
     if (u.purge === 'tower') {
@@ -132,12 +144,13 @@ describe('filament units', () => {
   });
 
   it('Bambu: the chute flush and the tower are as before', () => {
-    // NexSpiro's own Bambu macro (X1C); the A1 / P1S run Bambu Studio's template (vendor-gcode.test.ts)
+    // Bambu Studio's X1 Carbon change G-code: the purge is in its FLUSH blocks
     const out = run('bbl-x1c');
     const g = out.gcode;
-    const fl = [...g.matchAll(/^G1 E([\d.]+) F240 ; flush the previous colour/gm)].map((m) => Number(m[1]));
+    const fl = bambuFlushes(g);
     expect(fl.length).toBe(out.stats.toolChanges + 1); // the first load goes through the AMS too
-    expect(fl.every((e) => e > 50)).toBe(true); // 280 mm³ of 1.75 mm filament
+    expect(fl[0]).toBe(0); // the first load: nothing to flush yet
+    expect(fl.slice(1).every((e) => e > 50)).toBe(true); // 280 mm³ of 1.75 mm filament
     expect(g).toMatch(/^M620 S1A/m);
     // stating the chute changes nothing but the config line
     const chute = run('bbl-x1c', { purge_target: 'chute' }).gcode;
@@ -147,7 +160,8 @@ describe('filament units', () => {
     expect(towerMm(g)).toBeGreaterThan(0);
     const tower = run('bbl-x1c', { purge_target: 'tower' });
     expect(towerMm(tower.gcode)).toBeGreaterThan(towerMm(g) * 2.5);
-    expect([...tower.gcode.matchAll(/^G1 E([\d.]+) F240 ; flush the previous colour/gm)].every((m) => Number(m[1]) === 0)).toBe(true);
+    // no purge left in the change G-code: only the refill of the 2 mm toolchange retraction
+    expect(bambuFlushes(tower.gcode).every((e) => e <= Number(cfg('bbl-x1c').retract_length_toolchange) + 1e-6)).toBe(true);
   });
 
   it('a weave bleed change still skips the tower on a tower-flushing unit', () => {

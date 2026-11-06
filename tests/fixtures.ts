@@ -42,3 +42,10 @@ export function cone(cx: number, cy: number, r0: number, r1: number, h: number, 
   }
   return new Float32Array(out);
 }
+
+/** Purge of each filament change in Bambu Studio's change G-code: the E pushed inside its FLUSH_START / FLUSH_END
+ *  blocks between M620 S<n>A and M621 S<n>A (0 for a change that flushes nothing). */
+export function bambuFlushes(g: string): number[] {
+  return [...g.matchAll(/^M620 S\d+A\b[\s\S]*?^M621 S\d+A/gm)].map((m) =>
+    [...m[0].matchAll(/; FLUSH_START\n([\s\S]*?); FLUSH_END/g)].reduce((a, b) => a + [...b[1].matchAll(/^G1 E(-?[\d.]+)/gm)].reduce((x, e) => x + Number(e[1]), 0), 0));
+}

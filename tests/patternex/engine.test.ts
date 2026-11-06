@@ -5,7 +5,7 @@ import { weld } from '../../src/engine/mesh';
 import { resolveConfig } from '../../src/profiles/resolve';
 import { areaTotal, SCALE } from '../../src/engine/clipper';
 import { sliceMesh } from '../../src/engine/slice';
-import { box, cylinder } from '../fixtures';
+import { bambuFlushes, box, cylinder } from '../fixtures';
 import { builtinPattern, newPlacement, parseSvg, type Pattern, type RegionAction } from '../../src/plugins/patternex';
 import { frameOf, fromPattern, toPattern, type WorldPlacement } from '../../src/plugins/patternex/projection';
 import { placementGroups } from '../../src/plugins/patternex/resolve';
@@ -155,9 +155,11 @@ describe('slicing with Patternex (AMS)', () => {
     const full = slice([cube()], c, () => {}, { filaments: slots(c), plugins: { patternex: logo() } });
     const red = slice([cube()], c, () => {}, { filaments: slots(c), plugins: { patternex: logo({ purge: { mode: 'reduced', volume_mm3: 30, change_point_shift_mm: 0 } }) } });
     const none = slice([cube()], c, () => {}, { filaments: slots(c), plugins: { patternex: logo({ purge: { mode: 'none', change_point_shift_mm: 0 } }) } });
-    const flush = (g: string) => [...g.matchAll(/^G1 E([\d.]+) F240 ; flush/gm)].map((m) => +m[1]).slice(1); // [0] is the first load
+    // Bambu Studio's X1 Carbon change G-code: the purge is in its FLUSH blocks, plus the refill of the toolchange retraction
+    const refill = Number(c.retract_length_toolchange);
+    const flush = (g: string) => bambuFlushes(g).slice(1).map((e) => e - refill); // [0] is the first load
     expect(Math.max(...flush(red.gcode))).toBeCloseTo(30 / (Math.PI * 0.875 ** 2), 1);
-    expect(Math.max(...flush(none.gcode))).toBe(0);
+    expect(Math.max(...flush(none.gcode))).toBeLessThanOrEqual(1e-6);
     expect(Math.min(...flush(full.gcode))).toBeGreaterThan(5);
     expect(none.stats.towerGrams).toBeLessThan(full.stats.towerGrams);
     const rep = none.pluginReports!.patternex as PatternexReport;

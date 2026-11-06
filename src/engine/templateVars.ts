@@ -26,7 +26,7 @@ const INTS = new Set([
   'first_layer_temperature', 'bed_temperature', 'bed_temperature_initial_layer', 'first_layer_bed_temperature', 'flush_temperatures',
   'timelapse_type', 'chamber_cooling_mode', 'temperature_vitrification', 'min_vitrification_temperature', 'initial_nozzle_id', 'current_nozzle_id',
   'next_nozzle_id', 'initial_no_support_hotend', 'initial_hotend', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
-  'required_nozzle_HRC', 'filament_map', 'initial_no_support_filament_id', 'first_non_support_filaments', 'first_filaments', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
+  'year', 'month', 'day', 'hour', 'minute', 'second', 'required_nozzle_HRC', 'filament_map', 'initial_no_support_filament_id', 'first_non_support_filaments', 'first_filaments', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
   ...VECTOR_INT_KEYS,
 ]);
 
@@ -107,7 +107,7 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
     zhop: 0, e_retracted: per(() => 0, 0), e_restart_extra: per(() => 0, 0), e_position: per(() => 0, 0),
     initial_filament_type: String(fils[0] ? (fset(fils[0], 'filament_type') ?? fils[0].type) : (cfg.filament_type ?? 'PLA')),
     has_single_extruder_multi_material_priming: false, num_printing_extruders: Math.max(1, fils.length),
-    num_objects: 1, num_instances: 1, input_filename_base: String(cfg.input_filename_base ?? 'plate'),
+    num_objects: 1, num_instances: 1, ...dateVars(), input_filename_base: String(cfg.input_filename_base ?? 'plate'),
     // softening temperature of each filament (OrcaSlicer default 100 °C) and the lowest one in the print (H2D, Artillery)
     temperature_vitrification: per((s) => Math.round(Number(fset(s, 'temperature_vitrification') ?? 100)), Math.round(Number(cfg.temperature_vitrification ?? 100))),
     // filaments this print uses (Prusa XL / MMU3 start G-code walks it); gcode.ts passes the real list
@@ -150,6 +150,15 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
   return v;
 }
 
+/** OrcaSlicer's date placeholders ([year] [month] [day] [hour] [minute] [second], timestamp). */
+function dateVars() {
+  const d = new Date(), p = (x: number) => String(x).padStart(2, '0');
+  return {
+    year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(), hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds(),
+    timestamp: `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`,
+  };
+}
+
 const per0 = (filaments: FilamentSlot[], x: number): number[] => (filaments.length ? filaments.map(() => x) : [x]);
 
 /** Expands a vendor template (unescaped as the slicers do when they load a profile). */
@@ -178,7 +187,15 @@ export function renderVendor(tpl: string, cfg: Config, filaments: FilamentSlot[]
     for (const [k, x] of Object.entries(def)) vars[k] ??= x;
   }
   try {
-    return renderTemplate(unescapeCStyle(tpl), { vars, ints: INTS });
+    const out = renderTemplate(unescapeCStyle(tpl), { vars, ints: INTS });
+    // OrcaSlicer: when the change G-code does not select the next tool itself, the slicer writes the T command after it
+    // (GCode.cpp set_extruder: custom_gcode_changes_tool); Creality's K1 / K2 / Hi templates rely on that
+    const next = extra.next_extruder;
+    const multi = cfg.changer_type === 'ams' || cfg.changer_type === 'toolchanger' || cfg.has_ams === true;
+    if (what === 'Filament change G-code' && multi && next !== undefined && !new RegExp(`^\\s*T${Number(next)}(?!\\d)`, 'm').test(out)) {
+      return `${out.replace(/\n?$/, '\n')}T${Number(next)}`;
+    }
+    return out;
   } catch (e) {
     throw new Error(`${what}: ${(e as Error).message}`);
   }

@@ -18,6 +18,12 @@ Added so every shipped template renders (tests/machine-gcode.test.ts slices on e
 - Filament change: `new_filament_e_feedrate` / `old_filament_e_feedrate`, `current_filament_id` / `next_filament_id`, and the H2D change variables (`first_flush_volume`, `second_flush_volume`, `wipe_tower_*_pos_*`, `new_extruder_retracted_length`, `nozzle_volume_types`, …) with single-nozzle values.
 - H2D: `filament_map` (every filament on the left nozzle, Bambu's default of 1), `initial_no_support_hotend`, `nozzle_diameter_at_nozzle_id`, nozzle and hotend ids of 0, timelapse variables (`timelapse_inline_photo`, `has_timelapse_safe_pos`, … all false), `is_all_bbl_filament`, `has_tpu_in_first_layer`. The profile vectors the templates read (`hotend_cooling_rate`, `hotend_heating_rate`, `cooling_filter_enabled`) are shipped as `vendor_template_vars` (JSON) in the machine config, and are used only for names NexSpiro does not set itself.
 
+## Filament changes on units (Creality CFS, Anycubic ACE Pro)
+
+- When the maker's change G-code does not select the next tool, NexSpiro now writes `T<n>` after it, as OrcaSlicer does (GCode.cpp `custom_gcode_changes_tool`). This applies only to printers with a filament unit or a tool changer. Creality's K1 / K2 / Hi change G-code relies on it.
+- Purge: a unit running the maker's change G-code (with no `flush_length` in it) follows the profile's `purge_in_prime_tower`. The K1C and K1 Max CFS-C profiles have it on, so they now flush on the prime tower (`purge_target` tower; NexSpiro's own macro had flushed into a chute). The K2 Plus, Hi and Kobra S1 profiles have it off: the firmware's change command purges into the chute, and NexSpiro writes no flush of its own (`purge_target` chute).
+- OrcaSlicer's date placeholders (`year`, `month`, `day`, `hour`, `minute`, `second`, `timestamp`) are set. Creality's K2 start G-code prints them in its header.
+
 ## Printers
 
 "Blocks" lists the G-code templates now taken verbatim from the profile. "new" means NexSpiro had none for that block; "replaced" means NexSpiro's own version was replaced. "Values" lists the machine values that changed from NexSpiro's previous ones (old → new). Every profile also brings the machine limits NexSpiro has no setting for, kept under the slicers' names (`machine_max_speed_*`, `machine_max_acceleration_*`, `machine_max_jerk_*`, `thumbnails`, `thumbnails_format`, `support_air_filtration`, `support_chamber_temp_control`, `nozzle_volume`, `machine_load_filament_time`, …). Those are template variables and appear in the config block.
@@ -68,104 +74,104 @@ Added so every shipped template renders (tests/machine-gcode.test.ts slices on e
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Ender-3 V3 KE 0.4 nozzle.json`; chain: Creality Ender-3 V3 KE 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: bed z 240 → 245; retraction_length 0.8 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 100; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_z 20 → 30; extruder_clearance_max_radius – → 90; extruder_clearance_height_to_rod – → 47; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: bed z 240 → 245; retraction_length 0.8 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 100; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_z 20 → 30; extruder_clearance_max_radius – → 90; extruder_clearance_height_to_rod – → 47; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Creality K1 (`creality-k1`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K1 (0.4 nozzle).json`; chain: Creality K1 (0.4 nozzle) → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true
 
 ### Creality K1C (`creality-k1c`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K1C 0.4 nozzle.json`; chain: Creality K1C 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true
 
 ### Creality K1 Max (`creality-k1max`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K1 Max (0.4 nozzle).json`; chain: Creality K1 Max (0.4 nozzle) → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true
 
 ### Creality K2 Plus (`creality-k2plus`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K2 Plus 0.4 nozzle.json`; chain: Creality K2 Plus 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 349; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 800; max_speed_z 20 → 30; max_acceleration 20000 → 30000; extruder_clearance_max_radius – → 64; extruder_clearance_height_to_rod – → 24; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 349; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 800; max_speed_z 20 → 30; max_acceleration 20000 → 30000; extruder_clearance_max_radius – → 64; extruder_clearance_height_to_rod – → 24; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true
 
 ### Creality Ender-3 V3 (`creality-ender3v3`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Ender-3 V3 0.4 nozzle.json`; chain: Creality Ender-3 V3 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 0.8 → 0.6; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_xy 500 → 600; max_speed_z 20 → 500; max_acceleration 20000 → 5000; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 14; extruder_clearance_height_to_lid – → 250; auxiliary_fan – → true; min_layer_height – → 0.1; max_layer_height – → 0.35
+- Values: retraction_length 0.8 → 0.6; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_xy 500 → 600; max_speed_z 20 → 500; max_acceleration 20000 → 5000; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 14; extruder_clearance_height_to_lid – → 250; auxiliary_fan – → true
 
 ### Creality Ender-3 V3 SE (`creality-ender3v3se`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Ender-3 V3 SE 0.4 nozzle.json`; chain: Creality Ender-3 V3 SE 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 1 → 1.2; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → spiral; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_xy 500 → 250; max_speed_z 20 → 5; max_acceleration 3000 → 2500; extruder_clearance_max_radius – → 90; extruder_clearance_height_to_rod – → 47; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_length 1 → 1.2; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → spiral; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_xy 500 → 250; max_speed_z 20 → 5; max_acceleration 3000 → 2500; extruder_clearance_max_radius – → 90; extruder_clearance_height_to_rod – → 47; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Creality Ender-3 S1 (`creality-ender3s1`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Ender-3 S1 0.4 nozzle.json`; chain: Creality Ender-3 S1 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_z 20 → 10; max_acceleration 1000 → 500; extruder_clearance_max_radius – → 47; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.36
+- Values: retraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_speed_z 20 → 10; max_acceleration 1000 → 500; extruder_clearance_max_radius – → 47; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Creality Ender-3 V2 (`creality-ender3v2`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Ender-3 V2 0.4 nozzle.json`; chain: Creality Ender-3 V2 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 5; retraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 10; max_acceleration 1000 → 500; extruder_clearance_max_radius – → 47; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_length 1 → 5; retraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 10; max_acceleration 1000 → 500; extruder_clearance_max_radius – → 47; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Creality CR-10 SE (`creality-cr10se`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality CR-10 SE 0.4 nozzle.json`; chain: Creality CR-10 SE 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 30; max_acceleration 8000 → 5000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → normal; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 30; max_acceleration 8000 → 5000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Creality K2 Plus Combo (CFS) (`creality-k2plus-cfs`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K2 Plus 0.4 nozzle.json`; chain: Creality K2 Plus 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 349; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 800; max_speed_z 20 → 30; max_acceleration 20000 → 30000; extruder_clearance_max_radius – → 64; extruder_clearance_height_to_rod – → 24; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 349; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 800; max_speed_z 20 → 30; max_acceleration 20000 → 30000; extruder_clearance_max_radius – → 64; extruder_clearance_height_to_rod – → 24; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true
 
 ### Creality K1C + CFS (`creality-k1c-cfs`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K1C_CFS-C 0.4 nozzle.json`; chain: Creality K1C_CFS-C 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 249; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; purge_target chute → tower
 
 ### Creality K1 Max + CFS (`creality-k1max-cfs`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality K1 Max_CFS-C 0.4 nozzle.json`; chain: Creality K1 Max_CFS-C 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 800; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 45; extruder_clearance_height_to_lid – → 101; auxiliary_fan – → true; purge_target chute → tower
 
 ### Creality Hi Combo (CFS) (`creality-hi-cfs`)
 
 - Reference: OrcaSlicer (Creality profile), `resources/profiles/Creality/machine/Creality Hi 0.4 nozzle.json`; chain: Creality Hi 0.4 nozzle → fdm_creality_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced), time_lapse_gcode (new)
-- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; retraction_minimum_travel 1 → 0.5; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; extruder_clearance_max_radius – → 55; extruder_clearance_height_to_rod – → 27; extruder_clearance_height_to_lid – → 20; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 299; retraction_minimum_travel 1 → 0.5; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; extruder_clearance_max_radius – → 55; extruder_clearance_height_to_rod – → 27; extruder_clearance_height_to_lid – → 20; auxiliary_fan – → false
 
 ### Elegoo Neptune 4 (`elegoo-neptune4`)
 
 - Reference: OrcaSlicer (Elegoo profile), `resources/profiles/Elegoo/machine/EN4SERIES/Elegoo Neptune 4 0.4 nozzle.json`; chain: Elegoo Neptune 4 0.4 nozzle → fdm_elegoo_3dp_001_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: bed x 225 → 230; bed y 225 → 230; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 264; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 10000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 225 → 230; bed y 225 → 230; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 264; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 10000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Elegoo Neptune 4 Pro (`elegoo-neptune4pro`)
 
 - Reference: OrcaSlicer (Elegoo profile), `resources/profiles/Elegoo/machine/EN4SERIES/Elegoo Neptune 4 Pro 0.4 nozzle.json`; chain: Elegoo Neptune 4 Pro 0.4 nozzle → Elegoo Neptune 4 0.4 nozzle → fdm_elegoo_3dp_001_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: bed x 225 → 230; bed y 225 → 230; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 264; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 10000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 225 → 230; bed y 225 → 230; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 264; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 10000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Elegoo Neptune 4 Plus (`elegoo-neptune4plus`)
 
 - Reference: OrcaSlicer (Elegoo profile), `resources/profiles/Elegoo/machine/EN4SERIES/Elegoo Neptune 4 Plus 0.4 nozzle.json`; chain: Elegoo Neptune 4 Plus 0.4 nozzle → Elegoo Neptune 4 0.4 nozzle → fdm_elegoo_3dp_001_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: bed x 320 → 325; bed y 320 → 325; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 384; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 8000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 320 → 325; bed y 320 → 325; retraction_speed 40 → 60; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 384; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_acceleration 5000 → 8000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Elegoo Neptune 4 Max (`elegoo-neptune4max`)
 
@@ -177,169 +183,169 @@ Added so every shipped template renders (tests/machine-gcode.test.ts slices on e
 
 - Reference: OrcaSlicer (Elegoo profile), `resources/profiles/Elegoo/machine/EN3SERIES/Elegoo Neptune 3 Pro 0.4 nozzle.json`; chain: Elegoo Neptune 3 Pro 0.4 nozzle → fdm_elegoo_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: bed x 225 → 230; bed y 225 → 230; retraction_length 1 → 1.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 279; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 85; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 300; max_speed_z 20 → 10; max_acceleration 1500 → 1000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 225 → 230; bed y 225 → 230; retraction_length 1 → 1.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 279; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 85; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 300; max_speed_z 20 → 10; max_acceleration 1500 → 1000; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 34; extruder_clearance_height_to_lid – → 34; auxiliary_fan – → false
 
 ### Elegoo Centauri Carbon (`elegoo-centauri`)
 
 - Reference: OrcaSlicer (Elegoo profile), `resources/profiles/Elegoo/machine/ECC/Elegoo Centauri Carbon 0.4 nozzle.json`; chain: Elegoo Centauri Carbon 0.4 nozzle → fdm_elegoo_3dp_001_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: excluded area [] → [[[246, 0], [256, 0], [256, 20], [246, 20]]]; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 255; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 90; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: excluded area [] → [[[246, 0], [256, 0], [256, 20], [246, 20]]]; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 255; retraction_minimum_travel 1 → 0.8; wipe – → true; wipe_distance – → 1.2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; extruder_clearance_max_radius – → 68; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 90; auxiliary_fan – → true
 
 ### Prusa MK4S (`prusa-mk4s`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa MK4S 0.4 nozzle.json`; chain: Prusa MK4S 0.4 nozzle → fdm_machine_common_mk4s → fdm_machine_common_nextruder → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 0.7; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 219; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → false; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 40; extruder_clearance_max_radius – → 45; extruder_clearance_height_to_rod – → 14; extruder_clearance_height_to_lid – → 220; min_layer_height – → 0.07; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.7; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 219; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → false; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 40; extruder_clearance_max_radius – → 45; extruder_clearance_height_to_rod – → 14; extruder_clearance_height_to_lid – → 220
 
 ### Prusa MK3S+ (`prusa-mk3s`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa MK3S 0.4 nozzle.json`; chain: Prusa MK3S 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 0.8; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 200; max_speed_z 20 → 12; max_acceleration 1250 → 2000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.05; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.8; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 200; max_speed_z 20 → 12; max_acceleration 1250 → 2000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Prusa MINI+ (`prusa-mini`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa MINI 0.4 nozzle.json`; chain: Prusa MINI 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 3.2; retraction_speed 40 → 70; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 180; max_speed_z 20 → 12; max_acceleration 2500 → 1250; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.3
+- Values: retraction_length 1 → 3.2; retraction_speed 40 → 70; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 180; max_speed_z 20 → 12; max_acceleration 2500 → 1250; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Prusa CORE One (`prusa-coreone`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa CORE One 0.4 nozzle.json`; chain: Prusa CORE One 0.4 nozzle → Prusa CORE One HF 0.4 nozzle → fdm_machine_common_nextruder → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 1 → 0.7; retraction_speed 40 → 45; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 269; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 350; max_speed_z 20 → 12; max_acceleration 8000 → 7000; extruder_clearance_max_radius – → 75; extruder_clearance_height_to_rod – → 33; extruder_clearance_height_to_lid – → 50; min_layer_height – → 0.07; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.7; retraction_speed 40 → 45; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 269; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 350; max_speed_z 20 → 12; max_acceleration 8000 → 7000; extruder_clearance_max_radius – → 75; extruder_clearance_height_to_rod – → 33; extruder_clearance_height_to_lid – → 50
 
 ### Prusa XL (single tool) (`prusa-xl`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa XL 0.4 nozzle.json`; chain: Prusa XL 0.4 nozzle → fdm_machine_common_xl → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 1 → 0.8; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 1.5; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 400; max_speed_z 20 → 12; max_acceleration 5000 → 4000; extruder_clearance_max_radius – → 67; extruder_clearance_height_to_rod – → 21; extruder_clearance_height_to_lid – → 21; auxiliary_fan – → false; min_layer_height – → 0.07; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.8; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 1.5; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 400; max_speed_z 20 → 12; max_acceleration 5000 → 4000; extruder_clearance_max_radius – → 67; extruder_clearance_height_to_rod – → 21; extruder_clearance_height_to_lid – → 21; auxiliary_fan – → false
 
 ### Prusa XL (5 toolheads) (`prusa-xl-5t`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa XL 5T 0.4 nozzle.json`; chain: Prusa XL 5T 0.4 nozzle → fdm_machine_common_xl_5t → fdm_machine_common_xl → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 1 → 0.8; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 1.5; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 400; max_speed_z 20 → 12; max_acceleration 5000 → 4000; extruder_clearance_max_radius – → 67; extruder_clearance_height_to_rod – → 21; extruder_clearance_height_to_lid – → 21; auxiliary_fan – → false; min_layer_height – → 0.07; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.8; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 1.5; retraction_minimum_travel 1 → 1.5; wipe – → true; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 400; max_speed_z 20 → 12; max_acceleration 5000 → 4000; extruder_clearance_max_radius – → 67; extruder_clearance_height_to_rod – → 21; extruder_clearance_height_to_lid – → 21; auxiliary_fan – → false
 
 ### Prusa MK4S + MMU3 (`prusa-mk4s-mmu3`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa MK4 MMU3 0.4 nozzle.json`; chain: Prusa MK4 MMU3 0.4 nozzle → fdm_machine_common_mk4_mmu3 → Prusa MK4 0.4 nozzle → fdm_machine_common_nextruder → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 0.7; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop_types – → normal; retract_lift_below – → 219; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 40; extruder_clearance_max_radius – → 45; extruder_clearance_height_to_rod – → 13; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.07; max_layer_height – → 0.25
+- Values: retraction_length 1 → 0.7; retraction_speed 40 → 35; deretraction_speed 40 → 25; z_hop_types – → normal; retract_lift_below – → 219; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 40; extruder_clearance_max_radius – → 45; extruder_clearance_height_to_rod – → 13; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Prusa CORE One + MMU3 (`prusa-coreone-mmu3`)
 
 - Reference: OrcaSlicer (Prusa profile), `resources/profiles/Prusa/machine/Prusa CORE One MMU3 0.4 nozzle.json`; chain: Prusa CORE One MMU3 0.4 nozzle → Prusa CORE One 0.4 nozzle → Prusa CORE One HF 0.4 nozzle → fdm_machine_common_nextruder → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 0.7; retraction_speed 40 → 45; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 269; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 350; max_speed_z 20 → 12; max_acceleration 8000 → 7000; extruder_clearance_max_radius – → 75; extruder_clearance_height_to_rod – → 33; extruder_clearance_height_to_lid – → 50; min_layer_height – → 0.07; max_layer_height – → 0.3
+- Values: retraction_length 1 → 0.7; retraction_speed 40 → 45; deretraction_speed 40 → 25; z_hop_types – → slope; retract_lift_below – → 269; retraction_minimum_travel 1 → 1.5; wipe – → false; retract_before_wipe – → 80; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 350; max_speed_z 20 → 12; max_acceleration 8000 → 7000; extruder_clearance_max_radius – → 75; extruder_clearance_height_to_rod – → 33; extruder_clearance_height_to_lid – → 50
 
 ### Anycubic Kobra 2 Neo (`anycubic-kobra2neo`)
 
 - Reference: OrcaSlicer (Anycubic profile), `resources/profiles/Anycubic/machine/Anycubic Kobra 2 Neo 0.4 nozzle.json`; chain: Anycubic Kobra 2 Neo 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 1 → 2.5; retraction_speed 40 → 100; deretraction_speed 40 → 0; z_hop 0.2 → 0; z_hop_types – → auto; retract_lift_below – → 258; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 8; max_acceleration 2500 → 2000; extruder_clearance_max_radius – → 20; extruder_clearance_height_to_rod – → 20; extruder_clearance_height_to_lid – → 20; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: retraction_length 1 → 2.5; retraction_speed 40 → 100; deretraction_speed 40 → 0; z_hop 0.2 → 0; z_hop_types – → auto; retract_lift_below – → 258; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 300; max_speed_z 20 → 8; max_acceleration 2500 → 2000; extruder_clearance_max_radius – → 20; extruder_clearance_height_to_rod – → 20; extruder_clearance_height_to_lid – → 20; auxiliary_fan – → false
 
 ### Anycubic Kobra 2 Max (`anycubic-kobra2max`)
 
 - Reference: OrcaSlicer (Anycubic profile), `resources/profiles/Anycubic/machine/Anycubic Kobra 2 Max 0.4 nozzle.json`; chain: Anycubic Kobra 2 Max 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: flavor marlin → klipper; retraction_length 1 → 1.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0; z_hop_types – → auto; retract_lift_below – → 255; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 16; max_acceleration 3000 → 10000; extruder_clearance_max_radius – → 73; extruder_clearance_height_to_rod – → 25; extruder_clearance_height_to_lid – → 256; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: flavor marlin → klipper; retraction_length 1 → 1.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0; z_hop_types – → auto; retract_lift_below – → 255; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 16; max_acceleration 3000 → 10000; extruder_clearance_max_radius – → 73; extruder_clearance_height_to_rod – → 25; extruder_clearance_height_to_lid – → 256; auxiliary_fan – → false
 
 ### Anycubic Kobra 3 (`anycubic-kobra3`)
 
 - Reference: OrcaSlicer (Anycubic profile), `resources/profiles/Anycubic/machine/Anycubic Kobra 3 0.4 nozzle.json`; chain: Anycubic Kobra 3 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: bed x 250 → 255; bed y 250 → 255; excluded area [] → [[[0, 0], [255, 0], [255, 255], [0, 255]], [[2, 2], [2, 253], [253, 253], [253, 2]]]; flavor marlin → klipper; retraction_speed 40 → 60; deretraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 259.6; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; max_acceleration 10000 → 15000; extruder_clearance_max_radius – → 130; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 200; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 250 → 255; bed y 250 → 255; excluded area [] → [[[0, 0], [255, 0], [255, 255], [0, 255]], [[2, 2], [2, 253], [253, 253], [253, 2]]]; flavor marlin → klipper; retraction_speed 40 → 60; deretraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 259.6; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; max_acceleration 10000 → 15000; extruder_clearance_max_radius – → 130; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 200; auxiliary_fan – → false
 
 ### Anycubic Kobra 3 Combo (ACE Pro) (`anycubic-kobra3-ace`)
 
 - Reference: OrcaSlicer (Anycubic profile), `resources/profiles/Anycubic/machine/Anycubic Kobra 3 0.4 nozzle.json`; chain: Anycubic Kobra 3 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: bed x 250 → 255; bed y 250 → 255; excluded area [] → [[[0, 0], [255, 0], [255, 255], [0, 255]], [[2, 2], [2, 253], [253, 253], [253, 2]]]; flavor marlin → klipper; retraction_speed 40 → 60; deretraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 259.6; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; max_acceleration 10000 → 15000; extruder_clearance_max_radius – → 130; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 200; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: bed x 250 → 255; bed y 250 → 255; excluded area [] → [[[0, 0], [255, 0], [255, 255], [0, 255]], [[2, 2], [2, 253], [253, 253], [253, 2]]]; flavor marlin → klipper; retraction_speed 40 → 60; deretraction_speed 40 → 60; z_hop 0.2 → 0.4; z_hop_types – → auto; retract_lift_below – → 259.6; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 10; max_acceleration 10000 → 15000; extruder_clearance_max_radius – → 130; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 200; auxiliary_fan – → false
 
 ### Anycubic Kobra S1 Combo (ACE Pro) (`anycubic-kobras1-ace`)
 
 - Reference: OrcaSlicer (Anycubic profile), `resources/profiles/Anycubic/machine/Anycubic Kobra S1 0.4 nozzle.json`; chain: Anycubic Kobra S1 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: flavor marlin → klipper; retraction_length 1 → 0.8; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → slope; retract_lift_below – → 249; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 15; max_acceleration 20000 → 10000; extruder_clearance_max_radius – → 60; extruder_clearance_height_to_rod – → 48; extruder_clearance_height_to_lid – → 240; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.28
+- Values: flavor marlin → klipper; retraction_length 1 → 0.8; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → slope; retract_lift_below – → 249; wipe – → true; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 0; max_speed_xy 500 → 600; max_speed_z 20 → 15; max_acceleration 20000 → 10000; extruder_clearance_max_radius – → 60; extruder_clearance_height_to_rod – → 48; extruder_clearance_height_to_lid – → 240; auxiliary_fan – → true
 
 ### Voron 2.4 350 (`voron-24-350`)
 
 - Reference: OrcaSlicer (Voron profile), `resources/profiles/Voron/machine/Voron 2.4 350 0.4 nozzle.json`; chain: Voron 2.4 350 0.4 nozzle → fdm_klipper_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: bed z 340 → 325; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.1; max_layer_height – → 0.32
+- Values: bed z 340 → 325; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Voron Trident 300 (`voron-trident-300`)
 
 - Reference: OrcaSlicer (Voron profile), `resources/profiles/Voron/machine/Voron Trident 300 0.4 nozzle.json`; chain: Voron Trident 300 0.4 nozzle → fdm_klipper_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.1; max_layer_height – → 0.32
+- Values: retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Voron 0.2 (`voron-02`)
 
 - Reference: OrcaSlicer (Voron profile), `resources/profiles/Voron/machine/Voron 0.1 0.4 nozzle.json`; chain: Voron 0.1 0.4 nozzle → fdm_klipper_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.1; max_layer_height – → 0.32
+- Values: retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → slope; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_z 20 → 12; max_acceleration 10000 → 20000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Qidi Q1 Pro (`qidi-q1pro`)
 
 - Reference: OrcaSlicer (Qidi profile), `resources/profiles/Qidi/machine/Qidi Q1 Pro 0.4 nozzle.json`; chain: Qidi Q1 Pro 0.4 nozzle → fdm_qidi_x3_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), machine_pause_gcode (replaced), time_lapse_gcode (new)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: excluded area [] → [[[25, 245], [25, 240], [115, 240], [115, 245], [208, 245], [208, 240], [245, 240], [245, 245], [208, 245]]]; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 40; extruder_clearance_height_to_lid – → 120; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: excluded area [] → [[[25, 245], [25, 240], [115, 240], [115, 245], [208, 245], [208, 240], [245, 240], [245, 245], [208, 245]]]; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 40; extruder_clearance_height_to_lid – → 120; auxiliary_fan – → true
 
 ### Qidi X-Plus 3 (`qidi-xplus3`)
 
 - Reference: OrcaSlicer (Qidi profile), `resources/profiles/Qidi/machine/Qidi X-Plus 3 0.4 nozzle.json`; chain: Qidi X-Plus 3 0.4 nozzle → fdm_qidi_x3_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), machine_pause_gcode (replaced), time_lapse_gcode (new)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 0.8 → 1; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_length 0.8 → 1; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → true
 
 ### Qidi X-Max 3 (`qidi-xmax3`)
 
 - Reference: OrcaSlicer (Qidi profile), `resources/profiles/Qidi/machine/Qidi X-Max 3 0.4 nozzle.json`; chain: Qidi X-Max 3 0.4 nozzle → fdm_qidi_x3_common → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), machine_pause_gcode (replaced), time_lapse_gcode (new)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 0.8 → 1; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_length 0.8 → 1; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → auto; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 600; max_speed_z 20 → 10; extruder_clearance_max_radius – → 70; extruder_clearance_height_to_rod – → 30; extruder_clearance_height_to_lid – → 118; auxiliary_fan – → true
 
 ### Sovol SV08 (`sovol-sv08`)
 
 - Reference: OrcaSlicer (Sovol profile), `resources/profiles/Sovol/machine/Sovol SV08 0.4 nozzle.json`; chain: Sovol SV08 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: retraction_length 0.8 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 343; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 700; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: retraction_length 0.8 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 343; wipe – → true; wipe_distance – → 2; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 2; max_speed_xy 500 → 700; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140
 
 ### Sovol SV07 (`sovol-sv07`)
 
 - Reference: OrcaSlicer (Sovol profile), `resources/profiles/Sovol/machine/Sovol SV07 0.4 nozzle.json`; chain: Sovol SV07 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: flavor klipper → marlin; retraction_speed 40 → 50; deretraction_speed 40 → 50; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 348; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_acceleration 8000 → 12000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: flavor klipper → marlin; retraction_speed 40 → 50; deretraction_speed 40 → 50; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 348; retraction_minimum_travel 1 → 2; wipe – → true; retract_before_wipe – → 70; retract_when_changing_layer – → true; retract_length_toolchange – → 1; max_acceleration 8000 → 12000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140
 
 ### Sovol SV06 (`sovol-sv06`)
 
 - Reference: OrcaSlicer (Sovol profile), `resources/profiles/Sovol/machine/Sovol SV06 0.4 nozzle.json`; chain: Sovol SV06 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), before_layer_change_gcode (new), layer_change_gcode (new), change_filament_gcode (replaced), machine_pause_gcode (replaced)
-- Values: retraction_length 1 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0; z_hop_types – → normal; retract_lift_below – → 0; wipe – → true; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 4; max_speed_xy 500 → 80; max_speed_z 20 → 10; max_acceleration 1500 → 500; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.07; max_layer_height – → 0.25
+- Values: retraction_length 1 → 0.5; retraction_speed 40 → 30; deretraction_speed 40 → 30; z_hop 0.2 → 0; z_hop_types – → normal; retract_lift_below – → 0; wipe – → true; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 4; max_speed_xy 500 → 80; max_speed_z 20 → 10; max_acceleration 1500 → 500; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ### Artillery Sidewinder X4 Plus (`artillery-x4plus`)
 
 - Reference: OrcaSlicer (Artillery profile), `resources/profiles/Artillery/machine/Artillery Sidewinder X4 Plus 0.4 nozzle.json`; chain: Artillery Sidewinder X4 Plus 0.4 nozzle → fdm_machine_common
 - Blocks: machine_start_gcode (replaced), machine_end_gcode (replaced), layer_change_gcode (new), machine_pause_gcode (replaced)
 - Still NexSpiro's own (the profile leaves it empty): change_filament_gcode
-- Values: bed y 300 → 310; retraction_length 0.8 → 1.3; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 0; retraction_minimum_travel 1 → 2; wipe – → false; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 10; max_speed_z 20 → 12; max_acceleration 7000 → 6000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false; min_layer_height – → 0.08; max_layer_height – → 0.32
+- Values: bed y 300 → 310; retraction_length 0.8 → 1.3; retraction_speed 40 → 30; deretraction_speed 40 → 0; z_hop 0.2 → 0.4; z_hop_types – → normal; retract_lift_below – → 0; retraction_minimum_travel 1 → 2; wipe – → false; wipe_distance – → 1; retract_before_wipe – → 0; retract_when_changing_layer – → true; retract_length_toolchange – → 10; max_speed_z 20 → 12; max_acceleration 7000 → 6000; extruder_clearance_max_radius – → 65; extruder_clearance_height_to_rod – → 36; extruder_clearance_height_to_lid – → 140; auxiliary_fan – → false
 
 ## Printers without a matching maker profile
 
@@ -353,9 +359,21 @@ Added so every shipped template renders (tests/machine-gcode.test.ts slices on e
 
 ## Still missing / limits
 
+- Not imported: the profiles' `min_layer_height` / `max_layer_height` (e.g. 0.1–0.25 mm on the MK4 MMU3, 0.1 mm minimum on the Voron 0.1 and Ender-3 V3). They belong with the makers' own process presets and would put NexSpiro's 0.08 mm and 0.28 mm presets outside the printer's range. They need a decision on presets first.
 - Machine values with no NexSpiro setting (jerk, per-axis limits, thumbnails, air filtration, chamber control, nozzle volume, load and unload times) are stored and passed to the templates, but they do not drive the engine. That needs option keys in machineParams.ts, which another agent owns. Suggested keys: `machine_max_jerk_x/y/z/e`, `machine_max_acceleration_travel`, `machine_max_acceleration_retracting`, `machine_max_speed_e`, `thumbnails`, `thumbnails_format`, `support_air_filtration`, `support_chamber_temp_control`, `emit_machine_limits_to_gcode`.
 - H2D: NexSpiro prints with one nozzle (the left one, `filament_map` 1), so Bambu's dual-nozzle switching branches in the templates never run. `wrapping_detection_gcode` is shipped, but NexSpiro has no wrapping-detection hook, so it is never written to the G-code.
 - `printing_by_object_gcode` and `machine_pause_gcode` are inserted without template expansion (slicer.ts). None of the shipped vendor values contains a placeholder, so the output is still exact.
 - All matched profiles have their printable area origin at 0,0 (NexSpiro has no bed origin setting).
 - Golden tests (tests/advanced/basic-golden.test.ts): the Voron 2.4, Prusa MK4S and Ender-3 V2 hashes change because those printers now run the makers' G-code, which is intended. The P1S hash changes too, but because of other in-progress work (toolpath and config-block changes), not this one: the P1S start and end G-code is byte-identical. None of the hashes is re-pinned here, because the new values would mix both changes.
 - tests/advanced/phase3.test.ts "removes the retractions between loops" now counts retractions spread over a wipe as well (`G1 X… E-`). The X1 Carbon now has Bambu's `retract_before_wipe` 0 %, so it writes almost no bare `G1 E-` lines.
+
+## Tests
+
+- New: `tests/machine-gcode.test.ts`. For every generated profile it checks that templates, bed, flavour and key machine values equal the profile. For every printer it slices and checks that no template syntax, NaN or undefined is left, and that the maker's first start command and last end command appear in the output.
+- Updated, because the X1 Carbon, A1 mini and K1 / K2 / Hi CFS now run their makers' G-code instead of NexSpiro's macros. The checks are the same, read from the makers' G-code: the purge comes from Bambu's `FLUSH_START`/`FLUSH_END` blocks (helper `bambuFlushes` in tests/fixtures.ts), the X1 Carbon timelapse line has no leading space, and the end of a change is Bambu's `M621 S<n>A`. Files: tests/multimaterial.test.ts, tests/settings-wiring.test.ts, tests/patternex/engine.test.ts, tests/motionex/weave.test.ts, tests/phase2.test.ts.
+- tests/motionex/all-printers.test.ts:
+  - The scan stops at the end-G-code marker (Elegoo's end G-code writes M204) and reads absolute E (Anycubic's Kobra 2 Max profile uses M82).
+  - The Ender-3 V2 acceleration expectation is now 500 mm/s², from OrcaSlicer's profile.
+  - The Bowden lace case pins `retraction_minimum_travel` 1 (Prusa MINI's own threshold is 1.5 mm).
+- tests/advanced/phase3.test.ts: see above.
+- Not caused by this change, so left alone: tests/stress/settings-edges.test.ts (`initial_layer_travel_speed`, `z_offset` on the A1, which is unchanged here) and tests/ux-prepare.test.ts.

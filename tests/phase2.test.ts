@@ -103,7 +103,7 @@ describe('painting', () => {
     expect(pickSeam(square, 'back', 0, 0, null, Math.random, { enforce: [], block: [[10, 10], [0, 10]] })).not.toBeGreaterThan(1);
   });
   it('colour painting creates a second filament region with filament changes and a prime tower', () => {
-    const cfg = cfgFor('bbl-x1c'); // NexSpiro's own Bambu change macro (the A1 / P1S run Bambu Studio's, vendor-gcode.test.ts)
+    const cfg = cfgFor('bbl-x1c'); // Bambu Studio's own X1 Carbon change G-code
     const t = mesh(cylinder(100, 100, 12, 10));
     const color = new Uint8Array(triCount(t));
     const v = t.vertices, ix = t.indices;
@@ -114,8 +114,9 @@ describe('painting', () => {
     expect(out.gcode).toContain(';TYPE:prime tower');
     expect(out.stats.perFilament[1].grams).toBeGreaterThan(0.1);
     // after each change: fan restored, then the first extrusion is preceded by an un-retract
-    const after = out.gcode.split('; ===== end filament change =====').at(-1)!; // a change well above the fan-off first layer
-    expect(after.slice(0, 60)).toContain('M106 S255');
+    const lastEnd = [...out.gcode.matchAll(/^M621 S\d+A$/gm)].at(-1)!; // the end of the last change, well above the fan-off first layer
+    const after = out.gcode.slice(lastEnd.index! + lastEnd[0].length);
+    expect(after.slice(0, 100)).toContain('M106 S255');
     const firstExtrude = after.search(/\nG1 X[^\n]*E\d/);
     expect(after.slice(0, firstExtrude)).toMatch(/\nG1 E0\.8 F/);
   });

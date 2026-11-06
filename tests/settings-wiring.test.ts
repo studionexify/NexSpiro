@@ -8,7 +8,7 @@ import { PROCESS_PARAMS } from '../src/profiles/settings';
 import { FILAMENT_PARAMS } from '../src/profiles/filamentParams';
 import { MACHINE_PARAMS } from '../src/profiles/machineParams';
 import type { MeshInput } from '../src/engine/types';
-import { box, cone, cylinder, tee } from './fixtures';
+import { bambuFlushes, box, cone, cylinder, tee } from './fixtures';
 
 const cfgFor = (printerId: string, overrides = {}, machine = {}, fil = {}) =>
   resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides, machineOverrides: machine, filamentOverrides: fil });
@@ -315,10 +315,12 @@ describe('others', () => {
   it('flush into infill and objects reduces the purge', () => {
     const a = mesh(box(60, 60, 0, 20, 20, 4), 'a', { filament: 0 }), c = mesh(box(100, 60, 0, 20, 20, 4), 'b', { filament: 1 });
     const slots = filamentSlots([{ presetId: 'generic-pla', color: '#ffffff' }, { presetId: 'generic-pla', color: '#000000' }]);
-    const flush = (o = {}) => [...slice([a, c], cfgFor('bbl-x1c', o), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
+    // Bambu Studio's X1 Carbon change G-code: the purge is in its FLUSH blocks
+    const total = (g: string) => bambuFlushes(g).reduce((s, e) => s + e, 0);
+    const flush = (o = {}) => total(slice([a, c], cfgFor('bbl-x1c', o), () => {}, { filaments: slots }).gcode);
     expect(flush({ flush_into_infill: true })).toBeLessThan(flush());
     const w = mesh(box(140, 60, 0, 15, 15, 4), 'waste', { overrides: { flush_into_objects: true } });
-    const withWaste = [...slice([a, c, w], cfgFor('bbl-x1c'), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
+    const withWaste = total(slice([a, c, w], cfgFor('bbl-x1c'), () => {}, { filaments: slots }).gcode);
     expect(withWaste).toBeLessThan(flush());
   });
 
@@ -399,7 +401,7 @@ describe('cooling, retraction and machine G-code', () => {
 
   it('timelapse, chamber, filament start / end and before-layer-change G-code', () => {
     const b = mesh(box(100, 100, 0, 10, 10, 2));
-    expect(slice([b], cfgFor('bbl-x1c')).gcode.match(/^ M971 S11 C10 O0$/gm)!.length).toBeGreaterThan(5);
+    expect(slice([b], cfgFor('bbl-x1c')).gcode.match(/^\s*M971 S11 C10 O0$/gm)!.length).toBeGreaterThan(5);
     const g = slice([b], cfgFor('generic-marlin', {}, { before_layer_change_gcode: '; BEFORE [layer_num]' }, { chamber_temperatures: 45, filament_start_gcode: '; FIL START', filament_end_gcode: '; FIL END' }), () => {}, {
       filaments: filamentSlots([{ presetId: 'generic-pla', color: '#fff', overrides: { filament_start_gcode: '; FIL START', filament_end_gcode: '; FIL END' } }]),
     }).gcode;

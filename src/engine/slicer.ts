@@ -1290,7 +1290,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const travelJerk = i === 0 ? floatOrPercent(cfg.initial_layer_travel_jerk ?? '100%', num('travel_jerk')) || num('travel_jerk') : num('travel_jerk');
     // first layer travel: an explicit speed, or a percentage of the travel speed (kept under 250 mm/s for adhesion)
     const firstTravel0 = String(cfg.initial_layer_travel_speed ?? '100%');
-    const tf0 = firstTravel0.trim().endsWith('%') ? Math.min(floatOrPercent(firstTravel0, travelSpeed), 250) : floatOrPercent(firstTravel0, travelSpeed) || Math.min(travelSpeed, 250);
+    const tf0 = (firstTravel0.trim().endsWith('%') ? Math.min(floatOrPercent(firstTravel0, travelSpeed), 250) : floatOrPercent(firstTravel0, travelSpeed)) || Math.min(travelSpeed, 250);
 
     const travel = (x: number, y: number, feat: FeatureType, zz = zTop) => {
       if (isNaN(px)) {

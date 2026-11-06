@@ -47,8 +47,13 @@ interface Scan { outerF: number[]; outerLen: number[]; accels: number[]; badBed:
 function scan(gcode: string, c: Config, z0 = 0): Scan {
   const bx = Number(c.bed_x), by = Number(c.bed_y);
   const s: Scan = { outerF: [], outerLen: [], accels: [], badBed: [], m204: 0, svl: 0 };
-  let body = false, z = 0, cur = '', x = NaN, y = NaN, f = 0;
+  let body = false, z = 0, cur = '', x = NaN, y = NaN, f = 0, absE = false, lastE = 0;
   for (const l of gcode.split('\n')) {
+    // the printer maker's end G-code is not part of the print
+    if (l.startsWith(';===== NexSpiro end G-code')) break;
+    if (/^M82\b/.test(l)) absE = true;
+    if (/^M83\b/.test(l)) absE = false;
+    if (/^G92 E0/.test(l)) lastE = 0;
     if (l.startsWith(';Z:')) { body = true; z = +l.slice(3); }
     if (l.startsWith(';TYPE:')) cur = l.slice(6);
     if (!body) continue;
@@ -61,7 +66,10 @@ function scan(gcode: string, c: Config, z0 = 0): Scan {
     if (!isNaN(g('X'))) x = g('X');
     if (!isNaN(g('Y'))) y = g('Y');
     if (!isNaN(g('F'))) f = g('F') / 60;
-    const e = g('E');
+    // absolute E (Anycubic's Kobra 2 Max profile): the extrusion is the change of E
+    const eAbs = g('E');
+    const e = absE && !isNaN(eAbs) ? eAbs - lastE : eAbs;
+    if (absE && !isNaN(eAbs)) lastE = eAbs;
     if (e > 0 && /[XY]/.test(l) && (x < -0.5 || y < -0.5 || x > bx + 0.5 || y > by + 0.5)) s.badBed.push(l);
     if (cur === 'outer wall' && z > z0 && e > 0 && /[XY]/.test(l) && !isNaN(px)) { s.outerF.push(f); s.outerLen.push(Math.hypot(x - px, y - py)); }
   }
@@ -165,7 +173,8 @@ describe('wall art per machine', () => {
   it('recommends pixels and acceleration from the machine', () => {
     const p = paint({ accel: 0 });
     const slow = cfg('creality-ender3v2'), fast = cfg('voron-24-350');
-    expect(recommendedPaintAccel(slow)).toBe(1000);
+    // Ender-3 V2: OrcaSlicer's profile limits it to 500 mm/s²
+    expect(recommendedPaintAccel(slow)).toBe(500);
     expect(recommendedPaintAccel(fast)).toBe(10000);
     expect(recommendedPaintAccel(cfg('creality-k1'))).toBe(10000);
     // Ender-3 V2: Marlin, 800 mm/s² outer wall → long ramps, so big pixels
@@ -175,7 +184,7 @@ describe('wall art per machine', () => {
     // a painting acceleration above the machine is clamped, and said so
     const q = paint({ accel: 20000 });
     const { out, rep } = run('creality-ender3v2', { paint: q }, paintPrintSettings(q));
-    expect(rep.paint!.accel).toBe(1000);
+    expect(rep.paint!.accel).toBe(500);
     expect(out.warnings.some((w) => /above this printer/.test(w))).toBe(true);
     expect(out.warnings.some((w) => /pixels of [\d.]+ mm or more/.test(w))).toBe(true);
   });
@@ -200,7 +209,7 @@ describe('wall art per machine', () => {
     expect(isBowden(cfg('voron-24-350', {}, { retraction_length: 4 }))).toBe(true);
     expect(lacePrintSettings(lace(), c0).retraction_minimum_travel).toBe(2);
     const l = lace({ cell_w: 3, cell_h: 4, strand_mm: 1, open: 0.7 });
-    const { out, rep } = run('prusa-mini', { lace: l }, lacePrintSettings(l, c0), 1, { retraction_length: 3.2 });
+    const { out, rep } = run('prusa-mini', { lace: l }, lacePrintSettings(l, c0), 1, { retraction_length: 3.2, retraction_minimum_travel: 1 }); // Prusa's own threshold is 1.5 mm
     expect(rep.lace!.bowden).toBe(true);
     expect(rep.lace!.retractions / rep.lace!.laceLayers).toBeGreaterThan(30);
     expect(out.warnings.some((w) => /Bowden/.test(w))).toBe(true);
