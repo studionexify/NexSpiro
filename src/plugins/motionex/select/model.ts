@@ -53,11 +53,60 @@ export type Pick =
 
 export type PickKind = Pick['kind'];
 
+/**
+ * Exactly which lines a rule changes, by the numbers a person thinks in. Ranges are 1-based and inclusive
+ * (inner wall 1 = next to the outer wall, top layer 1 = the top surface); hi 99 = all of them. null = none.
+ * shape limits wall lines to their curved or their straight stretches.
+ */
+export interface RuleTargets {
+  outer: boolean;
+  inner: [number, number] | null;
+  infill: boolean;
+  top: [number, number] | null;
+  bottom: [number, number] | null;
+  solid: boolean;
+  support: boolean;
+  shape: 'any' | 'curved' | 'straight';
+}
+export const ALL_TARGETS: RuleTargets = { outer: true, inner: [1, 99], infill: true, top: [1, 99], bottom: [1, 99], solid: true, support: true, shape: 'any' };
+
+/** The coarse line groups a set of targets touches (what the slicer filters on before measuring). */
+export function groupsOfTargets(t: RuleTargets): LineGroup[] {
+  const g: LineGroup[] = [];
+  if (t.outer) g.push('outer');
+  if (t.inner) g.push('inner');
+  if (t.infill) g.push('infill');
+  if (t.top || t.bottom || t.solid) g.push('solid');
+  if (t.support) g.push('support');
+  return g;
+}
+
+/** Do the targets take this line? cls: the line class name from select/classes.ts. */
+export function targetOk(t: RuleTargets, cls: string, rank: number, curved: boolean): boolean {
+  const inR = (r: [number, number] | null) => !!r && rank >= r[0] && rank <= r[1];
+  let ok: boolean;
+  switch (cls) {
+    case 'outer': ok = t.outer; break;
+    case 'inner': ok = inR(t.inner); break;
+    case 'infill': ok = t.infill; break;
+    case 'top': ok = inR(t.top); break;
+    case 'bottom': ok = inR(t.bottom); break;
+    case 'solid': ok = t.solid; break;
+    case 'support': ok = t.support; break;
+    default: return true;
+  }
+  if (ok && t.shape !== 'any' && (cls === 'outer' || cls === 'inner')) ok = (t.shape === 'curved') === curved;
+  return ok;
+}
+
+/** Targets that need lines measured (anything finer than whole line kinds). */
+export const needsClasses = (r: SelectRule) => !!r.targets;
+
 export interface RuleApply {
   /** Filament slot (0-based) to print the selection with. */
   filament?: number;
   /** A Motionex motion on the selected walls; scale 1 = as designed. */
-  motion?: { brush_id: string; scale: number };
+  motion?: RuleMotion;
   /** Speed and flow in % of normal (100 = unchanged). */
   speed?: number;
   flow?: number;
@@ -65,13 +114,43 @@ export interface RuleApply {
   temp?: number;
 }
 
+/** A motion and this rule's own tuning of it (the Top view and Side view tabs); unset fields keep the motion's own. */
+export interface RuleMotion {
+  brush_id: string;
+  scale: number;
+  /** Top view: how far the line moves in and out (mm) and the length of one repeat (mm). */
+  amp?: number;
+  period?: number;
+  /** Side view: how the pattern changes from layer to layer; null = the same on every layer. */
+  layers?: import('../model').LayerEffect | null;
+  /** Side view: up-and-down movement along the line (mm); 0 = flat. */
+  z?: number;
+}
+
+/** The motion with the rule's own tuning. */
+export function tunedBrush(m: RuleMotion, b: import('../model').MotionBrush): import('../model').MotionBrush {
+  if (m.amp === undefined && m.period === undefined && m.layers === undefined && m.z === undefined) return b;
+  const out = { ...b };
+  if (m.amp !== undefined) out.amplitude = Math.max(0, m.amp);
+  if (m.period !== undefined) out.period_mm = Math.max(0.2, m.period);
+  if (m.layers !== undefined) out.layers = m.layers;
+  if (m.z !== undefined) {
+    out.z_amplitude = Math.max(0, m.z);
+    // a flat motion has no up-and-down curve: give it one that follows the side-to-side shape
+    if (m.z > 0 && b.curves.z_offset.points.every((p) => Math.abs(p.v) < 1e-6)) out.curves = { ...b.curves, z_offset: b.curves.lateral_offset };
+  }
+  return out;
+}
+
 export interface SelectRule {
   id: string;
   name: string;
   enabled: boolean;
   pick: Pick;
-  /** Line kinds the rule changes (empty = all). */
+  /** Line kinds the rule changes (empty = all). With targets, kept in step with them. */
   lines: LineGroup[];
+  /** Finer choice of lines (wall numbers, top / bottom layer numbers, curved or straight); unset = by `lines`. */
+  targets?: RuleTargets;
   apply: RuleApply;
   /** Soft edge (mm): speed, flow and motion fade out over this distance around the selection. */
   blend_mm: number;
@@ -104,6 +183,12 @@ export function loadRules(d: unknown): SelectRule[] {
 
 export function describePick(p: Pick): string {
   if (p.kind === 'layers') return pickEmpty(p) ? 'No layers chosen' : `Heights ${p.z0.toFixed(2)}–${p.z1.toFixed(2)} mm`;
-  if (p.kind === 'lines') return `${p.lines.length} line${p.lines.length === 1 ? '' : 's'}`;
+  if (p.kind === 'lines') { const seg = p.lines.filter((l) => l.pts.length === 2).length, n = p.lines.length - seg; return [n ? `${n} line${n === 1 ? '' : 's'}` : '', seg ? `${seg} segment${seg === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ') || '0 lines'; }
   return `${p.dabs.length} brush dab${p.dabs.length === 1 ? '' : 's'}`;
 }
+
+/**
+ * While the Select window is open its motions are drawn by the window itself, straight from the geometry
+ * (select/draft.ts), so the slicer leaves rule motions out; the exact path is made when the window closes.
+ */
+export const draftMode = { on: false };

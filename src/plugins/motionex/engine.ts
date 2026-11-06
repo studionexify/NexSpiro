@@ -203,7 +203,8 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     // velocity paint sets the outer wall speeds on whole loops, then lace cuts the walls (its pieces keep their speed)
     const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
     const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn, config.printerId) : undefined;
-    const picked = config.rules?.length ? ruleMotions(config.rules, layerOps, session?.rules) : { apps: [], regions: [] };
+    const brushById = new Map(config.brushes.map((b) => [b.id, b]));
+    const picked = config.rules?.length ? ruleMotions(config.rules, layerOps, session?.rules, (id) => brushById.get(id)) : { apps: [], regions: [] };
     const apps = [...config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } })), ...picked.apps];
     // speed, flow and temperature of the selections go last, over every motion
     const finish = <T extends MotionexReport>(r: T): T => (config.rules?.length ? { ...r, select: applyRulePass(layerOps, config.rules, ctx, session?.rules) } : r);

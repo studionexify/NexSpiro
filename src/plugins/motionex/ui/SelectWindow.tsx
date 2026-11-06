@@ -12,11 +12,13 @@ import { changerOf } from '../../../profiles/changer';
 import { MOVE_STRIDE } from '../../../engine/gcode';
 import type { SliceOutput } from '../../../engine/types';
 import { changed, mx, useMx } from './MotionexPanel';
-import { describePick, featuresOf, LINE_GROUPS, newRule, pickEmpty, ruleActive, type LineGroup, type PickKind, type SelectRule } from '../select/model';
+import { ALL_TARGETS, describePick, draftMode, featuresOf, groupsOfTargets, newRule, pickEmpty, ruleActive, targetOk, type PickKind, type RuleTargets, type SelectRule } from '../select/model';
+import { makeDraft, type Draft } from '../select/draft';
+import { MotionTabs } from './MotionTabs';
 import { piecesAt, weightAt, type Piece } from '../select/geometry';
 import { objectAnchors } from '../select/engine';
 import { FEATURE_RGB, featureName, hexRgb, runOf, segmentsOf, SelectView } from './selectView';
-import { classifyLines, SHOW_ALL, visibleMask, type LineClasses, type LineFilter } from './lineClasses';
+import { classifyLines, CLASS_IDS, SHOW_ALL, visibleMask, type LineClasses, type LineFilter } from '../select/classes';
 import { ViewCube, type CubeApi } from '../../../ui/PrepareOverlays';
 
 let isOpen = false;
@@ -35,7 +37,7 @@ type Tool = 'orbit' | 'layers' | 'lines' | 'brush';
 const TOOLS: [Tool, string, string][] = [
   ['orbit', 'Look', 'Left drag turns the view, right drag moves it, the wheel zooms'],
   ['layers', 'Layers', 'Click a line to choose its layer; Shift+click another to choose every layer between. Or drag on the height ruler'],
-  ['lines', 'Lines', 'Click a printed line to add it; click it again to take it out'],
+  ['lines', 'Lines', 'Click a printed line to add the whole line; Alt+click adds just that segment. Click it again to take it out'],
   ['brush', 'Brush', 'Drag over the print to paint an area; hold Alt to erase'],
 ];
 const KIND_OF: Record<Exclude<Tool, 'orbit'>, PickKind> = { layers: 'layers', lines: 'lines', brush: 'brush' };
@@ -94,11 +96,20 @@ function SelectWindow() {
 
   // slice when the window opens with nothing (or something out of date) to show
   useEffect(() => {
+    // motions are drawn here as a draft while the window is open: the slice under them is made without them
+    draftMode.on = true;
+    const hasMotion = () => mx.rules.some((r) => ruleActive(r) && r.apply.motion);
+    if (hasMotion()) useStore.getState().markDirty();
     const s = useStore.getState().slice;
     if (s.status !== 'slicing' && (!s.result || s.dirty)) void sliceNow();
     const close = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) openSelectWindow(false); };
     window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('keydown', close);
+      // closing: the exact path, with the motions, from a real slice
+      draftMode.on = false;
+      if (hasMotion()) { useStore.getState().markDirty(); void sliceNow(); }
+    };
   }, []);
 
   useEffect(() => {
@@ -124,7 +135,6 @@ function SelectWindow() {
   // which lines are drawn: hidden lines can't be clicked, brushed or chosen by layer either
   const classes = useMemo<LineClasses | null>(() => (segs && result ? classifyLines(segs, result.layers.length, (k) => result.moves[segs.move[k] * MOVE_STRIDE + 3]) : null), [segs, result]);
   useEffect(() => { if (classes) view.current?.setShown(visibleMask(classes, filter)); }, [classes, filter, segs]);
-  useEffect(() => { view.current?.setPauses(result?.pauses, ACTIVE); }, [result]);
   const cubeApi = useMemo<CubeApi>(() => ({
     // the cube mounts before the 3D view exists, so it listens through a set the view forwards to
     listen: (l) => { cubeListeners.add(l); return () => { cubeListeners.delete(l); }; },
@@ -165,6 +175,7 @@ function SelectWindow() {
         const f = featureName(segs.feature[s]);
         live.forEach((rl, k) => {
           if (!ps[k].length || !feats[k].has(f)) return;
+          if (rl.targets && classes && !targetOk(rl.targets, CLASS_IDS[classes.cls[s]], classes.rank[s], classes.curved[s] === 1)) return;
           const w = weightAt(ps[k], rl.blend_mm, x, y, f, (id) => { const bx = boxOf.get(id); return !bx || (x >= bx.min[0] - 0.6 && x <= bx.max[0] + 0.6 && y >= bx.min[1] - 0.6 && y <= bx.max[1] + 0.6); });
           if (w <= 0) return;
           const c = rl.id === activeId ? ACTIVE : OTHER, m = rl.id === activeId ? w : w * 0.7;
@@ -174,15 +185,28 @@ function SelectWindow() {
       out[at] = r; out[at + 1] = g; out[at + 2] = b;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segs, rulesKey, activeId, colorBy, filaments, info]);
+  }, [segs, rulesKey, activeId, colorBy, filaments, info, classes]);
 
-  // re-slice by itself a moment after a rule changes, so motions, speeds and blobs show on the lines
-  const firstRules = useRef(true);
+  // the motions, drawn at once from the geometry on screen (the slice is made without them while the window is open)
+  const [draft, setDraft] = useState<Draft | null>(null);
   useEffect(() => {
-    if (firstRules.current) { firstRules.current = false; return; }
-    const t = setTimeout(() => { if (useStore.getState().slice.status !== 'slicing') void sliceNow(); }, 700);
-    return () => clearTimeout(t);
-  }, [rulesKey]);
+    if (!result) { setDraft(null); return; }
+    const raf = requestAnimationFrame(() => {
+      try {
+        setDraft(makeDraft({ result, rules: mx.rules, now: info.now, boxes: info.boxes, brushOf: (id) => mx.library.get(id), cfg: currentConfig(), printerId: useStore.getState().printerId, options: mx.options }));
+      } catch (e) { console.warn('Select draft failed', e); setDraft(null); }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [result, rulesKey, info]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !segs) return;
+    v.setDraft(draft?.pos ?? null, ACTIVE);
+    if (draft?.replaced.size) { const m = new Uint8Array(segs.count); for (let k = 0; k < segs.count; k++) if (draft.replaced.has(segs.move[k])) m[k] = 1; v.setCovered(m); }
+    else v.setCovered(null);
+    const sliced = result?.pauses, mine = draft?.pauses;
+    v.setPauses(mine?.length ? (sliced?.length ? concat(sliced, mine) : mine) : sliced, ACTIVE);
+  }, [draft, segs, result]);
 
   const addRule = () => {
     const r = newRule(mx.rules.length + 1);
@@ -233,19 +257,23 @@ function SelectWindow() {
       return;
     }
     if (!ensureKind(r, 'lines') || r.pick.kind !== 'lines') return;
-    const { from, to } = runOf(result, move);
+    const one = e.altKey;
+    const { from, to } = one ? { from: move, to: move } : runOf(result, move);
     const pts: [number, number][] = [];
     for (let k = Math.max(0, from - 1); k <= to; k++) pts.push([+result.moves[k * MOVE_STRIDE].toFixed(3), +result.moves[k * MOVE_STRIDE + 1].toFixed(3)]);
     const feature = featureName(result.moveFeatures[move]);
     const w = result.moves[move * MOVE_STRIDE + 3] || 0.42;
     const p = hit.point;
-    const same = r.pick.lines.findIndex((l) => Math.abs(l.z - L.z) < 1e-3 && l.feature === feature && l.pts.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < Math.max(w, 0.5)));
+    // the same line (or for a segment, the same segment) again takes it out
+    const near = (l: { pts: [number, number][] }) => one ? l.pts.length === 2 && Math.hypot((l.pts[0][0] + l.pts[1][0]) / 2 - (pts[0][0] + pts[1][0]) / 2, (l.pts[0][1] + l.pts[1][1]) / 2 - (pts[0][1] + pts[1][1]) / 2) < 0.05
+      : l.pts.length > 2 && l.pts.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < Math.max(w, 0.5));
+    const same = r.pick.lines.findIndex((l) => Math.abs(l.z - L.z) < 1e-3 && l.feature === feature && near(l));
     if (same >= 0) r.pick.lines.splice(same, 1);
     else {
       const obj = objAt(info.boxes, p.x, p.y, p.z);
       anchor(r, obj);
       // long lines are thinned to every 0.2 mm or so: picks stay small in the project file
-      const thin = pts.filter((q, k) => k === 0 || k === pts.length - 1 || Math.hypot(q[0] - pts[k - 1][0], q[1] - pts[k - 1][1]) > 0.05);
+      const thin = one ? pts : pts.filter((q, k) => k === 0 || k === pts.length - 1 || Math.hypot(q[0] - pts[k - 1][0], q[1] - pts[k - 1][1]) > 0.05);
       r.pick.lines.push({ obj, z: +L.z.toFixed(4), h: +L.height.toFixed(4), feature, w: +w.toFixed(3), pts: thin });
     }
     changed();
@@ -309,8 +337,11 @@ function SelectWindow() {
           <span className="sxw-hint">{TOOLS.find((t) => t[0] === tool)?.[2]}</span>
           <span style={{ flex: 1 }} />
           {status === 'slicing' ? <span className="sxw-status">Slicing… {Math.round(progress * 100)}%</span>
-            : <button className="btn-secondary btn-small" onClick={() => void sliceNow()} title="Slice again with the rules, to see them on the lines and the real time and filament">{dirty ? 'Re-slice to see changes' : 'Re-slice'}</button>}
-          <button className="btn-primary btn-small" onClick={() => openSelectWindow(false)}>Done</button>
+            : <>
+              {draft && <span className="sxw-status" title="Motions are drawn straight from the geometry as you change them. The exact path and G-code are made by a real slice when you press Done.">Live draft · {draft.layers} layers · {Math.round(draft.ms)} ms</span>}
+              <button className="btn-secondary btn-small" onClick={() => void sliceNow()} title="Slice again for speed, flow, filament and temperature changes and the real time and filament (motions stay a live draft until Done)">{dirty ? 'Update slice' : 'Re-slice'}</button>
+            </>}
+          <button className="btn-primary btn-small" onClick={() => openSelectWindow(false)} title="Close and make the exact path with every rule">Done</button>
         </header>
         <div className="sxw-body">
           <aside className="sxw-side">
@@ -332,7 +363,7 @@ function SelectWindow() {
               </div>
             </div>
             <ShowLines f={filter} set={setFilter} lc={classes} />
-            {rule && <RuleEditor r={rule} oneObject={oneObject} setOneObject={setOneObject} />}
+            {rule && <RuleEditor r={rule} oneObject={oneObject} setOneObject={setOneObject} lc={classes} />}
           </aside>
           <main className="sxw-main">
             <div className="sxw-tools">
@@ -387,6 +418,8 @@ function SelectWindow() {
   );
 }
 
+const concat = (a: Float32Array, b: Float32Array) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+
 const fmtTime = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : s >= 60 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
 
 function summary(r: SelectRule, nFil: number): string {
@@ -440,7 +473,7 @@ function Num({ label, value, unit, min, max, step = 1, onChange, title }: { labe
   );
 }
 
-function RuleEditor({ r, oneObject, setOneObject }: { r: SelectRule; oneObject: boolean; setOneObject(v: boolean): void }) {
+function RuleEditor({ r, oneObject, setOneObject, lc }: { r: SelectRule; oneObject: boolean; setOneObject(v: boolean): void; lc: LineClasses | null }) {
   const filaments = useStore((s) => s.filaments);
   const set = (f: () => void) => { f(); changed(); };
   const brushes = mx.library.all();
@@ -458,11 +491,7 @@ function RuleEditor({ r, oneObject, setOneObject }: { r: SelectRule; oneObject: 
         <div className="sxw-row"><span className="sxw-lbl">To</span><input className="input" type="number" step={0.01} value={p.z1} onChange={(e) => set(() => { p.z1 = +e.target.value || 0; })} /><span className="sxw-unit">mm</span></div>
         <div className="sxw-row"><label className="sxw-check"><input type="checkbox" checked={!!p.obj} disabled={!p.obj && !oneObject} onChange={(e) => set(() => { if (!e.target.checked) { p.obj = undefined; setOneObject(false); } })} />{p.obj ? 'Only on one object' : 'On every object'}</label></div>
       </>}
-      <div className="sxw-sub">Line kinds</div>
-      <div className="sxw-chips">
-        <button className={!r.lines.length ? 'on' : ''} onClick={() => set(() => { r.lines = []; })}>All</button>
-        {LINE_GROUPS.map(([g, label]) => <button key={g} className={r.lines.includes(g) ? 'on' : ''} onClick={() => set(() => { r.lines = r.lines.includes(g) ? r.lines.filter((x) => x !== g) : [...r.lines, g as LineGroup]; })}>{label}</button>)}
-      </div>
+      <Targets r={r} lc={lc} />
       <div className="sxw-sub">Change there</div>
       <div className="sxw-row"><span className="sxw-lbl">Filament</span>
         <select className="select" value={r.apply.filament ?? ''} onChange={(e) => set(() => { r.apply.filament = e.target.value === '' ? undefined : +e.target.value; })}>
@@ -479,6 +508,7 @@ function RuleEditor({ r, oneObject, setOneObject }: { r: SelectRule; oneObject: 
         </select>
       </div>
       {r.apply.motion && <div className="sxw-row"><span className="sxw-lbl">Motion size</span><input type="range" min={0.2} max={3} step={0.05} value={r.apply.motion.scale} onChange={(e) => set(() => { r.apply.motion!.scale = +e.target.value; })} /><span className="sxw-unit">×{r.apply.motion.scale.toFixed(2)}</span></div>}
+      {r.apply.motion && <MotionTabs m={r.apply.motion} onChange={() => changed()} />}
       <Num label="Speed" value={r.apply.speed} unit="%" min={10} max={300} onChange={(v) => set(() => { r.apply.speed = v; })} />
       <Num label="Flow" value={r.apply.flow} unit="%" min={10} max={200} onChange={(v) => set(() => { r.apply.flow = v; })} />
       <Num label="Temperature" value={r.apply.temp} unit="°C" min={150} max={320} onChange={(v) => set(() => { r.apply.temp = v; })} title="Set per layer: a hotend needs 10–30 s to settle, so it cannot change for single lines" />
@@ -523,4 +553,57 @@ function ShowLines({ f, set, lc }: { f: LineFilter; set(f: LineFilter): void; lc
       <p className="sxw-muted">Hidden lines can't be picked or brushed, so you can hide the rest and work on one kind at a time.</p>
     </div>
   );
+}
+
+/** Which lines the rule changes: each kind on or off, walls and top / bottom layers by number, curved or straight. */
+function Targets({ r, lc }: { r: SelectRule; lc: LineClasses | null }) {
+  const t: RuleTargets = r.targets ?? fromLines(r);
+  const put = (n: RuleTargets) => {
+    const all = JSON.stringify(n) === JSON.stringify(ALL_TARGETS);
+    r.targets = all ? undefined : n;
+    r.lines = all ? [] : groupsOfTargets(n);
+    changed();
+  };
+  const flag = (key: 'outer' | 'infill' | 'solid' | 'support', label: string, tip: string) => (
+    <label className="sxw-check sxw-show" title={tip}><input type="checkbox" checked={t[key]} onChange={(e) => put({ ...t, [key]: e.target.checked })} />{label}</label>
+  );
+  const range = (key: 'inner' | 'top' | 'bottom', label: string, tip: string) => {
+    const most = Math.max(1, lc?.max[key] ?? 1), v = t[key];
+    const lo = v ? Math.min(v[0], most) : 1, hi = v ? Math.min(v[1], most) : most;
+    const num = (val: number, f: (x: number) => [number, number]) => (
+      <input className="input" type="number" min={1} max={most} step={1} disabled={!v} value={val} aria-label={`${label} ${val === lo ? 'from' : 'to'}`}
+        onChange={(e) => { const x = Math.round(+e.target.value); if (x >= 1) { const [a, b] = f(Math.min(x, most)); put({ ...t, [key]: [Math.min(a, b), Math.max(a, b) >= most ? 99 : Math.max(a, b)] }); } }} />
+    );
+    return (
+      <div className="sxw-row sxw-show" title={tip}>
+        <label className="sxw-check"><input type="checkbox" checked={!!v} onChange={(e) => put({ ...t, [key]: e.target.checked ? [1, 99] : null })} />{label}</label>
+        {num(lo, (x) => [x, hi])}<span className="sxw-unit">to</span>{num(hi, (x) => [lo, x])}<span className="sxw-unit">of {most}</span>
+      </div>
+    );
+  };
+  return (
+    <>
+      <div className="sxw-sub">Lines to change<span style={{ flex: 1 }} /><button className="btn-secondary btn-small" onClick={() => put({ ...ALL_TARGETS })}>All</button></div>
+      {flag('outer', 'Outer wall', 'The wall you see from outside')}
+      {range('inner', 'Inner walls', 'By number, counted inwards: 1 is right behind the outer wall. 2 to 2 changes only the second inner wall')}
+      {flag('infill', 'Infill', 'Sparse infill')}
+      {range('top', 'Top layers', 'By number, counted down: 1 is the top surface itself')}
+      {range('bottom', 'Bottom layers', 'By number, counted up: 1 is the bottom surface itself')}
+      {flag('solid', 'Other solid infill', 'Solid infill that is not part of a top or bottom skin')}
+      {flag('support', 'Support', 'Support and support interface')}
+      <div className="sxw-row" title="On walls: change only where the wall curves, or only its straight stretches. Corners count as neither.">
+        <span className="sxw-lbl">Wall shape</span>
+        <div className="sxw-chips">
+          {(['any', 'curved', 'straight'] as const).map((k) => <button key={k} className={t.shape === k ? 'on' : ''} onClick={() => put({ ...t, shape: k })}>{k === 'any' ? 'All' : k === 'curved' ? 'Curved parts' : 'Straight parts'}</button>)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Targets matching an older rule's line kinds. */
+function fromLines(r: SelectRule): RuleTargets {
+  if (!r.lines.length) return { ...ALL_TARGETS };
+  const h = (g: string) => r.lines.includes(g as never);
+  return { outer: h('outer'), inner: h('inner') ? [1, 99] : null, infill: h('infill'), top: h('solid') ? [1, 99] : null, bottom: h('solid') ? [1, 99] : null, solid: h('solid'), support: h('support'), shape: 'any' };
 }

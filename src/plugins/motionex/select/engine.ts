@@ -10,9 +10,26 @@ import type { Paths } from '../../../engine/types';
 import { difference, intersection, offset, pointIn, SCALE, union } from '../../../engine/clipper';
 import type { PluginContext, PrepareContext, RegionContribution } from '../../api';
 import type { PatternexRegion } from '../core/regions';
-import type { MotionApplication } from '../model';
-import { featuresOf, ruleActive, type LineGroup, type SelectRule } from './model';
-import { piecesAt, weightAt, type Poly } from './geometry';
+import type { MotionApplication, MotionBrush } from '../model';
+import { featuresOf, ruleActive, targetOk, tunedBrush, type LineGroup, type SelectRule } from './model';
+import { piecesAt, stripPolys, weightAt, type Poly } from './geometry';
+import { classifyLines, CLASS_IDS, segsOfOps } from './classes';
+
+/** Per layer and op: does each rule's targets take that move? Only for rules with targets. */
+export type TargetTest = (rule: SelectRule, layer: number, op: number) => boolean;
+
+/** Measures the lines of the layers (wall numbers, skin numbers, curves) and answers target tests on them. */
+export function targetTest(layers: LayerOps[], rules: SelectRule[]): TargetTest | undefined {
+  if (!rules.some((r) => ruleActive(r) && r.targets)) return undefined;
+  const { segs, opAt, width } = segsOfOps(layers);
+  const lc = classifyLines(segs, layers.length, (k) => width[k]);
+  return (r, layer, op) => {
+    if (!r.targets) return true;
+    const s = opAt[layer]?.[op] ?? -1;
+    if (s < 0) return false;
+    return targetOk(r.targets, CLASS_IDS[lc.cls[s]], lc.rank[s], lc.curved[s] === 1);
+  };
+}
 
 type Move = Extract<Op, { k: 'move' }>;
 
@@ -106,7 +123,8 @@ export function rulesPrepare(rules: SelectRule[], ctx: PrepareContext): { sessio
 }
 
 /** Motion rules as Motionex placements on their own regions. Later rules replace earlier motion where they overlap. */
-export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSession | undefined): { apps: MotionApplication[]; regions: PatternexRegion[] } {
+export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSession | undefined, brushOf?: (id: string) => MotionBrush | undefined): { apps: MotionApplication[]; regions: PatternexRegion[] } {
+  const test = targetTest(layers, rules.filter((r) => r.apply.motion));
   const apps: MotionApplication[] = [];
   const regions: PatternexRegion[] = [];
   const big: Poly = [[-1e4, -1e4], [1e4, -1e4], [1e4, 1e4], [-1e4, 1e4]];
@@ -120,7 +138,28 @@ export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSess
         if (m) return m;
         const L = layers[l];
         m = [];
-        if (L) for (const p of piecesAt(r, L.z, L.h, s?.now)) {
+        const ps = L ? piecesAt(r, L.z, L.h, s?.now) : [];
+        if (L && test && r.targets && ps.length) {
+          // only the chosen lines: a thin strip along each stretch of them inside the selection
+          const outlines = new Map<string, Paths | null>();
+          const inObj = (obj: string, x: number, y: number) => {
+            if (!s) return true;
+            if (!outlines.has(obj)) outlines.set(obj, s.outline(l, obj));
+            const o = outlines.get(obj);
+            return !o || pointIn(x, y, o);
+          };
+          let run: [number, number][] = [], w = 0.42, px = NaN, py = NaN;
+          const flush = () => { if (run.length > 1) m!.push(...stripPolys(run, w * 0.45)); run = []; };
+          L.ops.forEach((op, k) => {
+            if (op.k === 'raw' && op.resetPos) { flush(); px = NaN; return; }
+            if (op.k !== 'move') return;
+            const ok = !op.travel && op.e > 0 && !Number.isNaN(px) && test(r, l, k)
+              && weightAt(ps, r.blend_mm, (px + op.x) / 2, (py + op.y) / 2, op.feature, (obj) => inObj(obj, (px + op.x) / 2, (py + op.y) / 2)) > 0;
+            if (ok) { if (!run.length) run.push([px, py]); run.push([op.x, op.y]); w = op.w || w; } else flush();
+            px = op.x; py = op.y;
+          });
+          flush();
+        } else if (L) for (const p of ps) {
           if (p.polys) m.push(...p.polys);
           else if (p.obj && s) { const o = s.outline(l, p.obj); if (o) m.push(...o.map(toPoly)); }
           else m.push(big);
@@ -134,10 +173,14 @@ export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSess
     const p = r.pick;
     const lo = p.kind === 'layers' ? Math.min(p.z0, p.z1) : -1e4, hi = p.kind === 'layers' ? Math.max(p.z0, p.z1) : 1e4;
     const b = Math.max(0, r.blend_mm);
+    const base = brushOf?.(r.apply.motion!.brush_id);
+    const tuned = base && tunedBrush(r.apply.motion!, base);
     apps.push({
+      ...(tuned && tuned !== base ? { brush: tuned } : {}),
       brush_id: r.apply.motion!.brush_id, scale: r.apply.motion!.scale || 1, label: r.name,
       target: { type: 'faces', walls, faces: [id] },
-      mask: { z_start: lo - (p.kind === 'layers' ? b / 2 : 0), z_end: hi + (p.kind === 'layers' ? b / 2 : 0), fade_in_mm: p.kind === 'layers' ? b : 0, fade_out_mm: p.kind === 'layers' ? b : 0, blend_mm: b },
+      // with targets the region is a strip along the chosen lines: a wide soft edge would reach the next wall
+      mask: { z_start: lo - (p.kind === 'layers' ? b / 2 : 0), z_end: hi + (p.kind === 'layers' ? b / 2 : 0), fade_in_mm: p.kind === 'layers' ? b : 0, fade_out_mm: p.kind === 'layers' ? b : 0, blend_mm: r.targets ? Math.min(b, 0.12) : b },
       order: 1000 + k, blend: k > 0 ? 'override' : 'add', enabled: true,
     });
   });
@@ -150,6 +193,7 @@ export function applyRulePass(layers: LayerOps[], rules: SelectRule[], ctx: Plug
   const act = rules.filter((r) => ruleActive(r) && ((r.apply.speed !== undefined && r.apply.speed !== 100) || (r.apply.flow !== undefined && r.apply.flow !== 100) || r.apply.temp !== undefined));
   if (!act.length) return report;
   const feats = act.map((r) => featuresOf(r.lines));
+  const test = targetTest(layers, act);
   const baseTemp = num(ctx.cfg, 'nozzle_temperature', 0);
   let tempWasSet = false;
   let px = NaN, py = NaN;
@@ -172,7 +216,8 @@ export function applyRulePass(layers: LayerOps[], rules: SelectRule[], ctx: Plug
     };
     const step = Math.max(0.4, Math.min(...act.map((r) => r.blend_mm || 2)) / 3);
     const out: Op[] = [];
-    for (const op of L.ops) {
+    for (let oi = 0; oi < L.ops.length; oi++) {
+      const op = L.ops[oi];
       if (op.k === 'raw' && op.resetPos) { px = NaN; py = NaN; out.push(op); continue; }
       if (op.k !== 'move') { out.push(op); continue; }
       if (op.travel || op.e <= 0 || Number.isNaN(px)) { px = op.x; py = op.y; out.push(op); continue; }
@@ -187,6 +232,7 @@ export function applyRulePass(layers: LayerOps[], rules: SelectRule[], ctx: Plug
         let sf = 1, ff = 1;
         act.forEach((r, k) => {
           if (!live[k] || !feats[k].has(op.feature)) return;
+          if (test && r.targets && !test(r, li, oi)) return;
           const w = weightAt(pieces[k], r.blend_mm, mx, my, op.feature, (obj) => inObj(obj, mx, my));
           if (w <= 0) return;
           report.moves[r.id] = (report.moves[r.id] ?? 0) + 1;

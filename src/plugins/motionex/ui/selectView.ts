@@ -69,6 +69,9 @@ export class SelectView {
   /** Per segment: 1 = drawn and pickable. Null = all. */
   private shown: Uint8Array | null = null;
   private dots: THREE.Points | null = null;
+  /** Per segment: 1 = drawn over by the draft (still pickable, not drawn). */
+  private covered: Uint8Array | null = null;
+  private draft: THREE.LineSegments | null = null;
   readonly controls: OrbitControls;
   private lines: THREE.LineSegments | null = null;
   private colors: Float32Array | null = null;
@@ -172,6 +175,7 @@ export class SelectView {
     const m = new THREE.LineBasicMaterial({ vertexColors: true, clippingPlanes: [this.cut] });
     this.lines = new THREE.LineSegments(g, m);
     this.shown = null;
+    this.covered = null;
     this.scene.add(this.lines);
     g.computeBoundingBox();
     if (!keepCamera && g.boundingBox) this.frame(g.boundingBox);
@@ -212,15 +216,36 @@ export class SelectView {
   /** Draw (and pick) only the segments with mask 1; null shows every segment. */
   setShown(mask: Uint8Array | null) {
     this.shown = mask;
-    const g = this.lines?.geometry;
+    this.reindex();
+  }
+
+  /** Lines a draft is drawn over: not drawn, still picked (they are where the slice has them). */
+  setCovered(mask: Uint8Array | null) {
+    this.covered = mask;
+    this.reindex();
+  }
+
+  private reindex() {
+    const g = this.lines?.geometry, mask = this.shown, cov = this.covered;
     if (!g || !this.segs) return;
-    if (!mask) { g.setIndex(null); return; }
+    if (!mask && !cov) { g.setIndex(null); return; }
+    const n = this.segs.count, on = (s: number) => (!mask || mask[s]) && (!cov || !cov[s]);
     let k = 0;
-    for (let s = 0; s < mask.length; s++) if (mask[s]) k++;
+    for (let s = 0; s < n; s++) if (on(s)) k++;
     const idx = new Uint32Array(k * 2);
     let j = 0;
-    for (let s = 0; s < mask.length; s++) if (mask[s]) { idx[j++] = s * 2; idx[j++] = s * 2 + 1; }
+    for (let s = 0; s < n; s++) if (on(s)) { idx[j++] = s * 2; idx[j++] = s * 2 + 1; }
     g.setIndex(new THREE.BufferAttribute(idx, 1));
+  }
+
+  /** The draft: moved lines (segments, xyz xyz) drawn in one colour over the slice. */
+  setDraft(pos: Float32Array | null, rgb: [number, number, number]) {
+    if (this.draft) { this.scene.remove(this.draft); this.draft.geometry.dispose(); (this.draft.material as THREE.Material).dispose(); this.draft = null; }
+    if (!pos?.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.draft = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(...rgb), clippingPlanes: [this.cut] }));
+    this.scene.add(this.draft);
   }
 
   /** Writes per-segment colours (rgb per segment, both ends the same). */

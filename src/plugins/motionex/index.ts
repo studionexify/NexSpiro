@@ -10,7 +10,7 @@ import { defaultWeave, type WeaveSettings } from './weave/model';
 import { defaultPaint, type PaintSettings } from './paint/model';
 import { defaultLace, type LaceSettings } from './lace/model';
 import { defaultSculpt, sculptActive, type SculptSettings } from './sculpt/model';
-import { loadRules, ruleActive, type SelectRule } from './select/model';
+import { draftMode, loadRules, ruleActive, type SelectRule } from './select/model';
 
 export interface MotionexState {
   library: BrushLibrary;
@@ -70,7 +70,7 @@ export function saveMotionexState(state: MotionexState, store: KeyValueStore | n
 
 /** Plain-data snapshot for the slicing worker. */
 export function toConfig(state: MotionexState, printerId: string): MotionexConfig {
-  const rules = state.rules.filter(ruleActive);
+  const rules = (draftMode.on ? state.rules.map((r) => ({ ...r, apply: { ...r.apply, motion: undefined } })) : state.rules).filter(ruleActive);
   const used = new Set([...state.applications.filter((a) => a.enabled && !a.brush).map((a) => a.brush_id), ...rules.flatMap((r) => (r.apply.motion ? [r.apply.motion.brush_id] : []))]);
   return {
     applications: structuredClone(state.applications),
@@ -118,7 +118,7 @@ export function loadLace(d: unknown): LaceSettings {
 }
 
 /** Any wall-art mode or motion switched on (the slicer then needs Motionex). */
-export const motionexActive = (state: MotionexState) => state.applications.some((a) => a.enabled) || state.weave.enabled || state.paint.enabled || state.lace.enabled || sculptActive(state.sculpt) || state.rules.some(ruleActive);
+export const motionexActive = (state: MotionexState) => state.applications.some((a) => a.enabled) || state.weave.enabled || state.paint.enabled || state.lace.enabled || sculptActive(state.sculpt) || (draftMode.on ? state.rules.some((r) => ruleActive({ ...r, apply: { ...r.apply, motion: undefined } })) : state.rules.some(ruleActive));
 
 export function defaultApplication(brush_id: string): MotionApplication {
   return { brush_id, target: { type: 'body', walls: 'outer' }, mask: { z_start: 0.6, z_end: 1e4, fade_in_mm: 1, fade_out_mm: 0 }, order: 0, blend: 'add', enabled: true };

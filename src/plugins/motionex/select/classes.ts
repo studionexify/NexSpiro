@@ -1,11 +1,22 @@
 // Sorts the Select window's printed lines into the kinds a person thinks in: the outer wall, inner wall 1, 2, 3…
 // (counted inwards from the outer wall), sparse infill, top layer 1, 2, 3… (counted down from the top skin),
-// bottom layer 1, 2, 3… (counted up from the bottom skin), other solid infill and support. The slice does not
-// carry wall numbers or shell numbers, so they are measured from the lines themselves:
+// bottom layer 1, 2, 3… (counted up from the bottom skin), other solid infill and support, and on the walls
+// which stretches are curved. The slice does not carry wall numbers or shell numbers, so they are measured from
+// the lines themselves (the Select window and the slicer use the same code, so the highlight is what prints):
 // - wall number: distance from the line to the nearest outer wall of the same layer, in line widths;
-// - top / bottom number: layers to the nearest top (or bottom) skin straight above (or below) the line.
+// - top / bottom number: layers to the nearest top (or bottom) skin straight above (or below) the line;
+// - curved: the wall keeps turning the same way on both sides of the point (a corner turns on one side only).
 import { FEATURE_ORDER, type FeatureType } from '../../../engine/types';
-import type { Segs } from './selectView';
+import type { LayerOps } from '../../../engine/gcode';
+
+/** Printed segments: start xyz, end xyz; the move each came from (consecutive numbers = one line), its layer and kind. */
+export interface Segs {
+  pos: Float32Array;
+  move: Uint32Array;
+  layer: Uint32Array;
+  feature: Uint8Array;
+  count: number;
+}
 
 export type LineClass = 'outer' | 'inner' | 'infill' | 'top' | 'bottom' | 'solid' | 'support' | 'other';
 export const CLASS_IDS: LineClass[] = ['outer', 'inner', 'infill', 'top', 'bottom', 'solid', 'support', 'other'];
@@ -15,6 +26,8 @@ export interface LineClasses {
   cls: Uint8Array;
   /** Per segment: 1-based number within its kind (inner wall 1 = next to the outer wall, top 1 = the top skin). 0 = not counted. */
   rank: Uint8Array;
+  /** Per segment: 1 = on a curved stretch of a wall. */
+  curved: Uint8Array;
   /** Largest number found per counted kind. */
   max: { inner: number; top: number; bottom: number };
   /** Segments per kind. */
@@ -30,6 +43,8 @@ const SUPPORT = new Set([F('support'), F('support_interface')]);
 /** Farthest a top or bottom skin is looked for, in layers. */
 const SHELL_REACH = 30;
 const CELL = 2;
+/** Curved: turning at least this much per mm (radius under 150 mm), over CURVE_SPAN mm on each side. */
+const CURVE_K = 1 / 150, CURVE_SPAN = 1.5;
 
 const key = (x: number, y: number) => `${Math.floor(x / CELL)},${Math.floor(y / CELL)}`;
 const near = (set: Set<string> | undefined, x: number, y: number) => {
@@ -42,7 +57,7 @@ const near = (set: Set<string> | undefined, x: number, y: number) => {
 /** `width(s)`: the line width of a segment (mm). */
 export function classifyLines(segs: Segs, layerCount: number, width: (s: number) => number): LineClasses {
   const n = segs.count, P = segs.pos;
-  const cls = new Uint8Array(n), rank = new Uint8Array(n);
+  const cls = new Uint8Array(n), rank = new Uint8Array(n), curved = new Uint8Array(n);
   const max = { inner: 0, top: 0, bottom: 0 };
   const count = Object.fromEntries(CLASS_IDS.map((c) => [c, 0])) as Record<LineClass, number>;
   const mid = (s: number, a: 0 | 1) => (P[s * 6 + a] + P[s * 6 + 3 + a]) / 2;
@@ -104,13 +119,71 @@ export function classifyLines(segs: Segs, layerCount: number, width: (s: number)
       else if (up <= down) { c = 'top'; r = Math.min(250, up + 1); }
       else { c = 'bottom'; r = Math.min(250, down + 1); }
     }
+    if (c === 'outer' || c === 'inner') markCurved(P, s, e, curved);
     const ci = CLASS_IDS.indexOf(c);
     for (let k = s; k < e; k++) { cls[k] = ci; rank[k] = r; }
     count[c] += e - s;
     if (c === 'inner' || c === 'top' || c === 'bottom') max[c] = Math.max(max[c], r);
     s = e;
   }
-  return { cls, rank, max, count };
+  return { cls, rank, curved, max, count };
+}
+
+/** Curved stretches of one line (segments s..e-1): the heading changes the same way before and after each segment. */
+function markCurved(P: Float32Array, s: number, e: number, out: Uint8Array) {
+  const m = e - s;
+  if (m < 3) return;
+  const head = new Float64Array(m), arc = new Float64Array(m + 1);
+  for (let k = 0; k < m; k++) {
+    const i = (s + k) * 6, dx = P[i + 3] - P[i], dy = P[i + 4] - P[i + 1];
+    head[k] = Math.atan2(dy, dx);
+    arc[k + 1] = arc[k] + Math.hypot(dx, dy);
+  }
+  // unwrapped heading, so turns add up across ±180°
+  const turn = new Float64Array(m);
+  for (let k = 1; k < m; k++) { let d = head[k] - head[k - 1]; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI; turn[k] = turn[k - 1] + d; }
+  let a = 0, b = 0;
+  for (let k = 0; k < m; k++) {
+    const mid = (arc[k] + arc[k + 1]) / 2;
+    while (a < k && (arc[a] + arc[a + 1]) / 2 < mid - CURVE_SPAN) a++;
+    while (b < m - 1 && (arc[b + 1] + arc[b + 2]) / 2 <= mid + CURVE_SPAN) b++;
+    const back = turn[k] - turn[a], fwd = turn[b] - turn[k];
+    const lb = mid - (arc[a] + arc[a + 1]) / 2, lf = (arc[b] + arc[b + 1]) / 2 - mid;
+    if (lb < CURVE_SPAN * 0.5 || lf < CURVE_SPAN * 0.5) continue;
+    const need = CURVE_K * CURVE_SPAN;
+    if (Math.sign(back) === Math.sign(fwd) && Math.abs(back) >= need * (lb / CURVE_SPAN) && Math.abs(fwd) >= need * (lf / CURVE_SPAN)) out[s + k] = 1;
+  }
+}
+
+const SKIP = new Set(['travel', 'skirt', 'brim', 'prime_tower'].map((f) => FEATURE_ORDER.indexOf(f as FeatureType)));
+
+/**
+ * Segments of the slicer's own moves, so the slicer can measure line classes the same way the window does.
+ * `opAt[layer][op]` gives the segment of each printing move op (-1 for anything else).
+ */
+export function segsOfOps(layers: LayerOps[]): { segs: Segs; opAt: Int32Array[]; width: Float32Array } {
+  let count = 0;
+  for (const L of layers) for (const op of L.ops) if (op.k === 'move' && !op.travel && op.e > 0) count++;
+  const pos = new Float32Array(count * 6), move = new Uint32Array(count), layer = new Uint32Array(count), feature = new Uint8Array(count), width = new Float32Array(count);
+  const opAt: Int32Array[] = [];
+  let s = 0, mv = 0;
+  layers.forEach((L, li) => {
+    const at = new Int32Array(L.ops.length).fill(-1);
+    let px = NaN, py = NaN, pz = NaN;
+    L.ops.forEach((op, k) => {
+      if (op.k === 'raw' && op.resetPos) { px = NaN; mv += 2; return; }
+      if (op.k !== 'move') return;
+      mv++;
+      const f = FEATURE_ORDER.indexOf(op.feature);
+      if (!op.travel && op.e > 0 && !Number.isNaN(px) && !SKIP.has(f)) {
+        pos.set([px, py, pz, op.x, op.y, op.z], s * 6);
+        move[s] = mv; layer[s] = li; feature[s] = f; width[s] = op.w; at[k] = s; s++;
+      } else if (!op.travel && op.e > 0) mv++; // a line that can't be drawn breaks the run
+      px = op.x; py = op.y; pz = op.z;
+    });
+    opAt.push(at);
+  });
+  return { segs: { pos: pos.subarray(0, s * 6), move: move.subarray(0, s), layer: layer.subarray(0, s), feature: feature.subarray(0, s), count: s }, opAt, width: width.subarray(0, s) };
 }
 
 /** What the window shows: each kind on or off, and for the counted kinds how many from the outside in. */
