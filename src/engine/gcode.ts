@@ -5,6 +5,7 @@ import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from './types
 import { FEATURE_ORDER } from './types';
 import { fitArc } from './arc';
 import { changerOf } from '../profiles/changer';
+import { inZone, renderVendor, usesVendorTemplates } from './templateVars';
 
 export type Op =
   | {
@@ -100,6 +101,8 @@ export interface EmitInput {
   headerLines?: string[];
   /** Rewrites the lines between the start and end G-code (plugins that repeat the print). */
   bodyTransform?: (body: string[]) => string[];
+  /** Extra variables for vendor templates that only the slicer knows (head wrap zone, …). */
+  templateExtra?: Record<string, number | string | boolean>;
 }
 
 export interface EmitOutput {
@@ -151,7 +154,7 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
  *  - a head that is never picked up again is switched off when it is parked (`offAfterLastUse`)
  * Needs the move times. Heads are filament slots (slot n prints with head n).
  */
-export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; offAfterLastUse?: boolean } = {}) {
+export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; preheatDelta?: number; offAfterLastUse?: boolean } = {}) {
   // time at the start of every op, and every pick-up (a tool op that changes the head)
   const at: { li: number; oi: number; t: number }[] = [];
   const picks: { tool: number; t: number; idx: number }[] = [];
@@ -191,7 +194,7 @@ export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: 
       let k = pk.idx;
       while (k > parked + 1 && at[k - 1].t > pk.t - lead) k--;
       const tk = temp(pk.tool);
-      if (tk && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(tk)} ; preheat T${pk.tool} for its pick-up` });
+      if (tk && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(tk + Math.max(-100, Math.min(20, o.preheatDelta ?? 0)))} ; preheat T${pk.tool} for its pick-up` });
     }
   }
   if (o.offAfterLastUse) {
@@ -208,7 +211,7 @@ export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: 
 }
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
-export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], bodyTransform }: EmitInput): EmitOutput {
+export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], bodyTransform, templateExtra }: EmitInput): EmitOutput {
   const num = (k: string) => Number(cfg[k] ?? 0);
   const flavor = String(cfg.gcode_flavor);
   const relE = cfg.use_relative_e_distances !== false;
@@ -270,7 +273,10 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     }
     layerTimes.push(t);
   }
-  if (changerOf(cfg) === 'toolchanger') preheatParkedHeads(layers, num('tool_preheat_time'), filaments, { standbyDelta: num('standby_temperature_delta'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
+  if (changerOf(cfg) === 'toolchanger') {
+    const ooze = cfg.ooze_prevention !== false;
+    preheatParkedHeads(layers, ooze ? num('tool_preheat_time') : 0, filaments, { standbyDelta: ooze ? num('standby_temperature_delta') : 0, preheatDelta: num('preheat_delta_temperature'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
+  }
   const total = layerTimes.reduce((a, b) => a + b, 0);
 
   // 2) write
@@ -311,7 +317,37 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   }
   const chamber = num('chamber_temperature');
   if (chamber > 0) push(`M141 S${Math.round(chamber)} ; chamber temperature`);
-  push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  // the printer maker's own templates (Bambu Studio, Snapmaker Orca, OrcaSlicer profiles) run with the variables those
+  // slicers give them; every other printer uses NexSpiro's simple [key] expansion
+  const vendor = usesVendorTemplates(cfg);
+  const firstTool = layers.find((L) => L.ops.some((op) => op.k === 'move' && !op.travel))?.tool ?? 0;
+  const firstBox = (() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, oMinX = Infinity, oMinY = Infinity, oMaxX = -Infinity, oMaxY = -Infinity;
+    const L0 = layers[0];
+    for (const op of L0?.ops ?? []) {
+      if (op.k !== 'move' || op.travel || !(op.e > 0)) continue;
+      minX = Math.min(minX, op.x); minY = Math.min(minY, op.y); maxX = Math.max(maxX, op.x); maxY = Math.max(maxY, op.y);
+      if (op.feature !== 'prime_tower') { oMinX = Math.min(oMinX, op.x); oMinY = Math.min(oMinY, op.y); oMaxX = Math.max(oMaxX, op.x); oMaxY = Math.max(oMaxY, op.y); }
+    }
+    if (!isFinite(minX)) { minX = minY = maxX = maxY = 0; }
+    if (!isFinite(oMinX)) { oMinX = minX; oMinY = minY; oMaxX = maxX; oMaxY = maxY; }
+    return { minX, minY, maxX, maxY, cx: (oMinX + oMaxX) / 2, cy: (oMinY + oMaxY) / 2, obj: { minX: oMinX, minY: oMinY, maxX: oMaxX, maxY: oMaxY } };
+  })();
+  const zoneOf = (v: unknown) => (typeof v === 'string' && v ? v.split(',') : v);
+  const tplCommon = {
+    total_layer_count: layers.length, initial_extruder: firstTool, initial_tool: firstTool, initial_no_support_extruder: firstTool, initial_no_support_tool: firstTool,
+    current_extruder: firstTool,
+    first_layer_print_min: [firstBox.minX, firstBox.minY], first_layer_print_max: [firstBox.maxX, firstBox.maxY],
+    first_layer_print_size: [firstBox.maxX - firstBox.minX, firstBox.maxY - firstBox.minY], first_layer_center_no_wipe_tower: [firstBox.cx, firstBox.cy],
+    in_head_wrap_detect_zone: inZone(zoneOf(cfg.head_wrap_detect_zone), firstBox.obj),
+    initial_layer_print_height: Number(cfg.initial_layer_print_height ?? layers[0]?.h ?? 0.2),
+    has_wipe_tower: layers.some((L) => L.ops.some((op) => op.k === 'move' && op.feature === 'prime_tower')),
+    ...templateExtra,
+  };
+  const macro = (tpl: string, what: string, extra: Record<string, number | string | boolean | (number | string | boolean)[]> = {}) =>
+    vendor ? renderVendor(tpl, cfg, filaments, { ...tplCommon, ...extra }, what) : expandMacro(tpl, cfg, extra as Record<string, string | number>);
+  push(macro(String(cfg.machine_start_gcode ?? ''), 'Start G-code'));
+  if (vendor) push(';===== end of start G-code =====');
   const bodyStart = out.length;
   if (chamber > 0 && flavor !== 'klipper') push(`M191 S${Math.round(chamber)} ; wait for chamber`);
   if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '' && cfg.enable_pressure_advance !== false) push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
@@ -350,16 +386,18 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     const layerIndex = L.layer ?? li;
     const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li]);
     const bl = String(cfg.before_layer_change_gcode ?? '');
-    if (bl) push(expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    if (bl) push(vendor ? macro(bl, 'Before layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z }) : expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     push(';LAYER_CHANGE');
     push(`;Z:${n(L.z)}`);
     push(`;HEIGHT:${n(L.h)}`);
     if (!relE) { push('G92 E0'); eAbs = 0; }
     if (flavor !== 'klipper') push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
-    if (flavor === 'bbl') push(`M73 L${li + 1}`);
+    // (the makers' own layer change G-code reports the layer itself)
+    if (vendor && /M73 L|SET_PRINT_STATS_INFO/.test(String(cfg.layer_change_gcode ?? ''))) { /* reported by the template */ }
+    else if (flavor === 'bbl') push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
-    if (lc) push(expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    if (lc) push(vendor ? macro(lc, 'Layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z }) : expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     if (L.temp !== undefined) { push(`M104 S${L.temp}`); temp = L.temp; }
     if (L.bedTemp !== undefined) push(`M140 S${L.bedTemp}`);
     L.fan = layerFan;
@@ -407,6 +445,12 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
         case 'raw':
           push(op.text);
           tempIn(op.text);
+          // a macro that switched the extruder mode or reset E (the makers' change G-code ends in M83 / G92 E0):
+          // put NexSpiro's mode back, so absolute E never meets a firmware left in relative mode
+          if (/^\s*(?:N\d+\s+)?(?:M8[23]\b|G92\b[^;\n]*\bE)/m.test(op.text)) {
+            push(relE ? 'M83 ; relative E (after the inserted G-code)' : 'M82 ; absolute E (after the inserted G-code)');
+            if (!relE) { push('G92 E0'); eAbs = 0; }
+          }
           if (op.time) elapsed += op.time;
           if (op.time && /^\s*G4\b/.test(op.text) && Number.isFinite(x) && Number.isFinite(y)) pauses.push(x, y, Number.isFinite(z) ? z : L.z, op.time);
           if (op.resetPos) { x = NaN; y = NaN; z = NaN; f = NaN; accel = -1; }
@@ -493,7 +537,9 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   }
   push('M73 P100 R0');
   setFan(0);
-  push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
+  const lastL = layers[layers.length - 1];
+  if (vendor) push(';===== NexSpiro end G-code: the printer maker\'s own end G-code follows =====');
+  push(macro(String(cfg.machine_end_gcode ?? ''), 'End G-code', { layer_num: Math.max(0, layers.length - 1), layer_z: lastL?.z ?? 0, max_layer_z: lastL?.z ?? 0, toolchange_count: toolChanges }));
 
   const gramsOf = (mm: number, k: number) => {
     const fl = filaments[k] ?? filaments[0];

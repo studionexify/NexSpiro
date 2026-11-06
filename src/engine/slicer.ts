@@ -8,8 +8,10 @@ import {
 } from './clipper';
 import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
+import { flushSplit, inZone, renderVendor, usesVendorTemplates } from './templateVars';
 import type { IndexedMesh } from './mesh';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
+import { mixProblems, mixSubSlots, resolveFilament, subPassCount } from '../profiles/mixing';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh, type SlicingMode } from './slice';
 import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
@@ -60,6 +62,8 @@ interface PathItem extends Polyline2 {
 }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
+/** Infill printed in passes with "Apply subdivision to infill". */
+const SUB_FILL = new Set<FeatureType>(['sparse_infill', 'internal_solid_infill']);
 /** Overhang degrees (fraction of the line width hanging over the layer below) that start a new speed step. */
 const OVERHANG_LEVELS = [0.1, 0.25, 0.5, 0.75, 1];
 
@@ -138,7 +142,7 @@ export function slotFromConfig(cfg: Config): FilamentSlot {
   };
 }
 
-interface Island { obj: number; fil: number; ex: ExPolygon; walls: IslandWalls }
+interface Island { obj: number; fil: number; ex: ExPolygon; walls: IslandWalls; /** Subdivided mix: slot of each pass, bottom → top (the last is `fil`). */ sub?: number[] }
 interface Regions {
   top: Paths; bottom: Paths; bridge: Paths; solid: Paths; sparse: Paths;
   sparseMods: { paths: Paths; density: number; pattern: SparsePattern; speed?: number; angle?: number }[];
@@ -200,6 +204,45 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const rnd = mulberry(42);
   const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
   const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
+  // mixed filaments (colour mixing): indices after the physical slots resolve to a physical slot per layer
+  const mixes = opts.mixes ?? [];
+  const usedMixes = new Set<number>();
+  const objHeightT: (Float32Array | undefined)[] = [];
+  /** Height fraction (0 bottom … 1 top) of each layer within object o; -1 off the object (gradient mixes). */
+  const heightT = (o: number) => {
+    let t = objHeightT[o];
+    if (t) return t;
+    const sl = objSlices[o] ?? [];
+    let lo = -1, hi = -1;
+    for (let i = 0; i < N; i++) if (sl[i]?.length) { if (lo < 0) lo = i; hi = i; }
+    t = new Float32Array(N).fill(-1);
+    for (let i = Math.max(0, lo); lo >= 0 && i <= hi; i++) t[i] = hi > lo ? (zs[i] - zs[lo]) / (zs[hi] - zs[lo]) : 0;
+    return (objHeightT[o] = t);
+  };
+  const filAt = (f: number, i: number, o: number) => {
+    const v = f | 0;
+    if (v >= filaments.length && mixes[v - filaments.length]) usedMixes.add(v - filaments.length);
+    return clampFil(resolveFilament(v, i, filaments.length, mixes, mixes[v - filaments.length]?.kind === 'gradient' ? heightT(o) : undefined));
+  };
+  // Subdivide Mix Layer (Snapmaker Orca's experimental colour mixing): mix areas print their outer wall (and with
+  // "Apply subdivision to infill" their infill) in thinner passes, one filament per pass, inside each layer.
+  // Without "Full domain" only objects whose own filament is a mix are subdivided; with it painted mixes and
+  // colour changes to a mix are too.
+  const subOn = bool('mix_subdivide') && !bool('spiral_mode'), subFull = bool('mix_subdivide_full_domain'), subInfill = bool('mix_subdivide_infill');
+  type FilRegion = { fil: number; paths: Paths; sub?: number[] };
+  const regionOf = (f: number, i: number, o: number, src: 'object' | 'paint' | 'change'): { fil: number; sub?: number[] } => {
+    const v = f | 0, k = v - filaments.length, m = k >= 0 ? mixes[k] : undefined;
+    if (m && subOn && i > objStart && (src === 'object' || subFull) && !mixProblems(m, filaments.length).length) {
+      const n = subPassCount(m, hs[i]);
+      if (n >= 2) {
+        usedMixes.add(k);
+        const sub = mixSubSlots(m, i, n, m.kind === 'gradient' ? heightT(o) : undefined).map(clampFil);
+        if (new Set(sub).size > 1) return { fil: sub[n - 1], sub };
+        return { fil: sub[0] };
+      }
+    }
+    return { fil: filAt(v, i, o) };
+  };
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
   const flavor = str('gcode_flavor');
@@ -344,12 +387,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // ---------- multi-material: base filament per layer (colour-change actions) + painted colour regions
   const colorActions = (opts.layerActions ?? []).filter((a) => a.type === 'color' && a.filament !== undefined).sort((a, b) => a.z - b.z);
   const baseFilAt = (o: number, i: number) => {
-    let f = clampFil(meshes[o].filament ?? 0);
-    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = clampFil(a.filament!);
-    return f;
+    let f = meshes[o].filament ?? 0;
+    let src: 'object' | 'change' = 'object';
+    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) { f = a.filament!; src = 'change'; }
+    return regionOf(f, i, o, src);
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
-  const paintDepth = num('mmu_paint_depth') || 1.5;
+  // painted colour reach (Orca / Bambu "Maximum width of a segmented region"; 0 = nearest surface, no limit), deeper every
+  // other layer by the interlocking depth
+  const segWidth = Math.max(0, num('mmu_segmented_region_max_width')), segInterlock = Math.max(0, num('mmu_segmented_region_interlocking_depth'));
+  // with no width limit a painted top / bottom face colours its shell, as deep as the top / bottom shells
+  const paintFlatReach = Math.max(0.5, num('top_shell_thickness'), num('bottom_shell_thickness'), num('top_shell_layers') * num('layer_height'), num('bottom_shell_layers') * num('layer_height'));
+  const paintDepthAt = (i: number) => (segWidth > 0 ? segWidth + (segInterlock > 0 && i % 2 === 1 ? segInterlock : 0) : 0);
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
@@ -366,9 +415,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
   const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
   const supportBlockPlugins = [...sessions.values()].filter((x) => x.supportBlockersAt);
-  const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
+  const filRegionsCache = new Map<number, FilRegion[]>();
   const paintOverlapWarned = new Set<number>();
-  const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
+  const filRegions = (o: number, i: number): FilRegion[] => {
     const key = o * 1_000_000 + i;
     const hit = filRegionsCache.get(key);
     if (hit) return hit;
@@ -376,24 +425,24 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     filRegionsCache.set(key, r);
     return r;
   };
-  const filRegionsUncached = (o: number, i: number): { fil: number; paths: Paths }[] => {
+  const filRegionsUncached = (o: number, i: number): FilRegion[] => {
     const sl = objSlices[o][i];
     if (!sl.length) return [];
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
-    if (!colorTris[o].length && !contribs.length) return [{ fil: base, paths: sl }];
-    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth) : new Map<number, Paths>();
-    let out: { fil: number; paths: Paths }[] = [];
+    if (!colorTris[o].length && !contribs.length) return [{ ...base, paths: sl }];
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i), paintFlatReach) : new Map<number, Paths>();
+    let out: FilRegion[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
-      const fil = clampFil(c - 1);
+      const rf = regionOf(c - 1, i, o, 'paint');
       const r = taken.length ? difference(paths, taken) : paths;
       if (!r.length) continue;
-      out.push({ fil, paths: r });
+      out.push({ ...rf, paths: r });
       taken = union(taken, r);
     }
     const rest = taken.length ? difference(sl, taken) : sl;
-    if (rest.length) out.unshift({ fil: base, paths: rest });
+    if (rest.length) out.unshift({ ...base, paths: rest });
     // plugin regions win over paint and the base material; later contributions win over earlier ones
     for (const c of contribs) {
       const r = intersection(c.paths, sl);
@@ -402,13 +451,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         paintOverlapWarned.add(o);
         warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
       }
-      out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
-      out.push({ fil: clampFil(c.fil), paths: r });
+      out = out.map((e) => ({ ...e, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
+      out.push({ fil: filAt(c.fil, i, o), paths: r });
     }
     // merge regions sharing a filament
-    const merged = new Map<number, Paths>();
-    for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
-    return [...merged].map(([fil, paths]) => ({ fil, paths }));
+    // merge regions sharing a filament (a subdivided mix stays apart: its passes differ)
+    const merged = new Map<string, FilRegion>();
+    for (const r of out) {
+      const key = r.sub ? `${r.fil}|${r.sub.join(',')}` : `${r.fil}`;
+      const m = merged.get(key);
+      merged.set(key, m ? { ...m, paths: union(m.paths, r.paths) } : r);
+    }
+    return [...merged.values()];
   };
 
   // ---------- stage 4: perimeters, per object & filament region
@@ -463,10 +517,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             topOneWall: topOne,
           });
           pushAll(regInner, w.inner);
-          islands.push({ obj: oi, fil: reg.fil, ex, walls: w });
+          islands.push({ obj: oi, fil: reg.fil, ex, walls: w, ...(reg.sub ? { sub: reg.sub } : {}) });
         }
         const u = union(regInner);
-        objMap.set(reg.fil, u);
+        objMap.set(reg.fil, objMap.has(reg.fil) ? union(objMap.get(reg.fil)!, u) : u);
         pushAll(objInner, u);
       }
       inners.push(union(objInner));
@@ -769,7 +823,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const featFil = (o: number, i: number, kind: 'wall' | 'sparse' | 'solid', fallback: number) => {
     const k = kind === 'wall' ? 'wall_filament' : kind === 'sparse' ? 'sparse_infill_filament' : 'solid_infill_filament';
     const v = Math.round(onum(o, i, k));
-    return v > 0 ? clampFil(v - 1) : fallback;
+    return v > 0 ? filAt(v - 1, i, o) : fallback;
   };
   const flushObj = meshes.map((_, o) => obool(o, objStart, 'flush_into_objects'));
   const layerFils: number[][] = [];
@@ -779,13 +833,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     for (const isl of layerIslands[i]) {
       if (flushObj[isl.obj]) continue;
       s.add(featFil(isl.obj, i, 'wall', isl.fil));
+      if (isl.sub) for (const f of isl.sub) s.add(f);
       const rg = regions[i][isl.obj];
       if (rg.sparse.length || rg.sparseMods.length || rg.combined || rg.lines?.length) s.add(featFil(isl.obj, i, 'sparse', isl.fil));
       if (rg.solid.length || rg.top.length || rg.bottom.length || rg.bridge.length || rg.vshell.length || rg.floating.length || rg.subTop.length) s.add(featFil(isl.obj, i, 'solid', isl.fil));
     }
     if (support && supportFil >= 0 && (support.base[i].length)) s.add(supportFil);
     if (support && ifaceFil >= 0 && (support.iface[i].length || support.bottomIface?.[i]?.length)) s.add(ifaceFil);
-    if (!s.size && layerIslands[i].length) s.add(clampFil(meshes[layerIslands[i][0].obj].filament ?? 0));
+    if (!s.size && layerIslands[i].length) s.add(filAt(meshes[layerIslands[i][0].obj].filament ?? 0, i, layerIslands[i][0].obj));
     layerFils.push([...s]);
     s.forEach((f) => usedFils.add(f));
   }
@@ -821,8 +876,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const maxChanges = Math.max(1, ...changesPerLayer);
   const td = Math.max(4, bandDepth * maxChanges);
   let tx = num('prime_tower_x'), ty = num('prime_tower_y');
-  if (tx < 0) tx = Math.max(5, num('bed_x') - tw - 15);
-  if (ty < 0) ty = Math.max(5, num('bed_y') - td - 25);
+  // unset: the printer's default position (Bambu Studio's default_wipe_tower_pos, a fraction of the bed), kept on the bed
+  const towerPos = /^\s*([\d.]+)\s*x\s*([\d.]+)\s*$/i.exec(str('default_wipe_tower_pos'));
+  const brimM = Math.max(0, num('prime_tower_brim_width')) + 2;
+  const autoTower = !!towerPos && tx < 0 && ty < 0;
+  if (tx < 0) tx = towerPos ? Math.min(Math.max(brimM, Number(towerPos[1]) * num('bed_x')), num('bed_x') - tw - brimM) : Math.max(5, num('bed_x') - tw - 15);
+  if (ty < 0) ty = towerPos ? Math.min(Math.max(brimM, Number(towerPos[2]) * num('bed_y')), num('bed_y') - td - brimM) : Math.max(5, num('bed_y') - td - 25);
   // tower body: a (filleted) rectangle with optional diagonal ribs
   let towerBody: Paths = [rectPath(tx, ty, tx + tw, ty + td)];
   if (useTower) {
@@ -838,6 +897,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       towerBody = union([...towerBody, ...ribs]);
     }
     if (bool('prime_tower_fillet_wall')) towerBody = offset(offset(towerBody, -2, 'round'), 2, 'round');
+    // a default position (not set by the user) keeps the whole tower, ribs and brim included, on the plate
+    if (autoTower) {
+      const b0 = bounds(towerBody);
+      const lo = (v: number) => v / SCALE;
+      let dx = 0, dy = 0;
+      if (lo(b0.minX) - brimM < 0) dx = brimM - lo(b0.minX); else if (lo(b0.maxX) + brimM > num('bed_x')) dx = num('bed_x') - brimM - lo(b0.maxX);
+      if (lo(b0.minY) - brimM < 0) dy = brimM - lo(b0.minY); else if (lo(b0.maxY) + brimM > num('bed_y')) dy = num('bed_y') - brimM - lo(b0.maxY);
+      if (dx || dy) {
+        tx += dx; ty += dy;
+        towerBody = towerBody.map((p) => p.map((q) => ({ X: q.X + Math.round(dx * SCALE), Y: q.Y + Math.round(dy * SCALE) })));
+      }
+    }
     const tb = offset(towerBody, 3);
     if (intersection(tb, layerSlices[objStart]).length) warn('The prime tower overlaps an object — move it in Others › Prime tower.');
     const b = bounds(towerBody);
@@ -1027,6 +1098,32 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const layerOps: LayerOps[] = [];
   let px = 0, py = 0;
   let retracted = false;
+  // tool changers: each parked head keeps the filament it was retracted by (retract_length_toolchange, as in
+  // Orca / Snapmaker Orca); it comes back when that head is picked up again. null = the normal retraction
+  const parkedRetract = new Map<number, number>();
+  const vendorTpl = usesVendorTemplates(cfg);
+  let headWrap: boolean | null = null;
+  let firstVars: Record<string, number[]> | null = null;
+  /** First layer bounds of the objects (Bambu: first_layer_print_min/max/size, first_layer_center_no_wipe_tower). */
+  const firstLayerVars = () => {
+    if (firstVars) return firstVars;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of layerSlices[objStart] ?? []) for (const q of p) { minX = Math.min(minX, q.X / SCALE); minY = Math.min(minY, q.Y / SCALE); maxX = Math.max(maxX, q.X / SCALE); maxY = Math.max(maxY, q.Y / SCALE); }
+    if (!isFinite(minX)) minX = minY = maxX = maxY = 0;
+    firstVars = { first_layer_print_min: [minX, minY], first_layer_print_max: [maxX, maxY], first_layer_print_size: [maxX - minX, maxY - minY], first_layer_center_no_wipe_tower: [(minX + maxX) / 2, (minY + maxY) / 2] };
+    return firstVars;
+  };
+  /** Bambu A1: some printed area lies in the machine's head wrap detect zone (the timelapse then skips its park move). */
+  const inHeadWrapZone = () => {
+    if (headWrap !== null) return headWrap;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const sl of layerSlices) for (const p of sl) for (const q of p) { minX = Math.min(minX, q.X); minY = Math.min(minY, q.Y); maxX = Math.max(maxX, q.X); maxY = Math.max(maxY, q.Y); }
+    const zone = String(cfg.head_wrap_detect_zone ?? '');
+    headWrap = isFinite(minX) && !!zone && inZone(zone.split(','), { minX: minX / SCALE, minY: minY / SCALE, maxX: maxX / SCALE, maxY: maxY / SCALE });
+    return headWrap;
+  };
+  let toolchangeCount = 0;
+  let pendingDeretract: number | null = null;
   let prevSeams: [number, number][] = [];
   let curZ = 0;
   let curTool = -1;
@@ -1142,6 +1239,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       wipeTrail = [];
     };
 
+    /** Pass j (0 = bottom) of n of a subdivided mix layer: 1/n of the layer height, its top j+1 n-ths up. */
+    const toPass = (it: PathItem, j: number, n: number): PathItem => {
+      it.height = h / n;
+      if (it.depth) { it.depth = undefined; it.flows = undefined; } // no scarf ramp on a thin pass
+      if (j < n - 1) it.depth = new Array(it.pts.length / 2 + 2).fill((n - 1 - j) / n);
+      return it;
+    };
     const extrudePath = (it: PathItem) => {
       let pts = it.pts;
       if (pts.length < 4) return;
@@ -1154,7 +1258,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
       }
       travel(pts[0], pts[1], it.feature, startZ);
-      if (retracted) { ops.push({ k: 'retract', len: -Math.max(0, retractLen + restartExtra), speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
+      if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
       const a = Math.min(accelFor(it.feature, i), capH.a);
       if (a !== accelSet) { ops.push({ k: 'accel', a }); accelSet = a; }
       if (jerkOn) { const j = jerkFor(it.feature, i); if (j !== jerkSet) { ops.push({ k: 'jerk', j }); jerkSet = j; } }
@@ -1365,7 +1469,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     let flushSupportDone = false;
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) {
+      // the first filament: loaded by the start G-code (the makers' own start G-code loads the initial filament itself)
+      if (curTool === -1 && (!hasAms || vendorTpl || ((usedFils.size <= 1 || toolChanger) && next === 0))) {
         ops.push({ k: 'tool', tool: next }); curTool = next; toolSet = filaments[next]?.settings ?? {}; loadRetraction();
         const sg = String(toolSet.filament_start_gcode ?? '');
         if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
@@ -1394,18 +1499,38 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       // no chute: the tower band printed right after the change takes the flush, the change G-code purges nothing
       const flushLen = towerFlush && towerActive ? 0 : (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
       // a head is parked retracted by its normal length, which comes back when it is next picked up
-      if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: toolChanger ? retractLen : num('retract_length_toolchange') || retractLen, speed: retractSpeed });
+      if (toolChanger && curTool >= 0) {
+        const want = num('retract_length_toolchange') || retractLen;
+        const have = retracted ? (pendingDeretract ?? retractLen) : 0;
+        if (want > have) ops.push({ k: 'retract', len: want - have, speed: retractSpeed });
+        parkedRetract.set(curTool, Math.max(want, have));
+      } else if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: num('retract_length_toolchange') || retractLen, speed: retractSpeed });
       if (curTool >= 0) { const eg = String(filaments[curTool]?.settings?.filament_end_gcode ?? ''); if (eg) ops.push({ k: 'raw', text: expandMacro(eg, cfg, { filament_extruder_id: curTool }) }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
-        text: expandMacro(str('change_filament_gcode'), cfg, {
-          previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
-          new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
-          flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
-        }),
+        text: vendorTpl
+          // the maker's own change G-code, with the variables Bambu Studio / Orca give it (GCode.cpp set_extruder)
+          ? renderVendor(str('change_filament_gcode'), cfg, filaments, {
+            previous_extruder: prev, next_extruder: next, layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h),
+            toolchange_count: ++toolchangeCount, current_extruder: prev,
+            new_filament_temp: Math.round(i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp), old_filament_temp: curTool >= 0 ? Math.round(filaments[prev].nozzleTemp) : 0,
+            ...flushSplit(towerFlush && towerActive ? 0 : flushVol || 0, Math.PI * (fl.diameter / 2) ** 2),
+            old_retract_length_toolchange: num('retract_length_toolchange'), new_retract_length_toolchange: num('retract_length_toolchange'),
+            x_after_toolchange: isNaN(px) ? 0 : px, y_after_toolchange: isNaN(py) ? 0 : py, z_after_toolchange: zTop,
+            travel_point_1_x: isNaN(px) ? 0 : px, travel_point_1_y: isNaN(py) ? 0 : py, travel_point_2_x: isNaN(px) ? 0 : px, travel_point_2_y: isNaN(py) ? 0 : py,
+            travel_point_3_x: isNaN(px) ? 0 : px, travel_point_3_y: isNaN(py) ? 0 : py,
+            position: [isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, zTop],
+            outer_wall_volumetric_speed: Math.min(num('outer_wall_speed') * (num('outer_wall_line_width') || nozzle) * h, fl.maxVolumetricSpeed || 1e9),
+            wipe_tower_x: tx + tw / 2, wipe_tower_y: ty + td / 2, toolchange_z: zTop + 3,
+          }, 'Filament change G-code')
+          : expandMacro(str('change_filament_gcode'), cfg, {
+            previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
+            new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
+            flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
+          }),
       });
       // the parked head waits below its print temperature (it is heated again before its next pick-up)
-      if (toolChanger && curTool >= 0 && num('standby_temperature_delta') < 0)
+      if (toolChanger && curTool >= 0 && cfg.ooze_prevention !== false && num('standby_temperature_delta') < 0)
         ops.push({ k: 'raw', text: `M104 T${prev} S${Math.max(0, Math.round(filaments[prev].nozzleTemp + num('standby_temperature_delta')))} ; park T${prev} at standby` });
       if (fl.pressureAdvance !== undefined) ops.push({ k: 'raw', text: paLine(flavor, fl.pressureAdvance) });
       ops.push({ k: 'tool', tool: next });
@@ -1415,6 +1540,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
       if (num('retract_restart_extra_toolchange')) ops.push({ k: 'raw', text: `G1 E${num('retract_restart_extra_toolchange').toFixed(3)} F${Math.round(deretractSpeed * 60)}` });
       retracted = hasAms; // the AMS sequence ends with a retraction, a parked head was retracted; M600 leaves the nozzle primed
+      // a head picked up for the first time was never retracted (the start G-code primed it)
+      pendingDeretract = toolChanger ? (parkedRetract.get(next) ?? 0) : null;
       px = NaN; py = NaN;
       wipeTrail = [];
       const wasFirst = curTool === -1;
@@ -1443,7 +1570,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         retract();
         travel(tx + tw / 2, ty + td / 2, 'travel', curZ);
       }
-      ops.push({ k: 'raw', text: timelapse });
+      ops.push({ k: 'raw', text: vendorTpl ? renderVendor(timelapse, cfg, filaments, {
+        layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h), timelapse_type: smoothLapse ? 1 : 0, spiral_mode: vase,
+        in_head_wrap_detect_zone: inHeadWrapZone(), total_layer_count: N, ...firstLayerVars(),
+      }, 'Time lapse G-code') : timelapse });
     }
 
     // order filaments: current first
@@ -1559,6 +1689,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         for (const g of isl.walls.gaps) if (polyLen(g.pts) >= minLen) gapItems.push({ ...g, pts: g.pts.slice(), widths: g.widths!.slice(), flow: 1 } as PathItem);
       }
       const isFill = job.fills.filter((f) => mine(f.fil ?? isl.fil));
+      // subdivided mix: what is printed here is the top pass (the lower passes went first, see subPassPhase)
+      if (isl.sub && job.wallFil === isl.fil) {
+        const n = isl.sub.length;
+        for (const it of wallItems) if (it.wallDepth === 0) toPass(it, n - 1, n);
+        if (subInfill) for (const it of isFill) if (SUB_FILL.has(it.feature) && (it.fil ?? isl.fil) === isl.fil && (it.height === undefined || it.height < h)) toPass(it, n - 1, n);
+      }
       const fillOrdered = () => {
         const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
         const outp: PathItem[] = [];
@@ -1637,6 +1773,38 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         out.push(x + dx, y + dy);
       }
       return out;
+    }
+
+    // --- subdivided mixes: the lower passes of every mix area, bottom up, before anything else at full height
+    //     (the nozzle never goes down next to a line already printed on this layer)
+    {
+      const subJobs: { o: number; job: IslandJob }[] = [];
+      for (const o of (only === null ? objs : [only])) for (const job of jobsByObj.get(o) ?? []) if (job.isl.sub && job.wallFil === job.isl.fil) subJobs.push({ o, job });
+      const maxN = subJobs.length ? Math.max(...subJobs.map((x) => x.job.isl.sub!.length)) : 0;
+      for (let j = 0; j < maxN - 1; j++) {
+        const slots = [...new Set(subJobs.filter((x) => j < x.job.isl.sub!.length - 1).map((x) => x.job.isl.sub![j]))].sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+        for (const f of slots) {
+          changeTo(f);
+          for (const { o, job } of subJobs) {
+            const sub = job.isl.sub!, n = sub.length;
+            if (j >= n - 1 || sub[j] !== f) continue;
+            const items: PathItem[] = [];
+            for (const loop of job.isl.walls.loops[0] ?? []) {
+              const it: PathItem = { pts: simplify(loop.pts, resolution, loop.closed), closed: loop.closed, feature: loop.feature, width: loop.width, flow: 1, hole: loop.hole, wallDepth: 0 };
+              if (it.pts.length >= 4) items.push(toPass(it, j, n));
+            }
+            if (subInfill) for (const fl of job.fills) if (SUB_FILL.has(fl.feature) && (fl.fil ?? job.isl.fil) === job.isl.fil && (fl.height === undefined || fl.height < h)) items.push(toPass({ ...fl, pts: fl.pts.slice(), height: undefined }, j, n));
+            if (!items.length) continue;
+            objFlow = (onum(o, i, 'flow_ratio_scale') || 1) * (onum(o, i, 'print_flow_ratio') || 1);
+            curObj = o;
+            if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_START NAME=${labelName(o)}` : `M486 S${o}` });
+            for (const it of orderPaths(items, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it);
+            if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_END NAME=${labelName(o)}` : 'M486 S-1' });
+            objFlow = 1; curObj = -1;
+          }
+        }
+      }
+      if (maxN) order.sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
     }
 
     // --- per filament: islands (walls, gap fill, fills) of every object
@@ -1856,7 +2024,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn }, sessions);
   }
   const bodyTransform = programBodyPlugins(opts.plugins, { cfg, layerZ: zs, faceRegions: [], warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header, bodyTransform });
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header, bodyTransform, templateExtra: vendorTpl ? { in_head_wrap_detect_zone: inHeadWrapZone(), max_print_z: Math.ceil(zs[N - 1] ?? 0) } : undefined });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
@@ -1866,6 +2034,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   if (changer === 'ams' && slotCount(cfg) > 0 && Math.max(...usedFils) + 1 > slotCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the filament unit has ${slotCount(cfg)} slots. Move the filaments to slots 1–${slotCount(cfg)}, or swap spools by hand when the printer asks.`);
+  if (usedMixes.size && !toolChanger) warn(`Colour mixing changes filament on every layer. This printer has ${hasAms ? 'one nozzle: each change purges' : 'no automatic changes: it pauses on each change'}; mixing works best on a tool changer (Snapmaker U1).`);
+  for (const k of usedMixes) if (mixProblems(mixes[k], filaments.length).length) warn(`Mixed filament ${filaments.length + k + 1}: ${mixProblems(mixes[k], filaments.length).join(' ')}`);
   if (toolChanger && Math.max(...usedFils) + 1 > toolheadCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the tool changer has ${toolheadCount(cfg)} heads. Slot n prints with head n: move the filaments to slots 1–${toolheadCount(cfg)}.`);
   progress('Done', 1);
   // a program that repeats the print (Bulnex) is longer than the single print the preview and stats describe: say so

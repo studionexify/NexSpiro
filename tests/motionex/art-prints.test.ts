@@ -65,7 +65,7 @@ describe('art test prints', () => {
       const rep = out.pluginReports!.motionex as MotionexReport;
       if (m.mx.paint) { expect(rep.paint!.paintedLayers).toBeGreaterThan(100); expect(out.stats.toolChanges).toBe(0); }
       if (m.mx.lace) { expect(rep.lace!.laceLayers).toBeGreaterThan(100); expect(rep.lace!.openShare).toBeGreaterThan(0.1); }
-      if (m.mx.weave) { expect(out.stats.toolChanges).toBe(rep.weave!.wovenLayers - 1); expect(out.gcode).toMatch(/^T1 ; park/m); }
+      if (m.mx.weave) { expect(out.stats.toolChanges).toBe(rep.weave!.wovenLayers - 1); expect(out.gcode).toMatch(/^T1(?: ; park.*)?$/m); }
       expect(out.gcode).not.toMatch(/NaN|Infinity/);
       expect(out.warnings.filter((w) => /Velocity paint|Lace|Weave/.test(w) && !/minimum layer time/.test(w))).toEqual([]);
       if (!OUT) return;

@@ -132,19 +132,20 @@ describe('filament units', () => {
   });
 
   it('Bambu: the chute flush and the tower are as before', () => {
-    const out = run('bbl-p1s');
+    // NexSpiro's own Bambu macro (X1C); the A1 / P1S run Bambu Studio's template (vendor-gcode.test.ts)
+    const out = run('bbl-x1c');
     const g = out.gcode;
     const fl = [...g.matchAll(/^G1 E([\d.]+) F240 ; flush the previous colour/gm)].map((m) => Number(m[1]));
     expect(fl.length).toBe(out.stats.toolChanges + 1); // the first load goes through the AMS too
     expect(fl.every((e) => e > 50)).toBe(true); // 280 mm³ of 1.75 mm filament
     expect(g).toMatch(/^M620 S1A/m);
     // stating the chute changes nothing but the config line
-    const chute = run('bbl-p1s', { purge_target: 'chute' }).gcode;
+    const chute = run('bbl-x1c', { purge_target: 'chute' }).gcode;
     const strip = (s: string) => s.split('\n').filter((l) => !l.startsWith('; purge_target')).join('\n');
     expect(strip(chute)).toBe(strip(g));
     // the band holds the prime volume only (45 mm³ on a 35 mm tower at 0.2 mm: 6.4 mm deep)
     expect(towerMm(g)).toBeGreaterThan(0);
-    const tower = run('bbl-p1s', { purge_target: 'tower' });
+    const tower = run('bbl-x1c', { purge_target: 'tower' });
     expect(towerMm(tower.gcode)).toBeGreaterThan(towerMm(g) * 2.5);
     expect([...tower.gcode.matchAll(/^G1 E([\d.]+) F240 ; flush the previous colour/gm)].every((m) => Number(m[1]) === 0)).toBe(true);
   });

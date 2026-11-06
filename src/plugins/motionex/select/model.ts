@@ -142,6 +142,8 @@ export function tunedBrush(m: RuleMotion, b: import('../model').MotionBrush): im
   return out;
 }
 
+export interface Spread { above: number; below: number; fade: 'gradual' | 'sudden' }
+
 export interface SelectRule {
   id: string;
   name: string;
@@ -152,6 +154,11 @@ export interface SelectRule {
   /** Finer choice of lines (wall numbers, top / bottom layer numbers, curved or straight); unset = by `lines`. */
   targets?: RuleTargets;
   apply: RuleApply;
+  /**
+   * Picked lines and brush dabs: how many layers above and below they reach, and whether the change fades out
+   * over them (gradual) or stays full strength to the last one (sudden). Unset (older rules) = fade over blend_mm.
+   */
+  spread?: Spread;
   /** Soft edge (mm): speed, flow and motion fade out over this distance around the selection. */
   blend_mm: number;
   /** Where each object was (bounding box min x, y in plate mm) when the selection was made. */
@@ -162,7 +169,7 @@ let seq = 0;
 export function newRule(n: number): SelectRule {
   return {
     id: `r${Date.now().toString(36)}${(seq++).toString(36)}`, name: `Selection ${n}`, enabled: true,
-    pick: { kind: 'layers', z0: 0, z1: 0 }, lines: [], apply: {}, blend_mm: 2, anchors: {},
+    pick: { kind: 'layers', z0: 0, z1: 0 }, lines: [], apply: {}, blend_mm: 2, anchors: {}, spread: { above: 0, below: 0, fade: 'gradual' },
   };
 }
 
@@ -177,7 +184,7 @@ export const ruleActive = (r: SelectRule) => r.enabled && !pickEmpty(r.pick) && 
 export function loadRules(d: unknown): SelectRule[] {
   if (!Array.isArray(d)) return [];
   return d.filter((r) => r && typeof r === 'object' && r.pick && typeof r.pick.kind === 'string').map((r) => ({
-    ...newRule(0), ...r, lines: Array.isArray(r.lines) ? r.lines : [], apply: { ...(r.apply ?? {}) }, anchors: { ...(r.anchors ?? {}) },
+    ...newRule(0), ...r, spread: r.spread ? { above: Math.max(0, r.spread.above | 0), below: Math.max(0, r.spread.below | 0), fade: r.spread.fade === 'sudden' ? 'sudden' : 'gradual' } : undefined, lines: Array.isArray(r.lines) ? r.lines : [], apply: { ...(r.apply ?? {}) }, anchors: { ...(r.anchors ?? {}) },
   }));
 }
 

@@ -8,6 +8,7 @@ import {
 import ClipperLib from 'clipper-lib';
 import { concentricFill, linesFill, sparseFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
+import { flushSplit, renderVendor, usesVendorTemplates } from '../../templateVars';
 import type { IndexedMesh } from '../../mesh';
 import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from '../../order';
@@ -216,7 +217,12 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     return f;
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
-  const paintDepth = num('mmu_paint_depth') || 1.5;
+  // painted colour reach (Orca / Bambu "Maximum width of a segmented region"; 0 = nearest surface, no limit), deeper every
+  // other layer by the interlocking depth
+  const segWidth = Math.max(0, num('mmu_segmented_region_max_width')), segInterlock = Math.max(0, num('mmu_segmented_region_interlocking_depth'));
+  // with no width limit a painted top / bottom face colours its shell, as deep as the top / bottom shells
+  const paintFlatReach = Math.max(0.5, num('top_shell_thickness'), num('bottom_shell_thickness'), num('top_shell_layers') * num('layer_height'), num('bottom_shell_layers') * num('layer_height'));
+  const paintDepthAt = (i: number) => (segWidth > 0 ? segWidth + (segInterlock > 0 && i % 2 === 1 ? segInterlock : 0) : 0);
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
@@ -249,7 +255,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
     if (!colorTris[o].length && !contribs.length) return [{ fil: base, paths: sl }];
-    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth) : new Map<number, Paths>();
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i), paintFlatReach) : new Map<number, Paths>();
     let out: { fil: number; paths: Paths }[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
@@ -513,8 +519,11 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   const maxChanges = Math.max(1, ...changesPerLayer);
   const td = Math.max(4, bandDepth * maxChanges);
   let tx = num('prime_tower_x'), ty = num('prime_tower_y');
-  if (tx < 0) tx = Math.max(5, num('bed_x') - tw - 15);
-  if (ty < 0) ty = Math.max(5, num('bed_y') - td - 25);
+  // unset: the printer's default position (Bambu Studio's default_wipe_tower_pos, a fraction of the bed), kept on the bed
+  const towerPos = /^\s*([\d.]+)\s*x\s*([\d.]+)\s*$/i.exec(str('default_wipe_tower_pos'));
+  const brimM = Math.max(0, num('prime_tower_brim_width')) + 2;
+  if (tx < 0) tx = towerPos ? Math.min(Math.max(brimM, Number(towerPos[1]) * num('bed_x')), num('bed_x') - tw - brimM) : Math.max(5, num('bed_x') - tw - 15);
+  if (ty < 0) ty = towerPos ? Math.min(Math.max(brimM, Number(towerPos[2]) * num('bed_y')), num('bed_y') - td - brimM) : Math.max(5, num('bed_y') - td - 25);
   if (useTower) {
     const tb = offset([rectPath(tx, ty, tx + tw, ty + td)], 3);
     if (intersection(tb, layerSlices[0]).length) warnings.push('The prime tower overlaps an object — move it in Others › Prime tower.');
@@ -734,7 +743,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     // --- filament change
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
+      if (curTool === -1 && (!hasAms || usesVendorTemplates(cfg) || ((usedFils.size <= 1 || toolChanger) && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
       let flushVol = toolChanger ? num('tool_prime_volume') : opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
@@ -747,14 +756,25 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (!retracted && curTool >= 0) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
-        text: expandMacro(str('change_filament_gcode'), cfg, {
-          previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
-          new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
-          flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
-        }),
+        text: usesVendorTemplates(cfg)
+          ? renderVendor(str('change_filament_gcode'), cfg, filaments, {
+            previous_extruder: prev, next_extruder: next, layer_num: i, layer_z: zTop, max_layer_z: zTop, current_extruder: prev,
+            new_filament_temp: Math.round(i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp), old_filament_temp: Math.round(filaments[prev].nozzleTemp),
+            ...flushSplit(towerFlush && towerActive ? 0 : flushVol || 0, Math.PI * (fl.diameter / 2) ** 2),
+            old_retract_length_toolchange: num('retract_length_toolchange'), new_retract_length_toolchange: num('retract_length_toolchange'),
+            x_after_toolchange: isNaN(px) ? 0 : px, y_after_toolchange: isNaN(py) ? 0 : py, z_after_toolchange: zTop,
+            travel_point_1_x: isNaN(px) ? 0 : px, travel_point_1_y: isNaN(py) ? 0 : py, travel_point_2_x: isNaN(px) ? 0 : px, travel_point_2_y: isNaN(py) ? 0 : py,
+            travel_point_3_x: isNaN(px) ? 0 : px, travel_point_3_y: isNaN(py) ? 0 : py, position: [isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, zTop],
+            wipe_tower_x: tx + tw / 2, wipe_tower_y: ty + td / 2, toolchange_z: zTop + 3,
+          }, 'Filament change G-code')
+          : expandMacro(str('change_filament_gcode'), cfg, {
+            previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
+            new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
+            flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
+          }),
       });
       if (layerFan > 0) ops.push({ k: 'raw', text: `M106 S${Math.round((layerFan / 100) * 255)} ; restore part fan` });
-      if (toolChanger && curTool >= 0 && num('standby_temperature_delta') < 0)
+      if (toolChanger && curTool >= 0 && cfg.ooze_prevention !== false && num('standby_temperature_delta') < 0)
         ops.push({ k: 'raw', text: `M104 T${prev} S${Math.max(0, Math.round(filaments[prev].nozzleTemp + num('standby_temperature_delta')))} ; park T${prev} at standby` });
       if (fl.pressureAdvance !== undefined) ops.push({ k: 'raw', text: paLine(flavor, fl.pressureAdvance) });
       ops.push({ k: 'tool', tool: next });

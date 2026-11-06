@@ -370,3 +370,14 @@ label.sxw-show { display: flex; padding: 3px 0; }
 .sxw-edit .sxw-row.sxw-show { display: flex; gap: 6px; }
 .sxw-edit .sxw-row.sxw-show .sxw-check { flex: 1; }
 .sxw-edit .sxw-row.sxw-show .input { width: 46px; }
+
+/* Select window: picked lines with a remove cross; rule deselect cross */
+.sxw-picks { display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow: auto; margin: 2px 0 6px; }
+.sxw-pick { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 4px; border-radius: 4px; background: var(--surface-tertiary, rgba(127,127,127,0.08)); }
+.sxw-pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sxw-x { border: none; background: transparent; color: var(--text-secondary); font-size: 16px; line-height: 1; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; flex: 0 0 auto; }
+.sxw-x:hover { background: var(--surface-secondary, rgba(127,127,127,0.18)); color: var(--text-primary); }
+.sxw-rule { position: relative; }
+.sxw-rule-x { position: absolute; top: 6px; right: 6px; }
+.sxw-undo { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 8px; margin: 4px 0; border-radius: 6px; background: var(--surface-tertiary, rgba(127,127,127,0.12)); }
+.sxw-undo span { flex: 1; min-width: 0; }

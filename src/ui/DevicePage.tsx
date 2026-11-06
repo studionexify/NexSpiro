@@ -1,7 +1,7 @@
 // Device workspace: saved printers, live status, camera, job control, telemetry, AMS, HMS and files.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONNECTION_INFO, type ConnectionKind, type PrinterStatus, type RemoteFile, type SavedDevice } from '../connect/types';
-import { onSerialPortRequest } from '../connect/client';
+import { discoverPrinters, onSerialPortRequest, type FoundPrinter } from '../connect/client';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
 import { effectiveNozzle } from '../profiles/resolve';
 import { connectDevice, disconnectDevice, initDevices, removeDevice, run, saveDevice, uploadAndPrint, useDevices } from '../state/devices';
@@ -39,6 +39,17 @@ export function DevicePage() {
   useEffect(() => { void initDevices(); }, []);
   useEffect(() => onSerialPortRequest((list, pick) => setPorts({ list, pick })), []);
   const dev = devices.find((d) => d.id === selected) ?? null;
+  const [found, setFound] = useState<FoundPrinter[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const scan = async () => {
+    setScanning(true);
+    try { setFound(await discoverPrinters()); } finally { setScanning(false); }
+  };
+  const known = (f: FoundPrinter) => devices.some((d) => d.config.host === f.host || (f.serial && d.config.serial === f.serial));
+  const addFound = (f: FoundPrinter) => {
+    const p = PRINTERS.find((x) => f.model && x.printerModelId === f.model) ?? printerById(useStore.getState().printerId);
+    setEdit({ id: newId(), name: f.name || p.model, printerId: p.id, config: { kind: f.kind, host: f.host, serial: f.serial, hostname: f.hostname } });
+  };
 
   const newDevice = () => {
     const p = printerById(useStore.getState().printerId);
@@ -50,8 +61,20 @@ export function DevicePage() {
       <aside className="device-list">
         <div className="row" style={{ marginBottom: 10 }}>
           <b style={{ color: 'var(--text-strong)', fontSize: 14 }}>Printers</b><span className="spacer" />
+          {isDesktop() && <button className="btn-small" disabled={scanning} onClick={() => void scan()} title="Find printers on this Wi-Fi network">{scanning ? 'Scanning…' : 'Find on Wi-Fi'}</button>}
           <button className="btn-primary btn-small" onClick={newDevice}><Icon name="add" size={14} />Add</button>
         </div>
+        {found && (
+          <div style={{ marginBottom: 10, fontSize: 12 }}>
+            {!found.filter((f) => !known(f)).length && <p className="muted">No new printers found. Make sure they are on and on the same Wi-Fi; Bambu printers need LAN mode or their access code.</p>}
+            {found.filter((f) => !known(f)).map((f) => (
+              <div key={f.serial ?? f.host} className="row" style={{ gap: 6, padding: '4px 0' }}>
+                <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: 'var(--text-strong)' }}>{f.name ?? f.host}</div><div className="muted" style={{ fontSize: 11 }}>{f.host}{f.serial ? ` · ${f.serial}` : ''}</div></div>
+                <button className="btn-small" onClick={() => addFound(f)}>Set up</button>
+              </div>
+            ))}
+          </div>
+        )}
         {loaded && !devices.length && <p className="muted" style={{ fontSize: 12 }}>No printers yet. Add one to send prints over your network or USB.</p>}
         {devices.map((d) => (
           <div key={d.id} className={`objrow${d.id === selected ? ' sel' : ''}`} style={{ margin: '0 -12px', borderRadius: 0 }} onClick={() => set({ selected: d.id })}>
@@ -97,6 +120,7 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
   const p = printerById(d.printerId);
   const kinds = useMemo(() => {
     const all = Object.keys(CONNECTION_INFO) as ConnectionKind[];
+    if (p.connections.includes('bbl_lan')) return ['bbl_lan'] as ConnectionKind[]; // Bambu printers only speak their LAN protocol
     return [...p.connections, ...all.filter((k) => !p.connections.includes(k) && k !== 'bbl_lan')];
   }, [p]);
   const cfg = d.config;
@@ -133,26 +157,38 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
         }}>
           {vendors.map((v) => <optgroup key={v} label={v}>{PRINTERS.filter((x) => x.vendor === v).map((x) => <option key={x.id} value={x.id}>{printerName(x)}</option>)}</optgroup>)}
         </select>
-        <span>Connection</span>
-        <select className="select" value={cfg.kind} onChange={(e) => setCfg({ kind: e.target.value as ConnectionKind })}>
-          {kinds.map((k) => <option key={k} value={k}>{CONNECTION_INFO[k].label}{p.connections.includes(k) ? '' : ' (generic)'}</option>)}
-        </select>
+        {p.connections.length !== 1 && <>
+          <span>Connection</span>
+          <select className="select" value={cfg.kind} onChange={(e) => setCfg({ kind: e.target.value as ConnectionKind })}>
+            {kinds.map((k) => <option key={k} value={k}>{CONNECTION_INFO[k].label}{p.connections.includes(k) ? '' : ' (generic)'}</option>)}
+          </select>
+        </>}
         {cfg.kind !== 'serial' && <><span>IP address / host</span><input className="input mono" placeholder="192.168.1.50" value={cfg.host ?? ''} onChange={(e) => setCfg({ host: e.target.value.trim() })} /></>}
         {cfg.kind === 'bbl_lan' && <>
           <span>Serial number</span><input className="input mono" placeholder="01P00A..." value={cfg.serial ?? ''} onChange={(e) => setCfg({ serial: e.target.value.trim().toUpperCase() })} />
           <span>Access code</span><input className="input mono" type="password" placeholder="8 characters" value={cfg.accessCode ?? ''} onChange={(e) => setCfg({ accessCode: e.target.value.trim() })} />
         </>}
-        {(cfg.kind === 'moonraker' || cfg.kind === 'octoprint') && <>
-          <span>Port</span><input className="input mono" placeholder={cfg.kind === 'moonraker' ? '7125' : '80'} value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} />
-          <span>API key{cfg.kind === 'moonraker' ? ' (optional)' : ''}</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
+        {cfg.kind === 'octoprint' && <>
+          <span>API key</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
         </>}
+      </div>
+      <details style={{ marginTop: 10 }}>
+        <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>Advanced (only if your printer needs it)</summary>
+      <div className="form-grid" style={{ gridTemplateColumns: '150px 1fr', marginTop: 8 }}>
+        {cfg.kind === 'moonraker' && <>
+          <span>Port</span><input className="input mono" placeholder={cfg.kind === 'moonraker' ? '7125' : '80'} value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} />
+          <span>API key (optional)</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
+        </>}
+        {cfg.kind === 'octoprint' && <><span>Port</span><input className="input mono" placeholder="80" value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} /></>}
         {cfg.kind === 'serial' && <>
           <span>Baud rate</span>
           <select className="select" value={cfg.baudRate ?? 115200} onChange={(e) => setCfg({ baudRate: Number(e.target.value) })}>
             {[250000, 230400, 115200, 57600].map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </>}
+        {cfg.kind === 'bbl_lan' && <span className="muted" style={{ gridColumn: '1 / -1', fontSize: 12 }}>Nothing else needed.</span>}
       </div>
+      </details>
       <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{CONNECTION_INFO[cfg.kind].description}</p>
       {cfg.kind === 'bbl_lan' && <p className="muted" style={{ fontSize: 12 }}>On the printer screen: <b>Settings → Network</b> (A1/P1) or <b>Settings → General</b> (X1) shows the IP and the access code; the serial number is under <b>Settings → Device</b>. Insert a microSD card — the printer stores LAN jobs on it.</p>}
       {desktopOnly && <p style={{ color: '#E5484D', fontSize: 12 }}>This connection needs the NexSpiro desktop app.</p>}
@@ -258,6 +294,15 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
   const [rtsp, setRtsp] = useState<string | null>(null);
   const [on, setOn] = useState(false);
+  const [snap, setSnap] = useState<string | null>(null); // JPEG snapshot URL polled when there is no MJPEG stream
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!snap) return;
+    const t = setInterval(() => setTick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [snap]);
+  const toSnapshot = (u: string) => u.replace(/action=stream/, 'action=snapshot').replace(/\/stream(\b|$)/, '/snapshot');
+  useEffect(() => { if (!on || !online) setSnap(null); }, [on, online]);
   useEffect(() => {
     if (!on || !online) { setSrc(null); return; }
     let stop: (() => void) | null = null, dead = false;
@@ -267,7 +312,7 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
         stop = await h.camera((u) => { if (!dead) setSrc(u); });
         if (!stop) {
           const u = await h.cameraUrl();
-          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead) setSrc(u);
+          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead && u) { if (/snapshot/i.test(u)) setSnap(u); else setSrc(u); }
         }
       } catch (e: any) { toast('warn', `Camera: ${e?.message ?? e}`); }
     })();
@@ -278,7 +323,8 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
       <div className="row" style={{ marginBottom: 8 }}><h3 style={{ margin: 0 }}>Camera</h3><span className="spacer" />
         <button className="btn-secondary btn-small" disabled={!online} onClick={() => setOn(!on)}><Icon name="eye" size={14} />{on ? 'Stop' : 'Start'}</button></div>
       <div className="camera-view">
-        {src ? <img src={src} alt="Printer camera" /> : rtsp ? (
+        {snap ? <img src={`${snap}${snap.includes('?') ? '&' : '?'}t=${tick}`} alt="Printer camera" />
+          : src ? <img src={src} alt="Printer camera" onError={() => { if (!src.startsWith('blob:')) { setSnap(toSnapshot(src)); setSrc(null); } }} /> : rtsp ? (
           <p className="muted" style={{ padding: 16, fontSize: 12 }}>This printer streams RTSPS video. Open it in VLC: <span className="mono" style={{ userSelect: 'all', wordBreak: 'break-all' }}>{rtsp}</span></p>
         ) : <span className="muted">{online ? (on ? 'Waiting for the first frame…' : 'Camera off') : 'Offline'}</span>}
       </div>

@@ -77,6 +77,8 @@ export interface ConnectionConfig {
   accessCode?: string; // LAN access code
   apiKey?: string; // OctoPrint / Moonraker (optional)
   baudRate?: number;
+  /** Stable network identity (Klipper host name) used to find the printer again when its IP changes. */
+  hostname?: string;
 }
 
 /** A printer saved in the Device workspace. */

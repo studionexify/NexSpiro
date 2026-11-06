@@ -2,6 +2,7 @@
 // Plate view → printer, filament / AMS, inline process settings, objects tree.
 // Object view → pinned params, effects stack, Physics Core (advanced), inline per-object settings.
 // Replaces the old left Sidebar; it reuses the Sidebar's cards and process model so behaviour is identical.
+import { askOk } from '../askOk';
 import { useEffect, useRef, useState } from 'react';
 import { PARAM_BY_KEY, PROCESS_PRESETS, PROCESS_TABS, type ProcessTab } from '../../profiles/settings';
 import { useStore } from '../../state/store';
@@ -145,7 +146,7 @@ function PresetModal({ onClose }: { onClose: () => void }) {
                   onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} />
                 <button className="btn-secondary btn-small" title="Use this preset" onClick={() => applyUserPreset(p.id)}>Apply</button>
                 <button className="btn-secondary btn-small" title="Overwrite with the current settings" onClick={() => updateUserPreset(p.id)}>Update</button>
-                <button className="icon-btn" title="Delete preset" aria-label={`Delete ${p.name}`} onClick={() => { if (confirm(`Delete preset "${p.name}"?`)) deleteUserPreset(p.id); }}><Icon name="close" size={14} /></button>
+                <button className="icon-btn" title="Delete preset" aria-label={`Delete ${p.name}`} onClick={() => { if (askOk(`Delete preset "${p.name}"?`)) deleteUserPreset(p.id); }}><Icon name="close" size={14} /></button>
               </div>
             );
           })}

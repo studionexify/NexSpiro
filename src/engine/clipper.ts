@@ -108,6 +108,18 @@ export function clipLines(lines: Paths, region: Paths): Paths {
   return C.Clipper.OpenPathsFromPolyTree(tree);
 }
 
+/** Open polylines minus a closed region (the parts outside it). */
+export function clipLinesOutside(lines: Paths, region: Paths): Paths {
+  if (!lines.length) return [];
+  if (!region.length) return lines;
+  const c = new C.Clipper();
+  c.AddPaths(lines, PT.ptSubject, false);
+  c.AddPaths(region, PT.ptClip, true);
+  const tree = new C.PolyTree();
+  c.Execute(CT.ctDifference, tree, PFT.pftNonZero, PFT.pftNonZero);
+  return C.Clipper.OpenPathsFromPolyTree(tree);
+}
+
 export const area = (p: Path) => C.Clipper.Area(p) / (SCALE * SCALE);
 export const areaTotal = (ps: Paths) => ps.reduce((s, p) => s + area(p), 0);
 export const orientation = (p: Path): boolean => C.Clipper.Orientation(p);

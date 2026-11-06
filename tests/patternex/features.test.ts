@@ -28,7 +28,9 @@ const front = (o: Partial<WorldPlacement> = {}) => place({ position_xyz: [70, 60
 /** Smallest Y extruded per layer (keyed by layer Z) and overall. */
 const extremes = (gcode: string) => {
   let minY = Infinity; const ys: Record<string, number> = {};
-  for (const L of gcode.split(';LAYER_CHANGE').slice(1)) {
+  // the part only: not the end G-code, nor Bambu's own change G-code (M620 … M621), which purges at the chute
+  const part = gcode.split(';===== NexSpiro end G-code')[0].replace(/^M620 S\d+A[\s\S]*?^M621 S\d+A.*$/gm, '');
+  for (const L of part.split(';LAYER_CHANGE').slice(1)) {
     const z = Number(/;Z:([\d.]+)/.exec(L)?.[1] ?? 0).toFixed(1);
     for (const p of extrusions(L)) { minY = Math.min(minY, p[1]); ys[z] = Math.min(ys[z] ?? Infinity, p[1]); }
   }

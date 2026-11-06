@@ -16,7 +16,8 @@ import { estimateWeave, weavePrintSettings } from '../../src/plugins/motionex/we
 
 const CX = 128, CY = 128, R = 20;
 const settings = (w: Partial<WeaveSettings> = {}) => ({ ...weavePrintSettings({ ...defaultWeave(), ...w }), enable_arc_fitting: false });
-const cfg = (printerId = 'bbl-p1s', o: Record<string, unknown> = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: o as never });
+// NexSpiro's own Bambu filament change macro (the X1C); the A1 / P1S now run Bambu Studio's template (vendor-gcode.test.ts)
+const cfg = (printerId = 'bbl-x1c', o: Record<string, unknown> = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: o as never });
 const slots = (c: ReturnType<typeof cfg>) => { const a = slotFromConfig(c); return [{ ...a, name: 'White', color: '#ffffff' }, { ...a, name: 'Red', color: '#cc2222' }, { ...a, name: 'Black', color: '#111111' }]; };
 const weave = (w: Partial<WeaveSettings> = {}): WeaveSettings => ({ ...defaultWeave(), enabled: true, image: motifImage('checker', 64, 24, 2), z_start: 1.2, ...w });
 const mx = (w: WeaveSettings, printerId = 'bbl-p1s'): MotionexConfig => ({ applications: [], brushes: [], options: DEFAULT_OPTIONS, collisionMode: 'clamp', toolhead: defaultToolhead(printerId), printerId, weave: w });
@@ -169,20 +170,20 @@ describe('weave in the slicer', () => {
 
   it('bleed mode: no flush and no prime tower band for weave changes', () => {
     const w = weave({ change: { mode: 'bleed', volume_mm3: 0 } });
-    const c = cfg('bbl-a1', settings(w));
+    const c = cfg('bbl-a1mini', settings(w));
     expect(c.enable_prime_tower).toBe(false);
-    const out = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx(w, 'bbl-a1') } });
+    const out = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx(w, 'bbl-a1mini') } });
     expect(out.gcode).toMatch(/mode=none/);
     expect(out.gcode).not.toMatch(/mode=full/);
     expect(out.gcode).toMatch(/G1 E0(\.0+)? F240 ; flush the previous colour/);
     expect(out.gcode).not.toMatch(/;TYPE:Prime tower/i);
-    const reduced = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx({ ...w, change: { mode: 'reduced', volume_mm3: 20 } }, 'bbl-a1') } });
+    const reduced = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx({ ...w, change: { mode: 'reduced', volume_mm3: 20 } }, 'bbl-a1mini') } });
     expect(reduced.gcode).toMatch(/mode=reduced/);
     expect(reduced.gcode).toMatch(/G1 E8\.3\d F240 ; flush the previous colour/); // 20 mm³ of 1.75 mm filament
   });
 
   it('three colours take turns; mono relief makes no filament change', () => {
-    const c = cfg('bbl-p1s', settings());
+    const c = cfg('bbl-x1c', settings()); // T lines of the print only (Bambu's own start / end G-code on the P1S also select tools)
     const three = slice([vase()], c, () => {}, { filaments: slots(c), plugins: { motionex: mx(weave({ image: motifImage('kilim', 64, 20, 3), slots: [0, 1, 2] })) } });
     const tools = [...three.gcode.matchAll(/^T(\d)/gm)].map((m) => +m[1]);
     expect(new Set(tools)).toEqual(new Set([0, 1, 2]));

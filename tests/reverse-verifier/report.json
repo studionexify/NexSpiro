@@ -2606,7 +2606,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "adv/z_weave",
@@ -2691,7 +2691,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "adv/z_weave",
@@ -2776,7 +2776,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "adv/z_weave",
@@ -3911,10 +3911,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.31810833648773595,
-      "checkedMm": 83320.56961960846,
-      "checkedSegments": 42440,
-      "belowResolution": 1378,
+      "maxRelErrPct": 0.4975366605375095,
+      "checkedMm": 89292.87586923235,
+      "checkedSegments": 37671,
+      "belowResolution": 4825,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3956,7 +3956,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 43869,
+      "declaredHits": 44158,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -3981,9 +3981,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.6014890204047479,
-      "checkedMm": 105836.57358163253,
-      "checkedSegments": 23023,
-      "belowResolution": 1686,
+      "checkedMm": 110031.4249329636,
+      "checkedSegments": 36817,
+      "belowResolution": 6240,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4025,7 +4025,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 24709,
+      "declaredHits": 44323,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -4049,10 +4049,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.22129083460879084,
-      "checkedMm": 246230.54545563765,
-      "checkedSegments": 69077,
-      "belowResolution": 18252,
+      "maxRelErrPct": 0.5787940026344635,
+      "checkedMm": 284813.6052880305,
+      "checkedSegments": 62404,
+      "belowResolution": 21411,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4094,8 +4094,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 87990,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 117239,
+      "maxPosErrMm": 0.0011968994140687528,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9273,9 +9273,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5138197629585367,
-      "checkedMm": 16175.370395190703,
-      "checkedSegments": 4667,
-      "belowResolution": 319,
+      "checkedMm": 16270.438166730479,
+      "checkedSegments": 4685,
+      "belowResolution": 318,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9317,8 +9317,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 5106,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 5123,
+      "maxPosErrMm": 0.0005065917968636313,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9331,10 +9331,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.306550714828177,
-      "checkedMm": 15837.613330625774,
-      "checkedSegments": 3114,
-      "belowResolution": 159,
+      "maxRelErrPct": 0.4355037269538214,
+      "checkedMm": 15932.681102165552,
+      "checkedSegments": 3132,
+      "belowResolution": 158,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9376,8 +9376,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 3373,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 3390,
+      "maxPosErrMm": 0.0005065917968636313,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9391,9 +9391,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.3586584821099938,
-      "checkedMm": 19454.124424615566,
-      "checkedSegments": 3667,
-      "belowResolution": 133,
+      "checkedMm": 20551.038758818962,
+      "checkedSegments": 3740,
+      "belowResolution": 132,
       "failureCount": 0
     },
     "firstFailures": []
@@ -9435,7 +9435,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 5080,
+      "declaredHits": 5152,
       "maxPosErrMm": 0.0005073242187449978,
       "failureCount": 0
     },
@@ -9450,7 +9450,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-cylinder",
@@ -9535,7 +9535,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-cylinder",
@@ -9620,7 +9620,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-cylinder",
@@ -9705,7 +9705,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-pins-cylinder",
@@ -9790,7 +9790,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-pins-cylinder",
@@ -9875,7 +9875,7 @@
     "failureCount": 0,
     "metrics": {},
     "firstFailures": [],
-    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 20 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
+    "reason": "Woven segments slowed to the Z axis limits (1500 mm/s², 30 mm/s); pins at most 10 layers deep (nozzle tip 2.2 mm)."
   },
   {
     "target": "weave/z_weave-pins-cylinder",

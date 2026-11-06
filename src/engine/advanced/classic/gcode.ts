@@ -6,6 +6,7 @@ import type { Config } from '../../../profiles/settings';
 import type { FeatureType, FilamentSlot, LayerResult, SliceStats } from '../../types';
 import { FEATURE_ORDER } from '../../types';
 import { fitArc } from '../../arc';
+import { firstLayerTemplateVars, inZone, renderVendor, usesVendorTemplates } from '../../templateVars';
 
 export type Op =
   | { k: 'move'; x: number; y: number; z: number; e: number; f: number; feature: FeatureType; w: number; h: number; travel: boolean; t?: number; fixed?: boolean; noArc?: boolean;
@@ -139,7 +140,17 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
       out.push(`EXCLUDE_OBJECT_DEFINE NAME=${o.name} CENTER=${n(o.cx)},${n(o.cy)} POLYGON=[${poly}]`);
     }
   }
-  out.push(expandMacro(String(cfg.machine_start_gcode ?? ''), cfg));
+  // the printer maker's own templates run with the variables their slicer gives them (see ../../templateVars.ts)
+  const vendor = usesVendorTemplates(cfg);
+  const firstToolOp = layers.flatMap((L) => L.ops).find((op) => op.k === 'tool') as { tool?: number } | undefined;
+  const firstTool = firstToolOp?.tool ?? 0;
+  const fl0 = firstLayerTemplateVars(layers[0]?.ops as never, Number(cfg.initial_layer_print_height ?? layers[0]?.h ?? 0.2));
+  const zone = String(cfg.head_wrap_detect_zone ?? '');
+  const tplCommon = { ...fl0.vars, in_head_wrap_detect_zone: !!zone && inZone(zone.split(','), fl0.objects), total_layer_count: layers.length, initial_extruder: firstTool, initial_tool: firstTool, initial_no_support_extruder: firstTool, initial_no_support_tool: firstTool, current_extruder: firstTool };
+  const macro = (tpl: string, what: string, extra: Record<string, number | string | boolean | number[]> = {}) =>
+    vendor ? renderVendor(tpl, cfg, filaments, { ...tplCommon, ...extra }, what) : expandMacro(tpl, cfg, extra as Record<string, string | number>);
+  out.push(macro(String(cfg.machine_start_gcode ?? ''), 'Start G-code'));
+  if (vendor) out.push(';===== end of start G-code =====');
   if (cfg.pressure_advance !== undefined && cfg.pressure_advance !== '') out.push(flavor === 'klipper' ? `SET_PRESSURE_ADVANCE ADVANCE=${cfg.pressure_advance}` : `M900 K${cfg.pressure_advance}`);
   out.push('G90 ; absolute XYZ');
   out.push('M83 ; relative E');
@@ -159,10 +170,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
     out.push(`;Z:${n(L.z)}`);
     out.push(`;HEIGHT:${n(L.h)}`);
     if (flavor !== 'klipper') out.push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
-    if (flavor === 'bbl') out.push(`M73 L${li + 1}`);
+    if (vendor && /M73 L|SET_PRINT_STATS_INFO/.test(String(cfg.layer_change_gcode ?? ''))) { /* reported by the maker's template */ }
+    else if (flavor === 'bbl') out.push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') out.push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
-    if (lc) out.push(expandMacro(lc, cfg, { layer_num: li, layer_z: n(L.z) }));
+    if (lc) out.push(vendor ? macro(lc, 'Layer change G-code', { layer_num: li, layer_z: L.z, max_layer_z: L.z }) : expandMacro(lc, cfg, { layer_num: li, layer_z: n(L.z) }));
     if (L.temp !== undefined) out.push(`M104 S${L.temp}`);
     if (L.bedTemp !== undefined) out.push(`M140 S${L.bedTemp}`);
     if (L.fan !== fan) {
@@ -256,7 +268,9 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
   });
 
   out.push('M73 P100 R0');
-  out.push(expandMacro(String(cfg.machine_end_gcode ?? ''), cfg));
+  if (vendor) out.push(';===== NexSpiro end G-code: the printer maker\'s own end G-code follows =====');
+  const lastL = layers[layers.length - 1];
+  out.push(macro(String(cfg.machine_end_gcode ?? ''), 'End G-code', { layer_num: Math.max(0, layers.length - 1), layer_z: lastL?.z ?? 0, max_layer_z: lastL?.z ?? 0 }));
 
   const gramsOf = (mm: number, k: number) => {
     const fl = filaments[k] ?? filaments[0];

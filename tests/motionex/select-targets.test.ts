@@ -160,3 +160,27 @@ describe('model preview with infill and skins', () => {
     expect(off.moveFeatures.includes(FEATURE_ORDER.indexOf('sparse_infill'))).toBe(false);
   });
 });
+
+describe('reach up and down', () => {
+  const line = { z: 2, h: 0.2, feature: 'outer_wall' as const, w: 0.42, pts: [[0, 0], [10, 0]] as [number, number][] };
+  it('a new rule picks only its own layer', async () => {
+    const { piecesAt } = await import('../../src/plugins/motionex/select/geometry');
+    const r = rule({ pick: { kind: 'lines', lines: [line] } });
+    expect(piecesAt(r, 2, 0.2)).toHaveLength(1);
+    expect(piecesAt(r, 2.2, 0.2)).toHaveLength(0);
+    expect(piecesAt(r, 1.8, 0.2)).toHaveLength(0);
+  });
+  it('gradual fades over the chosen layers, sudden keeps full strength, then both stop', async () => {
+    const { piecesAt } = await import('../../src/plugins/motionex/select/geometry');
+    const g = rule({ pick: { kind: 'lines', lines: [line] }, spread: { above: 3, below: 1, fade: 'gradual' } });
+    expect(piecesAt(g, 2.2, 0.2)[0].zf).toBeCloseTo(0.75);
+    expect(piecesAt(g, 2.6, 0.2)[0].zf).toBeCloseTo(0.25);
+    expect(piecesAt(g, 2.8, 0.2)).toHaveLength(0);
+    expect(piecesAt(g, 1.8, 0.2)[0].zf).toBeCloseTo(0.5);
+    expect(piecesAt(g, 1.6, 0.2)).toHaveLength(0);
+    const s = rule({ pick: { kind: 'lines', lines: [line] }, spread: { above: 3, below: 0, fade: 'sudden' } });
+    expect(piecesAt(s, 2.6, 0.2)[0].zf).toBe(1);
+    expect(piecesAt(s, 2.6, 0.2)[0].features?.has('outer_wall')).toBe(true);
+    expect(piecesAt(s, 1.8, 0.2)).toHaveLength(0);
+  });
+});

@@ -80,7 +80,9 @@ describe('weave test prints', () => {
         else expect(out.gcode).not.toMatch(/mode=full/);
       } else expect(out.stats.toolChanges).toBe(0);
       // stays on the bed and below the ring top
-      const xs = [...out.gcode.matchAll(/^G1 X([-\d.]+) Y([-\d.]+)/gm)].map((m) => [+m[1], +m[2]]);
+      // (the print body; the makers' own start / end G-code park and wipe off the plate)
+      const printBody = out.gcode.split(';===== end of start G-code =====').pop()!.split(';===== NexSpiro end G-code')[0];
+      const xs = [...printBody.matchAll(/^G1 X([-\d.]+) Y([-\d.]+)/gm)].map((m) => [+m[1], +m[2]]);
       expect(xs.every(([x, y]) => x > -40 && x < printer.bed.x + 5 && y > -5 && y < printer.bed.y + 5)).toBe(true);
       expect(out.gcode).not.toMatch(/NaN|Infinity/);
       // open top: nothing but the woven wall above the floor (no lid from a minimum top thickness)

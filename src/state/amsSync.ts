@@ -49,3 +49,24 @@ export function syncAmsFromPrinter(): boolean {
   s.set({ toast: { kind: unmatched.length ? 'warn' : 'info', text: `Synced ${n} filament slot${n > 1 ? 's' : ''} from ${src.name}: ${list}.${unmatched.length ? ` No matching preset for ${unmatched.map((t) => t.trayType).join(', ')} — using ${filamentById('generic-pla').name}.` : ''}` } });
   return true;
 }
+
+/** Keep the project's filament slots in step with what the selected printer reports (AMS / U1 heads).
+ *  Runs whenever a connected printer of the project's model reports a different set of loaded filaments. */
+let autoStarted = false;
+export function startAutoFilamentSync() {
+  if (autoStarted) return;
+  autoStarted = true;
+  const sig = (t: AmsSlot[]) => t.map((x) => `${x.presetId}${x.color}`).join('|');
+  const check = () => {
+    const d = useDevices.getState(), s = useStore.getState();
+    const dev = d.devices.find((x) => x.printerId === s.printerId && statusHasAms(d.status[x.id]));
+    if (!dev) return;
+    const trays = amsToSlots(d.status[dev.id].ams);
+    if (!trays.length) return;
+    const cur = s.filaments.map((f) => `${f.presetId}${f.color.toUpperCase()}`).join('|');
+    if (sig(trays) === cur) return;
+    syncAmsFromPrinter();
+  };
+  useDevices.subscribe(check);
+  useStore.subscribe((s, p) => { if (s.printerId !== p.printerId) check(); });
+}

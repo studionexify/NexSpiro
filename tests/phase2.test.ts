@@ -103,7 +103,7 @@ describe('painting', () => {
     expect(pickSeam(square, 'back', 0, 0, null, Math.random, { enforce: [], block: [[10, 10], [0, 10]] })).not.toBeGreaterThan(1);
   });
   it('colour painting creates a second filament region with filament changes and a prime tower', () => {
-    const cfg = cfgFor('bbl-p1s');
+    const cfg = cfgFor('bbl-x1c'); // NexSpiro's own Bambu change macro (the A1 / P1S run Bambu Studio's, vendor-gcode.test.ts)
     const t = mesh(cylinder(100, 100, 12, 10));
     const color = new Uint8Array(triCount(t));
     const v = t.vertices, ix = t.indices;

@@ -12,7 +12,8 @@ import { addPart, addWallPart, addPlate, arrangeAll, deletePlate, moveToPlate, o
 import { openFillBed } from './FillBedDialog';
 import { openPlateSettings } from './PlateControls';
 import { collapseAllObjects, expandAllObjects } from '../state/tree';
-import { useStore, type ContextMenuState } from '../state/store';
+import { choiceColors, useStore, type ContextMenuState } from '../state/store';
+import { mixLabel } from '../profiles/mixing';
 import { Icon, ShapeIcon } from './icons';
 import type { PartType } from '../engine/types';
 import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
@@ -101,7 +102,7 @@ function objectItems(m: ContextMenuState): MenuItem[] {
     { label: 'Fix model', icon: 'shield', iconColor: s.objects.some((o) => ids.includes(o.id) && o.openEdges > 0) ? '#E3A21A' : undefined, onClick: () => repairObjects(ids) },
     { label: 'Split to objects', icon: 'splitB', disabled: !one, onClick: () => one && splitObject(one.id) },
     { sep: true },
-    { label: 'Filament', icon: 'filamentB', sub: s.filaments.map((f, k) => ({ label: `Filament ${k + 1}`, swatch: f.color, checked: !!one && (one.filament ?? 0) === k, onClick: () => setObjectFilament(k, ids) })) },
+    { label: 'Filament', icon: 'filamentB', sub: choiceColors(s).map((c, k) => ({ label: k < s.filaments.length ? `Filament ${k + 1}` : `Filament ${k + 1} (mix ${mixLabel(s.mixes[k - s.filaments.length])})`, swatch: c, checked: !!one && (one.filament ?? 0) === k, onClick: () => setObjectFilament(k, ids) })) },
     { label: 'Printable', icon: 'printable', checked: printable, onClick: () => togglePrintable(ids) },
     ...(s.plates.length > 1 ? [{ label: 'Move to plate', icon: 'moveToPlate', sub: s.plates.map((p, k) => ({ label: p.name, disabled: k === m.plate, onClick: () => { s.set({ selected: ids }); moveToPlate(k); } })) }] : []),
     { sep: true },

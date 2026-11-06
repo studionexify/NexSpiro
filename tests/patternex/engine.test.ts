@@ -16,7 +16,8 @@ import { defaultToolhead } from '../../src/plugins/motionex/core/toolhead';
 import { DEFAULT_OPTIONS } from '../../src/plugins/motionex/modifier';
 import type { MotionexConfig, MotionexReport } from '../../src/plugins/motionex/engine';
 
-const cfg = (printerId = 'bbl-p1s', o = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: { enable_arc_fitting: false, ...o } });
+// NexSpiro's own Bambu filament change macro (the X1C); the A1 / P1S now run Bambu Studio's template (vendor-gcode.test.ts)
+const cfg = (printerId = 'bbl-x1c', o = {}) => resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: { enable_arc_fitting: false, ...o } });
 const mesh = (soup: Float32Array, id = 'm'): MeshInput => ({ id, name: id, ...weld(soup) });
 const slots = (c: ReturnType<typeof cfg>) => { const a = slotFromConfig(c); return [a, { ...a, name: 'Black', color: '#111111' }, { ...a, name: 'Red', color: '#ff0000' }]; };
 /** A 10×4 mm black rectangle centred on the origin. */

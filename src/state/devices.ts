@@ -1,6 +1,6 @@
 // Device workspace state: saved printers, live status and the active connection handles.
 import { create } from 'zustand';
-import { deviceHandle, loadDevices, saveDevices, type DeviceHandle } from '../connect/client';
+import { deviceHandle, discoverPrinters, loadDevices, saveDevices, type DeviceHandle, type FoundPrinter } from '../connect/client';
 import type { PrinterStatus, SavedDevice } from '../connect/types';
 
 interface DevState {
@@ -26,6 +26,9 @@ export async function initDevices() {
   if (useDevices.getState().loaded) return;
   const devices = await loadDevices();
   useDevices.setState({ loaded: true, devices, selected: devices[0]?.id ?? null });
+  // Reconnect every saved network printer in the background. Connecting only reads status;
+  // it never sends motion or G-code. USB printers need a user gesture, so they are skipped.
+  for (const d of devices) if (d.config.kind !== 'serial') void connectDevice(d.id).catch(() => {});
 }
 
 export function handleOf(id: string): DeviceHandle {
@@ -63,9 +66,45 @@ export async function run<T>(id: string, label: string, fn: (h: DeviceHandle) =>
   finally { setBusy(id, null); }
 }
 
+const sameMachine = (d: SavedDevice, f: FoundPrinter) =>
+  f.kind === d.config.kind && ((!!f.serial && f.serial === d.config.serial) || (!!f.hostname && f.hostname === d.config.hostname));
+
+/** Update a saved printer's address/identity without dropping a live connection's state. */
+async function patchConfig(id: string, patch: Partial<SavedDevice['config']>) {
+  const devices = useDevices.getState().devices.map((d) => (d.id === id ? { ...d, config: { ...d.config, ...patch } } : d));
+  useDevices.setState({ devices });
+  await saveDevices(devices);
+}
+
+/** The router gave the printer a new IP: find it on the network by serial / host name and update it. */
+async function relocate(id: string): Promise<boolean> {
+  const d = useDevices.getState().devices.find((x) => x.id === id);
+  if (!d || d.config.kind === 'serial' || (!d.config.serial && !d.config.hostname)) return false;
+  setBusy(id, 'Looking for printer on Wi-Fi…');
+  try {
+    const f = (await discoverPrinters()).find((x) => sameMachine(d, x));
+    if (!f || f.host === d.config.host) return false;
+    const old = handles.get(id);
+    if (old) { await old.disconnect().catch(() => {}); handles.delete(id); }
+    await patchConfig(id, { host: f.host });
+    return true;
+  } finally { setBusy(id, null); }
+}
+
+/** After the first good connection, remember the printer's stable identity so a new IP is found automatically. */
+async function learnIdentity(id: string) {
+  const d = useDevices.getState().devices.find((x) => x.id === id);
+  if (!d || d.config.kind !== 'moonraker' || d.config.hostname) return;
+  const f = (await discoverPrinters()).find((x) => x.kind === 'moonraker' && x.host === d.config.host);
+  if (f?.hostname) await patchConfig(id, { hostname: f.hostname });
+}
+
 export async function connectDevice(id: string) {
-  try { await run(id, 'Connecting…', (h) => h.connect()); }
-  catch (e: any) { setStatus(id, { state: 'offline', message: e?.message ?? String(e) }); throw e; }
+  try { await run(id, 'Connecting…', (h) => h.connect()); void learnIdentity(id).catch(() => {}); }
+  catch (e: any) {
+    if (await relocate(id).catch(() => false)) {
+      try { await run(id, 'Connecting…', (h) => h.connect()); return; } catch (e2) { e = e2; }
+    } setStatus(id, { state: 'offline', message: String(e?.message ?? e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '') }); throw e; }
 }
 export const disconnectDevice = (id: string) => run(id, 'Disconnecting…', (h) => h.disconnect());
 

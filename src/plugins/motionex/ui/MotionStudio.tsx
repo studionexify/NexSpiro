@@ -2,6 +2,7 @@
 // keeps drawing the quick motion preview; this panel holds the shape, depth and spacing, how layers lead
 // or lag each other, layer stacking and the advanced curves, with close-ups of a short piece of wall.
 // Edits go into the placement's own copy of the motion; the library is left alone unless you save to it.
+import { askOk } from '../../../ui/askOk';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { evalCurve } from '../curve';
 import { useStore } from '../../../state/store';
@@ -136,13 +137,13 @@ export function MotionStudio({ layout = 'dock' }: { layout?: 'dock' | 'three' } 
         <div className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
           <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} />
           <select className="select" style={{ flex: 1 }} value={a.brush_id} aria-label="Motion"
-            onChange={(e) => { if (a.brush && !confirm('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = e.target.value; a.brush = undefined; changed(); }}>
+            onChange={(e) => { if (a.brush && !askOk('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = e.target.value; a.brush = undefined; changed(); }}>
             {[...libGroups].map(([g, bs]) => <optgroup key={g} label={g}>{bs.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</optgroup>)}
           </select>
         </div>
         <div className="row" style={{ gap: 6, margin: 0, alignItems: 'center' }}>
           <span className="mx-muted" style={{ flex: 1, margin: 0 }}>{a.brush ? `Changed for this placement · library “${base?.name ?? a.brush_id}” is unchanged` : 'As in the library · any change applies to this placement only'}</span>
-          <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (confirm('Go back to the library motion?')) { a.brush = undefined; changed(); } }}>Reset</button>
+          <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (askOk('Go back to the library motion?')) { a.brush = undefined; changed(); } }}>Reset</button>
           <button className="btn-secondary btn-small" onClick={saveToLibrary} title="Keep these changes as a new motion in My motions">Save to library</button>
         </div>
       </div>
@@ -646,7 +647,7 @@ function StudioThree({ a, draft, edit, profiles, layer, setLayer, saveToLibrary 
   const apps = mx.applications;
   const base = mx.library.get(a.brush_id);
   const lh = profiles.process.layerHeight || 0.2;
-  const pick = (id: string) => { if (id === a.brush_id) return; if (a.brush && !confirm('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = id; a.brush = undefined; hist.delete(a); changed(); };
+  const pick = (id: string) => { if (id === a.brush_id) return; if (a.brush && !askOk('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = id; a.brush = undefined; hist.delete(a); changed(); };
   const zEdit: Edit = (fn) => edit((x) => { fn(x); if (!(x.z_amplitude && x.z_amplitude > 0)) x.z_amplitude = Math.min(0.3, lh * 1.5); });
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -695,7 +696,7 @@ function StudioThree({ a, draft, edit, profiles, layer, setLayer, saveToLibrary 
           <div className="ms-status-name"><i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} /><b>{base?.name ?? a.brush_id}</b>{a.brush && <span className="ms-chip">edited</span>}</div>
           <span className="mx-muted" style={{ margin: 0 }}>{a.brush ? 'Changes apply to this placement only.' : 'As in the library.'}</span>
           <div className="row" style={{ gap: 6, margin: 0 }}>
-            <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (confirm('Go back to the library motion?')) { remember(a); a.brush = undefined; settle(a); changed(); } }}>Reset</button>
+            <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (askOk('Go back to the library motion?')) { remember(a); a.brush = undefined; settle(a); changed(); } }}>Reset</button>
             <button className="btn-primary btn-small" style={{ flex: 1 }} onClick={saveToLibrary} title="Keep this motion in My motions; it stays there next time NexSpiro opens">Save as preset</button>
           </div>
         </section>
@@ -815,7 +816,7 @@ function LibraryRail({ current, onPick, onSave }: { current: string; onPick: (id
                       <Wave b={b} /><span>{b.name}</span>
                     </button>
                     <button className={`ms-fav ${favs.has(b.id) ? 'on' : ''}`} aria-label={favs.has(b.id) ? 'Remove from favourites' : 'Add to favourites'} title="Favourite" onClick={() => toggleFav(b.id)}>{favs.has(b.id) ? '★' : '☆'}</button>
-                    {!preset && <button className="ms-del" aria-label={`Delete ${b.name}`} title="Delete from My motions" onClick={() => { if (confirm(`Delete “${b.name}” from My motions?`)) { mx.library.remove(b.id); changed(); } }}>✕</button>}
+                    {!preset && <button className="ms-del" aria-label={`Delete ${b.name}`} title="Delete from My motions" onClick={() => { if (askOk(`Delete “${b.name}” from My motions?`)) { mx.library.remove(b.id); changed(); } }}>✕</button>}
                   </div>
                 );
               })}

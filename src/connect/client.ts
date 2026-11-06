@@ -12,9 +12,19 @@ export interface DeviceBridge {
   disconnect(id: string): Promise<void>;
   call(id: string, method: string, args: unknown[]): Promise<any>;
   camera(id: string, on: boolean): Promise<boolean>;
+  discover?(): Promise<FoundPrinter[]>;
   onStatus(cb: (id: string, s: PrinterStatus) => void): () => void;
   onProgress(cb: (id: string, f: number) => void): () => void;
   onFrame(cb: (id: string, jpeg: Uint8Array) => void): () => void;
+}
+
+/** A printer seen on the local network (desktop only). */
+export interface FoundPrinter { kind: 'bbl_lan' | 'moonraker'; host: string; name?: string; serial?: string; hostname?: string; model?: string }
+
+/** Scan the Wi-Fi/LAN for printers (~6 s). Empty in the browser build. */
+export async function discoverPrinters(): Promise<FoundPrinter[]> {
+  const b = bridge();
+  return b?.discover ? b.discover() : [];
 }
 
 const bridge = (): DeviceBridge | undefined => (window as any).nexspiro?.devices;
@@ -124,7 +134,12 @@ export async function loadDevices(): Promise<SavedDevice[]> {
   if (b) list = await b.load();
   else try { list = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { list = []; }
   // devices saved before the connection kind was renamed
-  return list.map((d) => ((d.config.kind as string) === 'bambu_lan' ? { ...d, config: { ...d.config, kind: 'bbl_lan' } } : d));
+  return list.map((d) => {
+    if ((d.config.kind as string) === 'bambu_lan') return { ...d, config: { ...d.config, kind: 'bbl_lan' } };
+    // A Bambu printer saved with a Klipper/OctoPrint connection can never connect: switch it to LAN.
+    if (d.printerId.startsWith('bbl-') && d.config.kind !== 'bbl_lan') return { ...d, config: { ...d.config, kind: 'bbl_lan' } };
+    return d;
+  });
 }
 export async function saveDevices(list: SavedDevice[]) {
   const b = bridge();
