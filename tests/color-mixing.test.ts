@@ -218,7 +218,8 @@ describe('segmented regions (painted colour reach)', () => {
     expect(w2[1]).toBeLessThan(full[1] * 0.9); // walls and prime tower use filament 2 either way
     expect(w2d[1]).toBeGreaterThan(w2[1] * 1.1);
     // material conserved whatever the split
-    for (const g of [w2, w2d]) expect(Math.abs(g[0] + g[1] - (full[0] + full[1])) / (full[0] + full[1])).toBeLessThan(0.05);
+    // (prime tower and purge follow the number of changes, so the total moves a little)
+    for (const g of [w2, w2d]) expect(Math.abs(g[0] + g[1] - (full[0] + full[1])) / (full[0] + full[1])).toBeLessThan(0.08);
   });
 });
 

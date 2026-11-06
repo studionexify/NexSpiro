@@ -129,45 +129,90 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
   return out;
 }
 
-/** No width limit: grow each colour from its surface (unpainted surface = the object's filament, key -1) in
- *  equal steps; a point goes to the colour that reaches it first, so colours meet half way. */
+/** Cells of a grid whose centre lies inside `paths` (even-odd scanline fill). */
+function rasterize(paths: Paths, x0: number, y0: number, cell: number, nx: number, ny: number, mark: (i: number) => void) {
+  const xs: number[] = [];
+  for (let r = 0; r < ny; r++) {
+    const y = y0 + (r + 0.5) * cell;
+    xs.length = 0;
+    for (const p of paths) for (let k = 0; k < p.length; k++) {
+      const a = p[k], b = p[(k + 1) % p.length];
+      const ay = a.Y / SCALE, by = b.Y / SCALE;
+      if ((ay <= y) !== (by <= y)) xs.push(a.X / SCALE + ((y - ay) / (by - ay)) * (b.X - a.X) / SCALE);
+    }
+    xs.sort((m, n) => m - n);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const c0 = Math.max(0, Math.ceil((xs[k] - x0) / cell - 0.5)), c1 = Math.min(nx - 1, Math.floor((xs[k + 1] - x0) / cell - 0.5));
+      for (let c = c0; c <= c1; c++) mark(r * nx + c);
+    }
+  }
+}
+
+/** No width limit: each colour owns the points nearer to its surface than to any other (unpainted surface = the
+ *  object's filament, key -1). The band along the surface is exact (strips around the painted lines); the inside is
+ *  shared out by a nearest-colour flood on a fine grid, then clipped to the true outline. */
 function floodRegions(byColor: Map<number, { lines: Paths; flats: Paths }>, slice: Paths): Map<number, Paths> {
   const out = new Map<number, Paths>();
   if (!slice.length || !byColor.size) return out;
-  const total = areaTotal(slice);
-  if (total <= 0) return out;
-  // the slice outline as open polylines; the unpainted part of it belongs to the object's filament
-  const outline: Paths = slice.map((p) => [...p, p[0]]);
-  const paintedNear = union([...byColor.values()].flatMap((e) => lineStrip(e.lines, 0.3)));
-  const fronts = new Map<number, Paths>();
-  let taken: Paths = [];
-  const claim = (key: number, reg: Paths) => {
-    const r = taken.length ? difference(intersection(reg, slice), taken) : intersection(reg, slice);
-    if (!r.length) return;
-    fronts.set(key, union([...(fronts.get(key) ?? []), ...r]));
-    taken = union(taken, r);
-  };
-  // flats (near-horizontal painted faces) and the first step
   let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
   for (const p of slice) for (const q of p) { xmin = Math.min(xmin, q.X); xmax = Math.max(xmax, q.X); ymin = Math.min(ymin, q.Y); ymax = Math.max(ymax, q.Y); }
   const span = Math.max(xmax - xmin, ymax - ymin) / SCALE;
-  const step = Math.max(0.4, span / 60);
   const keys = [...byColor.keys()].sort((a, b) => a - b);
+  const outline: Paths = slice.map((p) => [...p, p[0]]);
+  const painted = union(keys.flatMap((k) => lineStrip(byColor.get(k)!.lines, 0.3)));
+  const lines = new Map<number, Paths>(keys.map((k) => [k, byColor.get(k)!.lines]));
+  lines.set(-1, clipLinesOutside(outline, painted));
+  // 1. the surface band, exact: what shows on the outside of the print
+  const band = Math.min(1, Math.max(0.4, span / 20));
+  const parts = new Map<number, Paths>();
+  let taken: Paths = [];
+  const claim = (key: number, reg: Paths) => {
+    let r = intersection(reg, slice);
+    if (taken.length && r.length) r = difference(r, taken);
+    if (!r.length) return;
+    parts.set(key, parts.has(key) ? union(parts.get(key)!, r) : r);
+    taken = union(taken, r);
+  };
   for (const k of keys) if (byColor.get(k)!.flats.length) claim(k, offset(union(byColor.get(k)!.flats), 0.05));
-  for (const k of keys) claim(k, lineStrip(byColor.get(k)!.lines, step));
-  claim(-1, lineStrip(clipLinesOutside(outline, paintedNear), step));
-  for (let n = 0; n < 400 && areaTotal(taken) < total * 0.999; n++) {
-    let grew = false;
-    for (const k of [...keys, -1]) {
-      const f = fronts.get(k);
-      if (!f?.length) continue;
-      const before = taken.length;
-      const a0 = areaTotal(taken);
-      claim(k, offset(f, step, 'round'));
-      if (areaTotal(taken) > a0 + 1e-6 || taken.length !== before) grew = true;
+  for (const k of [...keys, -1]) claim(k, lineStrip(lines.get(k)!, band));
+  const inner = taken.length ? difference(slice, taken) : slice;
+  if (inner.length && areaTotal(inner) > 1e-4) {
+    // 2. the inside: multi-source flood on a grid from the band's colours
+    const cell = Math.max(0.2, span / 160);
+    const x0 = xmin / SCALE - cell, y0 = ymin / SCALE - cell;
+    const nx = Math.ceil(span / cell) + 3, ny = Math.ceil(span / cell) + 3;
+    const label = new Int16Array(nx * ny).fill(-2); // -2 outside, -3 inside unassigned, else key (+1 offset: -1 → 0)
+    rasterize(inner, x0, y0, cell, nx, ny, (i) => { label[i] = -3; });
+    const queue: number[] = [];
+    for (const [k, reg] of parts) rasterize(reg, x0, y0, cell, nx, ny, (i) => { if (label[i] !== -3) { label[i] = k + 1; queue.push(i); } });
+    for (let q = 0; q < queue.length; q++) {
+      const i = queue[q], cx = i % nx, cy = (i / nx) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ex = cx + dx, ey = cy + dy;
+        if (ex < 0 || ey < 0 || ex >= nx || ey >= ny) continue;
+        const j = ey * nx + ex;
+        if (label[j] === -3) { label[j] = label[i]; queue.push(j); }
+      }
     }
-    if (!grew) break;
+    // cells back to rectangles (row runs), per colour, clipped to the inside
+    for (const k of keys) {
+      const rects: Paths = [];
+      for (let r = 0; r < ny; r++) {
+        let c = 0;
+        while (c < nx) {
+          if (label[r * nx + c] !== k + 1) { c++; continue; }
+          let e = c;
+          while (e + 1 < nx && label[r * nx + e + 1] === k + 1) e++;
+          const ax = x0 + c * cell, bx = x0 + (e + 1) * cell, ay = y0 + r * cell, by = y0 + (r + 1) * cell;
+          rects.push([{ X: Math.round(ax * SCALE), Y: Math.round(ay * SCALE) }, { X: Math.round(bx * SCALE), Y: Math.round(ay * SCALE) }, { X: Math.round(bx * SCALE), Y: Math.round(by * SCALE) }, { X: Math.round(ax * SCALE), Y: Math.round(by * SCALE) }]);
+          c = e + 1;
+        }
+      }
+      if (!rects.length) continue;
+      const r = intersection(union(rects), inner);
+      if (r.length) parts.set(k, parts.has(k) ? union(parts.get(k)!, r) : r);
+    }
   }
-  for (const k of keys) { const r = fronts.get(k); if (r?.length) out.set(k, r); }
+  for (const k of keys) { const r = parts.get(k); if (r?.length) out.set(k, r); }
   return out;
 }
