@@ -2,7 +2,7 @@
 // Plate view → printer, filament / AMS, inline process settings, objects tree.
 // Object view → pinned params, effects stack, Physics Core (advanced), inline per-object settings.
 // Replaces the old left Sidebar; it reuses the Sidebar's cards and process model so behaviour is identical.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PARAM_BY_KEY, PROCESS_PRESETS, PROCESS_TABS, type ProcessTab } from '../../profiles/settings';
 import { useStore } from '../../state/store';
 import { useAdvanced } from '../../state/advanced';
@@ -18,17 +18,20 @@ import { activeUserPreset, applyUserPreset, currentPresetValue, deleteUserPreset
 import { AdvancedPanel } from '../advanced/AdvancedPanel';
 import { useTools, type ResolvedTool } from '../advanced/hooks';
 import { HINTS } from './hints';
+import { PLUGINS } from '../../plugins/registry';
+import { studioOf } from '../../plugins/studios';
+import { BigPicker, foldPickers, type PickTarget } from './BigPick';
 import './inspector.css';
 
 export function Inspector() {
   const ctx = useUi((u) => u.inspectorCtx);
   const s = useStore();
-  const objView = ctx === 'object' && s.selected.length > 0;
+  void ctx; void s;
   return (
     <div className="panel insp" aria-label="Inspector">
-      <Crumb objView={objView} />
+      <Crumb objView={false} />
       <div className="iscroll">
-        {objView ? <ObjectView /> : <PlateView />}
+        <PlateView />
       </div>
     </div>
   );
@@ -48,7 +51,6 @@ function Crumb({ objView }: { objView: boolean }) {
         <b>{plateName}</b>
         <span className="tag">{s.objects.length ? `${s.objects.length} object${s.objects.length > 1 ? 's' : ''}` : 'empty'}</span>
         {n > 0 && <span className="tag warn" title="Settings changed from the preset for the whole plate">{n} changed</span>}
-        {s.selected.length > 0 && <button className="crumb-go" title="Show the selected object's settings" onClick={() => setUi({ inspectorCtx: 'object' })}>Selection<Icon name="chevron" size={12} /></button>}
       </div>
     );
   }
@@ -71,21 +73,25 @@ function PresetSection() {
   const s = useStore();
   const up = activeUserPreset(s);
   const upMod = isActiveUserPresetModified(s);
+  const nChanged = Object.keys(s.overrides).length;
+  // like Bambu Studio / Orca: a changed preset turns orange, says "(modified)" and gets a restore arrow
+  const modified = up ? upMod : nChanged > 0;
+  const restore = () => { if (up) applyUserPreset(up.id); else { s.set({ overrides: {} }); s.markDirty(); } };
   const [saveOpen, setSaveOpen] = useState(false);
   return (
     <section>
       {/* one dropdown instead of a wall of chips: built-in presets, then the user's own */}
       <div className="preset-row">
         <span className="h-inline">Preset</span>
-        <select className="preset-select" aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
-          title={up && upMod ? 'Modified since applied' : undefined}
+        <select className={`preset-select ${modified ? 'modified' : ''}`} aria-label="Preset" value={up ? `u:${up.id}` : active ? `i:${active}` : ''}
+          title={modified ? 'Modified: settings differ from the preset' : undefined}
           onChange={(e) => {
             const [k, id] = [e.target.value.slice(0, 1), e.target.value.slice(2)];
             if (k === 'i') { applyIntentPreset(id); s.set({ userPresetId: null }); } else if (k === 'u') applyUserPreset(id);
           }}>
           {!up && !active && <option value="">Custom</option>}
           <optgroup label="Presets">
-            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}</option>)}
+            {INTENT_PRESETS.map((p) => <option key={p.id} value={`i:${p.id}`}>{p.engine === 'advanced' ? '⚛ ' : ''}{p.label}{!up && active === p.id && modified ? ' (modified)' : ''}</option>)}
           </optgroup>
           {s.userPresets.length > 0 && (
             <optgroup label="My presets">
@@ -93,6 +99,9 @@ function PresetSection() {
             </optgroup>
           )}
         </select>
+        {modified
+          ? <button className="preset-reset" aria-label="Restore the preset values" title={up ? `Restore "${up.name}": discard the changes made since it was applied` : `Restore the preset: discard ${nChanged} changed setting${nChanged === 1 ? '' : 's'}`} onClick={restore}><Icon name="reset" size={14} /></button>
+          : <span className="preset-lock" title="All settings use the preset values"><Icon name="lock" size={12} /></span>}
         {up && upMod && <button className="sh-ib" title={`Overwrite "${up.name}" with the current settings`} onClick={() => updateUserPreset(up.id)}>Update</button>}
         <button className="sh-ib" title="Save the current settings as your own preset, or manage presets" onClick={() => setSaveOpen(true)}>Save as…</button>
       </div>
@@ -150,11 +159,19 @@ function PresetModal({ onClose }: { onClose: () => void }) {
 
 function PlateView() {
   const advanced = useAdvanced((a) => a.engineMode === 'advanced');
+  const objMode = useUi((u) => u.inspectorCtx) === 'object';
+  const setUi = useUi((u) => u.set);
   return <>
     <div className="insp-cards"><PrinterCard /><FilamentCard /></div>
     <PresetSection />
     {advanced && <PhysicsCore />}
-    <InlineSettings objMode={false} title="Process · whole plate" />
+    <InlineSettings objMode={objMode} title={
+      <span className="proc-mode">Process
+        <span className="seg proc-seg" role="tablist" aria-label="Process settings for">
+          <button role="tab" aria-selected={!objMode} className={!objMode ? 'on' : ''} title="Settings for the whole plate" onClick={() => setUi({ inspectorCtx: 'plate' })}>Global</button>
+          <button role="tab" aria-selected={objMode} className={objMode ? 'on' : ''} title="Settings for the selected object only; the object keeps them when you switch back to Global" onClick={() => setUi({ inspectorCtx: 'object' })}>Objects</button>
+        </span>
+      </span>} />
     <div className="insp-cards"><ObjectsCard /></div>
   </>;
 }
@@ -259,7 +276,7 @@ const TAB_HINT: Record<ProcessTab, string> = {
   Others: 'Brim, prime tower, special modes and G-code',
 };
 
-function InlineSettings({ objMode, title }: { objMode: boolean; title: string }) {
+function InlineSettings({ objMode, title }: { objMode: boolean; title: React.ReactNode }) {
   const s = useStore();
   const m = useProcessModel(objMode);
   const { pinnedParams, togglePinParam } = useUi();
@@ -268,7 +285,11 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
   const pool = changedOnly ? m.visible.filter((p) => m.changed(p.key)) : m.visible;
   const tabs = PROCESS_TABS.filter((t) => m.visible.some((p) => p.tab === t));
   const tab = tabs.includes(s.processTab) ? s.processTab : tabs[0];
-  const flat = !!q || changedOnly;
+  // plugins turned on in File → Plugins sit after the process tabs; s.dock.tab / open say which one is shown
+  const plugins = PLUGINS.filter((p) => s.plugins.includes(p.id));
+  const plugin = s.dock.open ? plugins.find((p) => p.id === s.dock.tab) : undefined;
+  const showTab = (t: ProcessTab) => s.set({ processTab: t, dock: { ...s.dock, open: false } });
+  const flat = !plugin && (!!q || changedOnly);
   const list = q
     ? pool.filter((p) => `${p.label} ${p.group} ${p.key} ${p.tab} ${HINTS[p.key] ?? ''}`.toLowerCase().includes(q))
     : changedOnly ? pool : pool.filter((p) => p.tab === tab);
@@ -284,7 +305,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         {!objMode && m.modifiedCount > 0 && (
           <button className="icon-btn" title={`${m.modifiedCount} changed from the preset: reset all`} onClick={() => { s.set({ overrides: {} }); s.markDirty(); }}><Icon name="reset" size={13} /></button>
         )}
-        {!objMode && (
+        {(
           <label className="insp-adv-toggle" title="Show expert and developer settings too">Expert
             <button className={`toggle ${s.showAdvanced ? 'on' : ''}`} aria-label="Show expert settings" onClick={() => s.set({ showAdvanced: !s.showAdvanced })} />
           </label>
@@ -301,7 +322,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         </div>
       )}
       {noSel ? (
-        <div className="empty-hint">Select an object to give it its own settings.</div>
+        <div className="proc-nosel">Select an object on the plate or in Objects to give it its own settings. Objects keep their own settings when you switch back to Global.</div>
       ) : objMode && (m.part ? m.part.type === 'modifier' && isWaveZone(m.part.overrides) : m.range && isWaveZone(m.range.overrides)) ? (
         <WeaveZoneSettings objectId={m.selObjs[0].id} partId={m.part?.id} rangeId={m.range?.id} />
       ) : solidPart ? (
@@ -310,12 +331,17 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
         {!flat && (
           <div className="stabs" role="tablist">
             {tabs.map((t) => (
-              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} title={TAB_HINT[t]} onClick={() => s.set({ processTab: t })}>
+              <button key={t} role="tab" aria-selected={!plugin && tab === t} className={!plugin && tab === t ? 'on' : ''} title={TAB_HINT[t]} onClick={() => showTab(t)}>
                 {t}{tabCount(t) > 0 && <span className="c" title={`${tabCount(t)} changed`}>{tabCount(t)}</span>}
               </button>
             ))}
+            {plugins.map((p) => (
+              <button key={p.id} role="tab" aria-selected={plugin?.id === p.id} className={`ptab ${plugin?.id === p.id ? 'on' : ''}`} title={p.name}
+                onClick={() => s.set({ dock: { ...s.dock, open: true, tab: p.id } })}>{p.name}</button>
+            ))}
           </div>
         )}
+        {plugin ? <PluginTab id={plugin.id} /> : <>
         <div className="ssearch">
           <Icon name="search" size={14} />
           <input id="param-search" placeholder={`Search ${m.visible.length} settings (Ctrl+F)`} value={s.search} aria-label="Search settings"
@@ -334,7 +360,42 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: string })
           ))}
           {!list.length && <div className="muted-s" style={{ padding: 16, textAlign: 'center' }}>{changedOnly && !q ? 'Nothing changed — everything uses the preset.' : 'No matching settings.'}</div>}
         </div>
+        </>}
       </>}
     </section>
   );
 }
+
+/**
+ * A plugin's settings, shown as a tab beside Quality / Strength / … and laid out like them: one row per setting
+ * (name left, control right) under small group headings. Its "More settings" folds follow the Expert switch.
+ */
+function PluginTab({ id }: { id: string }) {
+  const p = PLUGINS.find((x) => x.id === id)!;
+  // Plantex, Lumonex, Clickex and Flenex show their own Studio button; Motionex gets one here
+  const studio = studioOf(id);
+  const Panel = p.Panel;
+  const expert = useStore((s) => s.showAdvanced);
+  const box = useRef<HTMLDivElement>(null);
+  const [pick, setPick] = useState<PickTarget | null>(null);
+  // Expert on: every advanced fold shown open; off: hidden
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const apply = () => el.querySelectorAll<HTMLDetailsElement>('details.px-more, details.mx-more').forEach((d) => { if (expert && !d.open) d.open = true; });
+    apply();
+    const mo = new MutationObserver(apply);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [expert, id]);
+  // long dropdowns, picture libraries and chip rows open a centred picker window
+  useEffect(() => { const el = box.current; return el ? foldPickers(el, setPick) : undefined; }, [id]);
+  return (
+    <div className={`insp-plugin ${expert ? 'expert' : ''}`} ref={box}>
+      {studio && id === 'motionex' && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
+      <div className="dock-body"><Panel /></div>
+      {pick && <BigPicker target={pick} onClose={() => setPick(null)} />}
+    </div>
+  );
+}
+

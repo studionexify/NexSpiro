@@ -228,7 +228,7 @@ function PictureView({ l }: { l: LaceSettings }) {
     g.putImageData(d, 0, 0);
     return c.toDataURL();
   }, [l.image]);
-  return <img src={url} alt="" style={{ width: '100%', imageRendering: 'pixelated', aspectRatio: `${l.image.w} / ${Math.max(1, l.image.h)}`, display: 'block', maxHeight: 160, borderRadius: 4 }} />;
+  return <img src={url} alt="" style={{ width: '100%', height: 150, objectFit: 'contain', imageRendering: 'pixelated', display: 'block', borderRadius: 4 }} />;
 }
 
 function LaceReport() {

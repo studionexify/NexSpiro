@@ -3,6 +3,7 @@
 // map of Path sculpt, which works on top of any pattern (motions, lace, Patternex regions, velocity paint, weave).
 // The 3D view shows the moved threads at once, and the drool check says when a move reaches too far out to print.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { touchAdd } from '../../../ui/TouchMods';
 import { changed, mx, useMx } from './MotionexPanel';
 import { weaveColours } from './WeavePanel';
 import type { SculptSettings } from '../sculpt/model';
@@ -96,7 +97,7 @@ export function PixelMover({ id, w: W, h: H, colour, moves: d, edit, cap, title,
   const onDown = (e: React.PointerEvent) => {
     ref.current!.setPointerCapture(e.pointerId);
     const [x, y] = cell(e);
-    if (!e.shiftKey) S.clear();
+    if (!e.shiftKey && !touchAdd()) S.clear();
     if (mode === 'brush') paint(x, y);
     else if (mode === 'box') drag.current = { x0: x, y0: y, base: new Set(S) };
     else if (mode === 'same') for (const i of patch(W, H, key, x, y)) S.add(i);

@@ -16,7 +16,8 @@ import { plantexRenexSource } from '../renexSource';
 import { useStore } from '../../../state/store';
 import { FILAMENTS } from '../../../profiles/filaments';
 import { createPortal } from 'react-dom';
-import { designThumb, textureThumb } from './thumbs';
+import { designThumb, designOutline, textureThumb } from './thumbs';
+import { Live3D } from '../../../ui/Live3D';
 
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 const num = (v: string, d: number, min = -Infinity, max = Infinity) => { const n = parseFloat(v); return isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
@@ -68,7 +69,7 @@ function DesignLibrary() {
       <div className="mx-lib-grid" style={{ maxHeight: 300, overflowY: 'auto' }}>
         {list.map((d) => (
           <button key={d.id} className={`mx-lib-card ${pt.spec.name === d.name ? 'on' : ''}`} onClick={() => loadSpec(d.spec)} title={d.name}>
-            <img src={designThumb(d.spec, d.id + (d.mine ? JSON.stringify(d.spec).length : ''))} alt="" style={{ width: '100%', borderRadius: 6 }} />
+            <img src={designOutline(d.spec, d.id + (d.mine ? JSON.stringify(d.spec).length : ''), 84, useStore.getState().theme === 'dark')} alt="" style={{ width: '100%', aspectRatio: '1', borderRadius: 6 }} />
             <span>{d.name}</span>
             {d.mine && <span className="muted" onClick={(e) => { e.stopPropagation(); deleteDesign(d.id); }} title="Delete">✕ delete</span>}
           </button>
@@ -359,7 +360,7 @@ function FilamentSelect({ value, set, allowBody }: { value: number; set: (v: num
           <i style={{ background: fils[k]?.color ?? '#999' }} />{k + 1}
         </button>
       ))}
-      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>+</button>
+      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>Add slot</button>
     </div>
   );
 }
@@ -462,7 +463,7 @@ export function PlantexStudio() {
         </div>
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr) 420px' }}>
           <div style={{ overflowY: 'auto', padding: 10, borderRight: '1px solid var(--border)' }}><DesignLibrary /></div>
-          <div style={{ minWidth: 0, minHeight: 0, position: 'relative' }}><StudioViewer /></div>
+          <div style={{ minWidth: 0, minHeight: 0, position: 'relative' }}><Live3D flat={<img alt="Outline of the current design" src={designOutline(pt.spec, `big:${JSON.stringify(pt.spec)}`, 320, useStore.getState().theme === 'dark')} />}><StudioViewer /></Live3D></div>
           <div style={{ overflowY: 'auto', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
             <div className="seg mx-seg" style={{ padding: 8, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-primary)' }}>
               {TABS.map((t) => <button key={t} aria-label={`${t} tab`} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}

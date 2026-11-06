@@ -280,7 +280,7 @@ export const useStore = create<State>((set, get) => ({
   selectedRange: null,
   shortcutsOpen: false,
   oneLayer: false,
-  showGcode: true,
+  showGcode: false,
   undoStack: [],
   redoStack: [],
 

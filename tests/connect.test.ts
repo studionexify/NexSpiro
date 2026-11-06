@@ -73,6 +73,32 @@ describe('Moonraker', () => {
     await c.disconnect();
   });
 
+  it('reads every head of a tool changer (extruder, extruder1…) and the head in use', async () => {
+    const tc = await mockServer((req) => {
+      const u = req.url!;
+      if (u === '/printer/objects/list') return { json: { result: { objects: ['extruder2', 'extruder', 'heater_bed', 'extruder1', 'extruder3', 'extruder_stepper x'] } } };
+      if (u.startsWith('/printer/objects/query')) {
+        expect(u).toContain('&extruder1&extruder2&extruder3');
+        return { json: { result: { status: {
+          webhooks: { state: 'ready' }, print_stats: { state: 'printing' }, virtual_sdcard: { progress: 0.5 },
+          toolhead: { extruder: 'extruder2' },
+          extruder: { temperature: 175, target: 175 }, extruder1: { temperature: 20, target: 0 },
+          extruder2: { temperature: 220, target: 220 }, extruder3: { temperature: 200, target: 215 },
+          heater_bed: { temperature: 60, target: 60 },
+        } } } };
+      }
+      return { status: 404, json: {} };
+    });
+    const c = new MoonrakerConnection({ kind: 'moonraker', host: '127.0.0.1', port: tc.port });
+    await c.connect();
+    const s = c.status();
+    expect(s.heads?.map((h) => h.temp)).toEqual([175, 20, 220, 200]);
+    expect(s.activeHead).toBe(2);
+    expect(s.nozzleTemp).toBe(220); // the head in use
+    await c.disconnect();
+    tc.close();
+  });
+
   it('reports a clear error when the printer is unreachable', async () => {
     const c = new MoonrakerConnection({ kind: 'moonraker', host: '127.0.0.1', port: 1 });
     await expect(c.connect()).rejects.toThrow();

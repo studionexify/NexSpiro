@@ -110,6 +110,8 @@ export interface EmitOutput {
   moveLines: Uint32Array;
   /** Per move: wall texture strength 0..255 (only when some move has one). */
   moveWave?: Uint8Array;
+  /** Pauses on the part (dwells from motions such as Dots): x, y, z, seconds per pause. */
+  pauses?: Float32Array;
   layers: LayerResult[];
   stats: SliceStats;
 }
@@ -143,41 +145,66 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
 }
 
 /**
- * Tool changers: a parked head (cooled to standby by the change G-code) is heated back to print temperature
- * `lead` seconds before it is picked up again, but never before it was parked. Needs the move times.
+ * Tool changers, head temperatures over the whole print (the change G-code itself only parks the head it leaves):
+ *  - every head the print uses besides the first waits at standby from the start, so its first pick-up is not a cold heat-up
+ *  - a parked head is heated back to print temperature `lead` seconds before it is picked up again, never before it was parked
+ *  - a head that is never picked up again is switched off when it is parked (`offAfterLastUse`)
+ * Needs the move times. Heads are filament slots (slot n prints with head n).
  */
-export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[]) {
-  if (!(lead > 0)) return;
+export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; offAfterLastUse?: boolean } = {}) {
   // time at the start of every op, and every pick-up (a tool op that changes the head)
   const at: { li: number; oi: number; t: number }[] = [];
   const picks: { tool: number; t: number; idx: number }[] = [];
-  const parkedAt = new Map<number, number>();
   const parks: { tool: number; t: number; idx: number }[] = [];
-  let t = 0, tool = -1;
+  let t = 0, tool = -1, first = -1;
   layers.forEach((L, li) => L.ops.forEach((op, oi) => {
     at.push({ li, oi, t });
     if (op.k === 'move') t += op.t ?? 0;
     else if (op.k === 'raw' && op.time) t += op.time;
     else if (op.k === 'retract') t += Math.abs(op.len) / Math.max(1, op.speed);
     else if (op.k === 'tool') {
+      if (first < 0) first = op.tool;
       if (tool >= 0 && op.tool !== tool) { picks.push({ tool: op.tool, t, idx: at.length - 1 }); parks.push({ tool, t, idx: at.length - 1 }); }
       tool = op.tool;
     }
   }));
+  if (first < 0) return;
   const inserts: { li: number; oi: number; text: string }[] = [];
-  let p = 0;
-  for (const pk of picks) {
-    // the last time this head was parked before this pick-up
-    while (p < parks.length && parks[p].idx < pk.idx) { parkedAt.set(parks[p].tool, parks[p].idx); p++; }
-    const parked = parkedAt.get(pk.tool);
-    if (parked === undefined) continue; // never used yet: still at its start temperature
-    let k = pk.idx;
-    while (k > parked + 1 && at[k - 1].t > pk.t - lead) k--;
-    const temp = filaments[pk.tool]?.nozzleTemp;
-    if (temp && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(temp)} ; preheat T${pk.tool} for its pick-up` });
+  const temp = (k: number) => filaments[k]?.nozzleTemp;
+  // heads picked up later wait at standby from the start of the print (before the first head is selected)
+  const later = [...new Set(picks.map((p) => p.tool))].filter((k) => k !== first).sort((a, b) => a - b);
+  const delta = Math.min(0, o.standbyDelta ?? 0);
+  const parkedAt = new Map<number, number>();
+  for (const k of later) {
+    const tk = temp(k);
+    if (!tk) continue;
+    inserts.push({ li: at[0].li, oi: at[0].oi, text: `M104 T${k} S${Math.max(0, Math.round(tk + delta))} ; T${k} waits ${delta < 0 ? 'at standby' : 'hot'} for its first pick-up` });
+    parkedAt.set(k, -1);
   }
-  // from the end, so earlier positions stay valid
-  for (const ins of inserts.sort((a, b) => b.li - a.li || b.oi - a.oi)) layers[ins.li].ops.splice(ins.oi, 0, { k: 'raw', text: ins.text });
+  if (lead > 0) {
+    let p = 0;
+    for (const pk of picks) {
+      // the last time this head was parked before this pick-up (-1: waiting since the start)
+      while (p < parks.length && parks[p].idx < pk.idx) { parkedAt.set(parks[p].tool, parks[p].idx); p++; }
+      const parked = parkedAt.get(pk.tool);
+      if (parked === undefined) continue;
+      let k = pk.idx;
+      while (k > parked + 1 && at[k - 1].t > pk.t - lead) k--;
+      const tk = temp(pk.tool);
+      if (tk && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(tk)} ; preheat T${pk.tool} for its pick-up` });
+    }
+  }
+  if (o.offAfterLastUse) {
+    // the last park of a head with no pick-up after it: off right there (after the change G-code's standby line)
+    const lastPick = new Map<number, number>();
+    for (const pk of picks) lastPick.set(pk.tool, pk.idx);
+    const lastPark = new Map<number, number>();
+    for (const pk of parks) lastPark.set(pk.tool, pk.idx);
+    for (const [k, idx] of lastPark) if ((lastPick.get(k) ?? -1) < idx) inserts.push({ li: at[idx].li, oi: at[idx].oi, text: `M104 T${k} S0 ; T${k} is not used again` });
+  }
+  // from the end, so earlier positions stay valid (same position: kept in the order they were added)
+  inserts.forEach((x, n) => ((x as { n?: number }).n = n));
+  for (const ins of inserts.sort((a, b) => b.li - a.li || b.oi - a.oi || ((b as { n?: number }).n ?? 0) - ((a as { n?: number }).n ?? 0))) layers[ins.li].ops.splice(ins.oi, 0, { k: 'raw', text: ins.text });
 }
 
 /** Applies cooling slowdown + timing, then writes G-code text and packed preview moves. */
@@ -243,7 +270,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     }
     layerTimes.push(t);
   }
-  if (changerOf(cfg) === 'toolchanger') preheatParkedHeads(layers, num('tool_preheat_time'), filaments);
+  if (changerOf(cfg) === 'toolchanger') preheatParkedHeads(layers, num('tool_preheat_time'), filaments, { standbyDelta: num('standby_temperature_delta'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
   const total = layerTimes.reduce((a, b) => a + b, 0);
 
   // 2) write
@@ -254,6 +281,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   const aux = new TypedBuilder(Float32Array);
   const lines = new TypedBuilder(Uint32Array);
   const feats = new TypedBuilder(Uint8Array);
+  const pauses: number[] = [];
   const waves = new TypedBuilder(Uint8Array);
   let anyWave = false;
   const layerRes: LayerResult[] = [];
@@ -380,6 +408,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
           push(op.text);
           tempIn(op.text);
           if (op.time) elapsed += op.time;
+          if (op.time && /^\s*G4\b/.test(op.text) && Number.isFinite(x) && Number.isFinite(y)) pauses.push(x, y, Number.isFinite(z) ? z : L.z, op.time);
           if (op.resetPos) { x = NaN; y = NaN; z = NaN; f = NaN; accel = -1; }
           // a macro that touched the part fan (filament change): put the layer's fan speed back right away
           if (op.resetPos && /^\s*M10[67](?!\s*P[2-9])/m.test(op.text)) { fanOut = -1; setFan(layerFan); }
@@ -507,6 +536,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     moveAux: aux.toTyped(),
     moveLines: lines.toTyped(),
     moveWave: anyWave ? waves.toTyped() : undefined,
+    pauses: pauses.length ? new Float32Array(pauses) : undefined,
     layers: layerRes,
     stats: {
       timeSeconds: total,

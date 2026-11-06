@@ -3,6 +3,7 @@
 // view of the lamp — assembled (lit, with the bulb), exploded, or as the print pieces laid out on the
 // plates "Transfer to plate" will create. Right: printer fit, thermal and hardware report.
 import { useEffect, useRef, useState } from 'react';
+import { Live3D } from '../../../ui/Live3D';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -256,8 +257,8 @@ function Studio() {
         </header>
         <div className="lx-body">
           <aside className="lx-col lx-left"><div className="mx-panel"><EditorColumn /></div></aside>
-          <main className="lx-centre"><Viewer /></main>
-          <aside className="lx-col lx-right"><div className="mx-panel"><ReportColumn onTransfer={transfer} /></div></aside>
+          <main className="lx-centre"><Live3D><Viewer /></Live3D></main>
+          <aside className="lx-col lx-right" tabIndex={0} aria-label="Details panel (tap to open)"><div className="mx-panel"><ReportColumn onTransfer={transfer} /></div></aside>
         </div>
         {toast && <div className="lx-toast">{toast}</div>}
         {renex && <RenexStudio source="lumonex" build={lumonexRenexSource} onClose={() => setRenex(false)} />}

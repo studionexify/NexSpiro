@@ -4,6 +4,9 @@ import { create } from 'zustand';
 import { CONNECTION_INFO, type AmsTray } from '../connect/types';
 import { filamentById } from '../profiles/filaments';
 import { printerById } from '../profiles/printers';
+import { changerOf, toolheadCount } from '../profiles/changer';
+import { toolMapProblems, parseToolMap } from '../engine/toolmap';
+import { currentConfig } from '../state/slicing';
 import { connectDevice, initDevices, uploadAndPrint, useDevices } from '../state/devices';
 import { buildPrintJob } from '../state/printjob';
 import { useStore } from '../state/store';
@@ -48,6 +51,12 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
   const [sending, setSending] = useState(false);
   const used = useMemo(() => (result?.stats.perFilament ?? []).map((f, k) => (f.mm > 0 ? k : -1)).filter((k) => k >= 0), [result]);
   const trays = (st?.ams ?? []).flatMap((u) => u.trays);
+  // tool changer (Snapmaker U1, XL, Klipper changers): map each filament to the head it is loaded on
+  const machineCfg = useMemo(() => currentConfig(s.slice.plate), [s.slice.plate, s.printerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isChanger = changerOf(machineCfg) === 'toolchanger';
+  const heads = isChanger ? Math.max(toolheadCount(machineCfg), st?.heads?.length ?? 0) : 0;
+  const [toolMap, setToolMap] = useState<number[]>(() => parseToolMap(machineCfg.tool_map));
+  const mapProblems = isChanger ? toolMapProblems(toolMap, used, heads) : [];
 
   useEffect(() => { void initDevices(); }, []);
   useEffect(() => {
@@ -69,7 +78,7 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
     if (!dev) return;
     setSending(true);
     try {
-      const job = await buildPrintJob(isBbl ? '3mf' : 'gcode');
+      const job = await buildPrintJob(isBbl ? '3mf' : 'gcode', isChanger ? { toolMap: s.filaments.map((_, k) => toolMap[k] ?? k) } : {});
       if (!job) return;
       const amsMapping = isBbl && opts.useAms && mapping ? s.filaments.map((_, k) => mapping[k] ?? -1) : undefined;
       await uploadAndPrint(dev.id, job.name, job.data, start, { plate: 1, ...opts, useAms: opts.useAms && !!trays.length, amsMapping });
@@ -86,7 +95,7 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
       <button className="btn-secondary btn-small" onClick={() => { s.set({ workspace: 'device' }); onClose(); }}><Icon name="device" size={14} />Devices</button>
       <span className="spacer" />
       <button className="btn-secondary btn-small" disabled={!dev || sending} onClick={() => send(false)}>Send only</button>
-      <button className="btn-primary btn-small" disabled={!dev || sending || busy} onClick={() => send(true)}><Icon name="print" size={14} />{sending ? 'Sending…' : 'Print'}</button>
+      <button className="btn-primary btn-small" disabled={!dev || sending || busy || mapProblems.length > 0} onClick={() => send(true)}><Icon name="print" size={14} />{sending ? 'Sending…' : 'Print'}</button>
     </>}>
       {!devices.length ? (
         <div className="empty-state" style={{ margin: 10 }}>
@@ -110,6 +119,28 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
             <p style={{ color: '#E5484D', fontSize: 12 }}><Icon name="warn" size={12} /> This plate is sliced for {profile.vendor} {profile.model}; {dev.name} is a {printerById(dev.printerId).model}. Re-slice for the right printer first.</p>
           )}
           {busy && <p style={{ color: '#F2B33D', fontSize: 12 }}>The printer is busy. You can still send the file and start it later.</p>}
+          {isChanger && (
+            <>
+              <h3 style={{ fontSize: 13, marginBottom: 6 }}>Toolhead mapping</h3>
+              <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Each filament prints with its own head: no purge, a few seconds per swap. Pick the head each colour is loaded on.</p>
+              {used.map((k) => {
+                const f = s.filaments[k];
+                const h = toolMap[k] ?? k;
+                const live = st?.heads?.[h];
+                return (
+                  <div key={k} className="row" style={{ marginBottom: 6 }}>
+                    <span className="swatch" style={{ background: f.color }} /><span style={{ width: 150 }}>{k + 1}: {filamentById(f.presetId).name}</span>
+                    <Icon name="chevron" size={12} style={{ transform: 'rotate(-90deg)' }} />
+                    <select className="select" value={h} onChange={(e) => { const m = s.filaments.map((_, j) => toolMap[j] ?? j); m[k] = Number(e.target.value); setToolMap(m); }}>
+                      {Array.from({ length: heads }, (_, t) => <option key={t} value={t}>Head T{t}{st?.heads?.[t]?.temp != null ? ` — ${Math.round(st.heads[t].temp!)}°` : ''}</option>)}
+                    </select>
+                    {live?.temp != null && <span className="muted" style={{ fontSize: 12 }}>{Math.round(live.temp)}° now</span>}
+                  </div>
+                );
+              })}
+              {mapProblems.map((p) => <p key={p} style={{ color: '#E5484D', fontSize: 12, margin: '2px 0' }}><Icon name="warn" size={12} /> {p}</p>)}
+            </>
+          )}
           {isBbl && (
             <>
               <h3 style={{ fontSize: 13, marginBottom: 6 }}>Options</h3>

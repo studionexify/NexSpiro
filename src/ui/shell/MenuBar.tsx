@@ -1,3 +1,5 @@
+import { Live3DToggle } from '../Live3D';
+import { printerSwitchChoice, resetPrinterSwitchChoice } from '../ImportDialog';
 // Top menu bar (File / Edit / View / Add / Tools / Help) like a desktop app, plus the Preferences
 // dialog and the interface scale that keeps the layout fitting smaller windows.
 import { useEffect, useState } from 'react';
@@ -13,16 +15,18 @@ import { openPrintDialog } from '../PrintModal';
 import { openPlateSettings } from '../PlateControls';
 import { openFillBed } from '../FillBedDialog';
 import { Modal } from '../Modals';
-import { PluginManager } from '../RightDock';
+import { PLUGINS } from '../../plugins/registry';
+import { togglePlugin } from './Rail';
 import { useSliced } from './FileMenu';
 import { PlateSelect } from './TopRight';
 import { ModeToggle } from '../advanced/ModeToggle';
 import { Icon } from '../icons';
 
-interface Item { label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
+interface Item { switch?: boolean; head?: string; keep?: boolean; label?: string; kbd?: string; onClick?: () => void; disabled?: boolean; checked?: boolean; sep?: true }
 
 /** Auto scale: shrink everything a little on smaller windows so the panels never collide. */
 function autoScale(w: number, h: number) {
+  if (w <= 1024) return 1; // tablet / phone: full-size touch targets, no shrinking
   const fw = w >= 1760 ? 1 : w >= 1500 ? 0.92 : w >= 1320 ? 0.86 : 0.8;
   const fh = h >= 900 ? 1 : h >= 780 ? 0.92 : 0.85;
   return Math.min(fw, fh);
@@ -44,7 +48,7 @@ export function useUiScale() {
 
 const go = (workspace: Workspace) => useStore.getState().set({ workspace });
 
-function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item[]][] {
+function useMenus(openPrefs: () => void): [string, Item[]][] {
   const s = useStore();
   const sliced = useSliced();
   const sel = s.selected.length > 0;
@@ -138,8 +142,8 @@ function useMenus(openPrefs: () => void, openPlugins: () => void): [string, Item
       { label: 'Brim ears', kbd: 'E', onClick: tool('brim_ears'), checked: prep && s.tool === 'brim_ears' },
       { sep: true },
       { label: 'Calibration…', onClick: () => go('calibration') },
-      { label: 'Plugins…', onClick: openPlugins },
     ]],
+    ['Plugins', PLUGINS.map((p): Item => ({ label: p.name, switch: true, checked: s.plugins.includes(p.id), keep: true, onClick: () => togglePlugin(p.id) }))],
     ['Help', [
       { label: 'Keyboard shortcuts', kbd: '?', onClick: () => s.set({ shortcutsOpen: true }) },
       { label: 'Search everything', kbd: 'Ctrl+K', onClick: () => useUi.getState().set({ paletteOpen: true }) },
@@ -167,6 +171,8 @@ function Preferences({ onClose }: { onClose: () => void }) {
         </label>
         <label className="row"><input type="checkbox" checked={liveToolpaths} onChange={() => set({ liveToolpaths: !liveToolpaths })} />Show toolpath view while preparing</label>
         <label className="row"><input type="checkbox" checked={showOverhangs} onChange={() => set({ showOverhangs: !showOverhangs })} />Highlight overhangs</label>
+        <div className="row" style={{ gap: 8 }}><span style={{ flex: 1 }}>Studio previews (Plantex, Lumonex, Flenex, Clickex)</span><Live3DToggle /></div>
+        <PrinterSwitchReset />
       </div>
     </Modal>
   );
@@ -175,11 +181,12 @@ function Preferences({ onClose }: { onClose: () => void }) {
 export function MenuBar() {
   const [open, setOpen] = useState<string | null>(null);
   const [prefs, setPrefs] = useState(false);
-  const [plugins, setPlugins] = useState(false);
-  const menus = useMenus(() => setPrefs(true), () => setPlugins(true));
-  const { undo, redo, undoStack, redoStack, workspace } = useStore();
+  const menus = useMenus(() => setPrefs(true));
+  const { undo, redo, undoStack, redoStack, workspace, theme } = useStore();
   const is3d = workspace === 'prepare' || workspace === 'preview';
   useUiScale();
+  const compact = useCompactMenu();
+  const [sheet, setSheet] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === ',') { setPrefs(true); e.preventDefault(); }
@@ -197,15 +204,42 @@ export function MenuBar() {
   const stop = (e: React.PointerEvent) => e.stopPropagation();
   return (
     <nav className="sh-menubar" role="menubar" aria-label="Main menu">
-      {menus.map(([name, items]) => (
+      <img className="sh-mb-logo" src={theme === 'dark' ? './logo-dark.svg' : './logo-light.svg'} alt="NexSpiro" />
+      {compact && (
+        <button className={`sh-mb sh-mb-burger ${sheet ? 'on' : ''}`} aria-label="Menu" aria-expanded={sheet} onClick={() => setSheet(!sheet)}>
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        </button>
+      )}
+      {compact && sheet && (
+        <>
+          <div className="sh-msheet-scrim" onClick={() => setSheet(false)} />
+          <div className="sh-msheet" role="menu" aria-label="Main menu">
+            {menus.map(([name, items]) => (
+              <details key={name} className="sh-msec" open={name === 'File'}>
+                <summary>{name}</summary>
+                {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (
+                  <button key={i} role={it.keep ? 'menuitemcheckbox' : 'menuitem'} aria-checked={it.keep ? !!it.checked : undefined} className="menu-item" disabled={it.disabled}
+                    onClick={() => { if (!it.keep) setSheet(false); it.onClick?.(); }}>
+                    <span className="sh-mb-check">{!it.switch && it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span>
+                    {it.switch ? <span className={`sh-switch ${it.checked ? 'on' : ''}`} aria-hidden /> : null}
+                  </button>
+                ))}
+              </details>
+            ))}
+          </div>
+        </>
+      )}
+      {!compact && menus.map(([name, items]) => (
         <div key={name} className="menu">
           <button role="menuitem" aria-haspopup="menu" aria-expanded={open === name} className={`sh-mb ${open === name ? 'on' : ''}`}
-            onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={() => open && setOpen(name)}>{name}</button>
+            onPointerDown={stop} onClick={() => setOpen(open === name ? null : name)} onPointerEnter={(e) => e.pointerType === 'mouse' && open && setOpen(name)}>{name}</button>
           {open === name && (
             <div className="menu-pop sh-mb-pop" role="menu" onPointerDown={stop}>
-              {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : (
-                <button key={i} role="menuitem" className="menu-item" disabled={it.disabled} onClick={() => { setOpen(null); it.onClick?.(); }}>
-                  <span className="sh-mb-check">{it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span><kbd>{it.kbd ?? ''}</kbd>
+              {items.map((it, i) => it.sep ? <div key={i} className="sh-mb-sep" /> : it.head ? <div key={i} className="sh-mb-head">{it.head}</div> : (
+                <button key={i} role={it.keep ? 'menuitemcheckbox' : 'menuitem'} aria-checked={it.keep ? !!it.checked : undefined} className="menu-item" disabled={it.disabled}
+                  onClick={() => { if (!it.keep) setOpen(null); it.onClick?.(); }}>
+                  <span className="sh-mb-check">{!it.switch && it.checked ? '✓' : ''}</span><span className="sh-mb-label">{it.label}</span>
+                  {it.switch ? <span className={`sh-switch ${it.checked ? 'on' : ''}`} aria-hidden /> : <kbd>{it.kbd ?? ''}</kbd>}
                 </button>
               ))}
             </div>
@@ -222,7 +256,25 @@ export function MenuBar() {
       <button className="sh-ib" title="Search (Ctrl+K)" aria-label="Search" onClick={() => useUi.getState().set({ paletteOpen: true })}><Icon name="search" size={15} /></button>
       {is3d && <PlateSelect />}
       {prefs && <Preferences onClose={() => setPrefs(false)} />}
-      {plugins && <PluginManager onClose={() => setPlugins(false)} />}
     </nav>
   );
+}
+
+/** "Don't show again" on the different-printer question: shows the remembered answer and brings the question back. */
+function PrinterSwitchReset() {
+  const [v, setV] = useState(() => printerSwitchChoice());
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <span style={{ flex: 1 }}>File made for another printer: {v === 'switch' ? 'always switch' : v === 'keep' ? 'always keep current' : 'ask each time'}</span>
+      <button className="btn-secondary btn-small" disabled={!v} onClick={() => { resetPrinterSwitchChoice(); setV(null); }}>Reset</button>
+    </div>
+  );
+}
+
+/** Tablets and phones (≤1024px or no hover-capable pointer) get one Menu button with a full-height sheet. */
+function useCompactMenu() {
+  const q = '(max-width: 1024px), (hover: none)';
+  const [c, set] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(q).matches);
+  useEffect(() => { const m = matchMedia(q); const f = () => set(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  return c;
 }

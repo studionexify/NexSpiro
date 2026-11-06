@@ -3,7 +3,7 @@
 import { createPortal } from 'react-dom';
 import { useSyncExternalStore } from 'react';
 import { useStore } from '../../../state/store';
-import { MotionStudio } from './MotionStudio';
+import { MotionStudio, StudioToolbar } from './MotionStudio';
 
 let isOpen = false;
 const listeners = new Set<() => void>();
@@ -16,13 +16,13 @@ export function MotionStudioHost() {
   if (!open || !installed || typeof document === 'undefined') return null;
   return createPortal(
     <div className="mxw-back" role="dialog" aria-label="Motion Studio" onMouseDown={(e) => { if (e.target === e.currentTarget) openMotionStudio(false); }}>
-      <div className="mxw">
+      <div className="mxw mxw3">
         <header className="mxw-head">
-          <b>Motion Studio</b>
-          <span className="mx-muted" style={{ flex: 1, margin: 0 }}>Edit one motion in detail: shape, depth, spacing and how layers stack.</span>
+          <span className="crumbs" style={{ flex: 1 }}>Plugins / Motionex / <b>Motion Studio</b></span>
+          <StudioToolbar />
           <button className="btn-primary btn-small" onClick={() => openMotionStudio(false)}>Done</button>
         </header>
-        <div className="mxw-body"><MotionStudio /></div>
+        <div className="mxw-body"><MotionStudio layout="three" /></div>
       </div>
     </div>, document.body);
 }

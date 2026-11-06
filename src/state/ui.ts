@@ -39,7 +39,7 @@ const LS = 'nexspiro.ui.v1';
 const prefs: Partial<UiState> = (() => { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } })();
 
 export const useUi = create<UiState>((set, get) => ({
-  inspectorCtx: 'object',
+  inspectorCtx: 'plate',
   pinnedParams: Array.isArray(prefs.pinnedParams) ? prefs.pinnedParams : ['wall_loops', 'sparse_infill_density', 'outer_wall_speed'],
   pinnedPlugins: Array.isArray(prefs.pinnedPlugins) ? prefs.pinnedPlugins : [],
   inspectorCollapsed: !!prefs.inspectorCollapsed,
@@ -308,6 +308,9 @@ export interface SliceSummary {
   time?: string;
   weight?: string;
   cost?: string;
+  layers?: string;
+  /** Filament / tool changes, only when the print uses more than one filament. */
+  changes?: string;
   /** True when a valid slice for the active plate matches the scene (Export enabled). */
   ready: boolean;
 }
@@ -330,7 +333,9 @@ export function sliceSummary(): SliceSummary {
     return {
       status: fresh ? 'done' : 'idle', progress: 1,
       time: fmtTime(st.repeat ? st.repeat.totalSeconds : st.timeSeconds),
-      weight: `${(st.repeat ? st.repeat.totalGrams : st.filamentGrams).toFixed(st.repeat ? 1 : 2)} g`,
+      weight: `${(st.repeat ? st.repeat.totalGrams : st.filamentGrams).toFixed(1)} g`,
+      layers: String(st.layerCount),
+      changes: st.toolChanges > 0 || (st.perFilament ?? []).filter((f) => f.mm > 0.01).length > 1 ? String(st.toolChanges) : undefined,
       cost: (st.repeat ? st.repeat.totalCost : st.filamentCost).toFixed(2),
       // a blocking print-head collision stops export (same rule as exportGcode)
       ready: fresh && clearanceStatus().state !== 'collision',

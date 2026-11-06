@@ -1,4 +1,4 @@
-export { Rail } from './Rail';
+export { ModeTabs } from './Rail';
 export { TopLeft, FileMenu } from './FileMenu';
 export { TopRight } from './TopRight';
 export { ObjectPill } from './ObjectPill';

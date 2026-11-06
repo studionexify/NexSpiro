@@ -234,10 +234,13 @@ export function WeaveCard() {
       <div className="mx-card-title">Weave &amp; texture<span className="spacer" />
         <button className={`toggle on`} aria-label="Weave on" title="Turn weave off" onClick={() => upd(() => { w.enabled = false; })} />
       </div>
-      <div className="seg mx-seg">
-        <button className={w.mode === 'colour' ? 'on' : ''} title="One filament per layer, the colours take turns (AMS)" onClick={() => regen(() => { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; })}>Colour weave</button>
-        <button className={w.mode === 'mono' ? 'on' : ''} title="One filament: the picture is relief only, no filament changes" onClick={() => regen(() => { w.mode = 'mono'; })}>Mono relief</button>
-      </div>
+      <label className="mx-field">Weave type
+        <select className="select" value={w.mode} title={w.mode === 'colour' ? 'One filament per layer, the colours take turns (AMS)' : 'One filament: the picture is relief only, no filament changes'}
+          onChange={(e) => regen(() => { if (e.target.value === 'colour') { w.mode = 'colour'; if (w.slots.length < 2) w.slots = [0, Math.min(1, filaments.length - 1)]; } else w.mode = 'mono'; })}>
+          <option value="colour">Colour weave · filaments take turns</option>
+          <option value="mono">Mono relief · one filament, no changes</option>
+        </select>
+      </label>
       {w.mode === 'colour' && !ams && (
         <div className="mx-card" style={{ padding: 8, gap: 6 }}>
           <p className="mx-muted bad" style={{ margin: 0 }}>This printer changes filament by hand (M600 / pause): colour weave would stop the print for a spool swap every {w.layers_per_colour === 1 ? 'layer' : `${w.layers_per_colour} layers`}, hundreds of times. Use Mono relief, which weaves the picture with one filament and no changes, or pick a printer with a filament unit (AMS, MMU3, CFS, ACE) or a tool changer.</p>
@@ -303,7 +306,7 @@ export function WeaveCard() {
               <select className="select" style={{ flex: 1 }} value={slot} onChange={(e) => regen(() => { w.slots[i] = +e.target.value; })}>
                 {filaments.map((f, k) => <option key={k} value={k}>Slot {k + 1} · {f.color}</option>)}
               </select>
-              {w.slots.length > 2 && <button className="icon-btn" title="Remove colour" onClick={() => regen(() => { w.slots.splice(i, 1); })}>✕</button>}
+              {w.slots.length > 2 && <button className="btn-secondary btn-small" onClick={() => regen(() => { w.slots.splice(i, 1); })}>Remove</button>}
             </div>
           ))}
           {w.slots.length < Math.min(MAX_COLOURS, filaments.length) && <button className="btn-secondary btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => regen(() => { w.slots.push(filaments.findIndex((_, k) => !w.slots.includes(k))); })}>+ Colour</button>}
@@ -367,8 +370,8 @@ export function WeaveCard() {
             <summary className="mx-app-top" style={{ fontSize: 12 }}>
               <b style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zoneName(z)}{targets.length > 1 ? ` · ${z.obj.name}` : ''}</b>
               <span className="mx-muted" style={{ margin: 0 }}>{z.part ? z.part.overrides.wave_mode : z.range!.overrides.wave_mode === 'plain' ? 'plain' : 'wave'}</span>
-              <button className="icon-btn" title="Select it: move, turn and stretch it in the 3D view" onClick={(e) => { e.preventDefault(); set({ selected: [z.obj.id], selectedPart: z.part?.id ?? null, selectedRange: z.range?.id ?? null, processMode: 'objects' }); }}>◎</button>
-              <button className="icon-btn" title="Remove this zone" onClick={(e) => { e.preventDefault(); removeZone(z); }}>✕</button>
+              <button className="btn-secondary btn-small" title="Select it: move, turn and stretch it in the 3D view" onClick={(e) => { e.preventDefault(); set({ selected: [z.obj.id], selectedPart: z.part?.id ?? null, selectedRange: z.range?.id ?? null, processMode: 'objects' }); }}>Select</button>
+              <button className="btn-secondary btn-small" onClick={(e) => { e.preventDefault(); removeZone(z); }}>Remove</button>
             </summary>
             {z.range && (
               <div className="mx-two">
@@ -498,7 +501,7 @@ function PixelView({ w, colours }: { w: WeaveSettings; colours: RGB[] }) {
   }, [w.image, colours.map((c) => c.join()).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div style={{ background: 'var(--panel-2, #222)', borderRadius: 6, padding: 4 }}>
-      <canvas ref={ref} style={{ width: '100%', imageRendering: 'pixelated', aspectRatio: `${w.image.w} / ${Math.max(1, w.image.h * 0.45)}`, display: 'block' }} title={`${w.image.w} × ${w.image.h} pixels`} />
+      <canvas ref={ref} style={{ width: '100%', height: 150, objectFit: 'contain', imageRendering: 'pixelated', display: 'block' }} title={`${w.image.w} × ${w.image.h} pixels`} />
     </div>
   );
 }

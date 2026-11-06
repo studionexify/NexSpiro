@@ -223,7 +223,7 @@ function GreyView({ p }: { p: PaintSettings }) {
   }, [img, levels]);
   return (
     <div style={{ background: 'var(--panel-2, #222)', borderRadius: 6, padding: 4 }}>
-      <img src={url} alt="" style={{ width: '100%', imageRendering: 'pixelated', aspectRatio: `${img.w} / ${Math.max(1, img.h)}`, display: 'block', maxHeight: 160, objectFit: 'fill' }} title={`${img.w} × ${img.h} pixels, ${levels} levels`} />
+      <img src={url} alt="" style={{ width: '100%', height: 150, objectFit: 'contain', imageRendering: 'pixelated', display: 'block' }} title={`${img.w} × ${img.h} pixels, ${levels} levels`} />
     </div>
   );
 }

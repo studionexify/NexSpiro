@@ -1,11 +1,13 @@
+import { ImportDialogHost } from './ui/ImportDialog';
 import { Modal } from './ui/Modals';
 import { useEffect, useState } from 'react';
-import { RightDock } from './ui/RightDock';
 import { autoOrient, exportGcode, importBuffers, importDialog, newProject, sliceAndPreview } from './state/actions';
 import { useUi } from './state/ui';
-import { CameraBar, CommandPalette, MenuBar, ObjectPill, Rail, RightColumn, ViewBar } from './ui/shell';
-import { useInspectorFolded } from './ui/shell/RightColumn';
+import { ActionDock, CameraBar, CommandPalette, MenuBar, ModeTabs, RightColumn, ViewBar } from './ui/shell';
 import './ui/shell/shell.css';
+import { PhoneArrows } from './ui/shell/PhoneArrows';
+import { TouchMods } from './ui/TouchMods';
+import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
 import { useStore, type Workspace } from './state/store';
 import { Icon } from './ui/icons';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
@@ -14,7 +16,7 @@ import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './u
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { openProjectDialog, saveProject } from './state/project';
 import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
-import { LayerSlider, Legend, MoveSlider, PreviewEmpty, SliceProgress } from './ui/PreviewOverlays';
+import { LayerSlider, Legend, MoveSlider, PreviewEmpty } from './ui/PreviewOverlays';
 import { ContextMenu } from './ui/ContextMenu';
 import { FillBedHost } from './ui/FillBedDialog';
 import { PlateList, PlateSettingsHost } from './ui/PlateControls';
@@ -27,6 +29,7 @@ import { PLUGINS } from './plugins/registry';
 import { LumonexStudioHost } from './plugins/lumonex/ui/Studio';
 import { ClickexStudioHost } from './plugins/clickex/ui/Studio';
 import { MotionStudioHost } from './plugins/motionex/ui/studioWindow';
+import { SelectWindowHost } from './plugins/motionex/ui/SelectWindow';
 import { FlenexStudioHost } from './plugins/flenex/ui/Studio';
 import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
@@ -120,20 +123,17 @@ function useShortcuts() {
 
 export default function App() {
   const { theme, workspace: ws } = useStore();
-  const studio = useStore((s) => PLUGINS.find((p) => p.Studio && s.plugins.includes(p.id))?.Studio);
-  // the Motion tab needs a plugin that has one; without it, fall back to Prepare
-  const workspace = ws === 'motion' && !studio ? 'prepare' : ws;
+  // the old Motion tab is gone (its editor opens from the Motionex tab on the right): a saved 'motion' opens Prepare
+  const workspace = ws === 'motion' ? 'prepare' : ws;
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   const is3d = workspace === 'prepare' || workspace === 'preview';
-  const Studio = workspace === 'motion' ? studio : undefined;
-  const hasDock = useStore((st) => st.plugins.length > 0 && st.dock.open);
-  const dockW = useStore((st) => st.dock.width);
-  // the work area keeps at least ~62% of the body; the inspector and plugin dock share the rest
-  const folded = useInspectorFolded();
-  const right = folded ? '34px' : 'clamp(260px, 22%, 340px)';
-  const bodyCols = is3d ? (hasDock ? `minmax(62%, 1fr) minmax(0, ${dockW}px) ${right}` : `minmax(62%, 1fr) ${right}`) : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
+  const Studio = undefined as undefined | (() => JSX.Element);
+  const rightW = useRightWidth();
+  const dockOpen = useDockOpen();
+  const narrow = useNarrow();
+  const bodyCols = is3d && dockOpen && !narrow ? `minmax(0, 1fr) ${rightW}px` : Studio ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)';
 
   return (
     <div className="app sh-app"
@@ -145,25 +145,25 @@ export default function App() {
         if (files.length) importBuffers(files);
       }}>
       <MenuBar />
-      <Rail />
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><ObjectPill /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
+          {is3d && <ActionDock />}
+          {is3d && <PhoneArrows />}
           <ViewCube />
           <CameraBar />
-          <SliceProgress />
           {dragOver && <div className="dropzone">Drop to add to plate</div>}
         </main>
-        {is3d && <RightDock />}
         {is3d && <RightColumn />}
         {Studio && <Studio />}
         {workspace === 'home' && <HomePage />}
         {workspace === 'device' && <DevicePage />}
         {workspace === 'project' && <ProjectPage />}
         {workspace === 'calibration' && <CalibrationPage />}
+        {!is3d && <div className="float sh-modes-float"><ModeTabs /></div>}
       </div>
       <Toast />
       <ContextMenu />
@@ -174,6 +174,9 @@ export default function App() {
       <ClickexStudioHost />
       <FlenexStudioHost />
       <MotionStudioHost />
+      <SelectWindowHost />
+      <ImportDialogHost />
+      <TouchMods />
       <InstantTooltips />
       <ShortcutsHost />
       <CommandPalette />

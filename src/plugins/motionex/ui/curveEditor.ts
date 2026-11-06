@@ -3,7 +3,12 @@
 import { evalCurve, clamp } from "../curve";
 import { pt, type Curve } from "../model";
 
-export interface CurveEditorOpts { min: number; max: number; disabled: boolean; onChange: () => void; onSelect: (i: number | null) => void }
+export interface CurveEditorOpts {
+  min: number; max: number; disabled: boolean; onChange: () => void; onSelect: (i: number | null) => void;
+  /** Line colour (default violet). */ color?: string;
+  /** Snap to a 1/24 time grid and 1/20 value grid while dragging. */ snap?: () => boolean;
+  /** Extra drawing on top (cursor, stop pins); X and Y map curve space to pixels. */ overlay?: (g: CanvasRenderingContext2D, X: (t: number) => number, Y: (v: number) => number, w: number, h: number) => void;
+}
 
 type Grab = { kind: "point" | "in" | "out"; i: number } | null;
 
@@ -61,7 +66,8 @@ export class CurveEditor {
     this.canvas.style.cursor = this.o.disabled ? "not-allowed" : this.hit(x, y) ? "grab" : "crosshair";
     if (!this.grab) return;
     const P = this.curve.points, i = this.grab.i, p = P[i];
-    const t = clamp(this.T(x), 0, 1), v = clamp(this.V(y), this.o.min, this.o.max);
+    let t = clamp(this.T(x), 0, 1), v = clamp(this.V(y), this.o.min, this.o.max);
+    if (this.o.snap?.()) { const gv = (this.o.max - this.o.min) / 20; t = Math.round(t * 24) / 24; v = Math.round(v / gv) * gv; }
     if (this.grab.kind === "point") {
       const lo = i === 0 ? 0 : P[i - 1].t + 0.001, hi = i === P.length - 1 ? 1 : P[i + 1].t - 0.001;
       if (i !== 0 && i !== P.length - 1) p.t = round(clamp(t, lo, hi));
@@ -98,7 +104,7 @@ export class CurveEditor {
     c.width = this.w * dpr; c.height = this.hgt * dpr;
     const g = c.getContext("2d")!; g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, this.w, this.hgt);
-    g.font = "11px Inter, system-ui, sans-serif"; g.fillStyle = "#8a93a0"; g.strokeStyle = "#e6e9ee"; g.lineWidth = 1;
+    g.font = "11px Inter, system-ui, sans-serif"; g.fillStyle = "#8a93a0"; g.strokeStyle = "rgba(138,147,160,.28)"; g.lineWidth = 1;
     for (let k = 0; k <= 4; k++) {
       const v = this.o.min + ((this.o.max - this.o.min) * k) / 4, y = this.Y(v);
       g.beginPath(); g.moveTo(this.pad.l, y); g.lineTo(this.w - this.pad.r, y); g.stroke();
@@ -109,7 +115,8 @@ export class CurveEditor {
       g.beginPath(); g.moveTo(x, this.pad.t); g.lineTo(x, this.hgt - this.pad.b); g.stroke();
       g.fillText(`${k * 25}%`, x - 10, this.hgt - 7);
     }
-    g.strokeStyle = this.o.disabled ? "#c5cad2" : "#7c3aed"; g.lineWidth = 2; g.beginPath();
+    const col = this.o.color ?? "#7c3aed";
+    g.strokeStyle = this.o.disabled ? "#c5cad2" : col; g.lineWidth = 2; g.beginPath();
     const N = 300;
     for (let k = 0; k <= N; k++) { const t = k / N, x = this.X(t), y = this.Y(evalCurve(this.curve, t)); k ? g.lineTo(x, y) : g.moveTo(x, y); }
     g.stroke();
@@ -125,9 +132,11 @@ export class CurveEditor {
     }
     P.forEach((p, i) => {
       g.beginPath(); g.arc(this.X(p.t), this.Y(p.v), i === this.selected ? 6.5 : 5, 0, Math.PI * 2);
-      g.fillStyle = this.o.disabled ? "#c5cad2" : i === this.selected ? "#7c3aed" : "#fff"; g.fill();
-      g.strokeStyle = this.o.disabled ? "#c5cad2" : "#7c3aed"; g.lineWidth = 2; g.stroke();
+      g.fillStyle = this.o.disabled ? "#c5cad2" : i === this.selected ? col : "#fff"; g.fill();
+      g.strokeStyle = this.o.disabled ? "#c5cad2" : col; g.lineWidth = 2; g.stroke();
     });
+    if (this.o.snap?.()) { g.strokeStyle = "rgba(138,147,160,.18)"; g.lineWidth = 1; for (let k = 1; k < 24; k++) { if (k % 6 === 0) continue; const x = this.X(k / 24); g.beginPath(); g.moveTo(x, this.pad.t); g.lineTo(x, this.hgt - this.pad.b); g.stroke(); } }
+    this.o.overlay?.(g, this.X, this.Y, this.w, this.hgt);
     if (this.o.disabled) { g.fillStyle = "#6b7380"; g.font = "600 12px Inter, system-ui"; g.fillText("Up-and-down motions are coming soon", this.pad.l + 10, this.pad.t + 18); }
   }
 }

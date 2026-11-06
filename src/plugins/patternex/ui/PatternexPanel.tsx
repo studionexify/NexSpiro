@@ -240,13 +240,13 @@ function PlacementRow({ p }: { p: ObjPlacement }) {
   return (
     <div className={`px-place ${px.selected === p.id ? 'on' : ''}`} onClick={() => upd(() => { px.selected = p.id; }, false)}>
       <span className="px-name">{pat?.name ?? p.pattern_id}<span className="mx-muted"> on {obj?.name ?? 'missing object'}</span></span>
-      <button className="icon-btn" title={p.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); upd(() => { p.visible = !p.visible; }); }}>{p.visible ? '◉' : '○'}</button>
-      <button className="icon-btn" title={p.locked ? 'Unlock' : 'Lock'} onClick={(e) => { e.stopPropagation(); upd(() => { p.locked = !p.locked; }, false); }}>{p.locked ? '🔒' : '🔓'}</button>
-      <button className="icon-btn" title="Remove" onClick={(e) => { e.stopPropagation(); upd(() => {
+      <button className="btn-secondary btn-small" onClick={(e) => { e.stopPropagation(); upd(() => { p.visible = !p.visible; }); }}>{p.visible ? 'Hide' : 'Show'}</button>
+      <button className="btn-secondary btn-small" onClick={(e) => { e.stopPropagation(); upd(() => { p.locked = !p.locked; }, false); }}>{p.locked ? 'Unlock' : 'Lock'}</button>
+      <button className="btn-secondary btn-small" onClick={(e) => { e.stopPropagation(); upd(() => {
         px.placements = px.placements.filter((x) => x !== p);
         px.actions = px.actions.filter((a) => a.region_ref.placement_id !== p.id);
         if (px.selected === p.id) px.selected = null;
-      }); }}>✕</button>
+      }); }}>Remove</button>
     </div>
   );
 }
