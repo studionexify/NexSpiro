@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { slice, slotFromConfig } from '../src/engine/slicer';
 import { weld } from '../src/engine/mesh';
 import { resolveConfig } from '../src/profiles/resolve';
-import { mixColor, mixProblems, mixSequence, mixesAfterSlotRemoved, resolveFilament, shiftIndex, type MixedFilament } from '../src/profiles/mixing';
+import { deltaE, gradientSlots, matchMixes, mixColor, mixProblems, mixSequence, mixesAfterSlotRemoved, resolveFilament, shiftIndex, spreadCycle, type MixedFilament } from '../src/profiles/mixing';
 import { box } from './fixtures';
 
 const ratio = (a: number, b: number, ra: number, rb: number): MixedFilament => ({ id: 'm', kind: 'ratio', a, b, ra, rb });
@@ -39,6 +39,46 @@ describe('mix sequences', () => {
   });
 });
 
+describe('gradient', () => {
+  const g: MixedFilament & { kind: 'gradient' } = { id: 'g', kind: 'gradient', a: 0, b: 1, start: 0, end: 100 };
+  it('goes from all A to all B with the share following the height', () => {
+    const n = 100;
+    const s = gradientSlots(g, Array.from({ length: n }, (_, i) => i / (n - 1)));
+    expect(s.slice(0, 5).every((k) => k === 0)).toBe(true);
+    expect(s.slice(-5).every((k) => k === 1)).toBe(true);
+    const share = (lo: number, hi: number) => s.slice(lo, hi).filter((k) => k === 1).length / (hi - lo);
+    expect(share(40, 60)).toBeGreaterThan(0.4);
+    expect(share(40, 60)).toBeLessThan(0.6);
+    expect(share(0, 25)).toBeLessThan(share(25, 50));
+    expect(share(50, 75)).toBeLessThan(share(75, 100));
+  });
+  it('holds A below the start and B above the end', () => {
+    const s = gradientSlots({ ...g, start: 30, end: 60 }, Array.from({ length: 50 }, (_, i) => i / 49));
+    expect(s.slice(0, 14).every((k) => k === 0)).toBe(true);
+    expect(s.slice(30).every((k) => k === 1)).toBe(true);
+  });
+});
+
+describe('match', () => {
+  const colors = ['#FFFFFF', '#D32F2F', '#1E88E5', '#111111'];
+  it('finds a physical-like or blended colour close to the target', () => {
+    const pink = mixColor({ id: 'x', kind: 'ratio', a: 0, b: 1, ra: 1, rb: 1 }, colors);
+    const m = matchMixes(pink, colors);
+    expect(m[0].dE).toBeLessThan(1);
+    expect(m.length).toBeGreaterThan(1);
+    for (let i = 1; i < m.length; i++) expect(m[i].dE + 0.5).toBeGreaterThanOrEqual(m[i - 1].dE);
+    expect(mixProblems(m[0].mix, colors.length)).toEqual([]);
+  });
+  it('spreads three-filament cycles evenly', () => {
+    const c = spreadCycle([0, 1, 2], [3, 2, 1]);
+    expect(c).toHaveLength(6);
+    expect(c.filter((k) => k === 0)).toHaveLength(3);
+    expect(c.join('')).not.toMatch(/000/);
+    expect(deltaE('#000000', '#FFFFFF')).toBeGreaterThan(99);
+    expect(deltaE('#FF0000', '#FF0000')).toBe(0);
+  });
+});
+
 describe('slicing a mixed filament on the Snapmaker U1', () => {
   const c = resolveConfig({ printerId: 'snapmaker-u1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} as never });
   const a = slotFromConfig(c);
@@ -61,6 +101,25 @@ describe('slicing a mixed filament on the Snapmaker U1', () => {
     const ga = out.stats.perFilament[0].grams, gb = out.stats.perFilament[2].grams;
     expect(ga / gb).toBeGreaterThan(1.4);
     expect(ga / gb).toBeLessThan(2.8);
+  });
+
+  it('fades a gradient from A at the bottom to B at the top', () => {
+    const out = slice([{ id: 'b', name: 'b', filament: 4, ...weld(box(100, 100, 0, 20, 20, 10)) }], c, () => {}, { filaments, mixes: [{ id: 'g', kind: 'gradient', a: 0, b: 3, start: 0, end: 100 }] });
+    // tool in use when each layer's first extrusion starts
+    let cur = 0;
+    const tools: number[] = [];
+    for (const chunk of out.gcode.split(/^;LAYER_CHANGE/m).slice(1)) {
+      const t = [...chunk.matchAll(/^T(\d+)\b/gm)];
+      if (t.length) cur = Number(t[t.length - 1][1]);
+      tools.push(cur);
+    }
+    const n = tools.length;
+    expect(n).toBeGreaterThan(30);
+    expect(tools.slice(0, n / 2).filter((t) => t === 3).length).toBeLessThan(tools.slice(n / 2).filter((t) => t === 3).length);
+    expect(tools.slice(0, 3).every((t: number) => t === 0)).toBe(true);
+    expect(tools.slice(n - 3).every((t: number) => t === 3)).toBe(true);
+    expect(out.stats.perFilament[0].grams).toBeGreaterThan(0);
+    expect(out.stats.perFilament[3].grams).toBeGreaterThan(0);
   });
 
   it('warns on a single-nozzle printer', () => {

@@ -204,10 +204,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // mixed filaments (colour mixing): indices after the physical slots resolve to a physical slot per layer
   const mixes = opts.mixes ?? [];
   const usedMixes = new Set<number>();
-  const filAt = (f: number, i: number) => {
+  const objHeightT: (Float32Array | undefined)[] = [];
+  /** Height fraction (0 bottom … 1 top) of each layer within object o; -1 off the object (gradient mixes). */
+  const heightT = (o: number) => {
+    let t = objHeightT[o];
+    if (t) return t;
+    const sl = objSlices[o] ?? [];
+    let lo = -1, hi = -1;
+    for (let i = 0; i < N; i++) if (sl[i]?.length) { if (lo < 0) lo = i; hi = i; }
+    t = new Float32Array(N).fill(-1);
+    for (let i = Math.max(0, lo); lo >= 0 && i <= hi; i++) t[i] = hi > lo ? (zs[i] - zs[lo]) / (zs[hi] - zs[lo]) : 0;
+    return (objHeightT[o] = t);
+  };
+  const filAt = (f: number, i: number, o: number) => {
     const v = f | 0;
     if (v >= filaments.length && mixes[v - filaments.length]) usedMixes.add(v - filaments.length);
-    return clampFil(resolveFilament(v, i, filaments.length, mixes));
+    return clampFil(resolveFilament(v, i, filaments.length, mixes, mixes[v - filaments.length]?.kind === 'gradient' ? heightT(o) : undefined));
   };
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
@@ -355,7 +367,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const baseFilAt = (o: number, i: number) => {
     let f = meshes[o].filament ?? 0;
     for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = a.filament!;
-    return filAt(f, i);
+    return filAt(f, i, o);
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
   const paintDepth = num('mmu_paint_depth') || 1.5;
@@ -395,7 +407,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     let out: { fil: number; paths: Paths }[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
-      const fil = filAt(c - 1, i);
+      const fil = filAt(c - 1, i, o);
       const r = taken.length ? difference(paths, taken) : paths;
       if (!r.length) continue;
       out.push({ fil, paths: r });
@@ -412,7 +424,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
       }
       out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
-      out.push({ fil: filAt(c.fil, i), paths: r });
+      out.push({ fil: filAt(c.fil, i, o), paths: r });
     }
     // merge regions sharing a filament
     const merged = new Map<number, Paths>();
@@ -778,7 +790,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const featFil = (o: number, i: number, kind: 'wall' | 'sparse' | 'solid', fallback: number) => {
     const k = kind === 'wall' ? 'wall_filament' : kind === 'sparse' ? 'sparse_infill_filament' : 'solid_infill_filament';
     const v = Math.round(onum(o, i, k));
-    return v > 0 ? filAt(v - 1, i) : fallback;
+    return v > 0 ? filAt(v - 1, i, o) : fallback;
   };
   const flushObj = meshes.map((_, o) => obool(o, objStart, 'flush_into_objects'));
   const layerFils: number[][] = [];
@@ -794,7 +806,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     }
     if (support && supportFil >= 0 && (support.base[i].length)) s.add(supportFil);
     if (support && ifaceFil >= 0 && (support.iface[i].length || support.bottomIface?.[i]?.length)) s.add(ifaceFil);
-    if (!s.size && layerIslands[i].length) s.add(filAt(meshes[layerIslands[i][0].obj].filament ?? 0, i));
+    if (!s.size && layerIslands[i].length) s.add(filAt(meshes[layerIslands[i][0].obj].filament ?? 0, i, layerIslands[i][0].obj));
     layerFils.push([...s]);
     s.forEach((f) => usedFils.add(f));
   }
