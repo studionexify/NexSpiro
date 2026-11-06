@@ -1,7 +1,7 @@
 // Device workspace: saved printers, live status, camera, job control, telemetry, AMS, HMS and files.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONNECTION_INFO, type ConnectionKind, type PrinterStatus, type RemoteFile, type SavedDevice } from '../connect/types';
-import { onSerialPortRequest } from '../connect/client';
+import { discoverPrinters, onSerialPortRequest, type FoundPrinter } from '../connect/client';
 import { PRINTERS, printerById, printerName } from '../profiles/printers';
 import { effectiveNozzle } from '../profiles/resolve';
 import { connectDevice, disconnectDevice, initDevices, removeDevice, run, saveDevice, uploadAndPrint, useDevices } from '../state/devices';
@@ -39,6 +39,17 @@ export function DevicePage() {
   useEffect(() => { void initDevices(); }, []);
   useEffect(() => onSerialPortRequest((list, pick) => setPorts({ list, pick })), []);
   const dev = devices.find((d) => d.id === selected) ?? null;
+  const [found, setFound] = useState<FoundPrinter[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const scan = async () => {
+    setScanning(true);
+    try { setFound(await discoverPrinters()); } finally { setScanning(false); }
+  };
+  const known = (f: FoundPrinter) => devices.some((d) => d.config.host === f.host || (f.serial && d.config.serial === f.serial));
+  const addFound = (f: FoundPrinter) => {
+    const p = PRINTERS.find((x) => f.model && x.printerModelId === f.model) ?? printerById(useStore.getState().printerId);
+    setEdit({ id: newId(), name: f.name || p.model, printerId: p.id, config: { kind: f.kind, host: f.host, serial: f.serial } });
+  };
 
   const newDevice = () => {
     const p = printerById(useStore.getState().printerId);
@@ -50,8 +61,20 @@ export function DevicePage() {
       <aside className="device-list">
         <div className="row" style={{ marginBottom: 10 }}>
           <b style={{ color: 'var(--text-strong)', fontSize: 14 }}>Printers</b><span className="spacer" />
+          {isDesktop() && <button className="btn-small" disabled={scanning} onClick={() => void scan()} title="Find printers on this Wi-Fi network">{scanning ? 'Scanning…' : 'Find on Wi-Fi'}</button>}
           <button className="btn-primary btn-small" onClick={newDevice}><Icon name="add" size={14} />Add</button>
         </div>
+        {found && (
+          <div style={{ marginBottom: 10, fontSize: 12 }}>
+            {!found.filter((f) => !known(f)).length && <p className="muted">No new printers found. Make sure they are on and on the same Wi-Fi; Bambu printers need LAN mode or their access code.</p>}
+            {found.filter((f) => !known(f)).map((f) => (
+              <div key={f.serial ?? f.host} className="row" style={{ gap: 6, padding: '4px 0' }}>
+                <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: 'var(--text-strong)' }}>{f.name ?? f.host}</div><div className="muted" style={{ fontSize: 11 }}>{f.host}{f.serial ? ` · ${f.serial}` : ''}</div></div>
+                <button className="btn-small" onClick={() => addFound(f)}>Set up</button>
+              </div>
+            ))}
+          </div>
+        )}
         {loaded && !devices.length && <p className="muted" style={{ fontSize: 12 }}>No printers yet. Add one to send prints over your network or USB.</p>}
         {devices.map((d) => (
           <div key={d.id} className={`objrow${d.id === selected ? ' sel' : ''}`} style={{ margin: '0 -12px', borderRadius: 0 }} onClick={() => set({ selected: d.id })}>

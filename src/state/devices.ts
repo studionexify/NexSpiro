@@ -26,6 +26,9 @@ export async function initDevices() {
   if (useDevices.getState().loaded) return;
   const devices = await loadDevices();
   useDevices.setState({ loaded: true, devices, selected: devices[0]?.id ?? null });
+  // Reconnect every saved network printer in the background. Connecting only reads status;
+  // it never sends motion or G-code. USB printers need a user gesture, so they are skipped.
+  for (const d of devices) if (d.config.kind !== 'serial') void connectDevice(d.id).catch(() => {});
 }
 
 export function handleOf(id: string): DeviceHandle {

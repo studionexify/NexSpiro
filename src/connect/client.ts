@@ -12,9 +12,19 @@ export interface DeviceBridge {
   disconnect(id: string): Promise<void>;
   call(id: string, method: string, args: unknown[]): Promise<any>;
   camera(id: string, on: boolean): Promise<boolean>;
+  discover?(): Promise<FoundPrinter[]>;
   onStatus(cb: (id: string, s: PrinterStatus) => void): () => void;
   onProgress(cb: (id: string, f: number) => void): () => void;
   onFrame(cb: (id: string, jpeg: Uint8Array) => void): () => void;
+}
+
+/** A printer seen on the local network (desktop only). */
+export interface FoundPrinter { kind: 'bbl_lan' | 'moonraker'; host: string; name?: string; serial?: string; model?: string }
+
+/** Scan the Wi-Fi/LAN for printers (~6 s). Empty in the browser build. */
+export async function discoverPrinters(): Promise<FoundPrinter[]> {
+  const b = bridge();
+  return b?.discover ? b.discover() : [];
 }
 
 const bridge = (): DeviceBridge | undefined => (window as any).nexspiro?.devices;

@@ -9,6 +9,7 @@ import { PhoneArrows } from './ui/shell/PhoneArrows';
 import { TouchMods } from './ui/TouchMods';
 import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
 import { useStore, type Workspace } from './state/store';
+import { initDevices } from './state/devices';
 import { Icon } from './ui/icons';
 import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
 import { DevicePage } from './ui/DevicePage';
@@ -35,6 +36,8 @@ import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 
 function Toast() {
   const { toast, set } = useStore();
+  // Reconnect saved printers as soon as NexSpiro opens.
+  useEffect(() => { void initDevices(); }, []);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => set({ toast: null }), toast.kind === 'error' ? 9000 : 5000);
