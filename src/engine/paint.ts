@@ -1,5 +1,5 @@
 // Turn per-triangle paint into per-layer geometry (support/seam enforcers & blockers, colour regions).
-import { intersection, offset, SCALE, union } from './clipper';
+import { areaTotal, clipLinesOutside, difference, intersection, offset, SCALE, union } from './clipper';
 import type { Path, Paths } from './types';
 import type { IndexedMesh } from './mesh';
 import ClipperLib from 'clipper-lib';
@@ -74,12 +74,30 @@ export function pointsAtZ(mesh: IndexedMesh, tris: PaintedTri[], value: number, 
  * from the slice outline; painted near-horizontal faces within ±depth of the layer project down/up.
  * Returns region paths keyed by 1-based colour value; the caller assigns the remainder to the base filament.
  */
+/** Strip of half-width `d` (mm) around open polylines. */
+function lineStrip(lines: Paths, d: number): Paths {
+  if (!lines.length) return [];
+  const co = new C.ClipperOffset(2, SCALE * 0.0025);
+  co.AddPaths(lines, C.JoinType.jtRound, C.EndType.etOpenRound);
+  const out: Paths = [];
+  co.Execute(out, Math.round(d * SCALE));
+  return out;
+}
+
+/**
+ * Colour regions of a layer from painted triangles.
+ * `depth` > 0: each painted colour reaches this far in from the painted surface (Orca / Bambu
+ * "Maximum width of a segmented region"); the rest keeps the object's filament.
+ * `depth` 0 (Orca default): no limit, every point takes the colour of the nearest surface, painted or not
+ * (a wavefront grown from each colour's surface inside the cross-section).
+ */
 export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Paths, z: number, depth: number): Map<number, Paths> {
   const byColor = new Map<number, { lines: Paths; flats: Paths }>();
   const get = (c: number) => { let e = byColor.get(c); if (!e) byColor.set(c, (e = { lines: [], flats: [] })); return e; };
   const v = mesh.vertices, ix = mesh.indices;
   for (const p of tris) {
-    if (p.zmax < z - depth || p.zmin > z + depth) continue;
+    const reach = depth > 0 ? depth : 0.5;
+    if (p.zmax < z - reach || p.zmin > z + reach) continue;
     const s = p.zmin <= z && p.zmax >= z ? triSegment(mesh, p.t, z) : null;
     if (s) get(p.value).lines.push([{ X: Math.round(s[0] * SCALE), Y: Math.round(s[1] * SCALE) }, { X: Math.round(s[2] * SCALE), Y: Math.round(s[3] * SCALE) }]);
     // near-horizontal faces close to this layer paint the whole footprint
@@ -92,6 +110,7 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
       if (f.length) get(p.value).flats.push(f);
     }
   }
+  if (depth <= 0) return floodRegions(byColor, slice);
   const out = new Map<number, Paths>();
   for (const [color, e] of byColor) {
     let region: Paths = [];
@@ -106,5 +125,48 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
     const r = intersection(union(region), slice);
     if (r.length) out.set(color, r);
   }
+  return out;
+}
+
+/** No width limit: grow each colour from its surface (unpainted surface = the object's filament, key -1) in
+ *  equal steps; a point goes to the colour that reaches it first, so colours meet half way. */
+function floodRegions(byColor: Map<number, { lines: Paths; flats: Paths }>, slice: Paths): Map<number, Paths> {
+  const out = new Map<number, Paths>();
+  if (!slice.length || !byColor.size) return out;
+  const total = areaTotal(slice);
+  if (total <= 0) return out;
+  // the slice outline as open polylines; the unpainted part of it belongs to the object's filament
+  const outline: Paths = slice.map((p) => [...p, p[0]]);
+  const paintedNear = union([...byColor.values()].flatMap((e) => lineStrip(e.lines, 0.3)));
+  const fronts = new Map<number, Paths>();
+  let taken: Paths = [];
+  const claim = (key: number, reg: Paths) => {
+    const r = taken.length ? difference(intersection(reg, slice), taken) : intersection(reg, slice);
+    if (!r.length) return;
+    fronts.set(key, union([...(fronts.get(key) ?? []), ...r]));
+    taken = union(taken, r);
+  };
+  // flats (near-horizontal painted faces) and the first step
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+  for (const p of slice) for (const q of p) { xmin = Math.min(xmin, q.X); xmax = Math.max(xmax, q.X); ymin = Math.min(ymin, q.Y); ymax = Math.max(ymax, q.Y); }
+  const span = Math.max(xmax - xmin, ymax - ymin) / SCALE;
+  const step = Math.max(0.4, span / 60);
+  const keys = [...byColor.keys()].sort((a, b) => a - b);
+  for (const k of keys) if (byColor.get(k)!.flats.length) claim(k, offset(union(byColor.get(k)!.flats), 0.05));
+  for (const k of keys) claim(k, lineStrip(byColor.get(k)!.lines, step));
+  claim(-1, lineStrip(clipLinesOutside(outline, paintedNear), step));
+  for (let n = 0; n < 400 && areaTotal(taken) < total * 0.999; n++) {
+    let grew = false;
+    for (const k of [...keys, -1]) {
+      const f = fronts.get(k);
+      if (!f?.length) continue;
+      const before = taken.length;
+      const a0 = areaTotal(taken);
+      claim(k, offset(f, step, 'round'));
+      if (areaTotal(taken) > a0 + 1e-6 || taken.length !== before) grew = true;
+    }
+    if (!grew) break;
+  }
+  for (const k of keys) { const r = fronts.get(k); if (r?.length) out.set(k, r); }
   return out;
 }

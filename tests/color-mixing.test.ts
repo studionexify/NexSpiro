@@ -5,6 +5,8 @@ import { weld } from '../src/engine/mesh';
 import { resolveConfig } from '../src/profiles/resolve';
 import { deltaE, gradientSlots, matchMixes, mixColor, mixProblems, mixSequence, mixesAfterSlotRemoved, resolveFilament, shiftIndex, spreadCycle, type MixedFilament } from '../src/profiles/mixing';
 import { box } from './fixtures';
+import { colorRegionsAtZ, paintedTris } from '../src/engine/paint';
+import { areaTotal, SCALE } from '../src/engine/clipper';
 
 const ratio = (a: number, b: number, ra: number, rb: number): MixedFilament => ({ id: 'm', kind: 'ratio', a, b, ra, rb });
 
@@ -185,5 +187,37 @@ describe('Subdivide Mix Layer', () => {
     const low = (g: string) => layers(g).slice(3, -3).reduce((a, l) => { const top = Math.max(...l.ez); return a + l.ez.filter((z) => z < top - 1e-3).length; }, 0);
     expect(low(run({ mix_subdivide: true }, 0, true).gcode)).toBe(0);
     expect(low(run({ mix_subdivide: true, mix_subdivide_full_domain: true }, 0, true).gcode)).toBeGreaterThan(20);
+  });
+});
+
+describe('segmented regions (painted colour reach)', () => {
+  const c0 = resolveConfig({ printerId: 'snapmaker-u1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} as never });
+  const a = slotFromConfig(c0);
+  const filaments = [0, 1].map((k) => ({ ...a, name: `PLA ${k + 1}`, color: ['#ffffff', '#cc2222'][k] }));
+  // a 20 mm cube with its -X side painted filament 2
+  const mesh = weld(box(100, 100, 0, 20, 20, 6));
+  const color = new Uint8Array(mesh.indices.length / 3);
+  for (let t = 0; t < color.length; t++) {
+    const xs = [0, 1, 2].map((j) => mesh.vertices[mesh.indices[t * 3 + j] * 3]);
+    if (xs.every((x) => Math.abs(x - 100) < 1e-6)) color[t] = 2;
+  }
+  const grams = (o: Record<string, unknown>) => {
+    const c = resolveConfig({ printerId: 'snapmaker-u1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: o as never });
+    return slice([{ id: 'b', name: 'b', ...mesh, paint: { color } } as any], c, () => {}, { filaments }).stats.perFilament.map((p) => p.grams);
+  };
+  it('0 (default) fills in to the nearest surface; a width limits it; interlocking reaches further every other layer', () => {
+    const full = grams({});
+    const w2 = grams({ mmu_segmented_region_max_width: 2 });
+    const w2d = grams({ mmu_segmented_region_max_width: 2, mmu_segmented_region_interlocking_depth: 2 });
+    // nearest-surface: one side of four owns about a quarter of the cross-section
+    const sq = [[100, 100], [120, 100], [120, 120], [100, 120]].map(([x, y]) => ({ X: x * SCALE, Y: y * SCALE }));
+    const areaOf = (d: number) => areaTotal(colorRegionsAtZ(mesh as any, paintedTris(mesh as any, color), [sq], 3, d).get(2) ?? []);
+    expect(areaOf(0)).toBeGreaterThan(90);
+    expect(areaOf(0)).toBeLessThan(115);
+    expect(areaOf(2)).toBeCloseTo(40, 0);
+    expect(w2[1]).toBeLessThan(full[1] * 0.9); // walls and prime tower use filament 2 either way
+    expect(w2d[1]).toBeGreaterThan(w2[1] * 1.1);
+    // material conserved whatever the split
+    for (const g of [w2, w2d]) expect(Math.abs(g[0] + g[1] - (full[0] + full[1])) / (full[0] + full[1])).toBeLessThan(0.05);
   });
 });

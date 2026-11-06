@@ -1,6 +1,6 @@
 # Batch reverse-verifier summary
 
-Rows: 708, (target, profile) cells: 141, failing cells: 0, failing (target, assertion) pairs: 0
+Rows: 708, (target, profile) cells: 141, failing cells: 3, failing (target, assertion) pairs: 3
 
 ## Pass / fail grid
 
@@ -24,7 +24,7 @@ Rows: 708, (target, profile) cells: 141, failing cells: 0, failing (target, asse
 | adv/corner_overshoot | PASS | PASS | PASS |
 | adv/spatial_lattice | PASS | PASS | PASS |
 | adv/metamaterial | PASS | PASS | PASS |
-| adv/dovetail | PASS | PASS | PASS |
+| adv/dovetail | FAIL [STATUS] tech-status | FAIL [STATUS] tech-status | FAIL [STATUS] tech-status |
 | adv/sgd_slicing | PASS | PASS | PASS |
 | adv/eikonal_offsets | PASS | PASS | PASS |
 | adv/inverse_warp | PASS | PASS | PASS |
@@ -60,5 +60,8 @@ Type tags: VOLUME volumetric conservation, SAFETY finite/bed, RAMP non-planar an
 
 | Target | Profile | Type | Assertion | Count | Worst | Feature breakdown (count, worst %) | Example (one message) |
 |---|---|---|---|---|---|---|---|
+| adv/dovetail | Default | STATUS | tech-status | 1 | not run | - | status=idle |
+| adv/dovetail | Extreme Modulation | STATUS | tech-status | 1 | not run | - | status=idle |
+| adv/dovetail | Boundary Edge-Cases | STATUS | tech-status | 1 | not run | - | status=idle |
 
 `Worst` for volumetric is the locked maxRelErrPct (tolerance 2 %). Counts are exact (locked checker counts every failure; report keeps the first 5 in report.json).

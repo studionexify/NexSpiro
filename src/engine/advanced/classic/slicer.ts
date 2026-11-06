@@ -216,7 +216,10 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     return f;
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
-  const paintDepth = num('mmu_paint_depth') || 1.5;
+  // painted colour reach (Orca / Bambu "Maximum width of a segmented region"; 0 = nearest surface, no limit), deeper every
+  // other layer by the interlocking depth
+  const segWidth = Math.max(0, num('mmu_segmented_region_max_width')), segInterlock = Math.max(0, num('mmu_segmented_region_interlocking_depth'));
+  const paintDepthAt = (i: number) => (segWidth > 0 ? segWidth + (segInterlock > 0 && i % 2 === 1 ? segInterlock : 0) : 0);
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
     cfg, meshes, layerZ: zs, layerH: hs, planes, sliceAt: (o, i) => objSlices[o]?.[i] ?? [],
@@ -249,7 +252,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
     if (!colorTris[o].length && !contribs.length) return [{ fil: base, paths: sl }];
-    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth) : new Map<number, Paths>();
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i)) : new Map<number, Paths>();
     let out: { fil: number; paths: Paths }[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {

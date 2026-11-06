@@ -3898,10 +3898,15 @@
     "profile": "Default",
     "assertion": "tech-status",
     "type": "STATUS",
-    "pass": true,
-    "failureCount": 0,
+    "pass": false,
+    "failureCount": 1,
     "metrics": {},
-    "firstFailures": []
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
   },
   {
     "target": "adv/dovetail",
@@ -3912,9 +3917,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.31810833648773595,
-      "checkedMm": 83320.56961960846,
-      "checkedSegments": 42440,
-      "belowResolution": 1378,
+      "checkedMm": 39046.76496769636,
+      "checkedSegments": 1766,
+      "belowResolution": 210,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3956,8 +3961,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 43869,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 1976,
+      "maxPosErrMm": 0.0005069580078043145,
       "failureCount": 0
     },
     "firstFailures": []
@@ -3967,10 +3972,15 @@
     "profile": "Extreme Modulation",
     "assertion": "tech-status",
     "type": "STATUS",
-    "pass": true,
-    "failureCount": 0,
+    "pass": false,
+    "failureCount": 1,
     "metrics": {},
-    "firstFailures": []
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
   },
   {
     "target": "adv/dovetail",
@@ -3980,10 +3990,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.6014890204047479,
-      "checkedMm": 105836.57358163253,
-      "checkedSegments": 23023,
-      "belowResolution": 1686,
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 39046.76496769636,
+      "checkedSegments": 1766,
+      "belowResolution": 210,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4025,8 +4035,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 24709,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 1976,
+      "maxPosErrMm": 0.0005069580078043145,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4036,10 +4046,15 @@
     "profile": "Boundary Edge-Cases",
     "assertion": "tech-status",
     "type": "STATUS",
-    "pass": true,
-    "failureCount": 0,
+    "pass": false,
+    "failureCount": 1,
     "metrics": {},
-    "firstFailures": []
+    "firstFailures": [
+      {
+        "assertion": "tech-status",
+        "message": "status=idle"
+      }
+    ]
   },
   {
     "target": "adv/dovetail",
@@ -4049,10 +4064,10 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.22129083460879084,
-      "checkedMm": 246230.54545563765,
-      "checkedSegments": 69077,
-      "belowResolution": 18252,
+      "maxRelErrPct": 0.172337190629902,
+      "checkedMm": 87637.06488629086,
+      "checkedSegments": 3930,
+      "belowResolution": 204,
       "failureCount": 0
     },
     "firstFailures": []
@@ -4094,8 +4109,8 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 87990,
-      "maxPosErrMm": 0.0005073242187449978,
+      "declaredHits": 4134,
+      "maxPosErrMm": 0.0005061035156188609,
       "failureCount": 0
     },
     "firstFailures": []
