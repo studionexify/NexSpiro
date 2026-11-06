@@ -70,5 +70,11 @@
   "printer_variant": "0.4",
   "nozzle_type": "hardened_steel",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "machine_max_acceleration_travel": [
+   3000,
+   3000
+  ]
  }
 }

@@ -26,7 +26,7 @@ const INTS = new Set([
   'first_layer_temperature', 'bed_temperature', 'bed_temperature_initial_layer', 'first_layer_bed_temperature', 'flush_temperatures',
   'timelapse_type', 'chamber_cooling_mode', 'temperature_vitrification', 'min_vitrification_temperature', 'initial_nozzle_id', 'current_nozzle_id',
   'next_nozzle_id', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
-  'required_nozzle_HRC', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
+  'required_nozzle_HRC', 'filament_map', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
   ...VECTOR_INT_KEYS,
 ]);
 
@@ -94,6 +94,12 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
     retraction_distance_when_ec: per((s) => Number(fset(s, 'retraction_distances_when_ec') ?? 10), 10),
     filament_cooling_before_tower: per((s) => Number(fset(s, 'filament_cooling_before_tower') ?? 0), 0),
     // hardness a filament needs from the nozzle (abrasive filaments; 0 = any), the printer's extruder count
+    nozzle_volume_types: per(() => String(cfg.nozzle_volume_type ?? 'Standard'), String(cfg.nozzle_volume_type ?? 'Standard')),
+    // which nozzle each filament prints with (Bambu Studio H2D; 1 = left, the default)
+    filament_map: per(() => 1, 1),
+    filament_multitool_ramming: per((s) => fset(s, 'filament_multitool_ramming') === true, false),
+    filament_multitool_ramming_volume: per((s) => Number(fset(s, 'filament_multitool_ramming_volume') ?? 10), 10),
+    filament_multitool_ramming_flow: per((s) => Number(fset(s, 'filament_multitool_ramming_flow') ?? 10), 10),
     required_nozzle_HRC: per((s) => Math.round(Number(fset(s, 'required_nozzle_HRC') ?? 0)), 0),
     num_extruders: heads,
     // OrcaSlicer's custom G-code state (PrintConfig.cpp "placeholders"): at the start of a block nothing is hopped or
@@ -120,12 +126,23 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
     most_used_physical_extruder_id: 0, curr_physical_extruder_id: 0, current_extruder_id: 0,
     timelapse_inline_photo: false, has_timelapse_safe_pos: false, farthest_point_timelapse_enabled: false, timelapse_pos_x: 0, timelapse_pos_y: 0, clear_to_x0: false,
   });
+  // PrusaSlicer names of the retraction options (Prusa XL templates use them)
+  for (const [ps, orca] of [['retract_length', 'retraction_length'], ['retract_speed', 'retraction_speed'], ['deretract_speed', 'deretraction_speed'],
+    ['retract_lift', 'z_hop'], ['retract_before_travel', 'retraction_minimum_travel'], ['retract_length_toolchange', 'retract_length_toolchange']] as const) {
+    if (v[ps] === undefined && v[orca] !== undefined) v[ps] = v[orca];
+  }
+  // values from the maker's profile the templates read and NexSpiro has no setting for (printers.ts)
+  if (typeof cfg.vendor_template_vars === 'string' && cfg.vendor_template_vars) {
+    for (const [k, x] of Object.entries(JSON.parse(cfg.vendor_template_vars) as Record<string, PPValue>)) if (v[k] === undefined && x !== null) v[k] = x;
+  }
   v.min_vitrification_temperature = Math.min(...(v.temperature_vitrification as number[]).slice(0, Math.max(1, fils.length)));
   // outer wall volumetric speed of a filament (Bambu: the outer wall's flow, capped by the filament)
   const h = Number(cfg.layer_height) || 0.2, w = Number(cfg.outer_wall_line_width) || Number(cfg.nozzle_diameter) || 0.4;
   v.outer_wall_volumetric_speed = Math.min(Number(cfg.outer_wall_speed) * w * h || 12, fils[0]?.maxVolumetricSpeed ?? 1e9);
   return v;
 }
+
+const per0 = (filaments: FilamentSlot[], x: number): number[] => (filaments.length ? filaments.map(() => x) : [x]);
 
 /** Expands a vendor template (unescaped as the slicers do when they load a profile). */
 export function renderVendor(tpl: string, cfg: Config, filaments: FilamentSlot[], extra: TemplateExtra = {}, what = 'G-code template'): string {
@@ -139,6 +156,18 @@ export function renderVendor(tpl: string, cfg: Config, filaments: FilamentSlot[]
     const fr = (k: number) => Math.round((60 * Number(filaments[k]?.maxVolumetricSpeed ?? cfg.filament_max_volumetric_speed ?? 12)) / area);
     vars.next_filament_id ??= next; vars.current_filament_id ??= prev < 0 ? next : prev;
     vars.new_filament_e_feedrate ??= fr(next); vars.old_filament_e_feedrate ??= fr(prev < 0 ? next : prev);
+    // Bambu Studio's H2D change G-code: one nozzle (no nozzle switch, nothing parked retracted), the flush in one
+    // step at the chute, no prime tower wait / interface positions
+    const flush = Number(extra.flush_length ?? 0) * area;
+    const def: Record<string, PPValue> = {
+      new_extruder_retracted_length: 0, filament_retract_length_nc: per0(filaments, 0), old_extruder_variant: 'Direct Drive Standard', new_extruder_variant: 'Direct Drive Standard',
+      first_flush_volume: flush, second_flush_volume: 0, wipe_avoid_perimeter: false, wipe_avoid_pos_x: 0, is_prime_tower_interface: false,
+      filament_tower_interface_purge_volume: per0(filaments, 0), filament_tower_interface_print_temp: per0(filaments, 0),
+      wipe_tower_wait_pos_x: 0, wipe_tower_wait_pos_y: 0, wipe_tower_wait_pos_valid: false,
+      wipe_tower_center_pos_x: Number(extra.wipe_tower_x ?? 0), wipe_tower_center_pos_y: Number(extra.wipe_tower_y ?? 0), wipe_tower_center_pos_valid: extra.has_wipe_tower === true,
+      old_retract_length: Number(cfg.retraction_length ?? 0), new_retract_length: Number(cfg.retraction_length ?? 0), relative_e_axis: cfg.use_relative_e_distances !== false,
+    };
+    for (const [k, x] of Object.entries(def)) vars[k] ??= x;
   }
   try {
     return renderTemplate(unescapeCStyle(tpl), { vars, ints: INTS });

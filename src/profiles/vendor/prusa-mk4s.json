@@ -73,5 +73,11 @@
   "printer_variant": "0.4",
   "host_type": "prusalink",
   "single_extruder_multi_material": false
+ },
+ "template_vars": {
+  "nozzle_diameter": [
+   0.4
+  ],
+  "wipe": false
  }
 }

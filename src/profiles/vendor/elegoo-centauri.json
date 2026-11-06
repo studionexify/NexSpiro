@@ -105,5 +105,9 @@
   "single_extruder_multi_material": true,
   "purge_in_prime_tower": false,
   "enable_filament_ramming": false
+ },
+ "template_vars": {
+  "printable_height": 256,
+  "printer_model": "Elegoo Centauri Carbon"
  }
 }

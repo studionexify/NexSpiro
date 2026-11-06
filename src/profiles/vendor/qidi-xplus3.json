@@ -71,5 +71,10 @@
   "printer_variant": "0.4",
   "nozzle_type": "hardened_steel",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "nozzle_diameter": [
+   0.4
+  ]
  }
 }

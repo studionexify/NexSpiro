@@ -75,5 +75,6 @@
   "nozzle_type": "brass",
   "manual_filament_change": true,
   "single_extruder_multi_material": true
- }
+ },
+ "template_vars": {}
 }

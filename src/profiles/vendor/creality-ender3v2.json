@@ -70,5 +70,8 @@
   "printer_variant": "0.4",
   "nozzle_type": "undefine",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "printable_height": 250
  }
 }

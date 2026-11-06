@@ -100,5 +100,24 @@
   "printer_structure": "corexy",
   "printer_variant": "0.4",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "long_retractions_when_cut": [
+   false,
+   false
+  ],
+  "retraction_distances_when_cut": [
+   "18",
+   "18"
+  ],
+  "retraction_length": [
+   0.8,
+   0.8
+  ],
+  "scan_first_layer": true,
+  "wipe": [
+   true,
+   true
+  ]
  }
 }

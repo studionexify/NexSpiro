@@ -68,5 +68,6 @@
   "thumbnails_format": "PNG",
   "printer_variant": "0.4",
   "single_extruder_multi_material": true
- }
+ },
+ "template_vars": {}
 }

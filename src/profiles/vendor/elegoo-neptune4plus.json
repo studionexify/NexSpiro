@@ -86,5 +86,9 @@
   "single_extruder_multi_material": true,
   "purge_in_prime_tower": false,
   "enable_filament_ramming": true
+ },
+ "template_vars": {
+  "printable_height": 385,
+  "printer_model": "Elegoo Neptune 4 Plus"
  }
 }

@@ -124,6 +124,8 @@ export const AUX_STRIDE = 2; // part fan %, nozzle temperature
 
 /** Part fan % for a layer, by the cooling rules (fan by layer time, first layers, ramp, keep fan on). */
 export function layerFanSpeed(c: (k: string) => number, b: (k: string) => boolean, layer: number, layerTime: number): number {
+  // first layer fan speed (Orca): an exact speed for the first layer that overrides every other rule
+  if (layer === 0 && c('initial_layer_fan_speed') >= 0 && Number.isFinite(c('initial_layer_fan_speed'))) return Math.max(0, Math.min(100, Math.round(c('initial_layer_fan_speed'))));
   const first = Math.max(0, Math.round(c('close_fan_the_first_x_layers')));
   if (layer < first) return Math.max(0, c('first_x_layer_part_fan_speed'));
   const fmin = c('fan_min_speed'), fmax = c('fan_max_speed');
@@ -224,7 +226,14 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     const s = filaments[Math.max(0, Math.min(filaments.length - 1, t ?? 0))]?.settings;
     return { c: (k: string) => Number(s?.[k] ?? cfg[k] ?? 0), b: (k: string) => (s?.[k] ?? cfg[k]) === true };
   };
-  const clampA = (a: number) => (maxAccel > 0 ? Math.min(a, maxAccel) : a);
+  const extrudeLimit = cfg.emit_machine_limits_to_gcode !== false && flavor !== 'klipper' && flavor !== 'bbl' ? num('machine_max_acceleration_extruding') : 0;
+  const clampA = (a: number) => { let v = maxAccel > 0 ? Math.min(a, maxAccel) : a; if (extrudeLimit > 0) v = Math.min(v, extrudeLimit); return v; };
+  const zOff = num('z_offset');
+  const fwRetract = cfg.use_firmware_retraction === true;
+  const noM73 = cfg.disable_m73 === true;
+  const verbose = cfg.gcode_comments === true;
+  const kick = Math.max(0, num('fan_kickstart'));
+  const roleGcode = String(cfg.change_extrusion_role_gcode ?? '');
 
   // 1) timing + cooling slowdown per layer
   const layerTimes: number[] = [];
@@ -315,8 +324,23 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
       push(`EXCLUDE_OBJECT_DEFINE NAME=${o.name} CENTER=${n(o.cx)},${n(o.cy)} POLYGON=[${poly}]`);
     }
   }
-  const chamber = num('chamber_temperature');
+  // chamber temperature (filament): written only with "Activate temperature control" on
+  const chamberOn = (filaments[0]?.settings?.activate_chamber_temp_control ?? cfg.activate_chamber_temp_control) === true;
+  const chamber = chamberOn ? Math.max(...filaments.map((fl) => Number(fl.settings?.chamber_temperatures ?? fl.settings?.chamber_temperature ?? 0)), num('chamber_temperatures') || num('chamber_temperature')) : 0;
   if (chamber > 0) push(`M141 S${Math.round(chamber)} ; chamber temperature`);
+  // machine limits (Marlin): the firmware runs with the printer's limits; 0 = not written
+  if (cfg.emit_machine_limits_to_gcode !== false && flavor !== 'klipper' && flavor !== 'bbl') {
+    const lim = (prefix: string, keys: [string, string][]) => {
+      const parts = keys.filter(([, k]) => num(k) > 0).map(([a, k]) => `${a}${n(num(k), 2)}`);
+      if (parts.length) push(`${prefix} ${parts.join(' ')}`);
+    };
+    lim('M201', [['X', 'machine_max_acceleration_x'], ['Y', 'machine_max_acceleration_y'], ['Z', 'machine_max_acceleration_z'], ['E', 'machine_max_acceleration_e']]);
+    // M203 takes mm/s on Marlin 2
+    lim('M203', [['X', 'machine_max_speed_x'], ['Y', 'machine_max_speed_y'], ['Z', 'machine_max_speed_z'], ['E', 'machine_max_speed_e']]);
+    lim('M204', [['P', 'machine_max_acceleration_extruding'], ['R', 'machine_max_acceleration_retracting'], ['T', 'machine_max_acceleration_travel']]);
+    lim('M205', [['X', 'machine_max_jerk_x'], ['Y', 'machine_max_jerk_y'], ['Z', 'machine_max_jerk_z'], ['E', 'machine_max_jerk_e']]);
+    lim('M205', [['S', 'machine_min_extruding_rate'], ['T', 'machine_min_travel_rate']]);
+  }
   // the printer maker's own templates (Bambu Studio, Snapmaker Orca, OrcaSlicer profiles) run with the variables those
   // slicers give them; every other printer uses NexSpiro's simple [key] expansion
   const vendor = usesVendorTemplates(cfg);
@@ -378,8 +402,18 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   };
   const setFan = (pct: number) => {
     if (pct === fanOut) return;
+    // fan kick-start: from off (or a lower speed) the fan first runs flat out for a moment, then drops to the target
+    if (kick > 0 && pct > 0 && pct < 100 && fanOut <= 0) { push(`M106 S255${verbose ? ' ; fan kick-start' : ''}`); push(`G4 P${Math.round(kick * 1000)}`); elapsed += kick; }
     fanOut = pct;
     push(pct > 0 ? `M106 S${Math.round((pct / 100) * 255)}` : 'M107');
+  };
+  let lastRole = '';
+  /** ;TYPE: line for a new line type, with the printer's change extrusion role G-code after it. */
+  const typeLine = (feature: FeatureType, layerIndex: number, lz: number) => {
+    const role = feature.replace(/_/g, ' ');
+    push(`;TYPE:${role}`);
+    if (roleGcode) push(expandMacro(roleGcode, cfg, { extrusion_role: role, last_extrusion_role: lastRole, layer_num: layerIndex, layer_z: n(lz) }));
+    lastRole = role;
   };
   const tempIn = (text: string) => {
     for (const m of text.matchAll(/^M10[49](?![^;\n]*\bT\d)[^;\n]*\bS(\d+(?:\.\d+)?)/gm)) temp = Number(m[1]);
@@ -402,10 +436,10 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     push(`;Z:${n(L.z)}`);
     push(`;HEIGHT:${n(L.h)}`);
     if (!relE) { push('G92 E0'); eAbs = 0; }
-    if (flavor !== 'klipper') push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
+    if (flavor !== 'klipper' && !noM73) push(`M73 P${Math.floor((elapsed / Math.max(total, 1e-6)) * 100)} R${Math.ceil((total - elapsed) / 60)}`);
     // (the makers' own layer change G-code reports the layer itself)
     if (vendor && /M73 L|SET_PRINT_STATS_INFO/.test(String(cfg.layer_change_gcode ?? ''))) { /* reported by the template */ }
-    else if (flavor === 'bbl') push(`M73 L${li + 1}`);
+    else if (flavor === 'bbl' && !noM73) push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
     if (lc) push(vendor ? macro(lc, 'Layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z, ...extruded() }) : expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
@@ -424,7 +458,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
       if (arcs && op.k === 'move' && !op.travel && !op.noArc && op.e > 0 && op.z === z && !isNaN(x)) {
         const fit = fitArc(L.ops, oi, x, y);
         if (fit) {
-          if (curFeature !== op.feature) { curFeature = op.feature; push(`;TYPE:${op.feature.replace(/_/g, ' ')}`); }
+          if (curFeature !== op.feature) { curFeature = op.feature; typeLine(op.feature, layerIndex, L.z); }
           const last = L.ops[fit.end] as Extract<Op, { k: 'move' }>;
           let e = 0;
           const i0 = fit.cx - x, j0 = fit.cy - y;
@@ -490,12 +524,12 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
         case 'lift': {
           // spiral Z hop: A1/P1/X1/H2 firmware takes a full-circle G3 (P1); others get a short helix of G1 moves
           const f2 = fmtF(op.f);
-          if (flavor === 'bbl') { push('G17'); push(`G3 Z${n(op.z)} I${n(op.r)} J0 P1 F${f2}`); }
+          if (flavor === 'bbl') { push('G17'); push(`G3 Z${n(op.z + zOff)} I${n(op.r)} J0 P1 F${f2}`); }
           else {
             const z0 = isNaN(z) ? op.z : z;
             for (let k = 1; k <= 8; k++) {
               const a = (k / 8) * 2 * Math.PI;
-              push(`G1 X${n(op.x + op.r - op.r * Math.cos(a))} Y${n(op.y - op.r * Math.sin(a))} Z${n(z0 + ((op.z - z0) * k) / 8)} F${f2}`);
+              push(`G1 X${n(op.x + op.r - op.r * Math.cos(a))} Y${n(op.y - op.r * Math.sin(a))} Z${n(z0 + ((op.z - z0) * k) / 8 + zOff)} F${f2}`);
             }
           }
           x = op.x; y = op.y; z = op.z; f = op.f;
@@ -503,26 +537,28 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
           break;
         }
         case 'retract':
-          push(`G1 ${eTok(-op.len)} F${fmtF(op.speed)}`);
+          // firmware retraction: G10 / G11, length and speed set in the firmware
+          if (fwRetract) push(op.len > 0 ? `G10${verbose ? ' ; retract' : ''}` : `G11${verbose ? ' ; unretract' : ''}`);
+          else push(`G1 ${eTok(-op.len)} F${fmtF(op.speed)}${verbose ? (op.len > 0 ? ' ; retract' : ' ; unretract') : ''}`);
           filamentMm -= op.len;
           perFil[tool] -= op.len;
           break;
         case 'move': {
           if (!op.travel && curFeature !== op.feature) {
             curFeature = op.feature;
-            push(`;TYPE:${op.feature.replace(/_/g, ' ')}`);
+            typeLine(op.feature, layerIndex, L.z);
           }
           const parts = [op.travel && op.e === 0 ? 'G0' : 'G1'];
           if (op.x !== x) parts.push(`X${n(op.x)}`);
           if (op.y !== y) parts.push(`Y${n(op.y)}`);
-          if (op.z !== z) parts.push(`Z${n(op.z)}`);
+          if (op.z !== z) parts.push(`Z${n(op.z + zOff)}`);
           if (op.e !== 0) parts.push(eTok(op.e));
           if (op.f !== f) { parts.push(`F${fmtF(op.f)}`); f = op.f; }
           if (parts.length === 1 || (parts.length === 2 && parts[1].startsWith('F'))) {
             if (parts.length === 2) push(parts.join(' '));
             break;
           }
-          push(parts.join(' '));
+          push(verbose && op.travel ? `${parts.join(' ')} ; ${op.z !== z && op.x === x && op.y === y ? (op.z > z ? 'lift Z' : 'lower Z') : op.e < 0 ? 'wipe' : 'move to next position'}` : parts.join(' '));
           const moved = op.x !== x || op.y !== y || op.z !== z;
           x = op.x; y = op.y; z = op.z;
           filamentMm += op.e;

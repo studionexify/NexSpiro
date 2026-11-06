@@ -83,5 +83,9 @@
   "single_extruder_multi_material": true,
   "purge_in_prime_tower": false,
   "enable_filament_ramming": false
+ },
+ "template_vars": {
+  "printable_height": 280,
+  "printer_model": "Elegoo Neptune 3 Pro"
  }
 }

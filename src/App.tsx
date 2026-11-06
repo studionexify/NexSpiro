@@ -97,9 +97,11 @@ function useShortcuts() {
       if (mod && k === 'd') { s.duplicateSelected(); e.preventDefault(); return; }
       if (mod && k === 'c') { if (s.selected.length) copyObjects(); e.preventDefault(); return; }
       if (mod && k === 'v') { pasteObjects(); e.preventDefault(); return; }
+      if (mod && k === 'delete') { s.set({ selected: s.objects.map((o) => o.id) }); useStore.getState().removeSelected(); e.preventDefault(); return; }
       if (mod) return;
       if (k === 'delete' || k === 'backspace') s.removeSelected();
-      else if (k === 'escape') s.set({ selected: [], selectedPart: null, tool: 'select' });
+      else if (k === 'escape') s.set(s.tool !== 'select' ? { tool: 'select' } : { selected: [], selectedPart: null }); // first Esc leaves the tool, the next clears the selection
+      else if ((e.key === '+' || e.key === '=') && s.selected.length) s.duplicateSelected();
       else if (k === 'l') s.set({ tool: s.tool === 'paint_support' ? 'select' : 'paint_support' });
       else if (k === 'p') s.set({ tool: s.tool === 'paint_seam' ? 'select' : 'paint_seam' });
       else if (k === 'n') s.set({ tool: s.tool === 'paint_color' ? 'select' : 'paint_color' });
@@ -193,9 +195,9 @@ const SHORTCUTS: [string, [string, string][]][] = [
   ['Global', [['Ctrl+N', 'New project'], ['Ctrl+O', 'Open project'], ['Ctrl+S', 'Save project'], ['Ctrl+I', 'Import model'], ['Ctrl+R', 'Slice plate'],
     ['Ctrl+G', 'Export G-code'], ['Ctrl+P', 'Print plate'], ['Ctrl+F', 'Search settings'], ['Ctrl+K', 'Command palette'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+Tab', 'Next tab page (Shift: previous)'], ['Shift+?', 'Show this list']]],
   ['Camera', [['Ctrl+0', 'Default view'], ['Ctrl+1', 'Top view'], ['Ctrl+2', 'Bottom view'], ['Ctrl+3', 'Front view'], ['Ctrl+4', 'Rear view'], ['Ctrl+5', 'Left view'], ['Ctrl+6', 'Right view'], ['Ctrl+7', 'Isometric view'], ['Z', 'Fit to scene or selection']]],
-  ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Esc', 'Clear selection / leave tool'],
+  ['Prepare', [['Ctrl+A', 'Select all'], ['Ctrl+C / Ctrl+V', 'Copy / paste'], ['Ctrl+D', 'Duplicate'], ['Del', 'Delete selection'], ['Ctrl+Del', 'Delete all'], ['+', 'Add a copy of the selection'], ['Esc', 'Leave tool, then clear selection'],
     ['A / Shift+A', 'Arrange all / selection'], ['O', 'Auto orient'], ['M', 'Move'], ['R', 'Rotate'], ['S', 'Scale'], ['F', 'Lay on face'], ['C', 'Cut'], ['B', 'Boolean'],
-    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'], ['E', 'Brim ears'],
+    ['L', 'Support painting'], ['P', 'Seam painting'], ['N', 'Colour painting'], ['1…9', 'Paint filament (colour painting)'], ['H', 'Variable layer height'], ['T', 'Text'], ['U', 'Measure'], ['E', 'Brim ears'], ['G', 'Edges'],
     ['Shift (rotate)', 'Snap to 5° ticks; outer ring snaps to 45°']]],
   ['Preview', [['↑ / ↓', 'Layer up / down'], ['← / →', 'Move slider back / forward'], ['L', 'Show one layer only']]],
 ];

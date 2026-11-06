@@ -82,5 +82,44 @@
   "printer_structure": "corexy",
   "printer_variant": "0.4",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "cooling_filter_enabled": false,
+  "hotend_cooling_rate": [
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2
+  ],
+  "hotend_heating_rate": [
+   3.6,
+   3.6,
+   3.6,
+   3.6,
+   3.6,
+   3.6,
+   3.6
+  ],
+  "retraction_distances_when_cut": [
+   "10",
+   "10",
+   "10",
+   "10",
+   "10",
+   "10",
+   "10"
+  ],
+  "wipe": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
  }
 }

@@ -86,5 +86,19 @@
   "printer_structure": "i3",
   "printer_variant": "0.4",
   "single_extruder_multi_material": true
+ },
+ "template_vars": {
+  "long_retractions_when_cut": [
+   false
+  ],
+  "nozzle_diameter": [
+   0.4
+  ],
+  "retraction_distances_when_cut": [
+   "18"
+  ],
+  "wipe": [
+   true
+  ]
  }
 }

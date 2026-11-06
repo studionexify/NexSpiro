@@ -62,6 +62,8 @@ interface PathItem extends Polyline2 {
   wallDepth?: number;
   /** Prime (deretract) here, inside the part, before moving onto the start (wipe before external loop). */
   primeAt?: [number, number];
+  /** Object a per-object skirt belongs to. */
+  owner?: number;
   /** Step here, inside the part, right after the path ends (wipe on loops). */
   wipeIn?: [number, number];
 }
@@ -169,6 +171,23 @@ export function shiftLoopStart(pts: number[], d: number): number[] {
     left -= seg;
   }
   return pts;
+}
+
+/**
+ * "Insert solid layers": whether 1-based layer n is printed solid. "N" = every Nth layer, "N#K" = K layers every N
+ * ("5#" is "5#1"), or a comma list of layer numbers.
+ */
+export function solidLayerRule(rule: string): (n: number) => boolean {
+  const r = rule.trim();
+  if (!r) return () => false;
+  const m = /^(\d+)\s*(?:#\s*(\d*))?$/.exec(r);
+  if (m && !r.includes(',')) {
+    const every = Number(m[1]), k = m[2] === undefined ? 1 : Math.max(1, Number(m[2]) || 1);
+    if (every <= 0) return () => false;
+    return (n) => n > 0 && ((n - 1) % every) >= every - k;
+  }
+  const set = new Set(r.split(',').map((x) => Number(x.trim())).filter((x) => Number.isFinite(x) && x > 0));
+  return (n) => set.has(n);
 }
 
 /** Filament slot derived from the flat config (single-material default). */
@@ -416,7 +435,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const holes = offset(exs.flatMap((e) => e.holes.map((h) => h.slice().reverse())), xyh);
         sl[i] = difference(outer, holes);
       }
-      if (i === objStart && efc > 0) sl[i] = offset(sl[i], -efc);
+      // elephant foot compensation, spread over the first layers: full on the first, less on each one after
+      const efcN = Math.max(1, Math.round(num('elefant_foot_compensation_layers') || 1));
+      if (efc > 0 && i >= objStart && i < objStart + efcN) sl[i] = offset(sl[i], -efc * (1 - (i - objStart) / efcN));
     }
   }
   const layerSlices: Paths[] = Array.from({ length: N }, (_, i) => union(objSlices.flatMap((s) => s[i])));
@@ -595,6 +616,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const inner = layerInner[i][o];
       if (!inner.length) { per.push(empty); continue; }
       const density = vase ? 0 : onum(o, i, 'sparse_infill_density') / 100;
+      const extraSolid = solidLayerRule(ostr(o, i, 'extra_solid_infills'));
       const hRef = hs[i];
       const topLayers = vase ? 0 : Math.max(Math.round(onum(o, i, 'top_shell_layers')), onum(o, i, 'top_shell_thickness') > 0 ? Math.ceil(onum(o, i, 'top_shell_thickness') / hRef - 1e-6) : 0);
       const botLayers = Math.max(Math.round(onum(o, i, 'bottom_shell_layers')), onum(o, i, 'bottom_shell_thickness') > 0 ? Math.ceil(onum(o, i, 'bottom_shell_thickness') / hRef - 1e-6) : 0);
@@ -655,7 +677,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         sparse = union([...sparse, ...top, ...solid, ...vshell, ...(objFirst ? [] : bottom)]);
         top = []; solid = []; vshell = [];
       }
-      if (density >= 0.999) { solid = union([...solid, ...sparse]); sparse = []; }
+      if (density >= 0.999 || (!vase && extraSolid(i - objStart + 1))) { solid = union([...solid, ...sparse]); sparse = []; }
       else if (onum(o, i, 'minimum_sparse_infill_area') > 0 && sparse.length) {
         const small = toExPolygons(sparse).filter((e) => area(e.contour) + e.holes.reduce((s2, hh) => s2 + area(hh), 0) < onum(o, i, 'minimum_sparse_infill_area'));
         if (small.length) {
@@ -1029,15 +1051,36 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     if (brimType === 'auto_brim' && brimLoops.length) brimType = 'outer_only';
     const skirtN = Math.round(num('skirt_loops'));
     if (skirtN > 0) {
-      let base = union([...layerSlices[objStart], ...(support ? [...support.base[0], ...support.iface[0]] : []), ...(useTower ? towerBody : [])]);
-      if (brimLoops.length) base = union(base, offset(base, gap + bw));
+      // one skirt around everything (combined), or one around each object (per object)
+      const extra = [...(support ? [...support.base[0], ...support.iface[0]] : []), ...(useTower ? towerBody : [])];
+      const perObj = str('skirt_type') === 'perobject' && meshes.length > 1;
+      const bases: { base: Paths; owner?: number }[] = perObj
+        ? meshes.map((_, o) => ({ base: union([...(objSlices[o][objStart] ?? []), ...(o === 0 ? extra : [])]), owner: o })).filter((b) => b.base.length)
+        : [{ base: union([...layerSlices[objStart], ...extra]) }];
+      // skirt minimum extrusion length: more loops until the skirt pushes at least this much filament
+      const minFil = Math.max(0, num('min_skirt_length'));
+      const fd = filaments[0]?.diameter || 1.75, filPerMm = (w * h0) / (Math.PI * (fd / 2) ** 2);
+      const startAng = (num('skirt_start_angle') * Math.PI) / 180;
       let dropped = 0;
-      for (let k = skirtN - 1; k >= 0; k--) {
-        for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) {
-          const loop: PathItem = { pts: pathToPoly(p), closed: true, feature: 'skirt', width: w, flow: 1 };
-          // a skirt loop only primes the nozzle: one that leaves the plate is left out
-          if (offBed([loop])) dropped++; else skirtLoops.push(loop);
+      for (const { base: b0, owner } of bases) {
+        const base = brimLoops.length ? union(b0, offset(b0, gap + bw)) : b0;
+        const bb = bounds(base), cx = (bb.minX + bb.maxX) / 2 / SCALE, cy = (bb.minY + bb.maxY) / 2 / SCALE;
+        const loops: PathItem[] = [];
+        let fil = 0;
+        for (let k = 0; k < 200 && (k < skirtN || (minFil > 0 && fil < minFil)); k++) {
+          for (const p of offset(base, num('skirt_distance') + w / 2 + k * s, 'round')) {
+            let pts = pathToPoly(p);
+            // skirt start point: the loop starts at the given angle around the objects' centre
+            let best = 0, bestD = -Infinity;
+            for (let q = 0; q < pts.length; q += 2) { const d = (pts[q] - cx) * Math.cos(startAng) + (pts[q + 1] - cy) * Math.sin(startAng) - Math.abs((pts[q] - cx) * Math.sin(startAng) - (pts[q + 1] - cy) * Math.cos(startAng)); if (d > bestD) { bestD = d; best = q / 2; } }
+            pts = rotateLoop(pts, best);
+            const loop: PathItem = { pts, closed: true, feature: 'skirt', width: w, flow: 1, wallDepth: k, owner };
+            // a skirt loop only primes the nozzle: one that leaves the plate is left out
+            if (offBed([loop])) dropped++; else { loops.push(loop); fil += polyLen(pts, true) * filPerMm; }
+          }
         }
+        // outermost first, ending next to the objects
+        pushAll(skirtLoops, loops.reverse());
       }
       if (dropped) warn(`${dropped} skirt loop${dropped === 1 ? '' : 's'} would leave the plate and ${dropped === 1 ? 'was' : 'were'} left out.`);
     }
@@ -1502,7 +1545,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             const bw = thick ? nozzle : sw;
             const fs = filaments[solidFil]?.settings;
             const bridgeFan = (fs?.enable_overhang_bridge_fan ?? cfg.enable_overhang_bridge_fan) !== false ? Number(fs?.overhang_fan_speed ?? cfg.overhang_fan_speed ?? 100) : undefined;
-            add(linesFill(exToPaths(ex), thick ? nozzle : spacingOf(sw, h), ang), 'bridge', bw, num('bridge_flow') || 1, { fil: solidFil, fanMin: bridgeFan });
+            // external bridge density: line spacing over air (above 100% the lines overlap)
+            const bd = Math.max(0.1, Math.min(1.25, (cfg.bridge_density === undefined ? 100 : num('bridge_density')) / 100));
+            add(linesFill(exToPaths(ex), (thick ? nozzle : spacingOf(sw, h)) / bd, ang), 'bridge', bw, num('bridge_flow') || 1, { fil: solidFil, fanMin: bridgeFan });
           }
         }
         if (rg.solid.length) solidFill(rg.solid, ostr(o, i, 'internal_solid_infill_pattern'), i === 0 ? w0 : sw);
@@ -1677,11 +1722,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
 
     // --- first-layer adhesion (printed with the first filament of the layer)
     if (order.length) changeTo(order[0]);
+    // draft shield: the skirt rises with the tallest object; single loop: only the innermost loop above the first layer
+    const skirtLayers = str('draft_shield') === 'enabled' ? N : Math.round(num('skirt_height'));
+    const skirtNow = (it: PathItem) => (i === 0 || !bool('single_loop_draft_shield') || it.wallDepth === 0) && (it.owner === undefined || only === null || it.owner === only);
     if (i === 0) {
-      for (const it of orderPaths(skirtLoops.filter(() => only === null || only === byObjOrder[0]), px, py).paths) extrudePath(it);
+      for (const it of skirtLoops.filter((it) => skirtNow(it) && (only === null || it.owner !== undefined || only === byObjOrder[0]))) extrudePath({ ...it });
       for (const it of orderPaths(only === null ? brimLoops : brimByObj.get(only) ?? [], px, py).paths) extrudePath(it);
-    } else if (i < Math.round(num('skirt_height')) && only === null) {
-      for (const it of orderPaths(skirtLoops.map((s) => ({ ...s })), px, py).paths) extrudePath(it);
+    } else if (i < skirtLayers && (only === null || skirtLoops.some((it) => it.owner === only))) {
+      for (const it of skirtLoops.filter(skirtNow)) if (zs[i] <= (it.owner === undefined ? maxZ + shift : (objLast[it.owner] >= 0 ? zs[objLast[it.owner]] : 0)) + 1e-6 || str('draft_shield') !== 'enabled') extrudePath({ ...it });
     }
 
     // flush into infill: sparse infill of a filament that is followed by another one is printed after the change
@@ -1782,7 +1830,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
               // inward direction at the seam: left of the travel direction for a counter clockwise contour
               const sx = pts[0], sy = pts[1], tx = pts[2] - sx, ty = pts[3] - sy, tl = Math.hypot(tx, ty) || 1;
               const side = wallCw ? -1 : 1, nx = (-ty / tl) * side, ny = (tx / tl) * side, w = loop.width;
-              if (k === 0 && wipeBeforeOuter && seq[0] === 0) item.primeAt = [sx + nx * w, sy + ny * w];
+              if (k === 0 && wipeBeforeOuter) item.primeAt = [sx + nx * w, sy + ny * w];
               if (k === 0 && wipeLoops) item.wipeIn = [sx + (tx / tl + nx) * w * 0.7, sy + (ty / tl + ny) * w * 0.7];
             }
             wallItems.push(item);

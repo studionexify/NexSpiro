@@ -91,5 +91,6 @@
   "single_extruder_multi_material": true,
   "purge_in_prime_tower": true,
   "enable_filament_ramming": true
- }
+ },
+ "template_vars": {}
 }

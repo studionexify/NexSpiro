@@ -494,6 +494,8 @@ for (const p of PRINTERS) {
 // G-code for a block the profile leaves empty (e.g. the filament change of a unit Orca drives itself).
 interface GeneratedVendor extends VendorProfile {
   flavor: GcodeFlavor; bed: Partial<PrinterProfile['bed']>; excluded_areas: [number, number][][]; machine: Config;
+  /** Other profile values the templates read (H2D: hotend_heating_rate per nozzle), for names NexSpiro does not set. */
+  template_vars?: Record<string, unknown>;
 }
 for (const p of PRINTERS) {
   const v = GENERATED_VENDOR[p.id] as GeneratedVendor | undefined;
@@ -505,6 +507,7 @@ for (const p of PRINTERS) {
     ...p.machine, ...v.machine, ...v.templates, gcode_templates: 'vendor',
     gcode_template_source: `${v.vendor}: ${v.repo}@${v.commit.slice(0, 10)} ${v.profile}`,
     head_wrap_detect_zone: (v.head_wrap_detect_zone ?? []).join(','),
+    ...(v.template_vars && Object.keys(v.template_vars).length ? { vendor_template_vars: JSON.stringify(v.template_vars) } : {}),
   };
   const accel = Number(p.machine.max_acceleration);
   if (accel > 0 && Number(p.processOverrides.default_acceleration) > accel) p.processOverrides = { ...p.processOverrides, default_acceleration: accel };

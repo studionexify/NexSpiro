@@ -75,5 +75,15 @@
   "nozzle_type": "hardened_steel",
   "single_extruder_multi_material": false,
   "purge_in_prime_tower": false
+ },
+ "template_vars": {
+  "nozzle_diameter": [
+   0.4,
+   0.4,
+   0.4,
+   0.4,
+   0.4
+  ],
+  "wipe": true
  }
 }
