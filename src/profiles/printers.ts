@@ -298,12 +298,13 @@ G92 E0
 ; ===== end tool change =====`;
 
 /** A printer with one nozzle per filament: head swaps instead of filament swaps. */
-const toolchanger = (p: PrinterProfile, heads: number, swapSeconds: number): PrinterProfile => ({
+const toolchanger = (p: PrinterProfile, heads: number, swapSeconds: number, extra: Record<string, unknown> = {}): PrinterProfile => ({
   ...p,
   machine: {
     ...p.machine, changer_type: 'toolchanger', toolhead_count: heads, has_ams: false, change_filament_gcode: TOOL_CHANGE, filament_change_time: swapSeconds,
     retract_restart_extra_toolchange: 0.1,
-    tool_prime_volume: 3, standby_temperature_delta: -40, tool_preheat_time: 30,
+    tool_prime_volume: 3, ooze_prevention: true, standby_temperature_delta: -40, tool_preheat_time: 30, preheat_delta_temperature: 0,
+    ...extra,
   },
 });
 
@@ -426,7 +427,7 @@ PRINTERS.push(
   toolchanger(M('prusa-xl-5t', 'Prusa', 'XL (5 toolheads)', [360, 360, 360], 'medium', 5000, { connections: ['octoprint'], start: marlinStart('Prusa XL 5T', 5, 20, 200, 'G29 ; mesh bed levelling'),
     note: 'Five heads, one filament each. Check the start G-code against PrusaSlicer\'s XL profile before the first print.' }), 5, 12),
   toolchanger(K('snapmaker-u1', 'Snapmaker', 'U1', [270, 270, 270], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END', connections: ['moonraker'],
-    note: 'Four-head tool changer: each colour on its own head, swapped in seconds with no purge. Heads waiting for their turn sit at standby, are preheated before their pick-up and switch off after their last use. Send over LAN with a Klipper / Moonraker connection (the printer\'s IP, port 7125); in the Print dialog, map each filament to the head it is loaded on. Check the start macro against Snapmaker\'s own profile before the first print.' }), 4, 6),
+    note: 'Four-head tool changer: each colour on its own head, swapped in seconds with no purge. Heads waiting for their turn sit at standby, are preheated before their pick-up and switch off after their last use. Send over LAN with a Klipper / Moonraker connection (the printer\'s IP, port 7125); in the Print dialog, map each filament to the head it is loaded on. Check the start macro against Snapmaker\'s own profile before the first print.' }), 4, 6, { standby_temperature_delta: -150, tool_preheat_time: 30, preheat_delta_temperature: 0 }),
   toolchanger(K('generic-toolchanger', 'Generic', 'Klipper tool changer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'fast', 10000, { end: 'PRINT_END',
     note: 'StealthChanger, TapChanger, Jubilee and other Klipper tool changers: T0…Tn macros pick up the head and apply its offsets. Set the number of heads in Printer settings.' }), 4, 10),
   toolchanger(M('generic-idex', 'Generic', 'IDEX printer', [300, 300, 300], 'medium', 4000, { note: 'Independent dual extruder (two heads, T0 / T1). The firmware parks the idle head and applies its offset.' }), 2, 6),

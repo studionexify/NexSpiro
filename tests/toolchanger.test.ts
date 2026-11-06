@@ -50,8 +50,8 @@ describe('filament changers', () => {
     expect(picks.length).toBe(rep.wovenLayers - 1);
     expect(out.stats.toolChanges).toBe(picks.length);
     // the parked head waits 40 °C below its print temperature
-    expect(g).toMatch(/^M104 T0 S175 ; park T0 at standby/m);
-    expect(g).toMatch(/^M104 T1 S180 ; park T1 at standby/m);
+    expect(g).toMatch(/^M104 T0 S65 ; park T0 at standby/m);
+    expect(g).toMatch(/^M104 T1 S70 ; park T1 at standby/m);
     // and is heated back before it is needed: after its park, before its pick-up
     const lines = g.split('\n');
     let checked = 0;
@@ -77,6 +77,23 @@ describe('filament changers', () => {
     expect(out.warnings.some((w) => /need 3 heads, the tool changer has 2/.test(w))).toBe(true);
   });
 
+  it('ooze prevention: Snapmaker Orca values on the U1, switchable, preheat delta', () => {
+    const m = printerById('snapmaker-u1').machine;
+    expect([m.ooze_prevention, m.standby_temperature_delta, m.tool_preheat_time, m.preheat_delta_temperature]).toEqual([true, -150, 30, 0]);
+    const a0 = slotFromConfig(cfg('snapmaker-u1'));
+    const fils = [0, 1].map((k) => ({ ...a0, nozzleTemp: 210 }));
+    const acts = [{ z: 4, type: 'color' as const, filament: 1 }];
+    const obj = { id: 't', name: 't', ...weld(cylinder(128, 128, 10, 12, 48)) };
+    const off = slice([obj], cfg('snapmaker-u1', { }), () => {}, { filaments: fils, layerActions: acts }).gcode;
+    expect(off).toMatch(/^M104 T1 S60 ; T1 waits at standby/m);
+    const noOoze = slice([obj], { ...cfg('snapmaker-u1'), ooze_prevention: false }, () => {}, { filaments: fils, layerActions: acts }).gcode;
+    expect(noOoze).not.toMatch(/at standby|preheat T/);
+    expect(noOoze).toMatch(/^M109 T1 S210/m); // the pick-up still waits for print temperature
+    const delta = slice([obj], { ...cfg('snapmaker-u1'), preheat_delta_temperature: -10 }, () => {}, { filaments: fils, layerActions: acts }).gcode;
+    expect(delta).toMatch(/^M104 T1 S200 ; preheat T1/m);
+    expect(delta).toMatch(/^M109 T1 S210/m);
+  });
+
   it('keeps later heads at standby from the start and switches every head off after its last use', () => {
     // three colours, each used once: T0 for the base, then T1, then T2 on top
     const c = cfg('snapmaker-u1');
@@ -88,10 +105,10 @@ describe('filament changers', () => {
     const L = out.gcode.split('\n');
     const first = (re: RegExp) => L.findIndex((l) => re.test(l));
     const sel = (t: number) => first(new RegExp(`^T${t} ; park the head in use`));
-    // T1 and T2 wait at standby (40 °C below) before the first head prints, not cold
-    expect(first(/^M104 T1 S175 ; T1 waits at standby/)).toBeGreaterThan(0);
-    expect(first(/^M104 T2 S180 ; T2 waits at standby/)).toBeGreaterThan(0);
-    expect(first(/^M104 T1 S175 ; T1 waits/)).toBeLessThan(first(/^G1 .*E[0-9.]+/));
+    // T1 and T2 wait at standby (150 °C below, as in Snapmaker Orca) before the first head prints, not cold
+    expect(first(/^M104 T1 S65 ; T1 waits at standby/)).toBeGreaterThan(0);
+    expect(first(/^M104 T2 S70 ; T2 waits at standby/)).toBeGreaterThan(0);
+    expect(first(/^M104 T1 S65 ; T1 waits/)).toBeLessThan(first(/^G1 .*E[0-9.]+/));
     // each is preheated before its pick-up
     expect(first(/^M104 T1 S215 ; preheat T1/)).toBeLessThan(sel(1));
     expect(first(/^M104 T2 S220 ; preheat T2/)).toBeLessThan(sel(2));

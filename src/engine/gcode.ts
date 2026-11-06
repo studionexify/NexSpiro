@@ -151,7 +151,7 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
  *  - a head that is never picked up again is switched off when it is parked (`offAfterLastUse`)
  * Needs the move times. Heads are filament slots (slot n prints with head n).
  */
-export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; offAfterLastUse?: boolean } = {}) {
+export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; preheatDelta?: number; offAfterLastUse?: boolean } = {}) {
   // time at the start of every op, and every pick-up (a tool op that changes the head)
   const at: { li: number; oi: number; t: number }[] = [];
   const picks: { tool: number; t: number; idx: number }[] = [];
@@ -191,7 +191,7 @@ export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: 
       let k = pk.idx;
       while (k > parked + 1 && at[k - 1].t > pk.t - lead) k--;
       const tk = temp(pk.tool);
-      if (tk && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(tk)} ; preheat T${pk.tool} for its pick-up` });
+      if (tk && k > parked && k < pk.idx) inserts.push({ li: at[k].li, oi: at[k].oi, text: `M104 T${pk.tool} S${Math.round(tk + Math.max(-100, Math.min(20, o.preheatDelta ?? 0)))} ; preheat T${pk.tool} for its pick-up` });
     }
   }
   if (o.offAfterLastUse) {
@@ -270,7 +270,10 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     }
     layerTimes.push(t);
   }
-  if (changerOf(cfg) === 'toolchanger') preheatParkedHeads(layers, num('tool_preheat_time'), filaments, { standbyDelta: num('standby_temperature_delta'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
+  if (changerOf(cfg) === 'toolchanger') {
+    const ooze = cfg.ooze_prevention !== false;
+    preheatParkedHeads(layers, ooze ? num('tool_preheat_time') : 0, filaments, { standbyDelta: ooze ? num('standby_temperature_delta') : 0, preheatDelta: num('preheat_delta_temperature'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
+  }
   const total = layerTimes.reduce((a, b) => a + b, 0);
 
   // 2) write
