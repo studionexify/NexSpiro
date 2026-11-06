@@ -18,7 +18,7 @@ export interface LoadedModel {
   plate?: number;
   local?: [number, number, number];
   /** File-level facts shared by every model of one file. */
-  file?: { printerModel?: string; bed?: [number, number]; plateCount: number };
+  file?: { printerModel?: string; bed?: [number, number]; plateCount: number; plateSequences?: import('../engine/toolmap').FilamentSequence[] };
 }
 
 /** Where plate i of a Bambu / Orca project starts in the file's coordinates: plates sit in a grid of
@@ -50,7 +50,7 @@ export async function loadModelFile(name: string, data: ArrayBuffer, progress?: 
   else if (lower.endsWith('.3mf')) {
     const r = await parse3MF(data, step);
     if (r.filamentColors.length) filamentColors = r.filamentColors;
-    file = { printerModel: r.printerModel, bed: r.bed, plateCount: r.plateCount };
+    file = { printerModel: r.printerModel, bed: r.bed, plateCount: r.plateCount, ...(r.plateSequences ? { plateSequences: r.plateSequences as import('../engine/toolmap').FilamentSequence[] } : {}) };
     soups.push(...r.objects.map((o, _i, a) => ({ name: a.length > 1 ? o.name : base, soup: o.soup, color: o.color, filament: o.filament, plate: o.plate })));
   }
   else if (lower.endsWith('.amf')) {

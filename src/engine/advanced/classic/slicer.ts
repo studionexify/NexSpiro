@@ -11,6 +11,7 @@ import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import { flushSplit, renderVendor, usesVendorTemplates } from '../../templateVars';
 import type { IndexedMesh } from '../../mesh';
 import { splitNarrow } from './arachne';
+import { orderLayerTools } from '../../toolmap';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from '../../order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from '../../paint';
 import { sliceMesh } from './slice';
@@ -503,7 +504,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
   {
     let cur = -1;
     for (let i = 0; i < N; i++) {
-      const order = [...layerFils[i]].sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a - b));
+      const order = orderLayerTools(layerFils[i], cur, i, opts.filamentSequence);
       let c = 0;
       for (const f of order) { if ((cur !== -1 || (towerFlush && usedFils.size > 1)) && f !== cur) c++; cur = f; }
       changesPerLayer.push(c);
@@ -798,7 +799,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     }
 
     // order filaments: current first
-    const order = [...layerFils[i]].sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+    const order = orderLayerTools(layerFils[i], curTool, i, opts.filamentSequence);
     if (!order.length && curTool === -1) changeTo(supportFil >= 0 ? supportFil : 0);
 
     // --- first-layer adhesion (printed with the first filament of the layer)

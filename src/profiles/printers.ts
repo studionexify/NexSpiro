@@ -8,6 +8,7 @@ import vendorA1 from './vendor/bbl-a1.json';
 import vendorP1S from './vendor/bbl-p1s.json';
 import vendorU1 from './vendor/snapmaker-u1.json';
 import vendorN4Max from './vendor/elegoo-neptune4max.json';
+import { GENERATED_VENDOR } from './vendor/index';
 
 export type PlateType = 'cool_plate' | 'engineering_plate' | 'high_temp_plate' | 'textured_pei_plate';
 
@@ -486,6 +487,27 @@ for (const p of PRINTERS) {
     head_wrap_detect_zone: (v.tpl.head_wrap_detect_zone ?? []).join(','),
   };
   if (v.process) p.processOverrides = { ...p.processOverrides, ...v.process };
+}
+
+// Every other printer with a maker's profile in OrcaSlicer / Bambu Studio: templates, machine values, bed and excluded
+// areas from the resolved profile (src/profiles/vendor/<id>.json, generated with its source). NexSpiro keeps its own
+// G-code for a block the profile leaves empty (e.g. the filament change of a unit Orca drives itself).
+interface GeneratedVendor extends VendorProfile {
+  flavor: GcodeFlavor; bed: Partial<PrinterProfile['bed']>; excluded_areas: [number, number][][]; machine: Config;
+}
+for (const p of PRINTERS) {
+  const v = GENERATED_VENDOR[p.id] as GeneratedVendor | undefined;
+  if (!v || VENDOR[p.id]) continue;
+  p.bed = { ...p.bed, ...v.bed };
+  if (v.excluded_areas.length) p.excludedAreas = v.excluded_areas;
+  p.flavor = v.flavor;
+  p.machine = {
+    ...p.machine, ...v.machine, ...v.templates, gcode_templates: 'vendor',
+    gcode_template_source: `${v.vendor}: ${v.repo}@${v.commit.slice(0, 10)} ${v.profile}`,
+    head_wrap_detect_zone: (v.head_wrap_detect_zone ?? []).join(','),
+  };
+  const accel = Number(p.machine.max_acceleration);
+  if (accel > 0 && Number(p.processOverrides.default_acceleration) > accel) p.processOverrides = { ...p.processOverrides, default_acceleration: accel };
 }
 
 export const printerById = (id: string) => PRINTERS.find((p) => p.id === id) ?? PRINTERS[0];

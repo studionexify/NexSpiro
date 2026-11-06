@@ -5,6 +5,10 @@
 import type { Config } from '../profiles/settings';
 import type { FilamentSlot } from './types';
 import { renderTemplate, unescapeCStyle, type PPValue } from './placeholder';
+import { VECTOR_BOOL_KEYS, VECTOR_INT_KEYS, VECTOR_KEYS } from './slicerOptionKinds';
+
+const VECTOR_OPTS = new Set([...VECTOR_KEYS, ...VECTOR_INT_KEYS, ...VECTOR_BOOL_KEYS]);
+const BOOL_OPTS = new Set(VECTOR_BOOL_KEYS);
 
 export const usesVendorTemplates = (cfg: Config) => cfg.gcode_templates === 'vendor';
 
@@ -20,7 +24,10 @@ const INTS = new Set([
   'next_extruder', 'previous_extruder', 'toolchange_count', 'total_toolchanges', 'old_filament_temp', 'new_filament_temp',
   'bed_temperature_initial_layer_single', 'max_print_height', 'max_print_z', 'nozzle_temperature', 'nozzle_temperature_initial_layer', 'temperature',
   'first_layer_temperature', 'bed_temperature', 'bed_temperature_initial_layer', 'first_layer_bed_temperature', 'flush_temperatures',
-  'timelapse_type', 'chamber_cooling_mode', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
+  'timelapse_type', 'chamber_cooling_mode', 'temperature_vitrification', 'min_vitrification_temperature', 'initial_nozzle_id', 'current_nozzle_id',
+  'next_nozzle_id', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
+  'required_nozzle_HRC', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
+  ...VECTOR_INT_KEYS,
 ]);
 
 export interface TemplateExtra {
@@ -32,8 +39,20 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
   const v: Record<string, PPValue> = {};
   for (const [k, x] of Object.entries(cfg)) if (typeof x === 'number' || typeof x === 'string' || typeof x === 'boolean') v[k] = x;
   const fils = filaments.length ? filaments : [];
-  const per = <T extends PPValue>(f: (s: FilamentSlot, k: number) => T, fallback: T): T[] => (fils.length ? fils.map(f) : [fallback]);
+  // one value per extruder: as many as filaments, or heads on a tool changer (the extra heads repeat the first filament,
+  // so a template that walks every head — Prusa XL — finds a value for each)
+  const heads = Math.max(fils.length, Math.round(Number(cfg.toolhead_count ?? 1)) || 1, Math.round(Number(cfg.filament_slots ?? 0)) || 0);
+  const per = <T extends PPValue>(f: (s: FilamentSlot, k: number) => T, fallback: T): T[] =>
+    (fils.length ? Array.from({ length: heads }, (_, k) => f(fils[k] ?? fils[0], k)) : [fallback]);
   const fset = (s: FilamentSlot, k: string) => s.settings?.[k];
+  // options the slicers keep per extruder / per filament are vectors there ({retraction_length[0]}): one value per
+  // filament, the filament's own setting where it has one
+  for (const k of Object.keys(v)) {
+    if (!VECTOR_OPTS.has(k)) continue;
+    const x = v[k] as number | string | boolean;
+    const conv = (y: unknown): PPValue => (BOOL_OPTS.has(k) ? y === true || y === 1 || y === '1' || y === 'true' : (y as PPValue));
+    v[k] = per((s) => conv(fset(s, k) ?? x), conv(x));
+  }
   const bed = Math.round(Number(cfg.bed_temperature ?? 0)), bed0 = Math.round(Number(cfg.bed_temperature_initial_layer ?? bed));
   Object.assign(v, {
     printer_model: String(cfg.printer_model ?? ''),
@@ -67,7 +86,41 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
     initial_extruder: 0, initial_tool: 0, initial_no_support_extruder: 0, initial_no_support_tool: 0, current_extruder: 0,
     layer_num: 0, layer_z: 0, max_layer_z: 0, total_layer_count: 0, toolchange_count: 0, total_toolchanges: 0, current_object_idx: 0,
     has_wipe_tower: false, in_head_wrap_detect_zone: false, position: [0, 0, 0], fan_speed: 0,
+    // Bambu Studio / OrcaSlicer filament-cut retraction (X1E, H2D change G-code)
+    long_retraction_when_cut: per((s) => fset(s, 'long_retractions_when_cut') === true, false),
+    retraction_distance_when_cut: per((s) => Number(fset(s, 'retraction_distances_when_cut') ?? 18), 18),
+    // ... and when the H2D switches nozzles (not done by NexSpiro: one nozzle)
+    long_retraction_when_ec: per((s) => fset(s, 'long_retractions_when_ec') === true, false),
+    retraction_distance_when_ec: per((s) => Number(fset(s, 'retraction_distances_when_ec') ?? 10), 10),
+    filament_cooling_before_tower: per((s) => Number(fset(s, 'filament_cooling_before_tower') ?? 0), 0),
+    // hardness a filament needs from the nozzle (abrasive filaments; 0 = any), the printer's extruder count
+    required_nozzle_HRC: per((s) => Math.round(Number(fset(s, 'required_nozzle_HRC') ?? 0)), 0),
+    num_extruders: heads,
+    // OrcaSlicer's custom G-code state (PrintConfig.cpp "placeholders"): at the start of a block nothing is hopped or
+    // retracted
+    zhop: 0, e_retracted: per(() => 0, 0), e_restart_extra: per(() => 0, 0), e_position: per(() => 0, 0),
+    initial_filament_type: String(fils[0] ? (fset(fils[0], 'filament_type') ?? fils[0].type) : (cfg.filament_type ?? 'PLA')),
+    has_single_extruder_multi_material_priming: false, num_printing_extruders: Math.max(1, fils.length),
+    num_objects: 1, num_instances: 1, input_filename_base: String(cfg.input_filename_base ?? 'plate'),
+    // softening temperature of each filament (OrcaSlicer default 100 °C) and the lowest one in the print (H2D, Artillery)
+    temperature_vitrification: per((s) => Math.round(Number(fset(s, 'temperature_vitrification') ?? 100)), Math.round(Number(cfg.temperature_vitrification ?? 100))),
+    // filaments this print uses (Prusa XL / MMU3 start G-code walks it); gcode.ts passes the real list
+    is_extruder_used: per((_s, k) => k < Math.max(1, fils.length), true),
+    // OrcaSlicer: the preset names ({if print_settings_id=~/.*SPEED.*/})
+    print_settings_id: String(cfg.print_settings_id ?? cfg.preset_name ?? ''),
+    filament_settings_id: per((s) => String(s.settings?.filament_settings_id ?? s.name ?? ''), ''),
+    printer_settings_id: String(cfg.printer_settings_id ?? cfg.printer_model ?? ''),
+    filament_notes: per((s) => String(fset(s, 'filament_notes') ?? ''), ''),
+    printer_notes: String(cfg.printer_notes ?? ''),
+    // filament weight extruded so far (Prusa MK4S before layer change); gcode.ts passes the running total
+    extruded_volume_total: 0, extruded_weight_total: 0, extruded_volume: per(() => 0, 0), extruded_weight: per(() => 0, 0),
+    // Bambu Studio H2D (two nozzles): NexSpiro prints with one, the left (main) nozzle, extruder 0
+    nozzle_diameter_at_nozzle_id: per(() => Number(cfg.nozzle_diameter), Number(cfg.nozzle_diameter)),
+    initial_nozzle_id: 0, current_nozzle_id: 0, next_nozzle_id: 0, current_hotend: 0, next_hotend: 0,
+    most_used_physical_extruder_id: 0, curr_physical_extruder_id: 0, current_extruder_id: 0,
+    timelapse_inline_photo: false, has_timelapse_safe_pos: false, farthest_point_timelapse_enabled: false, timelapse_pos_x: 0, timelapse_pos_y: 0, clear_to_x0: false,
   });
+  v.min_vitrification_temperature = Math.min(...(v.temperature_vitrification as number[]).slice(0, Math.max(1, fils.length)));
   // outer wall volumetric speed of a filament (Bambu: the outer wall's flow, capped by the filament)
   const h = Number(cfg.layer_height) || 0.2, w = Number(cfg.outer_wall_line_width) || Number(cfg.nozzle_diameter) || 0.4;
   v.outer_wall_volumetric_speed = Math.min(Number(cfg.outer_wall_speed) * w * h || 12, fils[0]?.maxVolumetricSpeed ?? 1e9);
@@ -79,6 +132,14 @@ export function renderVendor(tpl: string, cfg: Config, filaments: FilamentSlot[]
   if (!tpl) return '';
   const vars: Record<string, PPValue | undefined> = { ...baseTemplateVars(cfg, filaments) };
   for (const [k, x] of Object.entries(extra)) if (x !== undefined) vars[k] = x;
+  // filament change: the filaments' ids and their extrusion feedrates (OrcaSlicer: 60 × max volumetric speed / area)
+  if (typeof extra.next_extruder === 'number' || typeof extra.next_extruder === 'string') {
+    const next = Number(extra.next_extruder), prev = Number(extra.previous_extruder ?? next);
+    const area = Math.PI * (Number(cfg.filament_diameter ?? 1.75) / 2) ** 2;
+    const fr = (k: number) => Math.round((60 * Number(filaments[k]?.maxVolumetricSpeed ?? cfg.filament_max_volumetric_speed ?? 12)) / area);
+    vars.next_filament_id ??= next; vars.current_filament_id ??= prev < 0 ? next : prev;
+    vars.new_filament_e_feedrate ??= fr(next); vars.old_filament_e_feedrate ??= fr(prev < 0 ? next : prev);
+  }
   try {
     return renderTemplate(unescapeCStyle(tpl), { vars, ints: INTS });
   } catch (e) {

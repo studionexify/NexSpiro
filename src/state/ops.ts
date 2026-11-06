@@ -155,14 +155,23 @@ export function centreOnBed(o: SceneObject, printerId: string, plate = useStore.
 /** Arrange every unlocked plate, like the toolbar Arrange. */
 export function arrangeAll(spacing?: number) {
   const s = useStore.getState();
-  s.plates.forEach((p, i) => { if (!p.locked) arrange(spacing, i); });
+  oneUndoStep(() => s.plates.forEach((p, i) => { if (!p.locked) arrange(spacing, i); }));
+}
+
+/** Run several object edits as one user action: a single Undo brings back the scene as it was before `fn`. */
+export function oneUndoStep(fn: () => void) {
+  const before = useStore.getState().objects;
+  fn();
+  const s = useStore.getState();
+  const k = s.undoStack.lastIndexOf(before);
+  if (k >= 0 && k < s.undoStack.length - 1) s.set({ undoStack: s.undoStack.slice(0, k + 1) });
 }
 
 /** Arrange only the selected objects, each group on its own plate. */
 export function arrangeSelected(spacing?: number) {
   const s = useStore.getState();
   const plates = new Set(s.objects.filter((o) => s.selected.includes(o.id)).map((o) => objectPlate(o, s.printerId, s.plates.length)));
-  for (const p of plates) arrange(spacing, p, s.selected);
+  oneUndoStep(() => { for (const p of plates) arrange(spacing, p, s.selected); });
 }
 
 /** Auto orient every object on a plate (skipped while the plate is locked). */

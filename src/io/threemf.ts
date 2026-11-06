@@ -11,6 +11,7 @@
 // Uses plain string scanning instead of DOMParser, so it also runs in workers and in Node, and stays fast on
 // models with millions of triangles.
 import JSZip from 'jszip';
+import { sequenceFromBambu, type FilamentSequence } from '../engine/toolmap';
 
 type Mat = number[]; // 3x4 affine in 3MF order: m00 m01 m02 m10 m11 m12 m20 m21 m22 tx ty tz (row vectors)
 const IDENT: Mat = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
@@ -49,6 +50,8 @@ export interface ThreeMFResult {
   bed?: [number, number];
   /** Number of plates in the file (1 when it has none). */
   plateCount: number;
+  /** Filament printing sequence of each plate (Bambu plate metadata), by 0-based plate index; undefined = Auto. */
+  plateSequences?: (FilamentSequence | undefined)[];
 }
 export type Progress = (fraction: number, stage: string) => void | Promise<void>;
 export class ImportCancelled extends Error { constructor() { super('Import cancelled'); } }
@@ -209,6 +212,7 @@ export async function parse3MF(buf: ArrayBuffer, progress?: Progress): Promise<T
   const ms = (await text('Metadata/model_settings.config')) ?? (await text('Metadata/Slic3r_PE_model.config'));
   const objPlate = new Map<string, number>();
   let plateCount = 1;
+  let plateSequences: (FilamentSequence | undefined)[] | undefined;
   if (ms) {
     for (const pl of elements(ms, 'plate')) {
       if (!pl.inner) continue;
@@ -216,6 +220,10 @@ export async function parse3MF(buf: ArrayBuffer, progress?: Progress): Promise<T
       for (const md of elements(ms, 'metadata', ...pl.inner)) if (md.a.key === 'plater_id' || md.a.key === 'index') { idx = +(md.a.value ?? 0) - 1; break; }
       if (idx < 0) continue;
       plateCount = Math.max(plateCount, idx + 1);
+      const pmd: Record<string, string | undefined> = {};
+      for (const md of elements(ms, 'metadata', ...pl.inner)) if (md.a.key) pmd[md.a.key] = md.a.value;
+      const fs = sequenceFromBambu(pmd);
+      if (fs) (plateSequences ??= [])[idx] = fs;
       for (const mi of elements(ms, 'model_instance', ...pl.inner)) {
         if (!mi.inner) continue;
         for (const md of elements(ms, 'metadata', ...mi.inner)) if (md.a.key === 'object_id' && md.a.value && !objPlate.has(md.a.value)) objPlate.set(md.a.value, idx);
@@ -342,5 +350,5 @@ export async function parse3MF(buf: ArrayBuffer, progress?: Progress): Promise<T
     result.push(o);
   }
   if (!result.length) throw new Error('3MF contains no printable meshes.');
-  return { objects: result, printerModel, bed, plateCount, filamentColors: filamentColors.map((c) => (/^#[0-9a-f]{6}/i.test(c) ? c.slice(0, 7) : '#808080')) };
+  return { objects: result, printerModel, bed, plateCount, ...(plateSequences ? { plateSequences } : {}), filamentColors: filamentColors.map((c) => (/^#[0-9a-f]{6}/i.test(c) ? c.slice(0, 7) : '#808080')) };
 }

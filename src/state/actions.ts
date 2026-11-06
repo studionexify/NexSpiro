@@ -2,7 +2,7 @@
 import { weld } from '../engine/mesh';
 import { ImportCancelled, loadModelFile } from '../io/load';
 import { askPrinterSwitch, importCancelled, importDone, importProgress, importStart } from '../ui/ImportDialog';
-import { openModelFiles, saveFile } from '../platform';
+import { openModelFiles } from '../platform';
 import { PRINTERS, printerById } from '../profiles/printers';
 import { arrange, autoOrient, centreOnBed } from './ops';
 import { plateObjects, sliceNow } from './slicing';
@@ -59,6 +59,12 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
           const plates = st0.plates.slice();
           for (let i = plates.length; i < need; i++) plates.push({ id: newId(), name: `Plate ${i + 1}`, layerActions: [] });
           st0.set({ plates });
+        }
+        // the file's per-plate filament sequences
+        const seqs = info?.plateSequences;
+        if (seqs?.some(Boolean)) {
+          const st1 = useStore.getState();
+          st1.set({ plates: st1.plates.map((p, k) => (seqs[k - firstPlate] ? { ...p, filamentSequence: seqs[k - firstPlate] } : p)) });
         }
       }
       for (const m of models) {
@@ -163,10 +169,9 @@ export async function exportGcode() {
     s.set({ toast: { kind: 'error', text: `Motionex: the print head would hit the print in ${mx.check.collisionCount} spots. Export is stopped — see the Motionex panel.` } });
     return;
   }
-  const base = (s.objects[0]?.name ?? 'plate').replace(/[^\w.-]+/g, '_');
-  const p = printerById(s.printerId);
-  const saved = await saveFile(`${base}_${p.model.replace(/\s+/g, '')}.gcode`, r.gcode, 'gcode');
-  if (saved) s.set({ toast: { kind: 'info', text: `G-code exported: ${saved}` } });
+  // same file as Export plate: filename_format, post-processing scripts, thumbnails, the sliced plate's objects
+  const { exportPlateFile } = await import('./printjob');
+  await exportPlateFile('gcode');
 }
 
 // ----- built-in sample models (procedural, no assets needed)

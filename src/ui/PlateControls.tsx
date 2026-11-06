@@ -8,6 +8,7 @@ import { updatePlate } from '../state/ops';
 import { plateObjects } from '../state/slicing';
 import { Icon } from './icons';
 import { Modal } from './Modals';
+import { FilamentSequenceEditor, draftOf, sequenceOf } from './FilamentSequenceEditor';
 
 const usePlateDialog = create<{ index: number | null }>(() => ({ index: null }));
 export const openPlateSettings = (index: number) => usePlateDialog.setState({ index });
@@ -87,12 +88,14 @@ function PlateSettings({ index, onClose }: { index: number; onClose: () => void 
   const [vase, setVase] = useState(tri(p.spiralVase));
   const [locked, setLocked] = useState(!!p.locked);
   const [seq, setSeq] = useState<string>(p.printSequence ?? 'global');
+  const [fseq, setFseq] = useState(() => draftOf(p.filamentSequence, s.filaments.length));
   const ok = () => {
     updatePlate(index, {
       name: name.trim() || p.name, locked,
       bedType: bed === 'global' ? undefined : bed,
       spiralVase: vase === 'global' ? undefined : vase === 'on',
       printSequence: seq === 'global' ? undefined : (seq as 'by_layer' | 'by_object'),
+      filamentSequence: s.filaments.length > 1 ? sequenceOf(fseq) : p.filamentSequence,
     });
     onClose();
   };
@@ -119,6 +122,7 @@ function PlateSettings({ index, onClose }: { index: number; onClose: () => void 
           <option value="by_layer">By layer</option>
           <option value="by_object">By object</option>
         </select>
+        {s.filaments.length > 1 && <FilamentSequenceEditor draft={fseq} colors={s.filaments.map((f) => f.color)} onChange={setFseq} />}
         <span>Locked</span>
         <label className="row" style={{ margin: 0 }}><button className={`toggle ${locked ? 'on' : ''}`} onClick={() => setLocked(!locked)} aria-label="Lock plate" />
           <span className="muted" style={{ fontSize: 12 }}>Arrange and auto orient skip a locked plate</span></label>

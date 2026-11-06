@@ -88,6 +88,8 @@ export interface Plate {
   printSequence?: 'by_layer' | 'by_object';
   /** Drawn calibration program printed instead of the plate's objects (PA line / pattern). */
   program?: CalibProgram;
+  /** Filament printing sequence for the first / other layers and layer ranges (undefined = Auto), like Bambu's plate setting. */
+  filamentSequence?: import('../engine/toolmap').FilamentSequence;
 }
 
 /** Right-click menu: where it opened and what was under the cursor. */

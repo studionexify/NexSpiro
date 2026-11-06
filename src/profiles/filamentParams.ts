@@ -37,6 +37,8 @@ export const FILAMENT_PARAMS: ParamDef[] = [
 
   // ---------------- Filament › Print temperature
   { key: 'chamber_temperatures', label: 'Chamber temperature', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 80, def: 0, tip: 'Heated or actively controlled chamber target (M141). 0 = not controlled.' },
+  { key: 'activate_chamber_temp_control', label: 'Activate temperature control', tab: 'Filament', group: 'Print temperature', type: 'bool', def: false, tip: 'Writes the chamber temperature into the G-code (M141, and M191 to wait for it on firmware that supports it). Off leaves the chamber to the start G-code.' },
+  { key: 'idle_temperature', label: 'Idle temperature', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 0, tip: 'Tool changers with ooze prevention: the temperature a parked head with this filament waits at. 0 uses the standby temperature variation of the printer.' },
   { key: 'nozzle_temperature_initial_layer', label: 'Nozzle (initial layer)', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 220, tip: 'Nozzle temperature for the first layer.' },
   { key: 'nozzle_temperature', label: 'Nozzle (other layers)', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 220, tip: 'Nozzle temperature after the first layer.' },
   { key: 'cool_plate_temp_initial_layer', label: 'Cool Plate (initial layer)', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 120, def: 35, tip: 'Bed temperature on the Cool Plate, first layer. 0 = this filament does not stick to that plate.' },
@@ -50,6 +52,8 @@ export const FILAMENT_PARAMS: ParamDef[] = [
 
   // ---------------- Filament › Volumetric speed limitation
   { key: 'filament_max_volumetric_speed', label: 'Max volumetric speed', tab: 'Filament', group: 'Volumetric speed limitation', type: 'float', unit: 'mm³/s', min: 0.5, max: 200, step: 0.5, def: 21, tip: 'Every move is slowed so that width × height × speed stays below this melt rate.' },
+  { key: 'filament_shrink', label: 'Shrinkage (XY)', tab: 'Filament', group: 'Basic information', type: 'percent', unit: '%', min: 50, max: 150, def: 100, tip: 'Size the part keeps after cooling, as a percentage (94% if a 100 mm test measures 94 mm). The model is scaled up in X and Y to make up for it.' },
+  { key: 'filament_shrinkage_compensation_z', label: 'Shrinkage (Z)', tab: 'Filament', group: 'Basic information', type: 'percent', unit: '%', min: 50, max: 150, def: 100, tip: 'Height the part keeps after cooling, as a percentage. The model is scaled up in Z to make up for it.' },
 
   // ---------------- Filament › Filament scarf seam settings
   { key: 'filament_scarf_seam_type', label: 'Scarf seam type', tab: 'Filament', group: 'Filament scarf seam settings', type: 'enum', def: 'none', options: opts(['none', 'None'], ['external', 'Contour'], ['all', 'Contour and hole']), tip: 'Scarf joint seam for this filament (used unless the process overrides it).' },
@@ -60,6 +64,7 @@ export const FILAMENT_PARAMS: ParamDef[] = [
   // ---------------- Cooling › Part cooling fan
   { key: 'close_fan_the_first_x_layers', label: 'No cooling for the first', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: 'layers', min: 0, max: 1000, def: 1, tip: 'Number of first layers printed at the special first-layer fan speed (usually off) for bed adhesion.' },
   { key: 'first_x_layer_part_fan_speed', label: 'Fan speed for those layers', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: 0, max: 100, def: 0, tip: 'Part fan speed during the first layers above.' },
+  { key: 'initial_layer_fan_speed', label: 'First layer fan speed', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: -1, max: 100, def: -1, tip: 'Exact part fan speed for the first layer, overriding every other cooling rule there (a little air keeps printed ducts cool over a hot bed). −1 = off.' },
   { key: 'full_fan_speed_layer', label: 'Full fan speed at layer', tab: 'Cooling', group: 'Part cooling fan', type: 'int', min: 0, max: 1000, def: 0, tip: 'Fan speed ramps up linearly from the first cooled layer to full speed at this layer. 0 = no ramp.' },
   { key: 'fan_min_speed', label: 'Min fan speed', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: 0, max: 100, def: 100, tip: 'Fan speed for layers that take as long as the layer time threshold below.' },
   { key: 'fan_cooling_layer_time', label: 'Min fan speed layer time', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: 's', min: 0, max: 1000, def: 100, tip: 'Layers faster than this get more fan (up to the max speed); slower layers get the min speed, or no fan unless "Keep fan always on".' },
@@ -74,6 +79,7 @@ export const FILAMENT_PARAMS: ParamDef[] = [
     options: opts(['0%', '0%'], ['10%', '10%'], ['25%', '25%'], ['50%', '50%'], ['75%', '75%'], ['95%', '95%']), tip: 'Walls overhanging by more than this percentage of their width get the overhang fan speed. 0% = every outer wall.' },
   { key: 'overhang_fan_speed', label: 'Fan speed for overhang', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: 0, max: 100, def: 100, disabledWhen: noOverhangFan, tip: 'Fan speed for bridges and overhanging walls.' },
   { key: 'ironing_fan_speed', label: 'Ironing fan speed', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: -1, max: 100, def: -1, tip: 'Fan speed while ironing. −1 = keep the layer\'s fan speed.' },
+  { key: 'support_material_interface_fan_speed', label: 'Support interface fan speed', tab: 'Cooling', group: 'Part cooling fan', type: 'int', unit: '%', min: -1, max: 100, def: -1, tip: 'Part fan speed while printing support interfaces. More air there bonds the support less to the part, so it comes off more easily. −1 = keep the layer fan.' },
   // ---------------- Cooling › Auxiliary part cooling fan
   { key: 'close_additional_fan_first_x_layers', label: 'For the first', tab: 'Cooling', group: 'Auxiliary part cooling fan', type: 'int', unit: 'layers', min: 0, max: 1000, def: 1, tip: 'First layers use the special auxiliary fan speed.' },
   { key: 'first_x_layer_fan_speed', label: 'Fan speed for those layers', tab: 'Cooling', group: 'Auxiliary part cooling fan', type: 'int', unit: '%', min: 0, max: 100, def: 0, tip: 'Auxiliary fan speed for the first layers.' },

@@ -342,6 +342,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     in_head_wrap_detect_zone: inZone(zoneOf(cfg.head_wrap_detect_zone), firstBox.obj),
     initial_layer_print_height: Number(cfg.initial_layer_print_height ?? layers[0]?.h ?? 0.2),
     has_wipe_tower: layers.some((L) => L.ops.some((op) => op.k === 'move' && op.feature === 'prime_tower')),
+    is_extruder_used: (() => {
+      const used = new Set(layers.flatMap((L) => [L.tool ?? 0, ...L.ops.flatMap((op) => (op.k === 'tool' ? [(op as { tool?: number }).tool ?? 0] : []))]));
+      const heads = Math.max(filaments.length, Math.round(Number(cfg.toolhead_count ?? 1)) || 1, Math.round(Number(cfg.filament_slots ?? 0)) || 0, ...[...used].map((k) => k + 1));
+      return Array.from({ length: heads }, (_, k) => used.has(k));
+    })(),
     ...templateExtra,
   };
   const macro = (tpl: string, what: string, extra: Record<string, number | string | boolean | (number | string | boolean)[]> = {}) =>
@@ -380,13 +385,19 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     for (const m of text.matchAll(/^M10[49](?![^;\n]*\bT\d)[^;\n]*\bS(\d+(?:\.\d+)?)/gm)) temp = Number(m[1]);
   };
 
+  /** Filament extruded so far, per filament and in all (OrcaSlicer: extruded_volume / extruded_weight, mm³ and g). */
+  const extruded = () => {
+    const vol = perFil.map((mm, k) => mm * Math.PI * ((filaments[k] ?? filaments[0])?.diameter ?? 1.75) ** 2 / 4);
+    const wt = vol.map((v, k) => (v / 1000) * ((filaments[k] ?? filaments[0])?.density ?? 1.24));
+    return { extruded_volume: vol, extruded_weight: wt, extruded_volume_total: vol.reduce((a, b) => a + b, 0), extruded_weight_total: wt.reduce((a, b) => a + b, 0) };
+  };
   layers.forEach((L, li) => {
     const moveStart = feats.length;
     const { c } = toolCfg(L.tool);
     const layerIndex = L.layer ?? li;
     const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li]);
     const bl = String(cfg.before_layer_change_gcode ?? '');
-    if (bl) push(vendor ? macro(bl, 'Before layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z }) : expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    if (bl) push(vendor ? macro(bl, 'Before layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z, ...extruded() }) : expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     push(';LAYER_CHANGE');
     push(`;Z:${n(L.z)}`);
     push(`;HEIGHT:${n(L.h)}`);
@@ -397,7 +408,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     else if (flavor === 'bbl') push(`M73 L${li + 1}`);
     else if (flavor === 'klipper') push(`SET_PRINT_STATS_INFO CURRENT_LAYER=${li + 1}${li === 0 ? ` TOTAL_LAYER=${layers.length}` : ''}`);
     const lc = String(cfg.layer_change_gcode ?? '');
-    if (lc) push(vendor ? macro(lc, 'Layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z }) : expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
+    if (lc) push(vendor ? macro(lc, 'Layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z, ...extruded() }) : expandMacro(lc, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     if (L.temp !== undefined) { push(`M104 S${L.temp}`); temp = L.temp; }
     if (L.bedTemp !== undefined) push(`M140 S${L.bedTemp}`);
     L.fan = layerFan;

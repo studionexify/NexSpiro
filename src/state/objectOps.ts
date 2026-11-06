@@ -4,7 +4,7 @@ import { reframePlacements } from '../plugins/patternex/ui/state';
 import { openEdgeCount, transformVertices, type IndexedMesh } from '../engine/mesh';
 import { centreMesh } from '../io/load';
 import { saveFile } from '../platform';
-import { arrange, centreOnBed, primitive, SHAPES, type ShapeKind } from './ops';
+import { arrange, centreOnBed, oneUndoStep, primitive, SHAPES, type ShapeKind } from './ops';
 import { askExportMode } from '../ui/ExportBooleanDialog';
 import { bakedWorldMesh, hasShapeParts, objectFromWorld } from './tools';
 import { cloneObject, dropToBed, newId, objectMatrix, objectPlate, partWorldMatrix, useStore, worldBounds, type SceneObject, type Vec3 } from './store';
@@ -149,8 +149,7 @@ export function cloneObjects(count: number, ids = useStore.getState().selected) 
   const src = s.objects.filter((o) => ids.includes(o.id));
   if (!src.length || count < 1) return;
   const copies = src.flatMap((o) => Array.from({ length: count }, (_, k) => cloneObject(o, { name: `${o.name} (${k + 2})`, position: [o.position[0] + 6 * (k + 1), o.position[1] + 6 * (k + 1), o.position[2]] as Vec3 })));
-  s.addObjects(copies);
-  arrange();
+  oneUndoStep(() => { s.addObjects(copies); arrange(); });
 }
 
 export function setObjectFilament(slot: number, ids = useStore.getState().selected) {

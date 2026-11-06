@@ -62,7 +62,7 @@ function useMenus(openPrefs: () => void): [string, Item[]][] {
       { label: 'Open project (.3mf)…', kbd: 'Ctrl+O', onClick: () => void openProjectDialog() },
       { label: 'Save project…', kbd: 'Ctrl+S', onClick: () => void saveProject(), disabled: !has },
       { sep: true },
-      { label: 'Import STL / OBJ / 3MF…', kbd: 'Ctrl+I', onClick: importDialog },
+      { label: 'Import STL / OBJ / 3MF / AMF / STEP…', kbd: 'Ctrl+I', onClick: importDialog },
       { label: 'Export selection as STL…', onClick: () => void exportStl(), disabled: !sel },
       { sep: true },
       { label: 'Slice plate', kbd: 'Ctrl+R', onClick: sliceAndPreview, disabled: !has && !hasProgram },

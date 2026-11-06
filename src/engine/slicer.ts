@@ -10,6 +10,7 @@ import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, 
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import { flushSplit, inZone, renderVendor, usesVendorTemplates } from './templateVars';
 import type { IndexedMesh } from './mesh';
+import { orderLayerTools } from './toolmap';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { mixProblems, mixSubSlots, resolveFilament, subPassCount } from '../profiles/mixing';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
@@ -59,6 +60,10 @@ interface PathItem extends Polyline2 {
   fil?: number;
   hole?: boolean;
   wallDepth?: number;
+  /** Prime (deretract) here, inside the part, before moving onto the start (wipe before external loop). */
+  primeAt?: [number, number];
+  /** Step here, inside the part, right after the path ends (wipe on loops). */
+  wipeIn?: [number, number];
 }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
@@ -131,6 +136,40 @@ const polyLen = (pts: number[], closed = false) => {
   if (closed && pts.length >= 4) s += Math.hypot(pts[0] - pts[pts.length - 2], pts[1] - pts[pts.length - 1]);
   return s;
 };
+
+/** Twice the signed area of a closed polyline (positive = counter clockwise). */
+const signedArea2 = (pts: number[]) => {
+  let a = 0;
+  for (let k = 0, n = pts.length; k < n; k += 2) { const j = (k + 2) % n; a += pts[k] * pts[j + 1] - pts[j] * pts[k + 1]; }
+  return a;
+};
+/** Reverses a closed loop in place of its point order (x, y pairs), keeping the first point first. */
+const reverseLoop = (pts: number[]) => {
+  const out = [pts[0], pts[1]];
+  for (let k = pts.length - 2; k >= 2; k -= 2) out.push(pts[k], pts[k + 1]);
+  return out;
+};
+/** Moves the start of a closed loop `d` mm backwards along it (staggered inner seams). */
+export function shiftLoopStart(pts: number[], d: number): number[] {
+  const n = pts.length / 2;
+  if (n < 3 || d <= 0) return pts;
+  let left = d % Math.max(1e-9, polyLen(pts, true));
+  for (let k = 0; k < n; k++) {
+    const a = (n - k) % n, b = (n - k - 1 + n) % n;
+    const ax = pts[a * 2], ay = pts[a * 2 + 1], bx = pts[b * 2], by = pts[b * 2 + 1];
+    const seg = Math.hypot(bx - ax, by - ay);
+    if (seg >= left - 1e-9) {
+      const t = seg > 0 ? left / seg : 0;
+      const sx = ax + (bx - ax) * t, sy = ay + (by - ay) * t;
+      // new loop: the cut point, then a → … around to b
+      const out = [sx, sy];
+      for (let m = 0; m < n; m++) { const q = (a + m) % n; out.push(pts[q * 2], pts[q * 2 + 1]); if (q === b) break; }
+      return t >= 1 - 1e-9 ? out.slice(2) : out;
+    }
+    left -= seg;
+  }
+  return pts;
+}
 
 /** Filament slot derived from the flat config (single-material default). */
 export function slotFromConfig(cfg: Config): FilamentSlot {
@@ -849,7 +888,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   {
     let cur = -1;
     for (let i = 0; i < N; i++) {
-      const order = [...layerFils[i]].sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a - b));
+      const order = orderLayerTools(layerFils[i], cur, i, opts.filamentSequence);
       let c = 0;
       // without a chute the first load is flushed on the tower too
       for (const f of order) { if ((cur !== -1 || (towerFlush && usedFils.size > 1)) && f !== cur) c++; cur = f; }
@@ -1013,11 +1052,21 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   let curObj = -1; // object being emitted: per-object speeds apply to its features
   let curLayer = 0;
   const cn = (k: string) => (k in live ? live[k] : curObj >= 0 ? onum(curObj, curLayer, k) : Number(cfg[k] ?? 0));
+  const firstLayerSpeed = (feat: FeatureType) =>
+    feat === 'outer_wall' || feat === 'inner_wall' || feat === 'overhang_wall' || feat === 'skirt' || feat === 'brim' || feat === 'prime_tower' || feat === 'gap_infill' ? cn('initial_layer_speed') : cn('initial_layer_infill_speed');
+  // Number of slow layers: the layers after the first ramp linearly from the first layer speed to the normal one
+  const slowLayers = Math.max(0, Math.round(num('slow_down_layers')));
   const speedFor = (feat: FeatureType, layer: number): number => {
-    if (layer === 0) {
-      if (feat === 'outer_wall' || feat === 'inner_wall' || feat === 'overhang_wall' || feat === 'skirt' || feat === 'brim' || feat === 'prime_tower' || feat === 'gap_infill') return cn('initial_layer_speed');
-      return cn('initial_layer_infill_speed');
+    if (feat === 'skirt' && num('skirt_speed') > 0) return num('skirt_speed');
+    if (layer === 0) return firstLayerSpeed(feat);
+    const v = normalSpeed(feat);
+    if (slowLayers > 1 && layer < slowLayers && feat !== 'travel') {
+      const v0 = firstLayerSpeed(feat);
+      return v0 < v ? v0 + ((v - v0) * layer) / slowLayers : v;
     }
+    return v;
+  };
+  const normalSpeed = (feat: FeatureType): number => {
     switch (feat) {
       case 'outer_wall': return cn('outer_wall_speed');
       case 'inner_wall': return cn('inner_wall_speed');
@@ -1040,6 +1089,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     if (feat === 'inner_wall') return cn('inner_wall_acceleration') || cn('default_acceleration');
     if (feat === 'top_surface' || feat === 'ironing') return cn('top_surface_acceleration');
     if (feat === 'sparse_infill') return floatOrPercent(cfg.sparse_infill_acceleration, cn('default_acceleration')) || cn('default_acceleration');
+    if (feat === 'internal_solid_infill') return floatOrPercent(cfg.internal_solid_infill_acceleration, cn('default_acceleration')) || cn('default_acceleration');
+    if (feat === 'bridge') return floatOrPercent(cfg.bridge_acceleration, cn('outer_wall_acceleration')) || cn('default_acceleration');
     return cn('default_acceleration');
   };
   const jerkOn = num('default_jerk') > 0;
@@ -1072,6 +1123,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   };
   loadRetraction();
   let objFlow = 1; // per-object flow multiplier (flow calibration)
+  // "Set other flow ratios": a flow multiplier per line type, on top of the filament and object flow ratios
+  const otherFlow = bool('set_other_flow_ratios');
+  const ROLE_FLOW: Partial<Record<FeatureType, string>> = {
+    outer_wall: 'outer_wall_flow_ratio', inner_wall: 'inner_wall_flow_ratio', overhang_wall: 'overhang_flow_ratio', sparse_infill: 'sparse_infill_flow_ratio',
+    internal_solid_infill: 'internal_solid_infill_flow_ratio', gap_infill: 'gap_fill_flow_ratio', support: 'support_flow_ratio', support_interface: 'support_interface_flow_ratio',
+  };
+  const roleFlow = (f: FeatureType) => { const k = ROLE_FLOW[f]; return k ? (Number.isFinite(cn(k)) && cfg[k] !== undefined ? cn(k) : 1) : 1; };
   const travelSpeed = num('travel_speed');
   const reduceMode = str('reduce_infill_retraction_mode') || 'auto';
   const labels = cfg.exclude_object !== false && flavor !== 'bbl';
@@ -1150,6 +1208,21 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const inInfill = infillArea.length ? insideTester(infillArea) : () => false;
     let firstTravel = true;
     const hopAllowed = (zz: number) => zz >= tnum('retract_lift_above') - 1e-9 && (tnum('retract_lift_below') <= 0 || zz <= tnum('retract_lift_below') + 1e-9);
+    // Z hop "On surfaces": only for travel that ends over a top surface, a bottom surface (the first layer is all bottom), or either
+    const enforce = tstr('retract_lift_enforce') || 'all';
+    let topHit: ((x: number, y: number) => boolean) | null = null, botHit: ((x: number, y: number) => boolean) | null = null;
+    const hopSurface = (x: number, y: number) => {
+      if (enforce === 'all') return true;
+      const wantTop = enforce === 'top' || enforce === 'top_bottom', wantBot = enforce === 'bottom' || enforce === 'top_bottom';
+      if (wantBot && i === objStart) return true;
+      if (wantTop && (topHit ??= insideTester(union(objs.flatMap((o) => regions[i][o].top))))(x, y)) return true;
+      return wantBot && (botHit ??= insideTester(union(objs.flatMap((o) => regions[i][o].bottom))))(x, y);
+    };
+    const zTravel = num('travel_speed_z') || num('max_speed_z') || 10;
+    const travelJerk = i === 0 ? floatOrPercent(cfg.initial_layer_travel_jerk ?? '100%', num('travel_jerk')) || num('travel_jerk') : num('travel_jerk');
+    // first layer travel: an explicit speed, or a percentage of the travel speed (kept under 250 mm/s for adhesion)
+    const firstTravel0 = String(cfg.initial_layer_travel_speed ?? '100%');
+    const tf0 = firstTravel0.trim().endsWith('%') ? Math.min(floatOrPercent(firstTravel0, travelSpeed), 250) : floatOrPercent(firstTravel0, travelSpeed) || Math.min(travelSpeed, 250);
 
     const travel = (x: number, y: number, feat: FeatureType, zz = zTop) => {
       if (isNaN(px)) {
@@ -1160,9 +1233,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       }
       if (safeZ !== null) {
         // by object: rise above every printed object, cross over, then come down on the next one
-        ops.push({ k: 'move', x: px, y: py, z: safeZ, e: 0, f: num('max_speed_z') || 10, feature: 'travel', w: 0, h, travel: true, fixed: true });
+        ops.push({ k: 'move', x: px, y: py, z: safeZ, e: 0, f: zTravel, feature: 'travel', w: 0, h, travel: true, fixed: true });
         ops.push({ k: 'move', x, y, z: safeZ, e: 0, f: travelSpeed, feature: 'travel', w: 0, h, travel: true });
-        ops.push({ k: 'move', x, y, z: zz, e: 0, f: num('max_speed_z') || 10, feature: 'travel', w: 0, h, travel: true, fixed: true });
+        ops.push({ k: 'move', x, y, z: zz, e: 0, f: zTravel, feature: 'travel', w: 0, h, travel: true, fixed: true });
         safeZ = null; px = x; py = y; curZ = zz; firstTravel = false;
         return;
       }
@@ -1178,19 +1251,21 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       // short hops (shorter than the retraction minimum travel) use the gentler short-travel acceleration
       const ta = i === 0 ? num('initial_layer_travel_acceleration') : d < minTravel && num('travel_short_distance_acceleration') > 0 ? num('travel_short_distance_acceleration') : num('travel_acceleration');
       if (ta && Math.min(ta, capH.a) !== accelSet) { accelSet = Math.min(ta, capH.a); ops.push({ k: 'accel', a: accelSet }); }
-      if (jerkOn && num('travel_jerk') !== jerkSet) { jerkSet = num('travel_jerk'); ops.push({ k: 'jerk', j: jerkSet }); }
+      if (jerkOn && travelJerk !== jerkSet) { jerkSet = travelJerk; ops.push({ k: 'jerk', j: jerkSet }); }
       const via = layerTravel ? layerTravel.route(px, py, x, y) : [];
-      const hop = needRetract && zHop > 0 && hopAllowed(zz);
-      const tf = i === 0 ? Math.min(travelSpeed, 250) : travelSpeed;
-      const zf = num('max_speed_z') || 10;
+      const hop = needRetract && zHop > 0 && hopAllowed(zz) && hopSurface(x, y);
+      const tf = i === 0 ? tf0 : travelSpeed;
+      const zf = zTravel;
       if (hop) {
         let type = tstr('z_hop_types') || 'normal';
         if (type === 'auto') type = layerSlices[i].length && crossesSlice(px, py, x, y, layerSlices[i]) ? 'spiral' : 'slope';
         const hz = curZ + zHop;
+        const slope = Math.max(1, Math.min(90, tnum('travel_slope') || 90));
+        if (type === 'slope' && slope >= 89.999) type = 'normal';
         if (type === 'spiral') ops.push({ k: 'lift', x: px, y: py, z: hz, r: Math.max(0.5, zHop * 2), f: Math.min(tf, 200) });
         else if (type === 'slope' && d > zHop * 2) {
-          // rise while already moving: reach the hop height after a short ramp along the travel
-          const t = Math.min(0.5, (zHop * 3) / d);
+          // rise while already moving: reach the hop height after hop / tan(travel angle) along the travel (at most half of it)
+          const t = Math.min(0.5, zHop / Math.tan((slope * Math.PI) / 180) / d);
           ops.push({ k: 'move', x: px + (x - px) * t, y: py + (y - py) * t, z: hz, e: 0, f: tf, feature: 'travel', w: 0, h, travel: true });
         } else ops.push({ k: 'move', x: px, y: py, z: hz, e: 0, f: zf, feature: 'travel', w: 0, h, travel: true, fixed: true });
         for (let k = 0; k < via.length; k += 2) ops.push({ k: 'move', x: via[k], y: via[k + 1], z: hz, e: 0, f: tf, feature: 'travel', w: 0, h, travel: true });
@@ -1207,9 +1282,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (retracted || retractLen <= 0) return;
       const wipeLen = tbool('wipe') ? tnum('wipe_distance') : 0;
       if (wipeLen > 0 && wipeTrail.length >= 4 && !isNaN(px)) {
-        const before = Math.max(0, Math.min(1, tnum('retract_before_wipe') / 100));
+        // firmware retraction (G10) cannot be split over the wipe: wipe dry, then retract once
+        const fw = cfg.use_firmware_retraction === true;
+        const before = fw ? 0 : Math.max(0, Math.min(1, tnum('retract_before_wipe') / 100));
+        const after = fw ? 1 : Math.max(0, Math.min(1 - before, tnum('retract_after_wipe') / 100));
         if (before > 0) ops.push({ k: 'retract', len: retractLen * before, speed: retractSpeed });
-        const rest = retractLen * (1 - before);
+        const rest = retractLen * (1 - before - after);
         // walk back along the trail
         const pts: number[] = [];
         let left = wipeLen, cx = px, cy = py;
@@ -1223,7 +1301,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           left -= seg * t;
         }
         const total = wipeLen - left;
-        const ws = travelSpeed * Math.max(0.01, num('wipe_speed') / 100);
+        // role based wipe speed: wipe at the speed of the line just printed
+        const ws = bool('role_based_wipe_speed') && lastFeature ? speedFor(lastFeature, i) : travelSpeed * Math.max(0.01, num('wipe_speed') / 100);
         let done = 0;
         for (let k = 0; k < pts.length; k += 2) {
           const seg = Math.hypot(pts[k] - (k ? pts[k - 2] : px), pts[k + 1] - (k ? pts[k - 1] : py));
@@ -1233,6 +1312,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         }
         if (pts.length) { px = pts[pts.length - 2]; py = pts[pts.length - 1]; }
         if (rest > 0 && total <= 0) ops.push({ k: 'retract', len: rest, speed: retractSpeed });
+        if (after > 0) ops.push({ k: 'retract', len: retractLen * after, speed: retractSpeed });
         void done;
       } else ops.push({ k: 'retract', len: retractLen, speed: retractSpeed });
       retracted = true;
@@ -1257,6 +1337,11 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const dx = pts[0] - pts[2], dy = pts[1] - pts[3], L = Math.hypot(dx, dy) || 1;
         travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
       }
+      if (it.primeAt && retracted) {
+        // wipe before external loop: prime just inside the part, then move onto the seam
+        travel(it.primeAt[0], it.primeAt[1], it.feature, startZ);
+        const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false;
+      }
       travel(pts[0], pts[1], it.feature, startZ);
       if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
       const a = Math.min(accelFor(it.feature, i), capH.a);
@@ -1267,7 +1352,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const xsOf = (w: number) => (w > hItem ? (w - hItem) * hItem + Math.PI * (hItem / 2) ** 2 : w * hItem);
       const xs = thick ? Math.PI * (nozzle / 2) ** 2 : xsOf(it.width);
       const layerFlow = i === 0 ? (num('initial_layer_flow_ratio') || 1) : 1;
-      const surfFlow = it.feature === 'top_surface' ? (cn('top_solid_infill_flow_ratio') || 1) : 1;
+      const surfFlow = it.feature === 'top_surface' ? (cn('top_solid_infill_flow_ratio') || 1) : it.feature === 'bottom_surface' ? (cn('bottom_solid_infill_flow_ratio') || 1) : it.feature === 'brim' ? (num('brim_flow_ratio') || 1) : 1;
       const flowMul = (fl.flowRatio || 1) * it.flow * objFlow * layerFlow * surfFlow;
       const ePerMm = (xs / filArea) * flowMul;
       const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
@@ -1276,6 +1361,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const maxVol = 'filament_max_volumetric_speed' in live ? live.filament_max_volumetric_speed : fl.maxVolumetricSpeed;
       v = Math.min(v, (maxVol || 1e9) / Math.max(xs, 1e-6));
       const noSlow = it.noSlow;
+      // support interface fan speed (filament): an exact fan for interfaces, so they bond less to the part
+      const ifaceFan = it.feature === 'support_interface' && it.fanSet === undefined && tnum('support_material_interface_fan_speed') >= 0 ? tnum('support_material_interface_fan_speed') : undefined;
+      const fanSetIt = ifaceFan ?? it.fanSet;
       if (it.closed) pts = [...pts, pts[0], pts[1]];
       let totalLen = 0;
       if (it.spiral) for (let k = 2; k < pts.length; k += 2) totalLen += Math.hypot(pts[k] - pts[k - 2], pts[k + 1] - pts[k - 1]);
@@ -1291,6 +1379,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const len3 = Math.hypot(len, zz - curZ);
         const feat = it.feats?.[idx] ?? it.feature;
         const segFlow = it.flows?.[idx] ?? 1;
+        const roleF = otherFlow ? roleFlow(feat) : 1;
         let sv = v;
         const cap = it.speeds?.[idx];
         if (cap !== undefined && cap > 0) sv = Math.min(sv, cap);
@@ -1298,15 +1387,20 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         if (varW) {
           const sw = (varW[idx - 1] + varW[idx]) / 2, sxs = xsOf(sw);
           const vv = Math.min(sv * Math.min(1, it.width / sw), (maxVol || 1e9) / Math.max(sxs, 1e-6));
-          ops.push({ k: 'move', x, y, z: zz, e: len3 * (sxs / filArea) * flowMul * segFlow, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * (sxs / filArea) * flowMul * segFlow * roleF, f: vv, feature: feat, w: sw, h: hEff, travel: false, fanMin, fanSet: fanSetIt, noSlow });
         } else if (segFlow > 1e-6) {
-          ops.push({ k: 'move', x, y, z: zz, e: len3 * ePerMm * segFlow, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: it.fanSet, noSlow, ...(it.depth ? { noArc: true } : {}) });
+          ops.push({ k: 'move', x, y, z: zz, e: len3 * ePerMm * segFlow * roleF, f: sv, feature: feat, w: it.width * Math.min(1.5, Math.max(0.3, segFlow)), h: hEff, travel: false, fanMin, fanSet: fanSetIt, noSlow, ...(it.depth ? { noArc: true } : {}) });
         } else {
           ops.push({ k: 'move', x, y, z: zz, e: 0, f: sv, feature: 'travel', w: 0, h, travel: true });
         }
         px = x; py = y; curZ = zz;
         wipeTrail.push(x, y);
         if (wipeTrail.length > 400) wipeTrail = wipeTrail.slice(-200);
+      }
+      if (it.wipeIn) {
+        // wipe on loops: a short dry step inward before leaving the loop, so its end does not blob on the surface
+        ops.push({ k: 'move', x: it.wipeIn[0], y: it.wipeIn[1], z: curZ, e: 0, f: bool('role_based_wipe_speed') ? v : travelSpeed * Math.max(0.01, num('wipe_speed') / 100), feature: 'travel', w: 0, h, travel: true });
+        px = it.wipeIn[0]; py = it.wipeIn[1];
       }
       if (zTop > maxPrinted) maxPrinted = zTop;
       lastFeature = it.feature;
@@ -1578,7 +1672,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
 
     // order filaments: current first
     const fils = only === null ? layerFils[i] : [...new Set(jobsByObj.get(only)?.flatMap((j) => [j.wallFil, ...j.fills.map((f) => f.fil ?? j.isl.fil)]) ?? [])];
-    const order = [...fils].sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+    const order = orderLayerTools(fils, curTool, i, opts.filamentSequence);
     if (!order.length && curTool === -1) changeTo(supportFil >= 0 ? supportFil : 0);
 
     // --- first-layer adhesion (printed with the first filament of the layer)
@@ -1626,6 +1720,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const scarfStart = scarfFromProcess ? ocfg(o, i).seam_slope_start_height : toolSet.filament_scarf_height ?? '10%';
         const scarfGap = scarfFromProcess ? ocfg(o, i).seam_slope_gap : toolSet.filament_scarf_gap ?? 0;
         const smallT = onum(o, i, 'small_perimeter_threshold');
+        const wallCw = ostr(o, i, 'wall_direction') === 'cw', staggerSeams = obool(o, i, 'staggered_inner_seams');
+        const wipeLoops = obool(o, i, 'wipe_on_loops');
+        const wipeBeforeOuter = obool(o, i, 'wipe_before_external_loop') && (wallSeq === 'outer_inner' || wallSeq === 'inner_outer_inner');
         const lower = lowerSupport ? lowerSupport[o] : null;
         for (const k of seq) {
           const ordered = orderPaths(isl.walls.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
@@ -1633,12 +1730,15 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             const feature = loop.feature;
             if (!loop.closed) { wallItems.push(classifyOverhang({ pts: simplify(loop.pts, resolution, false), closed: false, feature, width: loop.width, flow: 1, wallDepth: k }, lower, o)); continue; }
             let pts = simplify(loop.pts, resolution, true);
+            // wall loop direction: contours run the chosen way seen from above, holes the other way
+            if (pts.length >= 6 && (signedArea2(pts) > 0) !== ((wallCw ? !!loop.hole : !loop.hole))) pts = reverseLoop(pts);
             const prev = seamMode === 'aligned' && prevSeams.length
               ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
               : null;
             const avoid = obool(o, i, 'seam_placement_away_from_overhangs') && lower ? overhangPoints(pts, lower, loop.width) : null;
             const si = pickSeam(pts, seamMode, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, prev, rnd, avoid ? { enforce: hints?.enforce ?? [], block: [...(hints?.block ?? []), ...avoid] } : hints);
             pts = rotateLoop(pts, si);
+            if (k > 0 && staggerSeams) pts = shiftLoopStart(pts, k * loop.width);
             if (k === 0) seams.push([pts[0], pts[1]]);
             let flows: number[] | undefined;
             const fuzzThis = fuzzyOn && (fuzzy === 'allwalls' || (k === 0 && (fuzzy === 'all' || (fuzzy === 'external' && !loop.hole))));
@@ -1678,6 +1778,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             item.wallDepth = k;
             if (small !== undefined) item.speed = small;
             if (noSlow) item.noSlow = true;
+            if (!item.spiral && item.pts.length >= 4) {
+              // inward direction at the seam: left of the travel direction for a counter clockwise contour
+              const sx = pts[0], sy = pts[1], tx = pts[2] - sx, ty = pts[3] - sy, tl = Math.hypot(tx, ty) || 1;
+              const side = wallCw ? -1 : 1, nx = (-ty / tl) * side, ny = (tx / tl) * side, w = loop.width;
+              if (k === 0 && wipeBeforeOuter && seq[0] === 0) item.primeAt = [sx + nx * w, sy + ny * w];
+              if (k === 0 && wipeLoops) item.wipeIn = [sx + (tx / tl + nx) * w * 0.7, sy + (ty / tl + ny) * w * 0.7];
+            }
             wallItems.push(item);
           }
         }
@@ -1686,7 +1793,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const gapItems: PathItem[] = [];
       if (mine(job.gapFil)) {
         const minLen = Math.max(onum(o, i, 'filter_out_gap_fill'), 0);
-        for (const g of isl.walls.gaps) if (polyLen(g.pts) >= minLen) gapItems.push({ ...g, pts: g.pts.slice(), widths: g.widths!.slice(), flow: 1 } as PathItem);
+        // Apply gap fill: everywhere, only on layers of this object with a top / bottom surface, or nowhere
+        const gapTarget = ostr(o, i, 'gap_fill_target') || 'everywhere';
+        const gapHere = gapTarget === 'everywhere' || (gapTarget === 'topbottom' && (regions[i][o].top.length > 0 || regions[i][o].bottom.length > 0 || i === objStart));
+        if (gapHere) for (const g of isl.walls.gaps) if (polyLen(g.pts) >= minLen) gapItems.push({ ...g, pts: g.pts.slice(), widths: g.widths!.slice(), flow: 1 } as PathItem);
       }
       const isFill = job.fills.filter((f) => mine(f.fil ?? isl.fil));
       // subdivided mix: what is printed here is the top pass (the lower passes went first, see subPassPhase)
@@ -1804,7 +1914,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           }
         }
       }
-      if (maxN) order.sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+      if (maxN) order.splice(0, order.length, ...orderLayerTools(order, curTool, i, opts.filamentSequence));
     }
 
     // --- per filament: islands (walls, gap fill, fills) of every object

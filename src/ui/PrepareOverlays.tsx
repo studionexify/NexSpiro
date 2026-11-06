@@ -345,6 +345,16 @@ export { slotColor };
 function ArrangeSettings({ onClose }: { onClose: () => void }) {
   const { arrangeSettings: a, set } = useStore();
   const up = (p: Partial<typeof a>) => set({ arrangeSettings: { ...a, ...p } });
+  // like any popover: Esc, a click elsewhere or switching tool closes it (it used to stay over the tool panels).
+  // Listeners are bound once (onClose read through a ref): re-binding on every render dropped the event that caused it.
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current(); };
+    const down = () => close.current();
+    const unsub = useStore.subscribe((st, prev) => { if (st.tool !== prev.tool) close.current(); });
+    window.addEventListener('keydown', key, true); window.addEventListener('pointerdown', down);
+    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('pointerdown', down); unsub(); };
+  }, []);
   return (
     <div className="menu-pop arrange-pop" style={{ top: 40, left: 0, padding: 12, width: 240 }} onPointerDown={(e) => e.stopPropagation()}>
       <div className="row"><b style={{ flex: 1 }}>Arrange settings</b><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={14} /></button></div>

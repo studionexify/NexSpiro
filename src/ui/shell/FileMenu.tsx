@@ -1,6 +1,6 @@
 // Floating top-left cluster: File menu, Import, Undo, Redo (moved from the old TopBar).
 import { useEffect, useState } from 'react';
-import { exportGcode, importDialog, newProject, sliceAndPreview } from '../../state/actions';
+import { exportGcode, importDialog, newProject, sliceAllPlates, sliceAndPreview } from '../../state/actions';
 import { exportPlateFile } from '../../state/printjob';
 import { openProjectDialog, saveProject } from '../../state/project';
 import { useStore } from '../../state/store';
@@ -24,6 +24,7 @@ export function FileMenu() {
   const sliced = useSliced();
   const objects = useStore((s) => s.objects);
   const hasProgram = useStore((s) => !!s.plates[s.activePlate]?.program);
+  const plateCount = useStore((s) => s.plates.length);
   useOutsideClose(open, () => setOpen(false));
   const item = (label: string, kbd: string, fn: () => void, disabled = false) => (
     <button className="menu-item" disabled={disabled} onPointerDown={(e) => e.stopPropagation()} onClick={() => { setOpen(false); fn(); }}>
@@ -38,8 +39,9 @@ export function FileMenu() {
       {open && (
         <div className="menu-pop" role="menu">
           {item('New project', 'Ctrl+N', newProject)}
-          {item('Import STL / OBJ / 3MF…', 'Ctrl+I', importDialog)}
+          {item('Import STL / OBJ / 3MF / AMF / STEP…', 'Ctrl+I', importDialog)}
           {item('Slice plate', 'Ctrl+R', sliceAndPreview, !objects.length && !hasProgram)}
+          {item('Slice all plates', '', () => void sliceAllPlates(), !objects.length || plateCount < 2)}
           {item('Export G-code…', 'Ctrl+G', exportGcode, !sliced)}
           {item('Export plate sliced file (.gcode.3mf)…', '', () => void exportPlateFile('3mf'), !sliced)}
           {item('Print plate…', 'Ctrl+P', () => void openPrintDialog(), !sliced)}

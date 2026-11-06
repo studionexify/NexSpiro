@@ -10,11 +10,15 @@ import { bevelSelectedEdges, exactifyObject, refineObject, remeshObject, selectC
 import { hasPolygonFaces } from '../engine/meshedit';
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
+  // typed text is a draft until Enter/blur, so "-", "0." and an emptied field can be typed (it used to snap back on each key)
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => { if (draft !== null) { const v = parseFloat(draft); if (isFinite(v)) onChange(Math.min(max, Math.max(min, v))); setDraft(null); } };
   return (
     <div className="row" style={{ marginBottom: 6 }}>
       <span style={{ width: 62 }}>{label}</span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ flex: 1, minWidth: 0 }} />
-      <input className="input mono" style={{ width: 58, textAlign: 'right' }} value={+value.toFixed(2)} onChange={(e) => { const v = parseFloat(e.target.value); if (isFinite(v)) onChange(Math.min(max, Math.max(min, v))); }} />
+      <input className="input mono" style={{ width: 58, textAlign: 'right' }} value={draft ?? +value.toFixed(2)} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur(); } }} />
       <span className="unit">{unit}</span>
     </div>
   );

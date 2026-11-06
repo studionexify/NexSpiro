@@ -1,7 +1,7 @@
 // Vendor G-code template engine: the placeholder language of PrusaSlicer / OrcaSlicer / Bambu Studio /
 // Snapmaker Orca, so the printer makers' own start, end, filament-change and layer G-code run unchanged.
 //
-//   [name] [name_3]                       legacy variable (element 3 of a vector)
+//   [name] [name_3] [name[expr]]          legacy variable (element 3 / expr of a vector)
 //   {expr}                                expression, printed
 //   {if expr}…{elsif expr}…{else}…{endif} conditional text
 //   { statements }                        macro block: local / global x = …; x = …; v[i] = …;
@@ -65,7 +65,7 @@ const truthy = (x: V): boolean => {
 };
 
 // ---------------------------------------------------------------- lexer (macro / expression text)
-type Tok = { k: 'num'; v: string } | { k: 'str'; v: string } | { k: 'id'; v: string } | { k: 'op'; v: string } | { k: 'end' };
+type Tok = { k: 'num'; v: string } | { k: 'str'; v: string } | { k: 're'; v: string } | { k: 'id'; v: string } | { k: 'op'; v: string } | { k: 'end' };
 const OPS = ['&&', '||', '==', '!=', '<>', '<=', '>=', '=~', '!~', '+', '-', '*', '/', '%', '<', '>', '!', '(', ')', '[', ']', ',', ';', '=', '?', ':'];
 
 function lex(src: string): Tok[] {
@@ -94,7 +94,23 @@ function lex(src: string): Tok[] {
     const id = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
     if (id) { out.push({ k: 'id', v: id[0] }); i += id[0].length; continue; }
     const op = OPS.find((o) => src.startsWith(o, i));
-    if (op) { out.push({ k: 'op', v: op }); i += op.length; continue; }
+    if (op) {
+      out.push({ k: 'op', v: op });
+      i += op.length;
+      if (op === '=~' || op === '!~') {
+        // a regular expression literal: /…/
+        while (/\s/.test(src[i] ?? '')) i++;
+        if (src[i] === '/') {
+          let r = '';
+          i++;
+          while (i < src.length && src[i] !== '/') { if (src[i] === '\\' && i + 1 < src.length) { r += src[i] + src[i + 1]; i += 2; } else r += src[i++]; }
+          if (src[i] !== '/') throw new PlaceholderError('unterminated regular expression');
+          i++;
+          out.push({ k: 're', v: r });
+        }
+      }
+      continue;
+    }
     throw new PlaceholderError(`unexpected character "${c}"`);
   }
   out.push({ k: 'end' });
@@ -255,8 +271,16 @@ class Parser {
     let a = this.add();
     for (;;) {
       const t = this.peek();
-      if (t.k !== 'op' || !['==', '!=', '<>', '<', '>', '<=', '>='].includes(t.v)) return a;
+      if (t.k !== 'op' || !['==', '!=', '<>', '<', '>', '<=', '>=', '=~', '!~'].includes(t.v)) return a;
       this.p++;
+      if (t.v === '=~' || t.v === '!~') {
+        // regex match of the whole string (boost::regex_match, as in the C++ engine)
+        const re = this.peek();
+        let pat: string;
+        if (re.k === 're' || re.k === 'str') { this.p++; pat = re.v; } else pat = str(this.add());
+        if (this.exec) { const hit = new RegExp(`^(?:${pat})$`, 's').test(str(a)); a = bval(t.v === '=~' ? hit : !hit); }
+        continue;
+      }
       const b = this.add();
       if (!this.exec) continue;
       const strs = a.t === 'string' || b.t === 'string';
@@ -334,6 +358,39 @@ class Parser {
           if (!missing && t.v === 'empty' && id.k === 'id') { const v = this.m.lookup(id.v); missing = v.t === 'vector' ? v.v.length === 0 : str(v) === ''; }
           return bval(missing);
         }
+        if (t.v === 'interpolate_table') {
+          // interpolate_table(x, (x0, y0), (x1, y1), …): linear between the points, clamped at the ends
+          this.eat('(');
+          const x = this.expr();
+          const pts: [number, number][] = [];
+          while (this.isOp(',')) {
+            this.p++;
+            this.eat('(');
+            const px = this.expr(); this.eat(','); const py = this.expr();
+            this.eat(')');
+            if (this.exec) pts.push([num(px, 'interpolate_table'), num(py, 'interpolate_table')]);
+          }
+          this.eat(')');
+          if (!this.exec) return dval(0);
+          const xv = num(x, 'interpolate_table');
+          if (!pts.length) throw new PlaceholderError('interpolate_table: no points');
+          pts.sort((p, q) => p[0] - q[0]);
+          if (xv <= pts[0][0]) return dval(pts[0][1]);
+          for (let k = 1; k < pts.length; k++) {
+            const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
+            if (xv <= x1) return dval(x1 === x0 ? y1 : y0 + ((y1 - y0) * (xv - x0)) / (x1 - x0));
+          }
+          return dval(pts[pts.length - 1][1]);
+        }
+        if (t.v === 'size') {
+          this.eat('(');
+          const id = this.peek();
+          this.p++;
+          this.eat(')');
+          if (!this.exec) return ival(0);
+          const v = id.k === 'id' ? this.m.lookup(id.v) : ival(0);
+          return ival(v.t === 'vector' ? v.v.length : 1);
+        }
         const a = this.args();
         if (!this.exec) return ival(0);
         const n = (k: number) => num(a[k], t.v);
@@ -345,6 +402,8 @@ class Parser {
           }
           case 'int': return ival(Math.trunc(n(0)));
           case 'round': return ival(Math.round(n(0)));
+          case 'ceil': return ival(Math.ceil(n(0)));
+          case 'floor': return ival(Math.floor(n(0)));
           case 'digits': case 'zdigits': {
             const width = Math.trunc(n(1)), prec = a[2] ? Math.trunc(n(2)) : 0;
             const s = n(0).toFixed(prec);
@@ -382,6 +441,9 @@ function split(tpl: string): Piece[] {
     if (c === '[') {
       const m = /^\[([A-Za-z_][A-Za-z0-9_]*)\]/.exec(tpl.slice(i));
       if (m) { flush(); out.push({ k: 'legacy', name: m[1], raw: m[0] }); i += m[0].length; continue; }
+      // [name[index]]: element of a vector (legacy form with an expression index)
+      const mi = /^\[([A-Za-z_][A-Za-z0-9_]*)\[([^\[\]{}]+)\]\]/.exec(tpl.slice(i));
+      if (mi) { flush(); out.push({ k: 'block', v: `${mi[1]}[${mi[2]}]` }); i += mi[0].length; continue; }
     }
     if (c === '{') {
       // the matching brace, skipping string literals and nested braces

@@ -221,9 +221,12 @@ export function startCalibration(id: CalibId, p: CalibParams) {
   const s = useStore.getState();
   if (s.objects.length && !confirm('Start a calibration? The current plate will be replaced (save your project first if needed).')) return null;
   const r = buildCalibration(id, p, s.printerId, s.filaments[0].presetId);
+  // drop the previous test's settings (e.g. the MVS vase's spiral mode) so they do not leak into this one
+  const kept = { ...s.overrides };
+  for (const k of Object.keys(useCalibration.getState().last?.result.overrides ?? {})) delete kept[k];
   s.set({
     objects: r.objects, selected: [], selectedPart: null, undoStack: [], redoStack: [],
-    overrides: { ...s.overrides, ...r.overrides },
+    overrides: { ...kept, ...r.overrides },
     plates: [{ id: 'plate1', name: 'Plate 1', layerActions: r.layerActions, ...(r.program ? { program: r.program } : {}) }], activePlate: 0,
     project: { ...emptyProject(), title: CALIBRATIONS.find((c) => c.id === id)!.title, notes: r.howTo },
     slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },

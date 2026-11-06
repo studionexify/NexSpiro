@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FILAMENT_PAGES, FILAMENT_PARAMS, NULLABLE_FILAMENT_KEYS, filamentConfig } from '../profiles/filamentParams';
 import { MACHINE_PAGES, MACHINE_PARAMS } from '../profiles/machineParams';
 import { effectiveNozzle, machineConfig } from '../profiles/resolve';
@@ -10,8 +10,21 @@ import { useStore } from '../state/store';
 import { Icon } from './icons';
 
 export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+  const bg = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose); close.current = onClose;
+  // Esc closes the dialog (the topmost one only, when dialogs are stacked)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const all = document.querySelectorAll('.modal-bg');
+      if (all[all.length - 1] !== bg.current) return;
+      e.preventDefault(); e.stopPropagation(); close.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
   return (
-    <div className="modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div ref={bg} className="modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" role="dialog" aria-label={title}>
         <header>{title}<span className="spacer" /><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button></header>
         <div className="body">{children}</div>

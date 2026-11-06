@@ -2,12 +2,13 @@
 // plus Metadata/nexspiro_project.json with the full scene state, settings and project notes.
 import JSZip from 'jszip';
 import { saveFile } from '../platform';
-import { emptyProject, newId, objectMatrix, useStore, type FilamentSlotState, type Plate, type ProjectInfo, type SceneObject } from './store';
+import { emptyProject, newId, objectMatrix, objectPlate, useStore, type FilamentSlotState, type Plate, type ProjectInfo, type SceneObject } from './store';
 import { migrateConfig, type Config } from '../profiles/settings';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 import { mergeUserPresets } from './userPresets';
 import type { PatternexProjectData } from '../plugins/patternex/ui/state';
 import type { PrimSpec } from './ops';
+import { sequenceToBambu } from '../engine/toolmap';
 
 const VERSION = 2; // 2: current setting keys (see migrateConfig)
 
@@ -59,6 +60,21 @@ const xform = (o: SceneObject) => {
   return [e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10], e[12], e[13], e[14]].map((x) => +x.toFixed(6)).join(' ');
 };
 
+const xmlAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+/** Bambu / Orca plate settings (Metadata/model_settings.config): plate names, locks, the objects on each plate and the
+ *  filament printing sequence, under Bambu's keys so the plates carry over to Bambu Studio. */
+export function plateSettingsXml(plates: Plate[], objPlates: number[]): string {
+  const md = (k: string, v: string) => `    <metadata key="${k}" value="${xmlAttr(v)}"/>\n`;
+  const body = plates.map((p, i) => {
+    let x = `  <plate>\n${md('plater_id', String(i + 1))}${md('plater_name', p.name)}${md('locked', p.locked ? 'true' : 'false')}`;
+    if (p.printSequence) x += md('print_sequence', p.printSequence);
+    if (p.filamentSequence) for (const [k, v] of Object.entries(sequenceToBambu(p.filamentSequence))) x += md(k, v);
+    objPlates.forEach((pl, k) => { if (pl === i) x += `    <model_instance>\n  ${md('object_id', String(k + 1))}  ${md('instance_id', '0')}    </model_instance>\n`; });
+    return x + '  </plate>\n';
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${body}</config>\n`;
+}
+
 export async function buildProject(): Promise<Uint8Array> {
   const s = useStore.getState();
   const zip = new JSZip();
@@ -109,6 +125,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     })),
   };
   zip.file('Metadata/nexspiro_project.json', JSON.stringify(json));
+  zip.file('Metadata/model_settings.config', plateSettingsXml(s.plates, objs.map((o) => objectPlate(o, s.printerId, s.plates.length))));
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 }
 
