@@ -10,6 +10,7 @@ export interface FoundPrinter {
   host: string;
   name?: string;
   serial?: string;
+  hostname?: string; // Klipper host name (stable when the IP changes)
   model?: string; // vendor model code, e.g. N2S (A1), C12 (P1S), BL-P001 (X1C)
 }
 
@@ -61,7 +62,9 @@ async function probeMoonraker(host: string, found: Map<string, FoundPrinter>) {
     if (!r.ok) return;
     const j: any = await r.json();
     if (!j?.result?.klippy_state && !j?.result?.moonraker_version) return;
-    found.set(`moonraker:${host}`, { kind: 'moonraker', host, name: `Klipper @ ${host}` });
+    let hostname: string | undefined;
+    try { hostname = ((await (await fetch(`http://${host}:7125/printer/info`, { signal: ctl.signal })).json()) as any)?.result?.hostname || undefined; } catch { /* optional */ }
+    found.set(`moonraker:${host}`, { kind: 'moonraker', host, hostname, name: hostname ?? `Klipper @ ${host}` });
   } catch { /* not a printer */ } finally { clearTimeout(t); }
 }
 

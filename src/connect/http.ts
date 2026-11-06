@@ -140,7 +140,11 @@ export class MoonrakerConnection extends HttpPrinter {
     try {
       const r = await this.req('/server/webcams/list');
       const cam = (r.result?.webcams ?? []).find((w: any) => w.enabled !== false);
-      if (cam) return absUrl(this.base, cam.stream_url || cam.snapshot_url);
+      if (cam) {
+        // WebRTC / HLS streams can't play in an <img>; use the JPEG snapshot (polled by the viewer) instead.
+        const mjpeg = !cam.service || /mjpeg|uv4l/i.test(cam.service);
+        return absUrl(this.base, (mjpeg && cam.stream_url) || cam.snapshot_url || '/webcam/?action=snapshot');
+      }
     } catch { /* older Moonraker */ }
     return absUrl(this.base, '/webcam/?action=stream');
   }

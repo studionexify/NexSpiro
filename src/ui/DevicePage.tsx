@@ -48,7 +48,7 @@ export function DevicePage() {
   const known = (f: FoundPrinter) => devices.some((d) => d.config.host === f.host || (f.serial && d.config.serial === f.serial));
   const addFound = (f: FoundPrinter) => {
     const p = PRINTERS.find((x) => f.model && x.printerModelId === f.model) ?? printerById(useStore.getState().printerId);
-    setEdit({ id: newId(), name: f.name || p.model, printerId: p.id, config: { kind: f.kind, host: f.host, serial: f.serial } });
+    setEdit({ id: newId(), name: f.name || p.model, printerId: p.id, config: { kind: f.kind, host: f.host, serial: f.serial, hostname: f.hostname } });
   };
 
   const newDevice = () => {
@@ -282,6 +282,15 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
   const [rtsp, setRtsp] = useState<string | null>(null);
   const [on, setOn] = useState(false);
+  const [snap, setSnap] = useState<string | null>(null); // JPEG snapshot URL polled when there is no MJPEG stream
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!snap) return;
+    const t = setInterval(() => setTick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [snap]);
+  const toSnapshot = (u: string) => u.replace(/action=stream/, 'action=snapshot').replace(/\/stream(\b|$)/, '/snapshot');
+  useEffect(() => { if (!on || !online) setSnap(null); }, [on, online]);
   useEffect(() => {
     if (!on || !online) { setSrc(null); return; }
     let stop: (() => void) | null = null, dead = false;
@@ -291,7 +300,7 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
         stop = await h.camera((u) => { if (!dead) setSrc(u); });
         if (!stop) {
           const u = await h.cameraUrl();
-          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead) setSrc(u);
+          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead && u) { if (/snapshot/i.test(u)) setSnap(u); else setSrc(u); }
         }
       } catch (e: any) { toast('warn', `Camera: ${e?.message ?? e}`); }
     })();
@@ -302,7 +311,8 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
       <div className="row" style={{ marginBottom: 8 }}><h3 style={{ margin: 0 }}>Camera</h3><span className="spacer" />
         <button className="btn-secondary btn-small" disabled={!online} onClick={() => setOn(!on)}><Icon name="eye" size={14} />{on ? 'Stop' : 'Start'}</button></div>
       <div className="camera-view">
-        {src ? <img src={src} alt="Printer camera" /> : rtsp ? (
+        {snap ? <img src={`${snap}${snap.includes('?') ? '&' : '?'}t=${tick}`} alt="Printer camera" />
+          : src ? <img src={src} alt="Printer camera" onError={() => { if (!src.startsWith('blob:')) { setSnap(toSnapshot(src)); setSrc(null); } }} /> : rtsp ? (
           <p className="muted" style={{ padding: 16, fontSize: 12 }}>This printer streams RTSPS video. Open it in VLC: <span className="mono" style={{ userSelect: 'all', wordBreak: 'break-all' }}>{rtsp}</span></p>
         ) : <span className="muted">{online ? (on ? 'Waiting for the first frame…' : 'Camera off') : 'Offline'}</span>}
       </div>

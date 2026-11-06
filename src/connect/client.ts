@@ -19,7 +19,7 @@ export interface DeviceBridge {
 }
 
 /** A printer seen on the local network (desktop only). */
-export interface FoundPrinter { kind: 'bbl_lan' | 'moonraker'; host: string; name?: string; serial?: string; model?: string }
+export interface FoundPrinter { kind: 'bbl_lan' | 'moonraker'; host: string; name?: string; serial?: string; hostname?: string; model?: string }
 
 /** Scan the Wi-Fi/LAN for printers (~6 s). Empty in the browser build. */
 export async function discoverPrinters(): Promise<FoundPrinter[]> {
