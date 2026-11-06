@@ -379,3 +379,5 @@ label.sxw-show { display: flex; padding: 3px 0; }
 .sxw-x:hover { background: var(--surface-secondary, rgba(127,127,127,0.18)); color: var(--text-primary); }
 .sxw-rule { position: relative; }
 .sxw-rule-x { position: absolute; top: 6px; right: 6px; }
+.sxw-undo { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 8px; margin: 4px 0; border-radius: 6px; background: var(--surface-tertiary, rgba(127,127,127,0.12)); }
+.sxw-undo span { flex: 1; min-width: 0; }

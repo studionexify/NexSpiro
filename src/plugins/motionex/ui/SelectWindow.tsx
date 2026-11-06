@@ -70,12 +70,23 @@ const objAt = (boxes: ObjBox[], x: number, y: number, z: number) =>
 /** Makes the rule's selection of this kind, asking before a selection of another kind is thrown away. */
 function ensureKind(r: SelectRule, kind: PickKind): boolean {
   if (r.pick.kind === kind) return true;
-  if (!pickEmpty(r.pick) && !confirm(`"${r.name}" has a ${r.pick.kind} selection. Replace it with a ${kind} selection?`)) return false;
+  // no confirm(): pages in a sandboxed frame (the web app) can't show one, and it then always says no.
+  // The old selection is kept for Undo instead.
+  if (!pickEmpty(r.pick)) { const old = structuredClone(r.pick); offerUndo(`"${r.name}": ${r.pick.kind} selection replaced`, () => { r.pick = old; }); }
   r.pick = kind === 'layers' ? { kind, z0: 0, z1: 0 } : kind === 'lines' ? { kind, lines: [] } : { kind, dabs: [] };
   return true;
 }
 
+/** The last thing that can be undone (a deleted rule, a replaced selection), shown as a bar with an Undo button. */
+let undoSlot: { text: string; restore: () => void } | null = null;
+const undoListeners = new Set<() => void>();
+function offerUndo(text: string, restore: () => void) { undoSlot = { text, restore }; undoListeners.forEach((l) => l()); }
+const useUndo = () => useSyncExternalStore((l) => { undoListeners.add(l); return () => undoListeners.delete(l); }, () => undoSlot);
+
 function SelectWindow() {
+  const undo = useUndo();
+  // the Undo bar goes away after a while
+  useEffect(() => { if (!undo) return; const t = setTimeout(() => { if (undoSlot === undo) { undoSlot = null; undoListeners.forEach((l) => l()); } }, 10000); return () => clearTimeout(t); }, [undo]);
   useMx();
   const sliced = useStore((s) => s.slice.result);
   const objects = useStore((s) => s.objects);
@@ -366,6 +377,7 @@ function SelectWindow() {
             <div className="sxw-sec">
               <div className="sxw-title">Rules<span style={{ flex: 1 }} /><button className="btn-secondary btn-small" onClick={addRule}>New rule</button></div>
               {!mx.rules.length && <p className="sxw-muted">Make a rule, choose Layers, Lines or Brush above the view, and pick on the print. Then choose what changes there.</p>}
+              {undo?.text && <div className="sxw-undo" role="status"><span>{undo.text}</span><button className="btn-secondary btn-small" onClick={() => { undo.restore(); undoSlot = null; undoListeners.forEach((l) => l()); changed(); }}>Undo</button></div>}
               <div className="sxw-rules">
                 {mx.rules.map((r, i) => (
                   <div key={r.id} className={`sxw-rule${r.id === activeId ? ' on' : ''}${ruleActive(r) ? '' : ' idle'}`} onClick={() => setActiveId(r.id)}>
@@ -375,7 +387,15 @@ function SelectWindow() {
                     <div className="sxw-rule-btns">
                       <button disabled={i === 0} onClick={(e) => { e.stopPropagation(); mx.rules.splice(i - 1, 0, ...mx.rules.splice(i, 1)); changed(); }} title="Earlier: rules lower in the list win where they set the same thing">Up</button>
                       <button disabled={i === mx.rules.length - 1} onClick={(e) => { e.stopPropagation(); mx.rules.splice(i + 1, 0, ...mx.rules.splice(i, 1)); changed(); }}>Down</button>
-                      <button onClick={(e) => { e.stopPropagation(); if (!confirm(`Delete "${r.name}"?`)) return; mx.rules.splice(i, 1); if (r.id === activeId) setActiveId(mx.rules[0]?.id ?? null); changed(); }}>Delete</button>
+                      <button onClick={(e) => {
+                        e.stopPropagation();
+                        const k = mx.rules.indexOf(r);
+                        if (k < 0) return;
+                        mx.rules.splice(k, 1);
+                        if (r.id === activeId) setActiveId(mx.rules[0]?.id ?? null);
+                        offerUndo(`Deleted "${r.name}"`, () => { mx.rules.splice(Math.min(k, mx.rules.length), 0, r); setActiveId(r.id); });
+                        changed();
+                      }} title="Delete this rule (Undo brings it back)">Delete</button>
                     </div>
                   </div>
                 ))}
