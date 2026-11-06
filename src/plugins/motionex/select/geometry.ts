@@ -70,19 +70,39 @@ export function piecesAt(r: SelectRule, z: number, h: number, now?: Record<strin
     if (zf > 0) out.push({ polys: null, zf, obj: p.obj });
     return out;
   }
+  // picked lines and dabs with a set spread: whole layers above and below, fading or not
+  const sp = r.spread;
+  const spreadF = (pz: number) => {
+    const k = Math.round((z - pz) / Math.max(1e-3, h));
+    if (k === 0) return Math.abs(z - pz) <= tol ? 1 : 0;
+    const n = k > 0 ? sp!.above : sp!.below, a = Math.abs(k);
+    if (a > n) return 0;
+    return exact || sp!.fade === 'sudden' ? 1 : 1 - a / (n + 1);
+  };
   if (p.kind === 'lines') {
     for (const l of p.lines) {
-      const zf = zfOf(Math.abs(l.z - z));
+      const zf = sp ? spreadF(l.z) : zfOf(Math.abs(l.z - z));
       if (zf <= 0) continue;
       const [dx, dy] = shiftOf(r, l.obj, now);
       // on its own layer the strip covers that line only; above and below, a full line width
-      const polys = stripPolys(l.pts, zf === 1 && !exact ? l.w * 0.45 : l.w * 0.5, dx, dy);
+      const own = Math.abs(l.z - z) <= tol;
+      const polys = stripPolys(l.pts, own && !exact ? l.w * 0.45 : l.w * 0.5, dx, dy);
       if (!polys.length) continue;
-      out.push({ polys, box: box(polys, blend), zf, obj: l.obj, features: zf === 1 ? new Set([l.feature]) : undefined });
+      // with a spread, the layers above and below change the same kind of line as the picked one
+      out.push({ polys, box: box(polys, blend), zf, obj: l.obj, features: own || sp ? new Set([l.feature]) : undefined });
     }
     return out;
   }
   for (const d of p.dabs) {
+    if (sp && (sp.above || sp.below)) {
+      // the dab's own circle (as at its centre height) carried up and down the spread
+      const zf = spreadF(d.z);
+      if (zf <= 0 && Math.abs(d.z - z) >= d.r) continue;
+      const [dx, dy] = shiftOf(r, d.obj, now);
+      const polys = [circlePoly(d.x + dx, d.y + dy, d.r)];
+      out.push({ polys, box: box(polys, blend), zf: Math.max(zf, Math.abs(d.z - z) < d.r ? 1 : 0), obj: d.obj });
+      continue;
+    }
     const dz = Math.abs(d.z - z);
     if (dz >= d.r + blend) continue;
     const [dx, dy] = shiftOf(r, d.obj, now);

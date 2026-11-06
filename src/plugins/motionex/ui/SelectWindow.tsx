@@ -371,6 +371,7 @@ function SelectWindow() {
                   <div key={r.id} className={`sxw-rule${r.id === activeId ? ' on' : ''}${ruleActive(r) ? '' : ' idle'}`} onClick={() => setActiveId(r.id)}>
                     <input type="checkbox" checked={r.enabled} aria-label="Rule on" onClick={(e) => e.stopPropagation()} onChange={(e) => { r.enabled = e.target.checked; changed(); }} />
                     <div className="sxw-rule-text"><b>{r.name}</b><span>{describePick(r.pick)} · {summary(r, filaments.length)}</span></div>
+                    {r.id === activeId && <button className="sxw-x sxw-rule-x" aria-label="Deselect rule" title="Deselect this rule (it stays in the list)" onClick={(e) => { e.stopPropagation(); setActiveId(null); }}>×</button>}
                     <div className="sxw-rule-btns">
                       <button disabled={i === 0} onClick={(e) => { e.stopPropagation(); mx.rules.splice(i - 1, 0, ...mx.rules.splice(i, 1)); changed(); }} title="Earlier: rules lower in the list win where they set the same thing">Up</button>
                       <button disabled={i === mx.rules.length - 1} onClick={(e) => { e.stopPropagation(); mx.rules.splice(i + 1, 0, ...mx.rules.splice(i, 1)); changed(); }}>Down</button>
@@ -514,6 +515,17 @@ function RuleEditor({ r, oneObject, setOneObject, lc, limited }: { r: SelectRule
       <div className="sxw-row"><span className="sxw-lbl">Selection</span><span className="sxw-val">{describePick(p)}</span>
         <button className="btn-secondary btn-small" disabled={pickEmpty(p)} onClick={() => set(() => { r.pick = p.kind === 'layers' ? { kind: 'layers', z0: 0, z1: 0 } : p.kind === 'lines' ? { kind: 'lines', lines: [] } : { kind: 'brush', dabs: [] }; r.anchors = {}; })}>Clear</button>
       </div>
+      {p.kind === 'lines' && p.lines.length > 0 && (
+        <div className="sxw-picks">
+          {p.lines.map((l, k) => (
+            <div key={k} className="sxw-pick">
+              <span>{l.pts.length === 2 ? 'Segment' : 'Line'} · {featureLabel(l.feature)} · {l.z.toFixed(2)} mm</span>
+              <button className="sxw-x" aria-label="Take this line out" title="Take this line out of the selection" onClick={() => set(() => { p.lines.splice(k, 1); })}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {p.kind !== 'layers' && <SpreadEditor r={r} />}
       {p.kind === 'layers' && <>
         <div className="sxw-row"><span className="sxw-lbl">From</span><input className="input" type="number" step={0.01} value={p.z0} onChange={(e) => set(() => { p.z0 = +e.target.value || 0; })} /><span className="sxw-unit">mm</span></div>
         <div className="sxw-row"><span className="sxw-lbl">To</span><input className="input" type="number" step={0.01} value={p.z1} onChange={(e) => set(() => { p.z1 = +e.target.value || 0; })} /><span className="sxw-unit">mm</span></div>
@@ -541,7 +553,7 @@ function RuleEditor({ r, oneObject, setOneObject, lc, limited }: { r: SelectRule
       <Num label="Speed" value={r.apply.speed} unit="%" min={10} max={300} onChange={(v) => set(() => { r.apply.speed = v; })} />
       <Num label="Flow" value={r.apply.flow} unit="%" min={10} max={200} onChange={(v) => set(() => { r.apply.flow = v; })} />
       <Num label="Temperature" value={r.apply.temp} unit="°C" min={150} max={320} onChange={(v) => set(() => { r.apply.temp = v; })} title="Set per layer: a hotend needs 10–30 s to settle, so it cannot change for single lines" />
-      <div className="sxw-row" title="Speed, flow and motion fade in and out over this distance around the selection, along the layer and up and down. Filament changes are always sharp."><span className="sxw-lbl">Soft edge</span><input className="input" type="number" min={0} max={20} step={0.5} value={r.blend_mm} onChange={(e) => set(() => { r.blend_mm = Math.max(0, Math.min(20, +e.target.value || 0)); })} /><span className="sxw-unit">mm</span></div>
+      <div className="sxw-row" title="Speed, flow and motion fade in and out over this distance around the selection along the layer (and up and down for layer ranges). Filament changes are always sharp."><span className="sxw-lbl">Soft edge</span><input className="input" type="number" min={0} max={20} step={0.5} value={r.blend_mm} onChange={(e) => set(() => { r.blend_mm = Math.max(0, Math.min(20, +e.target.value || 0)); })} /><span className="sxw-unit">mm</span></div>
       <p className="sxw-muted">Rules lower in the list win where two set the same thing; different changes add up.</p>
     </div>
   );
@@ -638,4 +650,37 @@ function fromLines(r: SelectRule): RuleTargets {
   if (!r.lines.length) return { ...ALL_TARGETS };
   const h = (g: string) => r.lines.includes(g as never);
   return { outer: h('outer'), inner: h('inner') ? [1, 99] : null, infill: h('infill'), top: h('solid') ? [1, 99] : null, bottom: h('solid') ? [1, 99] : null, solid: h('solid'), support: h('support'), shape: 'any' };
+}
+
+const FEATURE_LABEL: Record<string, string> = { outer_wall: 'outer wall', overhang_wall: 'overhang wall', inner_wall: 'inner wall', sparse_infill: 'infill', internal_solid_infill: 'solid infill', top_surface: 'top', bottom_surface: 'bottom', bridge: 'bridge', gap_infill: 'gap fill', support: 'support', support_interface: 'support interface' };
+const featureLabel = (f: string) => FEATURE_LABEL[f] ?? f.replace(/_/g, ' ');
+
+/** How many layers above and below a picked line or brushed area reaches, and whether the change fades over them. */
+function SpreadEditor({ r }: { r: SelectRule }) {
+  const sp = r.spread ?? { above: 0, below: 0, fade: 'gradual' as const };
+  const put = (n: Partial<typeof sp>) => { r.spread = { ...sp, ...n }; changed(); };
+  const num = (key: 'above' | 'below', label: string) => (
+    <div className="sxw-row" title={`Also change the same lines this many layers ${key}`}>
+      <span className="sxw-lbl">{label}</span>
+      <input className="input" type="number" min={0} max={200} step={1} value={sp[key]} onChange={(e) => { const v = Math.round(+e.target.value); if (v >= 0) put({ [key]: Math.min(200, v) }); }} />
+      <span className="sxw-unit">layers</span>
+    </div>
+  );
+  return (
+    <>
+      <div className="sxw-sub">Reach up and down</div>
+      {num('above', 'Layers above')}
+      {num('below', 'Layers below')}
+      {(sp.above > 0 || sp.below > 0) && (
+        <div className="sxw-row" title="Gradual: the change gets weaker layer by layer away from the pick. Sudden: full strength on every layer it reaches, then stops">
+          <span className="sxw-lbl">Change</span>
+          <div className="sxw-chips">
+            <button className={sp.fade === 'gradual' ? 'on' : ''} onClick={() => put({ fade: 'gradual' })}>Gradual</button>
+            <button className={sp.fade === 'sudden' ? 'on' : ''} onClick={() => put({ fade: 'sudden' })}>Sudden</button>
+          </div>
+        </div>
+      )}
+      {!r.spread && <p className="sxw-muted">This older rule fades over the soft edge instead. Set a number to choose layers exactly.</p>}
+    </>
+  );
 }
