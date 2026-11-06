@@ -191,7 +191,14 @@ describe('calibration routines', () => {
   });
   it('retraction test increases retraction length', () => {
     const { out } = sliceCal('retraction');
-    const lens = new Set([...out.gcode.matchAll(/^G1 E-([\d.]+) F/gm)].map((m) => +m[1]));
+    // a retraction may run during the wipe (Bambu: retract_before_wipe 0 %): sum each run of E- moves
+    const lens: number[] = [];
+    let run = 0;
+    for (const l of out.gcode.split('\n')) {
+      const m = /^G1 (?:[XYZ][-\d.]+ )*E-([\d.]+)/.exec(l);
+      if (m) run += +m[1];
+      else if (/^G[0123] /.test(l) && run) { lens.push(run); run = 0; }
+    }
     expect(Math.max(...lens)).toBeGreaterThan(1.5);
   });
 });

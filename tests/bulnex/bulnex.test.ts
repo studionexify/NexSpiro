@@ -38,8 +38,11 @@ describe('bulnex g-code', () => {
     const cfg = { ...DEFAULT_BULNEX, cycles: 3, passes: 2, coolWaitMin: 2 };
     const out = slice([mesh(box(120, 20, 0, 16, 16, 12))], cfgFor(), () => {}, { plugins: { bulnex: cfg } });
     const g = out.gcode;
-    expect(g.match(/^G28/gm)?.length).toBe(1);
-    expect(g.match(/^G29/gm)?.length).toBe(1);
+    // homing and levelling happen in the start G-code only (the A1 runs Bambu's own), never between cycles
+    const body = g.split(';===== end of start G-code =====')[1] ?? '';
+    expect(g.match(/^G28/gm)?.length).toBeGreaterThan(0);
+    expect(body.match(/^G28/gm)).toBeNull();
+    expect(body.match(/^G29\b/gm)).toBeNull();
     expect(g.match(/BULNEX eject/g)?.length).toBe(3);
     expect(g.match(/^;LAYER_CHANGE/gm)?.length).toBe(out.stats.layerCount * 3);
     expect(g.match(/^; push \d of 2/gm)?.length).toBe(6);

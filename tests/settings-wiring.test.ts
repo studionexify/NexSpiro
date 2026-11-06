@@ -501,5 +501,5 @@ describe('the last eleven settings', () => {
   it('filename format expands placeholders', async () => {
     const { formatFilename } = await import('../src/state/printjob');
     expect(formatFilename('[input_filename_base]_[layer_height]mm_[filament_type]_[print_time].gcode', { base: 'cube', plate: 'Plate 1', cfg: { layer_height: 0.2, filament_type: 'PLA' }, seconds: 3725, grams: 1 }, 'gcode')).toBe('cube_0.2mm_PLA_1h2m.gcode');
-  });
+  }, 20_000); // the first dynamic import can take over 5 s while the whole suite runs
 });
