@@ -19,7 +19,9 @@ import { Icon } from './icons';
 import { FilamentModal, Modal, PrinterModal } from './Modals';
 import { ParamRow } from './ParamRow';
 import { collapseAllObjects, expandAllObjects, toggleObjectRow, useTree } from '../state/tree';
-import { autoChanges, changerLabel } from '../profiles/changer';
+import { autoChanges, changerLabel, changerOf } from '../profiles/changer';
+import { mixesAfterSlotRemoved } from '../profiles/mixing';
+import { ColorMixingSection, shiftFilamentRefs } from './ColorMixing';
 
 /** Collapsed state of the sidebar sections, kept between sessions. */
 const COLLAPSE_KEY = 'nexspiro.sidebar.collapsed.v1';
@@ -184,7 +186,7 @@ export function FilamentCard() {
       filament: o.filament === k ? 0 : o.filament !== undefined && o.filament > k ? o.filament - 1 : o.filament,
       paint: o.paint?.color ? { ...o.paint, color: o.paint.color.map((c) => (c === k + 1 ? 0 : c > k + 1 ? c - 1 : c)) } : o.paint,
     }), st.objects.map((o) => o.id));
-    set({ filaments: filaments.filter((_, i) => i !== k), flushMatrix: null });
+    set({ filaments: filaments.filter((_, i) => i !== k), mixes: mixesAfterSlotRemoved(st.mixes, k), flushMatrix: null });
   };
   return (
     <section className="card">
@@ -195,7 +197,7 @@ export function FilamentCard() {
         <SyncAmsLink />
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
-          onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
+          onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; if (useStore.getState().mixes.length) shiftFilamentRefs(null, filaments.length, 1); set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
           <Icon name="add" />
         </button>
       </div>
@@ -219,6 +221,7 @@ export function FilamentCard() {
             </div>
           );
         })}
+      {(changerOf(printerById(printerId).machine) === 'toolchanger' || useStore.getState().mixes.length > 0) && <ColorMixingSection />}
       </div></Body>
       {edit !== null && <FilamentModal slot={edit} onClose={() => setEdit(null)} />}
       {flush && <FlushModal onClose={() => setFlush(false)} />}
@@ -439,6 +442,7 @@ export function ObjectsCard() {
                         style={{ background: slotColor(s, o.filament ?? 0) }}
                         onChange={(e) => s.updateObjects((x) => ({ ...x, filament: +e.target.value }), [o.id])}>
                         {s.filaments.map((_, k) => <option key={k} value={k}>{k + 1}</option>)}
+                        {s.mixes.map((m, k) => <option key={`m${k}`} value={s.filaments.length + k}>{s.filaments.length + k + 1} · mix</option>)}
                       </select>
                     </div>
                     {!shut && own > 0 && (

@@ -10,6 +10,7 @@ import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, 
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import type { IndexedMesh } from './mesh';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
+import { mixProblems, resolveFilament } from '../profiles/mixing';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh, type SlicingMode } from './slice';
 import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
@@ -200,6 +201,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const rnd = mulberry(42);
   const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
   const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
+  // mixed filaments (colour mixing): indices after the physical slots resolve to a physical slot per layer
+  const mixes = opts.mixes ?? [];
+  const usedMixes = new Set<number>();
+  const filAt = (f: number, i: number) => {
+    const v = f | 0;
+    if (v >= filaments.length && mixes[v - filaments.length]) usedMixes.add(v - filaments.length);
+    return clampFil(resolveFilament(v, i, filaments.length, mixes));
+  };
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
   const flavor = str('gcode_flavor');
@@ -344,9 +353,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // ---------- multi-material: base filament per layer (colour-change actions) + painted colour regions
   const colorActions = (opts.layerActions ?? []).filter((a) => a.type === 'color' && a.filament !== undefined).sort((a, b) => a.z - b.z);
   const baseFilAt = (o: number, i: number) => {
-    let f = clampFil(meshes[o].filament ?? 0);
-    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = clampFil(a.filament!);
-    return f;
+    let f = meshes[o].filament ?? 0;
+    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = a.filament!;
+    return filAt(f, i);
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
   const paintDepth = num('mmu_paint_depth') || 1.5;
@@ -386,7 +395,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     let out: { fil: number; paths: Paths }[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
-      const fil = clampFil(c - 1);
+      const fil = filAt(c - 1, i);
       const r = taken.length ? difference(paths, taken) : paths;
       if (!r.length) continue;
       out.push({ fil, paths: r });
@@ -403,7 +412,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
       }
       out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
-      out.push({ fil: clampFil(c.fil), paths: r });
+      out.push({ fil: filAt(c.fil, i), paths: r });
     }
     // merge regions sharing a filament
     const merged = new Map<number, Paths>();
@@ -769,7 +778,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const featFil = (o: number, i: number, kind: 'wall' | 'sparse' | 'solid', fallback: number) => {
     const k = kind === 'wall' ? 'wall_filament' : kind === 'sparse' ? 'sparse_infill_filament' : 'solid_infill_filament';
     const v = Math.round(onum(o, i, k));
-    return v > 0 ? clampFil(v - 1) : fallback;
+    return v > 0 ? filAt(v - 1, i) : fallback;
   };
   const flushObj = meshes.map((_, o) => obool(o, objStart, 'flush_into_objects'));
   const layerFils: number[][] = [];
@@ -785,7 +794,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     }
     if (support && supportFil >= 0 && (support.base[i].length)) s.add(supportFil);
     if (support && ifaceFil >= 0 && (support.iface[i].length || support.bottomIface?.[i]?.length)) s.add(ifaceFil);
-    if (!s.size && layerIslands[i].length) s.add(clampFil(meshes[layerIslands[i][0].obj].filament ?? 0));
+    if (!s.size && layerIslands[i].length) s.add(filAt(meshes[layerIslands[i][0].obj].filament ?? 0, i));
     layerFils.push([...s]);
     s.forEach((f) => usedFils.add(f));
   }
@@ -1866,6 +1875,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   if (maxZ + shift > num('bed_z')) warn(`Model height ${(maxZ + shift).toFixed(1)} mm exceeds the printer's maximum height (${num('bed_z')} mm).`);
   if (usedFils.size > 1 && !hasAms) warn(`This print uses ${usedFils.size} filaments; the printer will pause for each manual filament change (${res.stats.toolChanges}).`);
   if (changer === 'ams' && slotCount(cfg) > 0 && Math.max(...usedFils) + 1 > slotCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the filament unit has ${slotCount(cfg)} slots. Move the filaments to slots 1–${slotCount(cfg)}, or swap spools by hand when the printer asks.`);
+  if (usedMixes.size && !toolChanger) warn(`Colour mixing changes filament on every layer. This printer has ${hasAms ? 'one nozzle: each change purges' : 'no automatic changes: it pauses on each change'}; mixing works best on a tool changer (Snapmaker U1).`);
+  for (const k of usedMixes) if (mixProblems(mixes[k], filaments.length).length) warn(`Mixed filament ${filaments.length + k + 1}: ${mixProblems(mixes[k], filaments.length).join(' ')}`);
   if (toolChanger && Math.max(...usedFils) + 1 > toolheadCount(cfg)) warn(`This print uses filament slot ${Math.max(...usedFils) + 1} but the tool changer has ${toolheadCount(cfg)} heads. Slot n prints with head n: move the filaments to slots 1–${toolheadCount(cfg)}.`);
   progress('Done', 1);
   // a program that repeats the print (Bulnex) is longer than the single print the preview and stats describe: say so

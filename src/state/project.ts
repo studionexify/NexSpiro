@@ -24,6 +24,7 @@ interface ProjectJson {
   printerId: string; plate: string; presetId: string;
   overrides: Config; machineOverrides: Config;
   filaments: FilamentSlotState[];
+  mixes?: import('../profiles/mixing').MixedFilament[];
   /** User process presets saved in this project (optional; older projects have none). */
   userPresets?: UserPreset[];
   userPresetId?: string | null;
@@ -96,7 +97,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
   const json: ProjectJson = {
     version: VERSION, app: 'NexSpiro',
     printerId: s.printerId, plate: s.plate, presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-    filaments: s.filaments, plates: s.plates, project,
+    filaments: s.filaments, mixes: s.mixes, plates: s.plates, project,
     userPresets: s.userPresets, userPresetId: s.userPresetId,
     plugins: (await import('../plugins/registry')).pluginProjectData(),
     objects: objs.map((o, i) => ({
@@ -157,7 +158,7 @@ export async function loadProject(data: ArrayBuffer) {
   useStore.getState().set({
     objects, selected: [], selectedPart: null, undoStack: [], redoStack: [],
     printerId: json.printerId, plate: json.plate as any, presetId: json.presetId, overrides: migrateConfig(json.overrides, json.version), machineOverrides: json.machineOverrides ?? {},
-    filaments: json.filaments, plates: json.plates?.length ? json.plates : [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0,
+    filaments: json.filaments, mixes: Array.isArray(json.mixes) ? json.mixes : [], plates: json.plates?.length ? json.plates : [{ id: 'plate1', name: 'Plate 1', layerActions: [] }], activePlate: 0,
     project: { ...emptyProject(), ...json.project, photos },
     slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
     workspace: 'prepare',

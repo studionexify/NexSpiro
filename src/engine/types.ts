@@ -150,6 +150,8 @@ export interface SliceOptions {
   /** Flush volume (mm³) for each [from][to] filament pair; overrides flush_volume. */
   flushMatrix?: number[][];
   layerActions?: LayerAction[];
+  /** Mixed filaments (colour mixing); filament index filaments.length + k is mixes[k]. */
+  mixes?: import('../profiles/mixing').MixedFilament[];
   /** Config for each enabled plugin, keyed by plugin id (plain data). */
   plugins?: Record<string, unknown>;
   /** A drawn calibration program (PA line / pattern) instead of sliced models. */

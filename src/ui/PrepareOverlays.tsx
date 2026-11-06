@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
 import { repairObjects } from '../state/meshTools';
-import { slotColor, useStore, worldBounds, type Tool } from '../state/store';
+import { choiceColors, slotColor, useStore, worldBounds, type Tool } from '../state/store';
+import { mixLabel } from '../profiles/mixing';
 import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
 import { Icon } from './icons';
@@ -262,8 +263,8 @@ export function PaintPanel() {
       )}
       {s.tool === 'paint_color' && (
         <div className="palette">
-          {s.filaments.map((f, k) => (
-            <button key={k} className={`pal ${s.paintColor === k + 1 ? 'on' : ''}`} style={{ background: f.color }} onClick={() => s.set({ paintColor: k + 1 })} title={`Filament ${k + 1}`}>{k + 1}</button>
+          {choiceColors(s).map((c, k) => (
+            <button key={k} className={`pal ${s.paintColor === k + 1 ? 'on' : ''}`} style={{ background: c }} onClick={() => s.set({ paintColor: k + 1 })} title={k < s.filaments.length ? `Filament ${k + 1}` : `Filament ${k + 1} · mix ${mixLabel(s.mixes[k - s.filaments.length])}`}>{k + 1}</button>
           ))}
           {s.filaments.length < 2 && <div style={{ color: 'var(--text-muted)' }}>Add a second filament in the Filament panel to paint colours.</div>}
         </div>

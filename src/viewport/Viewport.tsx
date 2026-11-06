@@ -14,7 +14,7 @@ import { circleFeature, measure, pickFeature } from '../state/measure';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { printerById } from '../profiles/printers';
 import {
-  dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, trsMatrix, useStore,
+  choiceColors, dropToBed, isOutOfBounds, newId, objectPlate, worldBounds, objectMatrix, plateAt, plateOrigin, trsMatrix, useStore,
   type ObjectPaint, type Vec3, type SceneObject, type ScenePart, type Tool,
 } from '../state/store';
 import { layOnFace, silhouette } from '../state/ops';
@@ -677,7 +677,7 @@ export function Viewport() {
 
     const syncObjects = () => {
       const s = useStore.getState();
-      const slots = s.filaments.map((f) => f.color);
+      const slots = choiceColors(s);
       const keep = new Set(s.objects.map((o) => o.id));
       for (const [id, m] of meshes) if (!keep.has(id)) { disposeMesh(m.mesh); meshes.delete(id); }
       const keepParts = new Set(s.objects.flatMap((o) => (o.parts ?? []).map((p) => p.id)));
@@ -1104,7 +1104,7 @@ export function Viewport() {
       } else if (type === 'gap_fill') {
         let changedGap = false;
         for (const g of gapFill(o.mesh, arr, s.gapArea / (scale * scale))) for (const t of g.tris) { arr[t] = g.value; changedGap = true; }
-        if (changedGap) { paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color)); invalidate(); }
+        if (changedGap) { paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, choiceColors(s)); invalidate(); }
         return;
       } else {
         // circle: the part of the sphere facing the camera (the circle is projected along the view); sphere: everything inside
@@ -1135,7 +1135,7 @@ export function Viewport() {
         if (arr[t] !== painting.value) { arr[t] = painting.value; changed = true; }
       }
       if (changed) {
-        paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color));
+        paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, choiceColors(s));
         invalidate();
       }
     };
@@ -1216,7 +1216,7 @@ export function Viewport() {
         if (!a) { a = { adj: triAdjacency(o.mesh), normals: triNormals(o.mesh) }; adjCache.set(o.mesh, a); }
         const arr = o.paint!.motion!;
         for (const t of growFaces(o.mesh, hit.faceIndex, s.motionGrowAngle, a.adj, a.normals)) if (value || arr[t] === s.motionSet) arr[t] = value;
-        paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, s.filaments.map((f) => f.color));
+        paintColors(meshes.get(id)!.mesh.geometry, o, s.tool, choiceColors(s));
         invalidate();
       }
       capture(ev);

@@ -13,6 +13,7 @@ import { printerById } from '../profiles/printers';
 import { CONFIG_VERSION, migrateConfig, type Config, type ProcessTab } from '../profiles/settings';
 import type { ObjectPatternex } from '../plugins/patternex/ui/state';
 import { filamentById } from '../profiles/filaments';
+import { mixColor, type MixedFilament } from '../profiles/mixing';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
@@ -125,6 +126,8 @@ interface State {
   printerId: string;
   plate: PlateType;
   filaments: FilamentSlotState[];
+  /** Mixed filaments (colour mixing); numbered after the physical filaments. */
+  mixes: MixedFilament[];
   presetId: string;
   overrides: Config;
   /** Saved user process presets and the one last applied / saved (null = a system preset). */
@@ -310,6 +313,7 @@ export const useStore = create<State>((set, get) => ({
   printerId: prefs.printerId ?? 'bbl-p1s',
   plate: (prefs.plate as PlateType) ?? 'textured_pei_plate',
   filaments: defaultFilaments(),
+  mixes: Array.isArray(prefs.mixes) ? prefs.mixes : [],
   presetId: prefs.presetId ?? '0.20',
   overrides: migrateConfig(prefs.overrides, prefs.configVersion ?? 1),
   userPresets: loadUserPresets(),
@@ -420,7 +424,7 @@ let lastUserPresets: UserPreset[] | null = null;
 useStore.subscribe((s) => {
   try {
     localStorage.setItem(LS, JSON.stringify({
-      theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
+      theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments, mixes: s.mixes,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
       plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, colorScheme: s.colorScheme, myPrinters: s.myPrinters, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
     }));
@@ -522,4 +526,10 @@ export function isOutOfBounds(o: SceneObject, printerId: string, plateCount = 1)
   return b.min[0] - ox < -e || b.min[1] - oy < -e || b.max[0] - ox > p.bed.x + e || b.max[1] - oy > p.bed.y + e || b.max[2] > p.bed.z + e;
 }
 
-export const slotColor = (s: State | ReturnType<typeof useStore.getState>, k: number) => s.filaments[Math.min(k, s.filaments.length - 1)]?.color ?? '#5DBE7A';
+export const slotColor = (s: State | ReturnType<typeof useStore.getState>, k: number) => {
+  const m = k >= s.filaments.length ? s.mixes?.[k - s.filaments.length] : undefined;
+  if (m) return mixColor(m, s.filaments.map((f) => f.color));
+  return s.filaments[Math.min(k, s.filaments.length - 1)]?.color ?? '#5DBE7A';
+};
+/** Colours of every filament an object or paint can use: physical slots, then mixed filaments. */
+export const choiceColors = (s: State | ReturnType<typeof useStore.getState>) => [...s.filaments.map((f) => f.color), ...(s.mixes ?? []).map((m) => mixColor(m, s.filaments.map((f) => f.color)))];

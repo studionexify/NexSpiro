@@ -119,7 +119,7 @@ export function sliceNow(): Promise<SliceOutput | null> {
     try {
       mine.postMessage({
         id, meshes, cfg: currentConfig(plate),
-        opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
+        opts: { program, filaments: filamentSlots(s.filaments), layerActions: s.plates[plate].layerActions, mixes: s.mixes.length ? s.mixes : undefined, plugins: pluginConfigs(), advanced: advancedSliceConfig(), flushMatrix: s.filaments.length > 1 ? effectiveFlush(s.filaments.map((f) => f.color), s.flushMatrix, s.flushMultiplier) : undefined },
       }, meshes.map((m) => m.vertices.buffer));
     } catch (e: any) {
       // settings or plugin data that cannot be sent to the worker: report it instead of staying at "Preparing"
