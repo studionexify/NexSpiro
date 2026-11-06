@@ -19,6 +19,7 @@ export const MACHINE_PARAMS: ParamDef[] = [
   { key: 'changer_type', label: 'Filament changes', tab: 'Basic information', group: 'Multi-material', type: 'enum', def: '',
     options: opts(['', 'From printer'], ['ams', 'Filament unit, one nozzle (AMS, MMU, CFS)'], ['toolchanger', 'Tool changer / IDEX, one nozzle per filament'], ['manual', 'Manual (pause and swap)']),
     tip: 'How this printer changes filament. A filament unit purges on every change; a tool changer picks up the next head already loaded, so it only primes; manual pauses for you to swap the spool.' },
+  { key: 'default_wipe_tower_pos', label: 'Default prime tower position', tab: 'Basic information', group: 'Multi-material', type: 'string', def: '', tip: 'Where the prime tower goes when its position is not set, as a fraction of the bed "XxY" (Bambu Studio: A1 0.0x1.0, P1S 0.644x0.977). Empty = back right corner.' },
   { key: 'filament_change_time', label: 'Time per change', tab: 'Basic information', group: 'Multi-material', type: 'float', unit: 's', min: 0, max: 600, def: 0, tip: 'Seconds one filament change takes (cut, unload, load, heat; or a head swap), without the purge. Used for the time estimate.' },
   { key: 'purge_target', label: 'Purge into', tab: 'Basic information', group: 'Multi-material', type: 'enum', def: '', disabledWhen: notUnit,
     options: opts(['', 'From printer'], ['chute', 'Purge chute (Bambu, CFS, ACE)'], ['tower', 'Prime tower (MMU3, ERCF, BoxTurtle)']),

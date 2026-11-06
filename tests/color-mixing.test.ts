@@ -221,3 +221,36 @@ describe('segmented regions (painted colour reach)', () => {
     for (const g of [w2, w2d]) expect(Math.abs(g[0] + g[1] - (full[0] + full[1])) / (full[0] + full[1])).toBeLessThan(0.05);
   });
 });
+
+describe('Bambu Studio multimaterial defaults on the A1 and P1S', () => {
+  const towerX = (printerId: string) => {
+    const c = resolveConfig({ printerId, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} as never });
+    const a = slotFromConfig(c);
+    const out = slice([{ id: 'b', name: 'b', ...weld(box(110, 110, 0, 20, 20, 3)) } as any], c, () => {}, { filaments: [a, { ...a, color: '#cc2222' }], layerActions: [{ z: 1.5, type: 'color', filament: 1 }] });
+    let inTower = false;
+    const xs: number[] = [], ys: number[] = [];
+    for (const l of out.gcode.split('\n')) {
+      if (l.startsWith(';TYPE:')) inTower = l === ';TYPE:prime tower';
+      if (!inTower || !/^G1 .*E[\d.]/.test(l)) continue;
+      const x = /X([\d.]+)/.exec(l), y = /Y([\d.]+)/.exec(l);
+      if (x) xs.push(+x[1]); if (y) ys.push(+y[1]);
+    }
+    return { c, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  };
+  it('matches the profile values', () => {
+    for (const id of ['bbl-a1', 'bbl-p1s']) {
+      const c = resolveConfig({ printerId: id, plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} as never });
+      expect([c.enable_prime_tower, c.prime_tower_width, c.prime_tower_brim_width, c.prime_tower_max_speed, c.interface_shells, c.wall_filament, c.sparse_infill_filament, c.solid_infill_filament, c.retract_length_toolchange, c.mmu_segmented_region_max_width, c.flush_into_infill, c.flush_into_objects, c.flush_into_support])
+        .toEqual([true, 35, 3, 90, false, 0, 0, 0, 2, 0, false, false, true]);
+    }
+  });
+  it('puts the prime tower where Bambu Studio does: back left on the A1, back right of centre on the P1S', () => {
+    const a1 = towerX('bbl-a1'), p1s = towerX('bbl-p1s');
+    expect(a1.x0).toBeLessThan(15);
+    expect(a1.y1).toBeGreaterThan(230);
+    expect(p1s.x0).toBeGreaterThan(150);
+    expect(p1s.x0).toBeLessThan(180);
+    expect(p1s.y1).toBeGreaterThan(230);
+    for (const t of [a1, p1s]) { expect(t.x1).toBeLessThanOrEqual(256); expect(t.y1).toBeLessThanOrEqual(256); expect(t.x0).toBeGreaterThanOrEqual(0); }
+  });
+});

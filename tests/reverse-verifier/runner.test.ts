@@ -129,7 +129,7 @@ function advCase(id: string, profile: Profile): AdvCase {
     case 'dovetail': {
       // Two materials painted per triangle (paint.color = filament index + 1) on an AMS machine.
       const m: any = indexed(box(110, 80, 0, 30, 30, 10), 'b');
-      m.paint = { color: paintBy(m, (x) => (x < 55 ? 1 : 2)) };
+      m.paint = { color: paintBy(m, (x) => (x < 125 ? 1 : 2)) }; // left half filament 1, right half filament 2
       const a = slotFromConfig(cfgWith('bbl-x1c', {}));
       return { ...base, printer: 'bbl-x1c', mesh: m, ov: { ...ov, has_ams: true }, filaments: [a, { ...a, name: 'Black', color: '#111111' }] };
     }

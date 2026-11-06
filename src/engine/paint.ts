@@ -89,14 +89,15 @@ function lineStrip(lines: Paths, d: number): Paths {
  * `depth` > 0: each painted colour reaches this far in from the painted surface (Orca / Bambu
  * "Maximum width of a segmented region"); the rest keeps the object's filament.
  * `depth` 0 (Orca default): no limit, every point takes the colour of the nearest surface, painted or not
- * (a wavefront grown from each colour's surface inside the cross-section).
+ * (a wavefront grown from each colour's surface inside the cross-section); painted top / bottom faces colour the
+ * layers within `flatReach` mm of them (the top / bottom shell).
  */
-export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Paths, z: number, depth: number): Map<number, Paths> {
+export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Paths, z: number, depth: number, flatReach = 0.5): Map<number, Paths> {
   const byColor = new Map<number, { lines: Paths; flats: Paths }>();
   const get = (c: number) => { let e = byColor.get(c); if (!e) byColor.set(c, (e = { lines: [], flats: [] })); return e; };
   const v = mesh.vertices, ix = mesh.indices;
   for (const p of tris) {
-    const reach = depth > 0 ? depth : 0.5;
+    const reach = depth > 0 ? depth : flatReach;
     if (p.zmax < z - reach || p.zmin > z + reach) continue;
     const s = p.zmin <= z && p.zmax >= z ? triSegment(mesh, p.t, z) : null;
     if (s) get(p.value).lines.push([{ X: Math.round(s[0] * SCALE), Y: Math.round(s[1] * SCALE) }, { X: Math.round(s[2] * SCALE), Y: Math.round(s[3] * SCALE) }]);

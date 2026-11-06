@@ -25,6 +25,8 @@
 // All four changed again only because the config block lists the new colour-mixing and ooze-prevention settings
 // (mix_subdivide, mix_subdivide_full_domain, mix_subdivide_infill, ooze_prevention, preheat_delta_temperature);
 // with those five lines removed the G-code hashes are exactly the previous ones.
+// And again for mmu_segmented_region_max_width, mmu_segmented_region_interlocking_depth and default_wipe_tower_pos
+// (config block only; with those lines removed the G-code is byte-identical to the original hashes above).
 import { describe, expect, it } from 'vitest';
 import { weld } from '../../src/engine/mesh';
 import { slice } from '../../src/engine/slicer';
@@ -37,10 +39,10 @@ const cfgFor = (printerId: string, overrides = {}) =>
 const mesh = (soup: Float32Array, name: string) => { const m = weld(soup); return { id: name, name, vertices: m.vertices, indices: m.indices }; };
 
 const CASES: { name: string; run: () => string; hash: string }[] = [
-  { name: 'cube on P1S', run: () => slice([mesh(box(100, 100, 0, 20, 20, 20), 'cube')], cfgFor('bbl-p1s', { enable_arc_fitting: false })).gcode, hash: 'ebf62d1398974936b2a27cf3c67c1209' },
-  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: '31251ff561d847c973bec0d74e9689bd' },
-  { name: 'tee with tree support on Prusa MK4S', run: () => slice([mesh(tee(100, 100), 'tee')], cfgFor('prusa-mk4s', { enable_support: true, support_type: 'tree_auto', enable_arc_fitting: false })).gcode, hash: 'f17daab5bd0ba1c47fd58c3c69970e5e' },
-  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true, enable_arc_fitting: false })).gcode, hash: '314ea9f99b769828ee167ff5e10e2abd' },
+  { name: 'cube on P1S', run: () => slice([mesh(box(100, 100, 0, 20, 20, 20), 'cube')], cfgFor('bbl-p1s', { enable_arc_fitting: false })).gcode, hash: 'a06f99ea52f792beff31189a43105103' },
+  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: '57021c6a3086a8a678c03ccdc616adc4' },
+  { name: 'tee with tree support on Prusa MK4S', run: () => slice([mesh(tee(100, 100), 'tee')], cfgFor('prusa-mk4s', { enable_support: true, support_type: 'tree_auto', enable_arc_fitting: false })).gcode, hash: '5068c27e51c9cf9968f6868f822b3f0b' },
+  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true, enable_arc_fitting: false })).gcode, hash: '844abd7ca39a9354becb637e4c045cbd' },
 ];
 
 describe('Basic mode is the classic engine', () => {

@@ -40,7 +40,7 @@ const extrusionLen = (ms: GMove[], type: string) => ms.filter((m) => m.type === 
 const types = (gcode: string) => new Set(gcode.match(/;TYPE:[a-z ]+/g)?.map((t) => t.slice(6)));
 
 describe('settings are wired, not dummies', () => {
-  const engine = ['src/engine/slicer.ts', 'src/engine/gcode.ts', 'src/engine/walls.ts', 'src/engine/support.ts', 'src/profiles/resolve.ts', 'src/profiles/changer.ts']
+  const engine = ['src/engine/slicer.ts', 'src/engine/gcode.ts', 'src/engine/walls.ts', 'src/engine/support.ts', 'src/profiles/resolve.ts', 'src/profiles/changer.ts', 'src/plugins/patternex/model.ts']
     .map((f) => fs.readFileSync(f, 'utf8')).join('\n');
   // keys that are stored and written into the G-code config block, rather than steering toolpaths
   const metadata = new Set(['process_notes', 'filament_notes', 'printer_notes', 'filament_vendor', 'filename_format', 'post_process']);
@@ -474,7 +474,7 @@ describe('the last eleven settings', () => {
     const color = new Uint8Array(12); color[2] = 2; color[3] = 2; // top face painted with filament 2
     m.paint = { color } as any;
     const slots = filamentSlots([{ presetId: 'generic-pla', color: '#ffffff' }, { presetId: 'generic-pla', color: '#000000' }]);
-    const run = (on: boolean) => parse(slice([m], cfgFor(P, { interface_shells: on, mmu_paint_depth: 3, sparse_infill_density: 10 }), undefined, { filaments: slots }).gcode);
+    const run = (on: boolean) => parse(slice([m], cfgFor(P, { interface_shells: on, mmu_segmented_region_max_width: 3, sparse_infill_density: 10 }), undefined, { filaments: slots }).gcode);
     const solid = (p: ReturnType<typeof parse>) => p.moves.filter((x) => x.z > 5.5 && x.z < 7.6 && x.type === 'internal solid infill').length;
     expect(solid(run(true))).toBeGreaterThan(solid(run(false)));
   });

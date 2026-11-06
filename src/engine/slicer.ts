@@ -395,6 +395,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // painted colour reach (Orca / Bambu "Maximum width of a segmented region"; 0 = nearest surface, no limit), deeper every
   // other layer by the interlocking depth
   const segWidth = Math.max(0, num('mmu_segmented_region_max_width')), segInterlock = Math.max(0, num('mmu_segmented_region_interlocking_depth'));
+  // with no width limit a painted top / bottom face colours its shell, as deep as the top / bottom shells
+  const paintFlatReach = Math.max(0.5, num('top_shell_thickness'), num('bottom_shell_thickness'), num('top_shell_layers') * num('layer_height'), num('bottom_shell_layers') * num('layer_height'));
   const paintDepthAt = (i: number) => (segWidth > 0 ? segWidth + (segInterlock > 0 && i % 2 === 1 ? segInterlock : 0) : 0);
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
@@ -428,7 +430,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
     if (!colorTris[o].length && !contribs.length) return [{ ...base, paths: sl }];
-    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i)) : new Map<number, Paths>();
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i), paintFlatReach) : new Map<number, Paths>();
     let out: FilRegion[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
@@ -873,8 +875,11 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const maxChanges = Math.max(1, ...changesPerLayer);
   const td = Math.max(4, bandDepth * maxChanges);
   let tx = num('prime_tower_x'), ty = num('prime_tower_y');
-  if (tx < 0) tx = Math.max(5, num('bed_x') - tw - 15);
-  if (ty < 0) ty = Math.max(5, num('bed_y') - td - 25);
+  // unset: the printer's default position (Bambu Studio's default_wipe_tower_pos, a fraction of the bed), kept on the bed
+  const towerPos = /^\s*([\d.]+)\s*x\s*([\d.]+)\s*$/i.exec(str('default_wipe_tower_pos'));
+  const brimM = Math.max(0, num('prime_tower_brim_width')) + 2;
+  if (tx < 0) tx = towerPos ? Math.min(Math.max(brimM, Number(towerPos[1]) * num('bed_x')), num('bed_x') - tw - brimM) : Math.max(5, num('bed_x') - tw - 15);
+  if (ty < 0) ty = towerPos ? Math.min(Math.max(brimM, Number(towerPos[2]) * num('bed_y')), num('bed_y') - td - brimM) : Math.max(5, num('bed_y') - td - 25);
   // tower body: a (filleted) rectangle with optional diagonal ribs
   let towerBody: Paths = [rectPath(tx, ty, tx + tw, ty + td)];
   if (useTower) {

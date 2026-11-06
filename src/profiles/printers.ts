@@ -133,7 +133,7 @@ export const PRINTERS: PrinterProfile[] = [
   {
     id: 'bbl-a1', printerModelId: 'N2S', cameraMode: 'jpeg', vendor: 'Bambu Lab', model: 'A1', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     plates: BBL_PLATES, flavor: 'bbl', connections: ['bbl_lan'],
-    machine: bblMachine({ machine_start_gcode: bblStart('Bambu Lab A1', -0.5, 20), machine_end_gcode: bblEnd, max_acceleration: 12000, change_filament_gcode: bblChange(-38, 245), machine_pause_gcode: 'M400 U1', filament_change_time: 60, has_ams: true }, 'bedslinger'),
+    machine: bblMachine({ machine_start_gcode: bblStart('Bambu Lab A1', -0.5, 20), machine_end_gcode: bblEnd, max_acceleration: 12000, change_filament_gcode: bblChange(-38, 245), machine_pause_gcode: 'M400 U1', filament_change_time: 60, has_ams: true, default_wipe_tower_pos: '0.0x1.0' }, 'bedslinger'),
     processOverrides: { travel_speed: 700, default_acceleration: 10000, outer_wall_acceleration: 5000 },
   },
   {
@@ -146,7 +146,7 @@ export const PRINTERS: PrinterProfile[] = [
     id: 'bbl-p1s', printerModelId: 'C12', cameraMode: 'jpeg', vendor: 'Bambu Lab', model: 'P1S', nozzle: 0.4, bed: { x: 256, y: 256, z: 256 },
     excludedAreas: [[[0, 0], [18, 0], [18, 28], [0, 28]]],
     plates: BBL_PLATES, flavor: 'bbl', connections: ['bbl_lan'],
-    machine: bblMachine({ machine_start_gcode: bblStart('Bambu Lab P1S', 0.5, 20), machine_end_gcode: bblEnd, change_filament_gcode: bblChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true }),
+    machine: bblMachine({ machine_start_gcode: bblStart('Bambu Lab P1S', 0.5, 20), machine_end_gcode: bblEnd, change_filament_gcode: bblChange(70, 265), machine_pause_gcode: 'M400 U1', filament_change_time: 95, has_ams: true, default_wipe_tower_pos: '0.644x0.977' }),
     processOverrides: {},
   },
   {
