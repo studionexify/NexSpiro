@@ -20,16 +20,18 @@ describe('G-code sanity', () => {
       for (const line of body) {
         const m = /^G[01] (.*)/.exec(line);
         if (!m) continue;
+        // extrusions stay on the bed (the makers' own macros may travel off it: purge chutes, wipers, parking)
+        const extruding = / E\d/.test(` ${m[1]}`) && /[XY]/.test(m[1]);
         for (const tok of m[1].split(' ')) {
           const v = parseFloat(tok.slice(1));
-          if (tok[0] === 'X') { expect(v).toBeGreaterThanOrEqual(-1); expect(v).toBeLessThanOrEqual(p.bed.x + 1); }
-          if (tok[0] === 'Y') { expect(v).toBeGreaterThanOrEqual(-1); expect(v).toBeLessThanOrEqual(p.bed.y + 1); }
+          if (tok[0] === 'X' && extruding) { expect(v).toBeGreaterThanOrEqual(-1); expect(v).toBeLessThanOrEqual(p.bed.x + 1); }
+          if (tok[0] === 'Y' && extruding) { expect(v).toBeGreaterThanOrEqual(-1); expect(v).toBeLessThanOrEqual(p.bed.y + 1); }
           if (tok[0] === 'Z') z = v;
           if (tok[0] === 'E') e += v;
         }
-        maxZ = Math.max(maxZ, z);
+        if (extruding) maxZ = Math.max(maxZ, z);
       }
-      expect(maxZ).toBeGreaterThan(14);
+      expect(maxZ).toBeGreaterThan(13.5); // top extruding layer (the model is 14 mm)
       expect(maxZ).toBeLessThan(16);
       expect(e).toBeGreaterThan(100);
       expect(out.layers.every((L, i) => i === 0 || L.z > out.layers[i - 1].z)).toBe(true);

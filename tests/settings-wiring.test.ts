@@ -315,10 +315,10 @@ describe('others', () => {
   it('flush into infill and objects reduces the purge', () => {
     const a = mesh(box(60, 60, 0, 20, 20, 4), 'a', { filament: 0 }), c = mesh(box(100, 60, 0, 20, 20, 4), 'b', { filament: 1 });
     const slots = filamentSlots([{ presetId: 'generic-pla', color: '#ffffff' }, { presetId: 'generic-pla', color: '#000000' }]);
-    const flush = (o = {}) => [...slice([a, c], cfgFor('bbl-p1s', o), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
+    const flush = (o = {}) => [...slice([a, c], cfgFor('bbl-x1c', o), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
     expect(flush({ flush_into_infill: true })).toBeLessThan(flush());
     const w = mesh(box(140, 60, 0, 15, 15, 4), 'waste', { overrides: { flush_into_objects: true } });
-    const withWaste = [...slice([a, c, w], cfgFor('bbl-p1s'), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
+    const withWaste = [...slice([a, c, w], cfgFor('bbl-x1c'), () => {}, { filaments: slots }).gcode.matchAll(/G1 E([\d.]+) F240 ; flush/g)].reduce((s, m) => s + Number(m[1]), 0);
     expect(withWaste).toBeLessThan(flush());
   });
 

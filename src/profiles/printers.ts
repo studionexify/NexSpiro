@@ -4,6 +4,11 @@ import type { Config } from './settings';
 export type GcodeFlavor = 'marlin' | 'klipper' | 'bbl';
 import type { ConnectionKind } from '../connect/types';
 export type { ConnectionKind };
+import vendorA1 from './vendor/bbl-a1.json';
+import vendorP1S from './vendor/bbl-p1s.json';
+import vendorU1 from './vendor/snapmaker-u1.json';
+import vendorN4Max from './vendor/elegoo-neptune4max.json';
+
 export type PlateType = 'cool_plate' | 'engineering_plate' | 'high_temp_plate' | 'textured_pei_plate';
 
 export interface PrinterProfile {
@@ -435,6 +440,53 @@ PRINTERS.push(
   M('generic-marlin', 'Generic', 'Marlin printer', [220, 220, 250], 'slow', 1000, { note: 'Starting point for any Marlin printer — set the bed size and start G-code in Printer settings.' }),
   K('generic-klipper', 'Generic', 'Klipper printer', [300, 300, 300], 'PRINT_START BED=[bed_temperature_initial_layer] HOTEND=[nozzle_temperature_initial_layer]', 'medium', 5000, { end: 'PRINT_END', note: 'Expects PRINT_START / PRINT_END macros in printer.cfg.' }),
 );
+
+// ---------------------------------------------------------------- the makers' own profiles, verbatim
+// Start, end, filament change, layer change and time lapse G-code are the printer makers' own templates, unchanged
+// (src/profiles/vendor/*.json, with the slicer repository and commit they come from), run by placeholder.ts with
+// the variables those slicers give them. The machine values below are taken from the same profiles.
+const VENDOR: Record<string, { tpl: VendorProfile; machine: Config; process?: Config; bed?: Partial<PrinterProfile['bed']> }> = {
+  'bbl-a1': { tpl: vendorA1 as VendorProfile, machine: {
+    retract_before_wipe: 0, retract_lift_below: 255, max_speed_z: 30, max_acceleration: 12000,
+    extruder_clearance_max_radius: 73, extruder_clearance_height_to_rod: 25, extruder_clearance_height_to_lid: 256,
+  } },
+  'bbl-p1s': { tpl: vendorP1S as VendorProfile, bed: { z: 250 }, machine: {
+    retract_before_wipe: 0, retract_lift_below: 249, max_speed_z: 20, max_acceleration: 20000,
+    extruder_clearance_max_radius: 68, extruder_clearance_height_to_rod: 34, extruder_clearance_height_to_lid: 90,
+  } },
+  'snapmaker-u1': { tpl: vendorU1 as VendorProfile, machine: {
+    retraction_length: 1.5, retraction_speed: 30, deretraction_speed: 30, z_hop: 0.4, z_hop_types: 'auto', wipe: true, wipe_distance: 2,
+    retract_before_wipe: 0, retract_length_toolchange: 10, retract_restart_extra_toolchange: 0, retract_when_changing_layer: true,
+    retract_lift_below: 269, retraction_minimum_travel: 1, max_layer_height: 0.32, max_speed_z: 20, max_acceleration: 20000,
+    extruder_clearance_max_radius: 72.5, extruder_clearance_height_to_rod: 27.5, extruder_clearance_height_to_lid: 140,
+    auxiliary_fan: true, filament_change_time: 5, chamber_cooling_mode: 1,
+  }, process: { prime_tower_width: 30, prime_tower_brim_width: 5, prime_volume: 45 } },
+  'elegoo-neptune4max': { tpl: vendorN4Max as VendorProfile, bed: { x: 426, y: 426, z: 480 }, machine: {
+    retraction_length: 0.8, retraction_speed: 60, deretraction_speed: 30, z_hop: 0.4, z_hop_types: 'auto', wipe: true, wipe_distance: 1.2,
+    retract_before_wipe: 0, retract_length_toolchange: 2, retract_restart_extra_toolchange: 0, retraction_minimum_travel: 0.8,
+    retract_when_changing_layer: true, retract_lift_below: 479, max_speed_z: 20, max_acceleration: 5000,
+    extruder_clearance_max_radius: 47, extruder_clearance_height_to_rod: 34, extruder_clearance_height_to_lid: 34, auxiliary_fan: false,
+  }, process: {
+    // Elegoo's "0.20mm Standard @Elegoo N4Max 0.4 nozzle" (OrcaSlicer): values that differ from NexSpiro's defaults
+    outer_wall_speed: 160, inner_wall_speed: 200, sparse_infill_speed: 200, internal_solid_infill_speed: 250, top_surface_speed: 200, travel_speed: 500,
+    default_acceleration: 3000, outer_wall_acceleration: 1500, top_surface_acceleration: 2000, travel_acceleration: 3000,
+    bottom_shell_layers: 4, bottom_shell_thickness: 0.8, elefant_foot_compensation: 0.1, filter_out_gap_fill: 1, print_flow_ratio: 0.97,
+    sparse_infill_pattern: 'cubic', support_interface_bottom_layers: 2, enable_prime_tower: false, wipe_speed: 100,
+    tree_support_branch_angle: 45, tree_support_branch_diameter: 2, tree_support_tip_diameter: 2, tree_support_wall_count: 0,
+  } },
+};
+interface VendorProfile { vendor: string; repo: string; commit: string; profile: string; templates: Record<string, string>; head_wrap_detect_zone?: string[] | null }
+for (const p of PRINTERS) {
+  const v = VENDOR[p.id];
+  if (!v) continue;
+  if (v.bed) p.bed = { ...p.bed, ...v.bed };
+  p.machine = {
+    ...p.machine, ...v.machine, ...v.tpl.templates, gcode_templates: 'vendor',
+    gcode_template_source: `${v.tpl.vendor}: ${v.tpl.repo}@${v.tpl.commit.slice(0, 10)} ${v.tpl.profile}`,
+    head_wrap_detect_zone: (v.tpl.head_wrap_detect_zone ?? []).join(','),
+  };
+  if (v.process) p.processOverrides = { ...p.processOverrides, ...v.process };
+}
 
 export const printerById = (id: string) => PRINTERS.find((p) => p.id === id) ?? PRINTERS[0];
 /** Display name; pass the nozzle in use (see effectiveNozzle) to show a chosen nozzle instead of the printer's own. */

@@ -38,15 +38,17 @@ describe('filament changers', () => {
     expect(autoChanges(printerById('generic-idex').machine)).toBe(true);
     // a printer setting overrides the profile: any printer can be set up as a tool changer
     expect(changerOf({ ...printerById('voron-24-350').machine, changer_type: 'toolchanger' })).toBe('toolchanger');
-    for (const p of PRINTERS.filter((q) => changerOf(q.machine) === 'toolchanger')) expect(String(p.machine.change_filament_gcode)).toMatch(/T\[next_extruder\]/);
+    // NexSpiro's macro picks up T[next_extruder]; a maker's own template (Snapmaker U1) builds the T command from next_extruder
+    for (const p of PRINTERS.filter((q) => changerOf(q.machine) === 'toolchanger')) expect(String(p.machine.change_filament_gcode)).toMatch(p.machine.gcode_templates === 'vendor' ? /next_extruder/ : /T\[next_extruder\]/);
   });
 
   it('swaps heads every layer with no purge, parks at standby and preheats before the pick-up', () => {
     const { out, rep } = run('snapmaker-u1');
     expect(rep.changes).toBeGreaterThan(20);
-    const g = out.gcode;
-    // one head swap per colour change
-    const picks = [...g.matchAll(/^T([01]) ; park the head in use/gm)];
+    // the print body (the U1's own start G-code selects heads too)
+    const g = out.gcode.split(';===== end of start G-code =====').pop()!;
+    // one head swap per colour change (NexSpiro's macro comments its T line, Snapmaker's does not)
+    const picks = [...g.matchAll(/^T([01])(?: ; park the head in use.*)?$/gm)];
     expect(picks.length).toBe(rep.wovenLayers - 1);
     expect(out.stats.toolChanges).toBe(picks.length);
     // the parked head waits 40 °C below its print temperature
@@ -56,7 +58,7 @@ describe('filament changers', () => {
     const lines = g.split('\n');
     let checked = 0;
     lines.forEach((l, k) => {
-      const m = /^T(\d) ; park/.exec(l);
+      const m = /^T(\d)(?: ; park.*)?$/.exec(l);
       if (!m || checked > 10) return;
       const t = m[1];
       const park = lines.slice(0, k).map((q, i) => (q.startsWith(`M104 T${t} S`) && q.includes('standby') ? i : -1)).filter((i) => i >= 0).pop();
@@ -88,10 +90,13 @@ describe('filament changers', () => {
     expect(off).toMatch(/^M104 T1 S60 ; T1 waits at standby/m);
     const noOoze = slice([obj], { ...cfg('snapmaker-u1'), ooze_prevention: false }, () => {}, { filaments: fils, layerActions: acts }).gcode;
     expect(noOoze).not.toMatch(/at standby|preheat T/);
-    expect(noOoze).toMatch(/^M109 T1 S210/m); // the pick-up still waits for print temperature
+    expect(noOoze).toMatch(/^M104 S210 T1$/m); // Snapmaker's change G-code sets the print temperature, its T macro picks up the head
+    // NexSpiro's own tool change macro waits for the print temperature (M109) at the pick-up
+    const gen = slice([obj], { ...cfg('generic-toolchanger'), ooze_prevention: false }, () => {}, { filaments: fils, layerActions: acts }).gcode;
+    expect(gen).toMatch(/^M109 T1 S210/m);
     const delta = slice([obj], { ...cfg('snapmaker-u1'), preheat_delta_temperature: -10 }, () => {}, { filaments: fils, layerActions: acts }).gcode;
     expect(delta).toMatch(/^M104 T1 S200 ; preheat T1/m);
-    expect(delta).toMatch(/^M109 T1 S210/m);
+    expect(delta).toMatch(/^M104 S210 T1$/m);
   });
 
   it('keeps later heads at standby from the start and switches every head off after its last use', () => {
@@ -104,11 +109,13 @@ describe('filament changers', () => {
     const out = slice([tower], c, () => {}, { filaments, layerActions: colourAt(4, 8) });
     const L = out.gcode.split('\n');
     const first = (re: RegExp) => L.findIndex((l) => re.test(l));
-    const sel = (t: number) => first(new RegExp(`^T${t} ; park the head in use`));
+    const startEnd = first(/^;===== end of start G-code =====/);
+    const sel = (t: number) => L.findIndex((l, k) => k > startEnd && new RegExp(`^T${t}(?: ; park the head in use.*)?$`).test(l));
     // T1 and T2 wait at standby (150 °C below, as in Snapmaker Orca) before the first head prints, not cold
     expect(first(/^M104 T1 S65 ; T1 waits at standby/)).toBeGreaterThan(0);
     expect(first(/^M104 T2 S70 ; T2 waits at standby/)).toBeGreaterThan(0);
-    expect(first(/^M104 T1 S65 ; T1 waits/)).toBeLessThan(first(/^G1 .*E[0-9.]+/));
+    // (before the first extrusion of the print; the maker's start G-code draws its own purge line earlier)
+    expect(first(/^M104 T1 S65 ; T1 waits/)).toBeLessThan(L.findIndex((l, k) => k > startEnd && /^G1 .*E[0-9.]+/.test(l)));
     // each is preheated before its pick-up
     expect(first(/^M104 T1 S215 ; preheat T1/)).toBeLessThan(sel(1));
     expect(first(/^M104 T2 S220 ; preheat T2/)).toBeLessThan(sel(2));

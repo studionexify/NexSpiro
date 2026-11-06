@@ -8,6 +8,7 @@ import {
 } from './clipper';
 import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
+import { flushSplit, inZone, renderVendor, usesVendorTemplates } from './templateVars';
 import type { IndexedMesh } from './mesh';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
 import { mixProblems, mixSubSlots, resolveFilament, subPassCount } from '../profiles/mixing';
@@ -1097,6 +1098,32 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const layerOps: LayerOps[] = [];
   let px = 0, py = 0;
   let retracted = false;
+  // tool changers: each parked head keeps the filament it was retracted by (retract_length_toolchange, as in
+  // Orca / Snapmaker Orca); it comes back when that head is picked up again. null = the normal retraction
+  const parkedRetract = new Map<number, number>();
+  const vendorTpl = usesVendorTemplates(cfg);
+  let headWrap: boolean | null = null;
+  let firstVars: Record<string, number[]> | null = null;
+  /** First layer bounds of the objects (Bambu: first_layer_print_min/max/size, first_layer_center_no_wipe_tower). */
+  const firstLayerVars = () => {
+    if (firstVars) return firstVars;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of layerSlices[objStart] ?? []) for (const q of p) { minX = Math.min(minX, q.X / SCALE); minY = Math.min(minY, q.Y / SCALE); maxX = Math.max(maxX, q.X / SCALE); maxY = Math.max(maxY, q.Y / SCALE); }
+    if (!isFinite(minX)) minX = minY = maxX = maxY = 0;
+    firstVars = { first_layer_print_min: [minX, minY], first_layer_print_max: [maxX, maxY], first_layer_print_size: [maxX - minX, maxY - minY], first_layer_center_no_wipe_tower: [(minX + maxX) / 2, (minY + maxY) / 2] };
+    return firstVars;
+  };
+  /** Bambu A1: some printed area lies in the machine's head wrap detect zone (the timelapse then skips its park move). */
+  const inHeadWrapZone = () => {
+    if (headWrap !== null) return headWrap;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const sl of layerSlices) for (const p of sl) for (const q of p) { minX = Math.min(minX, q.X); minY = Math.min(minY, q.Y); maxX = Math.max(maxX, q.X); maxY = Math.max(maxY, q.Y); }
+    const zone = String(cfg.head_wrap_detect_zone ?? '');
+    headWrap = isFinite(minX) && !!zone && inZone(zone.split(','), { minX: minX / SCALE, minY: minY / SCALE, maxX: maxX / SCALE, maxY: maxY / SCALE });
+    return headWrap;
+  };
+  let toolchangeCount = 0;
+  let pendingDeretract: number | null = null;
   let prevSeams: [number, number][] = [];
   let curZ = 0;
   let curTool = -1;
@@ -1231,7 +1258,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
       }
       travel(pts[0], pts[1], it.feature, startZ);
-      if (retracted) { ops.push({ k: 'retract', len: -Math.max(0, retractLen + restartExtra), speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
+      if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
       const a = Math.min(accelFor(it.feature, i), capH.a);
       if (a !== accelSet) { ops.push({ k: 'accel', a }); accelSet = a; }
       if (jerkOn) { const j = jerkFor(it.feature, i); if (j !== jerkSet) { ops.push({ k: 'jerk', j }); jerkSet = j; } }
@@ -1442,7 +1469,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     let flushSupportDone = false;
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) {
+      // the first filament: loaded by the start G-code (the makers' own start G-code loads the initial filament itself)
+      if (curTool === -1 && (!hasAms || vendorTpl || ((usedFils.size <= 1 || toolChanger) && next === 0))) {
         ops.push({ k: 'tool', tool: next }); curTool = next; toolSet = filaments[next]?.settings ?? {}; loadRetraction();
         const sg = String(toolSet.filament_start_gcode ?? '');
         if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
@@ -1471,15 +1499,35 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       // no chute: the tower band printed right after the change takes the flush, the change G-code purges nothing
       const flushLen = towerFlush && towerActive ? 0 : (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
       // a head is parked retracted by its normal length, which comes back when it is next picked up
-      if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: toolChanger ? retractLen : num('retract_length_toolchange') || retractLen, speed: retractSpeed });
+      if (toolChanger && curTool >= 0) {
+        const want = num('retract_length_toolchange') || retractLen;
+        const have = retracted ? (pendingDeretract ?? retractLen) : 0;
+        if (want > have) ops.push({ k: 'retract', len: want - have, speed: retractSpeed });
+        parkedRetract.set(curTool, Math.max(want, have));
+      } else if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: num('retract_length_toolchange') || retractLen, speed: retractSpeed });
       if (curTool >= 0) { const eg = String(filaments[curTool]?.settings?.filament_end_gcode ?? ''); if (eg) ops.push({ k: 'raw', text: expandMacro(eg, cfg, { filament_extruder_id: curTool }) }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
-        text: expandMacro(str('change_filament_gcode'), cfg, {
-          previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
-          new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
-          flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
-        }),
+        text: vendorTpl
+          // the maker's own change G-code, with the variables Bambu Studio / Orca give it (GCode.cpp set_extruder)
+          ? renderVendor(str('change_filament_gcode'), cfg, filaments, {
+            previous_extruder: prev, next_extruder: next, layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h),
+            toolchange_count: ++toolchangeCount, current_extruder: prev,
+            new_filament_temp: Math.round(i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp), old_filament_temp: curTool >= 0 ? Math.round(filaments[prev].nozzleTemp) : 0,
+            ...flushSplit(towerFlush && towerActive ? 0 : flushVol || 0, Math.PI * (fl.diameter / 2) ** 2),
+            old_retract_length_toolchange: num('retract_length_toolchange'), new_retract_length_toolchange: num('retract_length_toolchange'),
+            x_after_toolchange: isNaN(px) ? 0 : px, y_after_toolchange: isNaN(py) ? 0 : py, z_after_toolchange: zTop,
+            travel_point_1_x: isNaN(px) ? 0 : px, travel_point_1_y: isNaN(py) ? 0 : py, travel_point_2_x: isNaN(px) ? 0 : px, travel_point_2_y: isNaN(py) ? 0 : py,
+            travel_point_3_x: isNaN(px) ? 0 : px, travel_point_3_y: isNaN(py) ? 0 : py,
+            position: [isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, zTop],
+            outer_wall_volumetric_speed: Math.min(num('outer_wall_speed') * (num('outer_wall_line_width') || nozzle) * h, fl.maxVolumetricSpeed || 1e9),
+            wipe_tower_x: tx + tw / 2, wipe_tower_y: ty + td / 2, toolchange_z: zTop + 3,
+          }, 'Filament change G-code')
+          : expandMacro(str('change_filament_gcode'), cfg, {
+            previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
+            new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
+            flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
+          }),
       });
       // the parked head waits below its print temperature (it is heated again before its next pick-up)
       if (toolChanger && curTool >= 0 && cfg.ooze_prevention !== false && num('standby_temperature_delta') < 0)
@@ -1492,6 +1540,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
       if (num('retract_restart_extra_toolchange')) ops.push({ k: 'raw', text: `G1 E${num('retract_restart_extra_toolchange').toFixed(3)} F${Math.round(deretractSpeed * 60)}` });
       retracted = hasAms; // the AMS sequence ends with a retraction, a parked head was retracted; M600 leaves the nozzle primed
+      // a head picked up for the first time was never retracted (the start G-code primed it)
+      pendingDeretract = toolChanger ? (parkedRetract.get(next) ?? 0) : null;
       px = NaN; py = NaN;
       wipeTrail = [];
       const wasFirst = curTool === -1;
@@ -1520,7 +1570,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         retract();
         travel(tx + tw / 2, ty + td / 2, 'travel', curZ);
       }
-      ops.push({ k: 'raw', text: timelapse });
+      ops.push({ k: 'raw', text: vendorTpl ? renderVendor(timelapse, cfg, filaments, {
+        layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h), timelapse_type: smoothLapse ? 1 : 0, spiral_mode: vase,
+        in_head_wrap_detect_zone: inHeadWrapZone(), total_layer_count: N, ...firstLayerVars(),
+      }, 'Time lapse G-code') : timelapse });
     }
 
     // order filaments: current first
@@ -1971,7 +2024,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     pluginRun = runPlugins(layerOps, opts.plugins, { cfg, layerZ: zs, faceRegions, warn }, sessions);
   }
   const bodyTransform = programBodyPlugins(opts.plugins, { cfg, layerZ: zs, faceRegions: [], warn: (msg) => { if (!warnings.includes(msg)) warnings.push(msg); } }, sessions);
-  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header, bodyTransform });
+  const res = emit({ cfg, filaments, layers: layerOps, objectLabels: labels ? objectLabels : [], headerLines: pluginRun.header, bodyTransform, templateExtra: vendorTpl ? { in_head_wrap_detect_zone: inHeadWrapZone(), max_print_z: Math.ceil(zs[N - 1] ?? 0) } : undefined });
 
   const bx = num('bed_x'), by = num('bed_y');
   const all = bounds(layerSlices.flat());
