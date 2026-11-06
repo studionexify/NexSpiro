@@ -24,7 +24,7 @@ export function joinLines(lines: string[], numbered = false): string {
     const BLOCK = 100_000;
     for (let s = 0; s < lines.length; s += BLOCK) {
       let part = lines.slice(s, Math.min(lines.length, s + BLOCK));
-      if (numbered) part = part.map((chunk) => chunk.split('\n').map((l) => (l && !l.startsWith(';') ? `N${++nLine} ${l}` : l)).join('\n'));
+      if (numbered) part = part.map((chunk) => chunk.split('\n').map((l) => (/^\s*($|;)/.test(l) ? l : `N${++nLine} ${l}`) /* blank / comment-only lines (indented ones too) get no number */).join('\n'));
       blocks.push(part.join('\n'));
     }
     let out = '';

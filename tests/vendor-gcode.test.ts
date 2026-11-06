@@ -125,6 +125,20 @@ describe('slicing with the makers\' templates', () => {
     // plus Bambu's refill of the toolchange retraction ([new_retract_length_toolchange], 2 mm) inside the block
     expect(total).toBeCloseTo(planned + Number(c.retract_length_toolchange), 1);
   });
+  it('absolute E stays safe: after the maker\'s change G-code (it ends in M83 / G92 E0) NexSpiro restores M82 and E0', () => {
+    const c = resolveConfig({ printerId: 'bbl-a1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: {} as never, machineOverrides: { use_relative_e_distances: false } } as never);
+    const a = slotFromConfig(c);
+    const g = slice([{ id: 'b', name: 'b', ...weld(box(110, 110, 0, 20, 20, 3)) } as any], c, () => {}, { filaments: [a, { ...a, color: '#cc2222' }], layerActions: [{ z: 1.5, type: 'color', filament: 1 }] }).gcode;
+    const i = g.indexOf('M621 S1A');
+    expect(i).toBeGreaterThan(0);
+    const after = g.slice(i).split('\n');
+    const k = after.findIndex((l) => l.startsWith('M82 ; absolute E'));
+    expect(k).toBeGreaterThan(0);
+    expect(after[k + 1]).toBe('G92 E0');
+    // the next extrusion starts again from a small absolute E
+    const firstE = after.slice(k + 2).find((l) => /^G1 .*[XY].* E[\d.]+/.test(l))!;
+    expect(Number(/E([\d.]+)/.exec(firstE)![1])).toBeLessThan(5);
+  });
   it('Snapmaker U1: PRINT_START, head pick-up macro, 10 mm park retraction, PRINT_END', () => {
     const { g } = sliceOn('snapmaker-u1', 2);
     expect(g).toMatch(/^PRINT_START$/m);

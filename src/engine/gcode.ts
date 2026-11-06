@@ -445,6 +445,12 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
         case 'raw':
           push(op.text);
           tempIn(op.text);
+          // a macro that switched the extruder mode or reset E (the makers' change G-code ends in M83 / G92 E0):
+          // put NexSpiro's mode back, so absolute E never meets a firmware left in relative mode
+          if (/^\s*(?:N\d+\s+)?(?:M8[23]\b|G92\b[^;\n]*\bE)/m.test(op.text)) {
+            push(relE ? 'M83 ; relative E (after the inserted G-code)' : 'M82 ; absolute E (after the inserted G-code)');
+            if (!relE) { push('G92 E0'); eAbs = 0; }
+          }
           if (op.time) elapsed += op.time;
           if (op.time && /^\s*G4\b/.test(op.text) && Number.isFinite(x) && Number.isFinite(y)) pauses.push(x, y, Number.isFinite(z) ? z : L.z, op.time);
           if (op.resetPos) { x = NaN; y = NaN; z = NaN; f = NaN; accel = -1; }
@@ -532,6 +538,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   push('M73 P100 R0');
   setFan(0);
   const lastL = layers[layers.length - 1];
+  if (vendor) push(';===== NexSpiro end G-code: the printer maker\'s own end G-code follows =====');
   push(macro(String(cfg.machine_end_gcode ?? ''), 'End G-code', { layer_num: Math.max(0, layers.length - 1), layer_z: lastL?.z ?? 0, max_layer_z: lastL?.z ?? 0, toolchange_count: toolChanges }));
 
   const gramsOf = (mm: number, k: number) => {

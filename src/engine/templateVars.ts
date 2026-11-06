@@ -96,6 +96,26 @@ export function flushSplit(flushVolume: number, filamentArea: number): Record<st
   return out;
 }
 
+type MoveLike = { k: string; x?: number; y?: number; e?: number; travel?: boolean; feature?: string };
+/** First layer box of the extrusions (Bambu: first_layer_print_min/max/size, first_layer_center_no_wipe_tower without the tower). */
+export function firstLayerTemplateVars(ops: readonly MoveLike[] | undefined, initialLayerHeight: number) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, oMinX = Infinity, oMinY = Infinity, oMaxX = -Infinity, oMaxY = -Infinity;
+  for (const op of ops ?? []) {
+    if (op.k !== 'move' || op.travel || !((op.e ?? 0) > 0) || op.x === undefined || op.y === undefined) continue;
+    minX = Math.min(minX, op.x); minY = Math.min(minY, op.y); maxX = Math.max(maxX, op.x); maxY = Math.max(maxY, op.y);
+    if (op.feature !== 'prime_tower') { oMinX = Math.min(oMinX, op.x); oMinY = Math.min(oMinY, op.y); oMaxX = Math.max(oMaxX, op.x); oMaxY = Math.max(oMaxY, op.y); }
+  }
+  if (!isFinite(minX)) { minX = minY = maxX = maxY = 0; }
+  if (!isFinite(oMinX)) { oMinX = minX; oMinY = minY; oMaxX = maxX; oMaxY = maxY; }
+  return {
+    vars: {
+      first_layer_print_min: [minX, minY], first_layer_print_max: [maxX, maxY], first_layer_print_size: [maxX - minX, maxY - minY],
+      first_layer_center_no_wipe_tower: [(oMinX + oMaxX) / 2, (oMinY + oMaxY) / 2], initial_layer_print_height: initialLayerHeight,
+    },
+    objects: { minX: oMinX, minY: oMinY, maxX: oMaxX, maxY: oMaxY },
+  };
+}
+
 /** Point-in-polygon for the A1's head wrap detect zone ("226x224" style points). */
 export function inZone(zone: unknown, box: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
   if (!Array.isArray(zone) || zone.length < 3) return false;

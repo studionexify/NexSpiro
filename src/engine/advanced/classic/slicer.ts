@@ -8,6 +8,7 @@ import {
 import ClipperLib from 'clipper-lib';
 import { concentricFill, linesFill, sparseFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
+import { flushSplit, renderVendor, usesVendorTemplates } from '../../templateVars';
 import type { IndexedMesh } from '../../mesh';
 import { splitNarrow } from './arachne';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from '../../order';
@@ -742,7 +743,7 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
     // --- filament change
     const changeTo = (next: number) => {
       if (next === curTool) return;
-      if (curTool === -1 && (!hasAms || ((usedFils.size <= 1 || toolChanger) && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
+      if (curTool === -1 && (!hasAms || usesVendorTemplates(cfg) || ((usedFils.size <= 1 || toolChanger) && next === 0))) { ops.push({ k: 'tool', tool: next }); curTool = next; return; }
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
       let flushVol = toolChanger ? num('tool_prime_volume') : opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
@@ -755,11 +756,22 @@ export function slice(meshes: MeshInput[], cfg: Config, progress: ProgressFn = (
       if (!retracted && curTool >= 0) { ops.push({ k: 'retract', len: retractLen, speed: retractSpeed }); }
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
-        text: expandMacro(str('change_filament_gcode'), cfg, {
-          previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
-          new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
-          flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
-        }),
+        text: usesVendorTemplates(cfg)
+          ? renderVendor(str('change_filament_gcode'), cfg, filaments, {
+            previous_extruder: prev, next_extruder: next, layer_num: i, layer_z: zTop, max_layer_z: zTop, current_extruder: prev,
+            new_filament_temp: Math.round(i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp), old_filament_temp: Math.round(filaments[prev].nozzleTemp),
+            ...flushSplit(towerFlush && towerActive ? 0 : flushVol || 0, Math.PI * (fl.diameter / 2) ** 2),
+            old_retract_length_toolchange: num('retract_length_toolchange'), new_retract_length_toolchange: num('retract_length_toolchange'),
+            x_after_toolchange: isNaN(px) ? 0 : px, y_after_toolchange: isNaN(py) ? 0 : py, z_after_toolchange: zTop,
+            travel_point_1_x: isNaN(px) ? 0 : px, travel_point_1_y: isNaN(py) ? 0 : py, travel_point_2_x: isNaN(px) ? 0 : px, travel_point_2_y: isNaN(py) ? 0 : py,
+            travel_point_3_x: isNaN(px) ? 0 : px, travel_point_3_y: isNaN(py) ? 0 : py, position: [isNaN(px) ? 0 : px, isNaN(py) ? 0 : py, zTop],
+            wipe_tower_x: tx + tw / 2, wipe_tower_y: ty + td / 2, toolchange_z: zTop + 3,
+          }, 'Filament change G-code')
+          : expandMacro(str('change_filament_gcode'), cfg, {
+            previous_extruder: prev, next_extruder: next, toolchange_z: (zTop + 3).toFixed(2), layer_z: zTop.toFixed(2), layer_num: i,
+            new_filament_temp: i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp, old_filament_temp: filaments[prev].nozzleTemp,
+            flush_length: flushLen.toFixed(2), wipe_tower_x: (tx + tw / 2).toFixed(2), wipe_tower_y: (ty + td / 2).toFixed(2),
+          }),
       });
       if (layerFan > 0) ops.push({ k: 'raw', text: `M106 S${Math.round((layerFan / 100) * 255)} ; restore part fan` });
       if (toolChanger && curTool >= 0 && cfg.ooze_prevention !== false && num('standby_temperature_delta') < 0)
