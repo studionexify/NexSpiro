@@ -120,6 +120,7 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
   const p = printerById(d.printerId);
   const kinds = useMemo(() => {
     const all = Object.keys(CONNECTION_INFO) as ConnectionKind[];
+    if (p.connections.includes('bbl_lan')) return ['bbl_lan'] as ConnectionKind[]; // Bambu printers only speak their LAN protocol
     return [...p.connections, ...all.filter((k) => !p.connections.includes(k) && k !== 'bbl_lan')];
   }, [p]);
   const cfg = d.config;

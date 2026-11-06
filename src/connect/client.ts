@@ -134,7 +134,12 @@ export async function loadDevices(): Promise<SavedDevice[]> {
   if (b) list = await b.load();
   else try { list = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { list = []; }
   // devices saved before the connection kind was renamed
-  return list.map((d) => ((d.config.kind as string) === 'bambu_lan' ? { ...d, config: { ...d.config, kind: 'bbl_lan' } } : d));
+  return list.map((d) => {
+    if ((d.config.kind as string) === 'bambu_lan') return { ...d, config: { ...d.config, kind: 'bbl_lan' } };
+    // A Bambu printer saved with a Klipper/OctoPrint connection can never connect: switch it to LAN.
+    if (d.printerId.startsWith('bbl-') && d.config.kind !== 'bbl_lan') return { ...d, config: { ...d.config, kind: 'bbl_lan' } };
+    return d;
+  });
 }
 export async function saveDevices(list: SavedDevice[]) {
   const b = bridge();

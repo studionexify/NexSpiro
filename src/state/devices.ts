@@ -68,7 +68,7 @@ export async function run<T>(id: string, label: string, fn: (h: DeviceHandle) =>
 
 export async function connectDevice(id: string) {
   try { await run(id, 'Connecting…', (h) => h.connect()); }
-  catch (e: any) { setStatus(id, { state: 'offline', message: e?.message ?? String(e) }); throw e; }
+  catch (e: any) { setStatus(id, { state: 'offline', message: String(e?.message ?? e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '') }); throw e; }
 }
 export const disconnectDevice = (id: string) => run(id, 'Disconnecting…', (h) => h.disconnect());
 

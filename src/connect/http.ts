@@ -31,6 +31,7 @@ abstract class HttpPrinter implements PrinterConnection {
       try { return text ? JSON.parse(text) : null; } catch { return text; }
     } catch (e: any) {
       if (e?.name === 'AbortError') throw new Error(`No response from ${this.base}`);
+      if (e instanceof TypeError) throw new Error(`Can't reach ${this.base}. Check the IP, that the printer is on the same Wi-Fi, and the connection type.`);
       throw e;
     } finally { clearTimeout(t); }
   }
