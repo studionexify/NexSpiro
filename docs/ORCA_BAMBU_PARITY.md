@@ -45,7 +45,7 @@ print by object, fuzzy skin, per-object settings, auto cooling — ✅ (`src/pro
 
 | Remaining gap | Source | Note |
 | --- | --- | --- |
-| Filament printing sequence per layer (plate settings: first-layer and other-layer filament order) | Bambu Studio | ⚠️ not present — needs a plate-level setting and tool-order change in the slicer's layer emitter |
+| Filament printing sequence per layer (plate settings: first-layer, other-layer and layer-range filament order) | Bambu Studio | ✅ Plate settings › Filament sequence; saved in Bambu's 3MF plate keys |
 
 ## Device (Snapmaker Orca U1 / Bambu)
 | Feature | NexSpiro |
@@ -56,3 +56,8 @@ print by object, fuzzy skin, per-object settings, auto cooling — ✅ (`src/pro
 | Attach / detach toolheads (U1) | ✅ toolchanger support |
 | Filament sync and mapping to loaded filaments (closest colour, same type) | ✅ `src/profiles/amsSync.ts` |
 | Cloud binding (PIN, app QR code), vendor account login | ⛔ requires the vendors' cloud services and accounts |
+
+## Detailed audits
+- [Options vs OrcaSlicer / Bambu Studio / Snapmaker Orca](parity/options.md): every preset key compared; 65 added and implemented, 172 still missing (listed).
+- [Machine G-code per printer](parity/machine-gcode.md): 53 printers use their makers' G-code and machine values verbatim.
+- [Prepare tool UX](parity/ux-prepare.md) and [other flows UX](parity/ux-flows.md): each action tested in the running app.

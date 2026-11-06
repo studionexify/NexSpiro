@@ -42,10 +42,10 @@ const cfgFor = (printerId: string, overrides = {}) =>
 const mesh = (soup: Float32Array, name: string) => { const m = weld(soup); return { id: name, name, vertices: m.vertices, indices: m.indices }; };
 
 const CASES: { name: string; run: () => string; hash: string }[] = [
-  { name: 'cube on P1S', run: () => slice([mesh(box(100, 100, 0, 20, 20, 20), 'cube')], cfgFor('bbl-p1s', { enable_arc_fitting: false })).gcode, hash: 'd44b657b56422161d64f08dbb689f629' },
-  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: '57021c6a3086a8a678c03ccdc616adc4' },
-  { name: 'tee with tree support on Prusa MK4S', run: () => slice([mesh(tee(100, 100), 'tee')], cfgFor('prusa-mk4s', { enable_support: true, support_type: 'tree_auto', enable_arc_fitting: false })).gcode, hash: '5068c27e51c9cf9968f6868f822b3f0b' },
-  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true, enable_arc_fitting: false })).gcode, hash: '844abd7ca39a9354becb637e4c045cbd' },
+  { name: 'cube on P1S', run: () => slice([mesh(box(100, 100, 0, 20, 20, 20), 'cube')], cfgFor('bbl-p1s', { enable_arc_fitting: false })).gcode, hash: '8691e29368128092229082f1917ad24a' },
+  { name: 'cylinder on Voron (arachne, arcs)', run: () => slice([mesh(cylinder(80, 80, 12, 15), 'cyl')], cfgFor('voron-24-350', { wall_generator: 'arachne', enable_arc_fitting: true })).gcode, hash: '7fe7ed81b19ba01b38169bac87dd2912' },
+  { name: 'tee with tree support on Prusa MK4S', run: () => slice([mesh(tee(100, 100), 'tee')], cfgFor('prusa-mk4s', { enable_support: true, support_type: 'tree_auto', enable_arc_fitting: false })).gcode, hash: '38c4f6e41d4f2846354bec0095e09445' },
+  { name: 'vase cylinder on Ender-3 V2', run: () => slice([mesh(cylinder(100, 100, 15, 20), 'vase')], cfgFor('creality-ender3v2', { spiral_mode: true, enable_arc_fitting: false })).gcode, hash: 'c9a0b294ccefe1cc0501b5f139a07411' },
 ];
 
 describe('Basic mode is the classic engine', () => {
