@@ -146,7 +146,14 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [] }:
   const firstTool = firstToolOp?.tool ?? 0;
   const fl0 = firstLayerTemplateVars(layers[0]?.ops as never, Number(cfg.initial_layer_print_height ?? layers[0]?.h ?? 0.2));
   const zone = String(cfg.head_wrap_detect_zone ?? '');
-  const tplCommon = { ...fl0.vars, in_head_wrap_detect_zone: !!zone && inZone(zone.split(','), fl0.objects), total_layer_count: layers.length, initial_extruder: firstTool, initial_tool: firstTool, initial_no_support_extruder: firstTool, initial_no_support_tool: firstTool, current_extruder: firstTool };
+  const tplCommon = { ...fl0.vars, in_head_wrap_detect_zone: !!zone && inZone(zone.split(','), fl0.objects), total_layer_count: layers.length, initial_extruder: firstTool, initial_tool: firstTool, initial_no_support_extruder: firstTool, initial_no_support_tool: firstTool, current_extruder: firstTool,
+    initial_no_support_filament_id: firstTool, first_non_support_filaments: [firstTool, -1], first_filaments: [firstTool, -1],
+    max_print_z: Math.ceil(layers[layers.length - 1]?.z ?? 0),
+    is_extruder_used: (() => {
+      const used = new Set([firstTool, ...layers.flatMap((L) => L.ops.flatMap((op) => (op.k === 'tool' ? [(op as { tool?: number }).tool ?? 0] : [])))]);
+      const heads = Math.max(filaments.length, Math.round(Number(cfg.toolhead_count ?? 1)) || 1, Math.round(Number(cfg.filament_slots ?? 0)) || 0, ...[...used].map((k) => k + 1));
+      return Array.from({ length: heads }, (_, k) => used.has(k));
+    })() };
   const macro = (tpl: string, what: string, extra: Record<string, number | string | boolean | number[]> = {}) =>
     vendor ? renderVendor(tpl, cfg, filaments, { ...tplCommon, ...extra }, what) : expandMacro(tpl, cfg, extra as Record<string, string | number>);
   out.push(macro(String(cfg.machine_start_gcode ?? ''), 'Start G-code'));

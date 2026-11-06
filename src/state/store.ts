@@ -277,6 +277,12 @@ const defaultFilaments = (): FilamentSlotState[] => {
   return [{ presetId: id, color: prefs.filamentColor ?? filamentById(id).color }];
 };
 
+/** After undo / redo: keep only the selected objects (and part) that still exist. */
+function liveSelection(selected: string[], part: string | null, objects: SceneObject[]) {
+  const ids = new Set(objects.map((o) => o.id));
+  return { selected: selected.filter((id) => ids.has(id)), selectedPart: part && objects.some((o) => o.parts?.some((p) => p.id === part)) ? part : null };
+}
+
 export const useStore = create<State>((set, get) => ({
   theme: (prefs.theme as Theme) ?? systemTheme,
   workspace: 'prepare',
@@ -393,13 +399,14 @@ export const useStore = create<State>((set, get) => ({
     const s = get();
     if (!s.undoStack.length) return;
     const back = s.undoStack[s.undoStack.length - 1];
-    set({ objects: back, undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects], edgeSel: edgeSelHistory.get(back) ?? null });
+    set({ objects: back, undoStack: s.undoStack.slice(0, -1), redoStack: [...s.redoStack, s.objects], edgeSel: edgeSelHistory.get(back) ?? null, ...liveSelection(s.selected, s.selectedPart, back) });
     get().markDirty();
   },
   redo: () => {
     const s = get();
     if (!s.redoStack.length) return;
-    set({ objects: s.redoStack[s.redoStack.length - 1], redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects], edgeSel: null });
+    const fwd = s.redoStack[s.redoStack.length - 1];
+    set({ objects: fwd, redoStack: s.redoStack.slice(0, -1), undoStack: [...s.undoStack, s.objects], edgeSel: null, ...liveSelection(s.selected, s.selectedPart, fwd) });
     get().markDirty();
   },
   setOverride: (key, v) => {

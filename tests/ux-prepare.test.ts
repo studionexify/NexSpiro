@@ -33,3 +33,16 @@ describe('one action, one undo step', () => {
     expect(S().objects).toBe(before);
   });
 });
+
+describe('undo / redo selection', () => {
+  it('drops selected ids of objects that undo removed', () => {
+    reset();
+    addShape('box'); const a = S().objects[0].id;
+    addShape('sphere'); const b = S().objects[1].id;
+    S().set({ selected: [a, b] });
+    S().undo();
+    expect(S().selected).toEqual([a]);
+    S().redo();
+    expect(S().objects.map((o) => o.id)).toContain(b);
+  });
+});

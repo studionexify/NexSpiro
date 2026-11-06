@@ -25,7 +25,7 @@ const INTS = new Set([
   'bed_temperature_initial_layer_single', 'max_print_height', 'max_print_z', 'nozzle_temperature', 'nozzle_temperature_initial_layer', 'temperature',
   'first_layer_temperature', 'bed_temperature', 'bed_temperature_initial_layer', 'first_layer_bed_temperature', 'flush_temperatures',
   'timelapse_type', 'chamber_cooling_mode', 'temperature_vitrification', 'min_vitrification_temperature', 'initial_nozzle_id', 'current_nozzle_id',
-  'next_nozzle_id', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
+  'next_nozzle_id', 'initial_no_support_hotend', 'initial_hotend', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
   'required_nozzle_HRC', 'filament_map', 'initial_no_support_filament_id', 'first_non_support_filaments', 'first_filaments', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
   ...VECTOR_INT_KEYS,
 ]);
@@ -122,7 +122,7 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
     extruded_volume_total: 0, extruded_weight_total: 0, extruded_volume: per(() => 0, 0), extruded_weight: per(() => 0, 0),
     // Bambu Studio H2D (two nozzles): NexSpiro prints with one, the left (main) nozzle, extruder 0
     nozzle_diameter_at_nozzle_id: per(() => Number(cfg.nozzle_diameter), Number(cfg.nozzle_diameter)),
-    initial_nozzle_id: 0, current_nozzle_id: 0, next_nozzle_id: 0, current_hotend: 0, next_hotend: 0,
+    initial_nozzle_id: 0, initial_no_support_hotend: 0, initial_hotend: 0, current_nozzle_id: 0, next_nozzle_id: 0, current_hotend: 0, next_hotend: 0,
     most_used_physical_extruder_id: 0, curr_physical_extruder_id: 0, current_extruder_id: 0,
     timelapse_inline_photo: false, has_timelapse_safe_pos: false, farthest_point_timelapse_enabled: false, timelapse_pos_x: 0, timelapse_pos_y: 0, clear_to_x0: false,
   });

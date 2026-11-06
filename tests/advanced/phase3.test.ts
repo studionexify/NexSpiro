@@ -70,7 +70,8 @@ describe('helical thick-vase (#21)', () => {
     sane(out.gcode);
   });
   it('removes the retractions between loops', () => {
-    const count = (g: string) => (g.match(/G1 E-/g) ?? []).length;
+    // a retraction is a G1 with negative E: alone, or spread over the wipe (Bambu's retract_before_wipe 0 %)
+    const count = (g: string) => (g.match(/^G1 [^;\n]*E-/gm) ?? []).length;
     const basic = slice([indexed(tube(100, 100, 15, 3, 20), 'tube')], cfgFor('bbl-x1c'));
     const { out } = adv(indexed(tube(100, 100, 15, 3, 20), 'tube'), 'bbl-x1c', ['thick_vase']);
     expect(count(out.gcode)).toBeLessThan(count(basic.gcode) * 0.6);

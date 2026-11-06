@@ -37,7 +37,7 @@ export const FILAMENT_PARAMS: ParamDef[] = [
 
   // ---------------- Filament › Print temperature
   { key: 'chamber_temperatures', label: 'Chamber temperature', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 80, def: 0, tip: 'Heated or actively controlled chamber target (M141). 0 = not controlled.' },
-  { key: 'activate_chamber_temp_control', label: 'Activate temperature control', tab: 'Filament', group: 'Print temperature', type: 'bool', def: false, tip: 'Writes the chamber temperature into the G-code (M141, and M191 to wait for it on firmware that supports it). Off leaves the chamber to the start G-code.' },
+  { key: 'activate_chamber_temp_control', label: 'Activate temperature control', tab: 'Filament', group: 'Print temperature', type: 'bool', def: true, tip: 'Writes the chamber temperature into the G-code (M141, and M191 to wait for it on firmware that supports it). Off leaves the chamber to the start G-code.' },
   { key: 'idle_temperature', label: 'Idle temperature', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 0, tip: 'Tool changers with ooze prevention: the temperature a parked head with this filament waits at. 0 uses the standby temperature variation of the printer.' },
   { key: 'nozzle_temperature_initial_layer', label: 'Nozzle (initial layer)', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 220, tip: 'Nozzle temperature for the first layer.' },
   { key: 'nozzle_temperature', label: 'Nozzle (other layers)', tab: 'Filament', group: 'Print temperature', type: 'int', unit: '°C', min: 0, max: 500, def: 220, tip: 'Nozzle temperature after the first layer.' },

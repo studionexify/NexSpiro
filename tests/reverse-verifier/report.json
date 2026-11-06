@@ -1973,47 +1973,212 @@
   {
     "target": "adv/conformal_layers",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51956.1062048749,
+      "checkedSegments": 10013,
+      "belowResolution": 363,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 10.27655997646857,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 10376,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_layers",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51956.1062048749,
+      "checkedSegments": 10013,
+      "belowResolution": 363,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 10.27655997646857,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 10376,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_layers",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved top skins limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.41007283121340954,
+      "checkedMm": 116315.9190333559,
+      "checkedSegments": 22825,
+      "belowResolution": 164,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 6.53255534937331,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_layers",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 22989,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/hot_on_hot",
@@ -2690,47 +2855,209 @@
   {
     "target": "adv/subvoxel_aa",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 1.7044001309218786,
+      "checkedMm": 51955.42641933925,
+      "checkedSegments": 19779,
+      "belowResolution": 363,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 10.328159148912867,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 20142,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/subvoxel_aa",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.47694196899831537,
+      "checkedMm": 51954.90161415794,
+      "checkedSegments": 19779,
+      "belowResolution": 363,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 3.0653966579810987,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 20142,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/subvoxel_aa",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5603081596203477,
+      "checkedMm": 116315.8211885999,
+      "checkedSegments": 47689,
+      "belowResolution": 164,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 3.133667907048064,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/subvoxel_aa",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 47853,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/turing_infill",
@@ -3569,92 +3896,419 @@
   {
     "target": "adv/dovetail",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.4975366605375095,
+      "checkedMm": 89290.13089028452,
+      "checkedSegments": 37672,
+      "belowResolution": 4873,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 44207,
+      "maxPosErrMm": 0.0005073242187449978,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/dovetail",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.6014890204047479,
+      "checkedMm": 110028.67995401609,
+      "checkedSegments": 36818,
+      "belowResolution": 6288,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 44372,
+      "maxPosErrMm": 0.0005073242187449978,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/dovetail",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5787940026344635,
+      "checkedMm": 284795.6871720427,
+      "checkedSegments": 62405,
+      "belowResolution": 21471,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/dovetail",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 117300,
+      "maxPosErrMm": 0.0011968994140687528,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/sgd_slicing",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.28006117959392834,
+      "checkedMm": 16720.942901901828,
+      "checkedSegments": 7802,
+      "belowResolution": 72,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 10.29650295704784,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 7874,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/sgd_slicing",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.2714344843223313,
+      "checkedMm": 16290.444716572254,
+      "checkedSegments": 1781,
+      "belowResolution": 68,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 4.117980331136505,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 1849,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/sgd_slicing",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Overhang-reducing layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.21562194224705702,
+      "checkedMm": 36770.97592333802,
+      "checkedSegments": 3505,
+      "belowResolution": 182,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0.07836404055069206,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/sgd_slicing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 3687,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/eikonal_offsets",
@@ -4076,182 +4730,836 @@
   {
     "target": "adv/gloss_modulation",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39008.42988001276,
+      "checkedSegments": 1763,
+      "belowResolution": 216,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 1979,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/gloss_modulation",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39008.42988001276,
+      "checkedSegments": 1763,
+      "belowResolution": 216,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 1979,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/gloss_modulation",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.11423861857246219,
+      "checkedMm": 87542.05943258156,
+      "checkedSegments": 3922,
+      "belowResolution": 212,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/gloss_modulation",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 4134,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/foam_control",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Temperature look-ahead uses the hotend time constant (4 s)."
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.2069798283810401,
+      "checkedMm": 167587.69909450732,
+      "checkedSegments": 3335,
+      "belowResolution": 514,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 3849,
+      "maxPosErrMm": 0.0005045166015520408,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/foam_control",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Temperature look-ahead uses the hotend time constant (4 s)."
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.14038627915374907,
+      "checkedMm": 167587.69909450732,
+      "checkedSegments": 3335,
+      "belowResolution": 514,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 3849,
+      "maxPosErrMm": 0.0005045166015520408,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/foam_control",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Temperature look-ahead uses the hotend time constant (4 s)."
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.126259715835214,
+      "checkedMm": 362833.41534619674,
+      "checkedSegments": 7195,
+      "belowResolution": 476,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/foam_control",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 7671,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/knot_braiding",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.43859652647427627,
+      "checkedMm": 21680.56081365613,
+      "checkedSegments": 14561,
+      "belowResolution": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 10.13652448079334,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 14561,
+      "maxPosErrMm": 0.0005034790039104564,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/knot_braiding",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.43859652647427627,
+      "checkedMm": 21619.033710659533,
+      "checkedSegments": 11108,
+      "belowResolution": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 8.419685681280443,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 11108,
+      "maxPosErrMm": 0.0005034790039104564,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/knot_braiding",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.442525902310548,
+      "checkedMm": 50558.87281689782,
+      "checkedSegments": 57202,
+      "belowResolution": 72,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 1.3830848918923215,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/knot_braiding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 57274,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/co_molding",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3639107332543716,
+      "checkedMm": 125343.5281192477,
+      "checkedSegments": 18113,
+      "belowResolution": 1422,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 19535,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/co_molding",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "notApplicable": 1
+    },
+    "firstFailures": [],
+    "reason": "The part is too thin for a cavity inside its shell."
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.22426009204242142,
+      "checkedMm": 105742.06982938659,
+      "checkedSegments": 3474,
+      "belowResolution": 284,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
-    "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 3758,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/co_molding",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5799699501081553,
+      "checkedMm": 315759.9973334034,
+      "checkedSegments": 51961,
+      "belowResolution": 20088,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/co_molding",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 89106,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/thick_vase",
@@ -4880,92 +6188,422 @@
   {
     "target": "adv/harmonic_dome",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5397323281608022,
+      "checkedMm": 55579.758705050626,
+      "checkedSegments": 19024,
+      "belowResolution": 444,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 8.049466975527455,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 19468,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/harmonic_dome",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.45236147619729095,
+      "checkedMm": 53228.40581962588,
+      "checkedSegments": 17966,
+      "belowResolution": 237,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 6.606754680761221,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 18203,
+      "maxPosErrMm": 0.0005037231445328416,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/harmonic_dome",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Dome-following layers limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.6806686859413944,
+      "checkedMm": 127396.73936083977,
+      "checkedSegments": 43418,
+      "belowResolution": 365,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 9.953468129664715,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/harmonic_dome",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 43806,
+      "maxPosErrMm": 0.0005037841796848852,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_ironing",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.4423412879846221,
+      "checkedMm": 49507.09573531486,
+      "checkedSegments": 8469,
+      "belowResolution": 9807,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 7.047660623884817,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 18276,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_ironing",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.4423412879846221,
+      "checkedMm": 50402.03602173638,
+      "checkedSegments": 9481,
+      "belowResolution": 403,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 4.634407341033381,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 9884,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/conformal_ironing",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "Curved-surface ironing limited to 11° slopes by Bambu Lab X1C hotend."
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.41007283121340954,
+      "checkedMm": 110146.65204516232,
+      "checkedSegments": 18808,
+      "belowResolution": 282,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/conformal_ironing",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 19090,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/perimeter_feathering",
@@ -5801,47 +7439,209 @@
   {
     "target": "adv/monge_ampere",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.4071272893207202,
+      "checkedMm": 51602.257832666815,
+      "checkedSegments": 2577,
+      "belowResolution": 306,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 2883,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/monge_ampere",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.37578814780506975,
+      "checkedMm": 51224.09623635662,
+      "checkedSegments": 2411,
+      "belowResolution": 337,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 2752,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/monge_ampere",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5230285113876308,
+      "checkedMm": 109844.18244485256,
+      "checkedSegments": 7400,
+      "belowResolution": 528,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/monge_ampere",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 7928,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/symplectic_shaper",
@@ -6266,92 +8066,422 @@
   {
     "target": "adv/spinor_fields",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "No continuous-fiber head: defect-free paths steer the polymer beads."
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 38823.73976216705,
+      "checkedSegments": 6568,
+      "belowResolution": 216,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 6784,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/spinor_fields",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "No continuous-fiber head: defect-free paths steer the polymer beads."
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3569645676953678,
+      "checkedMm": 39662.55921671768,
+      "checkedSegments": 6118,
+      "belowResolution": 217,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 6335,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/spinor_fields",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": [],
+    "reason": "No continuous-fiber head: defect-free paths steer the polymer beads."
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.3055167732745121,
+      "checkedMm": 86066.08796393758,
+      "checkedSegments": 16724,
+      "belowResolution": 212,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/spinor_fields",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 16936,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/band_gap",
     "profile": "Default",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 220200.0045499526,
+      "checkedSegments": 143312,
+      "belowResolution": 1818,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 154832,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/band_gap",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "notApplicable": 1
+    },
+    "firstFailures": [],
+    "reason": "No resonator cell up to 40 mm reaches 18000 Hz with 0.45 mm lines."
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.31810833648773595,
+      "checkedMm": 140773.7746469396,
+      "checkedSegments": 3240,
+      "belowResolution": 432,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
-    "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 3672,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/band_gap",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
-    "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
+    "assertion": "tech-status",
+    "type": "STATUS",
+    "pass": true,
+    "failureCount": 0,
     "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.22670187928409122,
+      "checkedMm": 257660.422752046,
+      "checkedSegments": 41245,
+      "belowResolution": 513,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "adv/band_gap",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
+    "type": "HARNESS",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 42507,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "adv/homogenization",
@@ -6564,47 +8694,221 @@
   {
     "target": "plugin/motionex",
     "profile": "Default",
-    "assertion": "slice-ran",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.5091178044866971,
+      "checkedMm": 24140.440688414663,
+      "checkedSegments": 46189,
+      "belowResolution": 2901,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
-    "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 60289,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Default",
+    "assertion": "spirographic-signature",
+    "type": "SIGNATURE",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "layersAnalysed": 91,
+      "worstAmplitudeErrMm": 0.00459313582091847,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "plugin/motionex",
     "profile": "Extreme Modulation",
-    "assertion": "slice-ran",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.32343853333754496,
+      "checkedMm": 51297.63510656932,
+      "checkedSegments": 50396,
+      "belowResolution": 3796,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
-    "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 55272,
+      "maxPosErrMm": 0.000503662109380798,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Extreme Modulation",
+    "assertion": "spirographic-signature",
+    "type": "SIGNATURE",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "layersAnalysed": 91,
+      "worstAmplitudeErrMm": 0.0642389620567756,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "plugin/motionex",
     "profile": "Boundary Edge-Cases",
-    "assertion": "slice-ran",
+    "assertion": "volumetric-extrusion-conservation",
+    "type": "VOLUME",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxRelErrPct": 0.316910631094801,
+      "checkedMm": 3358.799621679062,
+      "checkedSegments": 3577,
+      "belowResolution": 172,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "finite-and-bed-safe",
+    "type": "SAFETY",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "minExtrusionZ": 0.2,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "nonplanar-ramp-angle",
+    "type": "RAMP",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "maxThetaDeg": 0,
+      "minExtrusionZ": 0.2,
+      "plunges": 0,
+      "plungeMinClearanceMm": 0,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "declared-geometry-map",
     "type": "HARNESS",
-    "pass": false,
-    "failureCount": 1,
-    "metrics": {},
-    "firstFailures": [
-      {
-        "assertion": "slice-ran",
-        "message": "Error: Start G-code: \"retraction_length\" is not a vector"
-      }
-    ]
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "declaredHits": 16322,
+      "maxPosErrMm": 0.0005034790039104564,
+      "failureCount": 0
+    },
+    "firstFailures": []
+  },
+  {
+    "target": "plugin/motionex",
+    "profile": "Boundary Edge-Cases",
+    "assertion": "spirographic-signature",
+    "type": "SIGNATURE",
+    "pass": true,
+    "failureCount": 0,
+    "metrics": {
+      "layersAnalysed": 50,
+      "worstAmplitudeErrMm": 0.0008659892669715119,
+      "failureCount": 0
+    },
+    "firstFailures": []
   },
   {
     "target": "plugin/hanex",

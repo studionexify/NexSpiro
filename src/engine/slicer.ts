@@ -190,6 +190,28 @@ export function solidLayerRule(rule: string): (n: number) => boolean {
   return (n) => set.has(n);
 }
 
+/**
+ * Filament shrinkage compensation: each object is scaled up by 100 / shrink in X and Y (about its own centre) and by
+ * 100 / shrink (Z) in Z (from the bed), so it cools down to its modelled size. Objects that need no scaling are kept.
+ */
+export function shrinkCompensate(meshes: MeshInput[], filCfg: (m: MeshInput) => Config, cfg: Config): MeshInput[] {
+  return meshes.map((m) => {
+    const fc = filCfg(m);
+    const pct = (k: string) => { const v = Number(fc[k] ?? cfg[k] ?? 100); return v >= 50 && v <= 150 ? v : 100; };
+    const sxy = 100 / pct('filament_shrink'), sz = 100 / pct('filament_shrinkage_compensation_z');
+    if (Math.abs(sxy - 1) < 1e-9 && Math.abs(sz - 1) < 1e-9) return m;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let k = 0; k < m.vertices.length; k += 3) { x0 = Math.min(x0, m.vertices[k]); x1 = Math.max(x1, m.vertices[k]); y0 = Math.min(y0, m.vertices[k + 1]); y1 = Math.max(y1, m.vertices[k + 1]); }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const scale = (v: Float32Array) => {
+      const out = new Float32Array(v.length);
+      for (let k = 0; k < v.length; k += 3) { out[k] = cx + (v[k] - cx) * sxy; out[k + 1] = cy + (v[k + 1] - cy) * sxy; out[k + 2] = v[k + 2] * sz; }
+      return out;
+    };
+    return { ...m, vertices: scale(m.vertices), parts: m.parts?.map((p) => ({ ...p, vertices: scale(p.vertices) })) };
+  });
+}
+
 /** Filament slot derived from the flat config (single-material default). */
 export function slotFromConfig(cfg: Config): FilamentSlot {
   return {
@@ -262,6 +284,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const rnd = mulberry(42);
   const filaments = opts.filaments?.length ? opts.filaments : [slotFromConfig(cfg)];
   const clampFil = (f: number) => Math.max(0, Math.min(filaments.length - 1, f | 0));
+  meshes = shrinkCompensate(meshes, (m) => filaments[clampFil(m.filament ?? 0)]?.settings ?? cfg, cfg);
   // mixed filaments (colour mixing): indices after the physical slots resolve to a physical slot per layer
   const mixes = opts.mixes ?? [];
   const usedMixes = new Set<number>();
@@ -1059,7 +1082,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         : [{ base: union([...layerSlices[objStart], ...extra]) }];
       // skirt minimum extrusion length: more loops until the skirt pushes at least this much filament
       const minFil = Math.max(0, num('min_skirt_length'));
-      const fd = filaments[0]?.diameter || 1.75, filPerMm = (w * h0) / (Math.PI * (fd / 2) ** 2);
+      const fd = filaments[0]?.diameter || 1.75, filPerMm = ((w > h0 ? (w - h0) * h0 + Math.PI * (h0 / 2) ** 2 : w * h0) * (filaments[0]?.flowRatio || 1)) / (Math.PI * (fd / 2) ** 2);
       const startAng = (num('skirt_start_angle') * Math.PI) / 180;
       let dropped = 0;
       for (const { base: b0, owner } of bases) {
@@ -1231,6 +1254,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   let safeZ: number | null = null; // by-object: travel to the next object above everything printed
   /** The last extruded path, newest point last (for wipe moves). */
   let wipeTrail: number[] = [];
+  /** Line type of the last extrusion, across layers (role based wipe speed). */
+  let lastPrinted: FeatureType | null = null;
   let maxPrinted = 0;
 
   // emission of one layer (all objects, or one object when printing by object)
@@ -1345,7 +1370,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         }
         const total = wipeLen - left;
         // role based wipe speed: wipe at the speed of the line just printed
-        const ws = bool('role_based_wipe_speed') && lastFeature ? speedFor(lastFeature, i) : travelSpeed * Math.max(0.01, num('wipe_speed') / 100);
+        const ws = bool('role_based_wipe_speed') && lastPrinted ? speedFor(lastPrinted, i) : travelSpeed * Math.max(0.01, num('wipe_speed') / 100);
         let done = 0;
         for (let k = 0; k < pts.length; k += 2) {
           const seg = Math.hypot(pts[k] - (k ? pts[k - 2] : px), pts[k + 1] - (k ? pts[k - 1] : py));
@@ -1380,10 +1405,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const dx = pts[0] - pts[2], dy = pts[1] - pts[3], L = Math.hypot(dx, dy) || 1;
         travel(pts[0] + (dx / L) * it.leadIn, pts[1] + (dy / L) * it.leadIn, it.feature, startZ);
       }
-      if (it.primeAt && retracted) {
-        // wipe before external loop: prime just inside the part, then move onto the seam
+      if (it.primeAt && retractLen > 0 && (retracted || isNaN(px) || Math.hypot(pts[0] - px, pts[1] - py) > minTravel)) {
+        // wipe before external loop: arrive (retracted) just inside the part, prime there, then move onto the seam
         travel(it.primeAt[0], it.primeAt[1], it.feature, startZ);
+        if (retracted) {
         const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false;
+        }
       }
       travel(pts[0], pts[1], it.feature, startZ);
       if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
@@ -1447,7 +1474,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         px = it.wipeIn[0]; py = it.wipeIn[1];
       }
       if (zTop > maxPrinted) maxPrinted = zTop;
-      lastFeature = it.feature;
+      lastFeature = it.feature; lastPrinted = it.feature;
     };
     /** Extrusion volume of a path (mm³), for flushing into infill / support / objects. */
     const volumeOf = (it: PathItem) => {

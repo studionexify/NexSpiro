@@ -588,7 +588,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     const body = bodyTransform(out.splice(bodyStart));
     for (const l of body) out.push(l);
   }
-  push('M73 P100 R0');
+  if (!noM73) push('M73 P100 R0');
   setFan(0);
   const lastL = layers[layers.length - 1];
   if (vendor) push(';===== NexSpiro end G-code: the printer maker\'s own end G-code follows =====');
