@@ -878,6 +878,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   // unset: the printer's default position (Bambu Studio's default_wipe_tower_pos, a fraction of the bed), kept on the bed
   const towerPos = /^\s*([\d.]+)\s*x\s*([\d.]+)\s*$/i.exec(str('default_wipe_tower_pos'));
   const brimM = Math.max(0, num('prime_tower_brim_width')) + 2;
+  const autoTower = !!towerPos && tx < 0 && ty < 0;
   if (tx < 0) tx = towerPos ? Math.min(Math.max(brimM, Number(towerPos[1]) * num('bed_x')), num('bed_x') - tw - brimM) : Math.max(5, num('bed_x') - tw - 15);
   if (ty < 0) ty = towerPos ? Math.min(Math.max(brimM, Number(towerPos[2]) * num('bed_y')), num('bed_y') - td - brimM) : Math.max(5, num('bed_y') - td - 25);
   // tower body: a (filleted) rectangle with optional diagonal ribs
@@ -895,6 +896,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       towerBody = union([...towerBody, ...ribs]);
     }
     if (bool('prime_tower_fillet_wall')) towerBody = offset(offset(towerBody, -2, 'round'), 2, 'round');
+    // a default position (not set by the user) keeps the whole tower, ribs and brim included, on the plate
+    if (autoTower) {
+      const b0 = bounds(towerBody);
+      const lo = (v: number) => v / SCALE;
+      let dx = 0, dy = 0;
+      if (lo(b0.minX) - brimM < 0) dx = brimM - lo(b0.minX); else if (lo(b0.maxX) + brimM > num('bed_x')) dx = num('bed_x') - brimM - lo(b0.maxX);
+      if (lo(b0.minY) - brimM < 0) dy = brimM - lo(b0.minY); else if (lo(b0.maxY) + brimM > num('bed_y')) dy = num('bed_y') - brimM - lo(b0.maxY);
+      if (dx || dy) {
+        tx += dx; ty += dy;
+        towerBody = towerBody.map((p) => p.map((q) => ({ X: q.X + Math.round(dx * SCALE), Y: q.Y + Math.round(dy * SCALE) })));
+      }
+    }
     const tb = offset(towerBody, 3);
     if (intersection(tb, layerSlices[objStart]).length) warn('The prime tower overlaps an object — move it in Others › Prime tower.');
     const b = bounds(towerBody);
