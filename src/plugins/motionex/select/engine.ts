@@ -13,6 +13,7 @@ import type { PatternexRegion } from '../core/regions';
 import type { MotionApplication, MotionBrush } from '../model';
 import { featuresOf, ruleActive, targetOk, tunedBrush, type LineGroup, type SelectRule } from './model';
 import { piecesAt, stripPolys, weightAt, type Poly } from './geometry';
+import { brushAt } from '../modifier';
 import { classifyLines, CLASS_IDS, segsOfOps } from './classes';
 
 /** Per layer and op: does each rule's targets take that move? Only for rules with targets. */
@@ -122,8 +123,36 @@ export function rulesPrepare(rules: SelectRule[], ctx: PrepareContext): { sessio
   };
 }
 
+/** A rule whose motion was made smaller so it stays clear of the next wall; mm = the largest swing allowed. */
+export interface Limited { id: string; name: string; mm: number }
+/** Largest side-to-side swing, as a share of the line width, for a motion on some walls only. */
+export const CROSS_SHARE = 0.5;
+
+/**
+ * Inner walls chosen with a neighbour left out (outer wall off, or from a number past 1 / up to a number). The
+ * outer wall alone is not limited: the inner walls follow it (bonding), so it can't run into them.
+ */
+export function wallsPartial(t: NonNullable<SelectRule['targets']>): boolean {
+  const inner = t.inner;
+  if (!inner) return false;
+  return !t.outer || inner[0] > 1 || inner[1] < 99;
+}
+
+function lineWidth(layers: LayerOps[]): number {
+  for (const L of layers) for (const op of L.ops) if (op.k === 'move' && !op.travel && (op.feature === 'inner_wall' || op.feature === 'outer_wall') && op.w > 0) return op.w;
+  return 0.42;
+}
+
+/** Peak side-to-side movement of a motion (mm, before the size slider), over one repeat. */
+export function peakLateral(b: MotionBrush): number {
+  let m = 0;
+  for (let k = 0; k < 96; k++) m = Math.max(m, Math.abs(brushAt({ ...b, layers: null }, (k / 96) * b.period_mm, b.period_mm * 4, 0, b.period_mm)?.lat ?? 0));
+  return m;
+}
+
 /** Motion rules as Motionex placements on their own regions. Later rules replace earlier motion where they overlap. */
-export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSession | undefined, brushOf?: (id: string) => MotionBrush | undefined): { apps: MotionApplication[]; regions: PatternexRegion[] } {
+export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSession | undefined, brushOf?: (id: string) => MotionBrush | undefined): { apps: MotionApplication[]; regions: PatternexRegion[]; limited: Limited[] } {
+  const limited: Limited[] = [];
   const test = targetTest(layers, rules.filter((r) => r.apply.motion));
   const apps: MotionApplication[] = [];
   const regions: PatternexRegion[] = [];
@@ -174,7 +203,13 @@ export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSess
     const lo = p.kind === 'layers' ? Math.min(p.z0, p.z1) : -1e4, hi = p.kind === 'layers' ? Math.max(p.z0, p.z1) : 1e4;
     const b = Math.max(0, r.blend_mm);
     const base = brushOf?.(r.apply.motion!.brush_id);
-    const tuned = base && tunedBrush(r.apply.motion!, base);
+    let tuned = base && tunedBrush(r.apply.motion!, base);
+    // a motion on some walls but not their neighbours may not swing into the next wall
+    if (tuned && r.targets && wallsPartial(r.targets)) {
+      const w = lineWidth(layers), cap = w * CROSS_SHARE;
+      const peak = peakLateral(tuned) * (r.apply.motion!.scale || 1);
+      if (peak > cap) { tuned = { ...tuned, amplitude: tuned.amplitude * (cap / peak) }; limited.push({ id: r.id, name: r.name, mm: cap }); }
+    }
     apps.push({
       ...(tuned && tuned !== base ? { brush: tuned } : {}),
       brush_id: r.apply.motion!.brush_id, scale: r.apply.motion!.scale || 1, label: r.name,
@@ -184,7 +219,7 @@ export function ruleMotions(rules: SelectRule[], layers: LayerOps[], s: RuleSess
       order: 1000 + k, blend: k > 0 ? 'override' : 'add', enabled: true,
     });
   });
-  return { apps, regions };
+  return { apps, regions, limited };
 }
 
 /** Speed, flow and temperature of the rules, on the finished moves. */

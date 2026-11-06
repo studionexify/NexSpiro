@@ -25,6 +25,8 @@ export interface Draft {
   /** Layers worked on, and how long it took (ms). */
   layers: number;
   ms: number;
+  /** Rules whose motion was made smaller so it stays clear of the next wall. */
+  limited: { id: string; name: string; mm: number }[];
 }
 
 export interface DraftInput {
@@ -96,5 +98,5 @@ export function makeDraft(d: DraftInput): Draft | null {
     }
     for (const q of P) if (q.post?.dwell_ms) pauses.push(q.x, q.y, q.z, q.post.dwell_ms / 1000);
   }
-  return { pos: new Float32Array(pos), replaced, pauses: new Float32Array(pauses), layers: touched.size, ms: performance.now() - t0 };
+  return { pos: new Float32Array(pos), replaced, pauses: new Float32Array(pauses), layers: touched.size, limited: picked.limited, ms: performance.now() - t0 };
 }

@@ -204,7 +204,8 @@ export const motionexEngine: EnginePlugin<MotionexConfig, MotionexReport> = {
     const paint = config.paint?.enabled ? applyPaint(layerOps, config.paint, ctx.cfg, session?.masks?.paint ? (l) => session.masks!.paint!.maskAt(l) : null, ctx.warn) : undefined;
     const lace = config.lace?.enabled ? applyLace(layerOps, config.lace, ctx.cfg, session?.masks?.lace ? (l) => session.masks!.lace!.maskAt(l) : null, ctx.warn, config.printerId) : undefined;
     const brushById = new Map(config.brushes.map((b) => [b.id, b]));
-    const picked = config.rules?.length ? ruleMotions(config.rules, layerOps, session?.rules, (id) => brushById.get(id)) : { apps: [], regions: [] };
+    const picked = config.rules?.length ? ruleMotions(config.rules, layerOps, session?.rules, (id) => brushById.get(id)) : { apps: [], regions: [], limited: [] };
+    for (const l of picked.limited) ctx.warn(`Select & apply: the motion of "${l.name}" was made smaller (at most ${l.mm.toFixed(2)} mm each way) so it doesn't run into the next wall.`);
     const apps = [...config.applications.filter((a) => a.enabled).map((a) => ({ ...a, target: { ...a.target } })), ...picked.apps];
     // speed, flow and temperature of the selections go last, over every motion
     const finish = <T extends MotionexReport>(r: T): T => (config.rules?.length ? { ...r, select: applyRulePass(layerOps, config.rules, ctx, session?.rules) } : r);

@@ -15,6 +15,7 @@ import { changed, mx, useMx } from './MotionexPanel';
 import { ALL_TARGETS, describePick, draftMode, featuresOf, groupsOfTargets, newRule, pickEmpty, ruleActive, targetOk, type PickKind, type RuleTargets, type SelectRule } from '../select/model';
 import { makeDraft, type Draft } from '../select/draft';
 import { MotionTabs } from './MotionTabs';
+import { wallsFromModel, wallSettings } from '../select/modelWalls';
 import { piecesAt, weightAt, type Piece } from '../select/geometry';
 import { objectAnchors } from '../select/engine';
 import { FEATURE_RGB, featureName, hexRgb, runOf, segmentsOf, SelectView } from './selectView';
@@ -45,6 +46,7 @@ const ACTIVE = hexRgb('#ff3d7f'), OTHER = hexRgb('#4f8cff');
 // kept while the app runs, so the window opens again with the same lines shown and the same projection
 let lastFilter: LineFilter = { ...SHOW_ALL };
 let lastOrtho = false;
+let lastSource: 'model' | 'slice' = 'model';
 const cubeListeners = new Set<(m: ArrayLike<number>) => void>();
 
 interface ObjBox { id: string; name: string; min: [number, number, number]; max: [number, number, number] }
@@ -74,13 +76,26 @@ function ensureKind(r: SelectRule, kind: PickKind): boolean {
 
 function SelectWindow() {
   useMx();
-  const result = useStore((s) => s.slice.result);
+  const sliced = useStore((s) => s.slice.result);
+  const objects = useStore((s) => s.objects);
+  const overrides = useStore((s) => s.overrides);
+  const presetId = useStore((s) => s.presetId);
+  const [source, setSourceState] = useState<'model' | 'slice'>(lastSource);
+  const setSource = (v: 'model' | 'slice') => { lastSource = v; setSourceState(v); if (v === 'slice' && !useStore.getState().slice.result) void sliceNow(); };
+  // walls straight from the 3D model: layer height and wall count changes show at once, without slicing
+  const fromModel = useMemo(() => {
+    if (source !== 'model') return null;
+    try { return wallsFromModel(plateMeshes(plateObjects().filter((o) => o.printable !== false)), wallSettings(currentConfig())); } catch (e) { console.warn('model walls failed', e); return null; }
+  }, [source, objects, overrides, presetId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const result = source === 'model' ? fromModel : sliced;
+  const ws = wallSettings(currentConfig());
   const status = useStore((s) => s.slice.status);
   const progress = useStore((s) => s.slice.progress);
   const dirty = useStore((s) => s.slice.dirty);
   const filaments = useStore((s) => s.filaments);
   const theme = useStore((s) => s.theme);
   const host = useRef<HTMLDivElement>(null);
+  const had = useRef(false);
   const view = useRef<SelectView | null>(null);
   const [tool, setTool] = useState<Tool>('lines');
   const [brushR, setBrushR] = useState(1.5);
@@ -101,7 +116,7 @@ function SelectWindow() {
     const hasMotion = () => mx.rules.some((r) => ruleActive(r) && r.apply.motion);
     if (hasMotion()) useStore.getState().markDirty();
     const s = useStore.getState().slice;
-    if (s.status !== 'slicing' && (!s.result || s.dirty)) void sliceNow();
+    if (lastSource === 'slice' && s.status !== 'slicing' && (!s.result || s.dirty)) void sliceNow();
     const close = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) openSelectWindow(false); };
     window.addEventListener('keydown', close);
     return () => {
@@ -115,6 +130,7 @@ function SelectWindow() {
   useEffect(() => {
     const v = new SelectView(host.current!);
     view.current = v;
+    had.current = false; // a new view (React may make it twice) frames the print again
     v.onProjection = (o) => { lastOrtho = o; setOrthoState(o); };
     v.cameraListeners.add((m) => { for (const l of cubeListeners) l(m); });
     return () => { v.dispose(); view.current = null; };
@@ -123,7 +139,6 @@ function SelectWindow() {
   useEffect(() => { view.current?.setPickMode(tool !== 'orbit'); if (tool !== 'brush') view.current?.showBrush(null); }, [tool]);
 
   const segs = useMemo(() => (result ? segmentsOf(result) : null), [result]);
-  const had = useRef(false);
   useEffect(() => {
     if (!segs || !view.current) return;
     view.current.setData(segs, had.current);
@@ -363,7 +378,7 @@ function SelectWindow() {
               </div>
             </div>
             <ShowLines f={filter} set={setFilter} lc={classes} />
-            {rule && <RuleEditor r={rule} oneObject={oneObject} setOneObject={setOneObject} lc={classes} />}
+            {rule && <RuleEditor r={rule} oneObject={oneObject} setOneObject={setOneObject} lc={classes} limited={draft?.limited.find((l) => l.id === rule.id)} />}
           </aside>
           <main className="sxw-main">
             <div className="sxw-tools">
@@ -371,6 +386,15 @@ function SelectWindow() {
               {tool === 'brush' && <label className="sxw-inline">Brush size<input type="range" min={0.3} max={10} step={0.1} value={brushR} onChange={(e) => setBrushR(+e.target.value)} /><span>{brushR.toFixed(1)} mm</span></label>}
               {tool === 'layers' && <label className="sxw-inline"><input type="checkbox" checked={oneObject} onChange={(e) => setOneObject(e.target.checked)} />Only the clicked object</label>}
               <span style={{ flex: 1 }} />
+              <div className="sxw-proj sxw-source" role="group" aria-label="Show">
+                <button className={source === 'model' ? 'on' : ''} onClick={() => setSource('model')} title="Walls built straight from the 3D model: layer height and wall changes show at once. Infill and skins come with the real slice">From model</button>
+                <button className={source === 'slice' ? 'on' : ''} onClick={() => setSource('slice')} title="The last real slice: every line, infill and skins included">Last slice</button>
+              </div>
+              {source === 'model' && <>
+                <label className="sxw-inline" title="Layer height (a real setting: the slice uses it too)">Layer<input className="input sxw-num" type="number" min={0.04} max={1} step={0.02} value={ws.layerH} onChange={(e) => { const v = +e.target.value; if (v >= 0.04 && v <= 1) useStore.getState().setOverride('layer_height', v); }} />mm</label>
+                <label className="sxw-inline" title="First layer height (a real setting)">First<input className="input sxw-num" type="number" min={0.04} max={1} step={0.02} value={ws.firstH} onChange={(e) => { const v = +e.target.value; if (v >= 0.04 && v <= 1) useStore.getState().setOverride('initial_layer_print_height', v); }} />mm</label>
+                <label className="sxw-inline" title="Number of walls (a real setting)">Walls<input className="input sxw-num" type="number" min={1} max={12} step={1} value={ws.walls} onChange={(e) => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 12) useStore.getState().setOverride('wall_loops', v); }} /></label>
+              </>}
               <label className="sxw-inline">Colour by
                 <select className="select" value={colorBy} onChange={(e) => setColorBy(e.target.value as 'feature' | 'filament')}><option value="feature">Line kind</option><option value="filament">Filament</option></select>
               </label>
@@ -384,7 +408,7 @@ function SelectWindow() {
                   <button className={!ortho ? 'on' : ''} onClick={() => view.current?.setOrtho(false)} title="Perspective: far lines look smaller, like a photo">Persp</button>
                 </div>
               </ViewCube>
-              {!result && <div className="sxw-empty">{status === 'slicing' ? 'Slicing the plate to show its lines…' : 'Nothing sliced yet. Add a model to the plate, then Re-slice.'}</div>}
+              {!result && <div className="sxw-empty">{source === 'model' ? 'Add a model to the plate to see its walls.' : status === 'slicing' ? 'Slicing the plate to show its lines…' : 'Nothing sliced yet. Add a model to the plate, then Re-slice.'}</div>}
               <div className="sxw-rails">
                 <div className="sxw-rail">
                   <span>Cut</span>
@@ -409,7 +433,7 @@ function SelectWindow() {
               {cost.missing > 0 && <span className="sxw-warn">{cost.missing} rule{cost.missing > 1 ? 's use' : ' uses'} a filament that is not loaded: add it in the filament list</span>}
               {cost.kind === 'manual' && cost.swaps > 0 && <span className="sxw-warn">this printer changes filament by hand: {cost.swaps} pauses</span>}
               <span style={{ flex: 1 }} />
-              {result && <span className="sxw-actual" title={dirty ? 'From the last slice, which is out of date' : 'From the last slice'}>{dirty ? 'Last slice' : 'Sliced'}: {fmtTime(result.stats.timeSeconds)} · {result.stats.toolChanges} changes · {(result.stats.flushGrams ?? 0).toFixed(1)} g purge · {result.stats.towerGrams.toFixed(1)} g tower</span>}
+              {sliced && <span className="sxw-actual" title={dirty ? 'From the last slice, which is out of date' : 'From the last slice'}>{dirty ? 'Last slice' : 'Sliced'}: {fmtTime(sliced.stats.timeSeconds)} · {sliced.stats.toolChanges} changes · {(sliced.stats.flushGrams ?? 0).toFixed(1)} g purge · {sliced.stats.towerGrams.toFixed(1)} g tower</span>}
             </footer>
           </main>
         </div>
@@ -473,7 +497,7 @@ function Num({ label, value, unit, min, max, step = 1, onChange, title }: { labe
   );
 }
 
-function RuleEditor({ r, oneObject, setOneObject, lc }: { r: SelectRule; oneObject: boolean; setOneObject(v: boolean): void; lc: LineClasses | null }) {
+function RuleEditor({ r, oneObject, setOneObject, lc, limited }: { r: SelectRule; oneObject: boolean; setOneObject(v: boolean): void; lc: LineClasses | null; limited?: { mm: number } }) {
   const filaments = useStore((s) => s.filaments);
   const set = (f: () => void) => { f(); changed(); };
   const brushes = mx.library.all();
@@ -508,6 +532,7 @@ function RuleEditor({ r, oneObject, setOneObject, lc }: { r: SelectRule; oneObje
         </select>
       </div>
       {r.apply.motion && <div className="sxw-row"><span className="sxw-lbl">Motion size</span><input type="range" min={0.2} max={3} step={0.05} value={r.apply.motion.scale} onChange={(e) => set(() => { r.apply.motion!.scale = +e.target.value; })} /><span className="sxw-unit">×{r.apply.motion.scale.toFixed(2)}</span></div>}
+      {r.apply.motion && limited && <p className="sxw-warn">Made smaller to {limited.mm.toFixed(2)} mm each way so it doesn't run into the next wall. Choose the neighbouring walls too to let it swing further.</p>}
       {r.apply.motion && <MotionTabs m={r.apply.motion} onChange={() => changed()} />}
       <Num label="Speed" value={r.apply.speed} unit="%" min={10} max={300} onChange={(v) => set(() => { r.apply.speed = v; })} />
       <Num label="Flow" value={r.apply.flow} unit="%" min={10} max={200} onChange={(v) => set(() => { r.apply.flow = v; })} />
@@ -564,10 +589,13 @@ function Targets({ r, lc }: { r: SelectRule; lc: LineClasses | null }) {
     r.lines = all ? [] : groupsOfTargets(n);
     changed();
   };
-  const flag = (key: 'outer' | 'infill' | 'solid' | 'support', label: string, tip: string) => (
+  // kinds the shown lines don't have (walls from the model have no infill or skins) are left out
+  const none = (k: 'outer' | 'inner' | 'infill' | 'top' | 'bottom' | 'solid' | 'support') => !!lc && lc.count[k] === 0;
+  const flag = (key: 'outer' | 'infill' | 'solid' | 'support', label: string, tip: string) => !none(key) && (
     <label className="sxw-check sxw-show" title={tip}><input type="checkbox" checked={t[key]} onChange={(e) => put({ ...t, [key]: e.target.checked })} />{label}</label>
   );
   const range = (key: 'inner' | 'top' | 'bottom', label: string, tip: string) => {
+    if (none(key)) return null;
     const most = Math.max(1, lc?.max[key] ?? 1), v = t[key];
     const lo = v ? Math.min(v[0], most) : 1, hi = v ? Math.min(v[1], most) : most;
     const num = (val: number, f: (x: number) => [number, number]) => (

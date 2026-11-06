@@ -70,11 +70,13 @@ describe('rules aimed at numbered lines', () => {
     const z = out.layers.find((l) => l.z > 4 - 0.05 && l.z < 4 + 0.15)!.z;
     // outer wall untouched; the inner walls as a whole now spread wider than before
     expect(spread(radii(out, z, 'outer_wall'))).toBeLessThan(spread(radii(base, z, 'outer_wall')) + 0.05);
-    expect(spread(radii(out, z, 'inner_wall'))).toBeGreaterThan(spread(radii(base, z, 'inner_wall')) + 0.2);
+    expect(spread(radii(out, z, 'inner_wall'))).toBeGreaterThan(spread(radii(base, z, 'inner_wall')) + 0.15);
     // inner wall 1 (the ring next to the outer wall) stays where it was
     const r1 = Math.max(...radii(base, z, 'inner_wall'));
     const onRing = (o: typeof out) => radii(o, z, 'inner_wall').filter((r) => Math.abs(r - r1) < 0.03).length;
-    expect(onRing(out)).toBeGreaterThanOrEqual(onRing(base));
+    expect(onRing(out)).toBeGreaterThan(20);
+    // nothing of inner wall 2 reaches into inner wall 1's lane
+    expect(radii(out, z, 'inner_wall').every((r) => Math.abs(r - r1) < 0.03 || r < r1 - 0.12)).toBe(true);
   });
 
   it('speed on top layer 1 only slows the top surface', () => {
@@ -110,5 +112,34 @@ describe('live draft', () => {
     expect(t.layers).toBeNull();
     expect(t.z_amplitude).toBeCloseTo(0.08);
     expect(tunedBrush({ brush_id: b.id, scale: 1 }, b)).toBe(b);
+  });
+});
+
+describe('walls from the 3D model', () => {
+  it('builds outer and inner wall loops per layer at the chosen layer height, and drafts motions on them', async () => {
+    const { wallsFromModel } = await import('../../src/plugins/motionex/select/modelWalls');
+    const mesh = { id: 'p', name: 'p', ...weld(cylinder(CX, CY, R, 8, 96)) };
+    const a = wallsFromModel([mesh], { layerH: 0.2, firstH: 0.2, walls: 3, outerW: 0.42, innerW: 0.45 })!;
+    const b = wallsFromModel([mesh], { layerH: 0.1, firstH: 0.2, walls: 2, outerW: 0.42, innerW: 0.45 })!;
+    expect(a.layers.length).toBe(40);
+    expect(b.layers.length).toBe(79);
+    const OUT = FEATURE_ORDER.indexOf('outer_wall');
+    const L = a.layers[10], rs: number[] = [];
+    for (let k = L.moveStart; k < L.moveEnd; k++) if (a.moveFeatures[k] === OUT) rs.push(Math.hypot(a.moves[k * MOVE_STRIDE] - CX, a.moves[k * MOVE_STRIDE + 1] - CY));
+    expect(Math.abs(rs[0] - (R - 0.21))).toBeLessThan(0.05);
+    const r = rule({ pick: { kind: 'layers', z0: 3, z1: 5 }, apply: { motion: { brush_id: PRESETS[0].id, scale: 1 } }, blend_mm: 0 });
+    const d = makeDraft({ result: a, rules: [r], now: {}, boxes: [], brushOf: (id) => PRESETS.find((x) => x.id === id), cfg: cfg(), printerId: 'snapmaker-u1' })!;
+    expect(d.pos.length).toBeGreaterThan(600);
+  });
+
+  it('a motion on one inner wall is made small enough not to reach the next wall', () => {
+    const out = run([]);
+    const r = rule({ pick: { kind: 'layers', z0: 3, z1: 5 }, ...targets({ inner: [2, 2] }), apply: { motion: { brush_id: PRESETS[0].id, scale: 2 } }, blend_mm: 0 });
+    const d = makeDraft({ result: out, rules: [r], now: {}, boxes: [], brushOf: (id) => PRESETS.find((x) => x.id === id), cfg: cfg(), printerId: 'snapmaker-u1' })!;
+    expect(d.limited).toHaveLength(1);
+    expect(d.limited[0].mm).toBeLessThan(0.3);
+    // the outer wall alone is not limited (the inner walls follow it)
+    const o = rule({ pick: { kind: 'layers', z0: 3, z1: 5 }, ...targets({ outer: true }), apply: { motion: { brush_id: PRESETS[0].id, scale: 2 } }, blend_mm: 0 });
+    expect(makeDraft({ result: out, rules: [o], now: {}, boxes: [], brushOf: (id) => PRESETS.find((x) => x.id === id), cfg: cfg(), printerId: 'snapmaker-u1' })!.limited).toHaveLength(0);
   });
 });
