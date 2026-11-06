@@ -75,12 +75,31 @@ const absUrl = (base: string, u: string | undefined | null) => {
   return `${host.protocol}//${host.hostname}${u.startsWith('/') ? '' : '/'}${u}`;
 };
 
+/** Snapmaker U1 print_task_config → one 'AMS' unit with a tray per tool head (type + colour the printer detected). */
+export function taskConfigTrays(tc: any, active = -1): PrinterStatus['ams'] {
+  if (!tc) return undefined;
+  const types: unknown[] = tc.filament_type ?? tc.filament_types ?? [];
+  const colors: unknown[] = tc.filament_color_rgba ?? tc.filament_color ?? tc.filament_colors ?? [];
+  const exist: unknown[] = tc.filament_exist ?? [];
+  const sub: unknown[] = tc.filament_sub_type ?? [];
+  if (!Array.isArray(types) || !types.length) return undefined;
+  const trays = types.map((t, i) => {
+    const present = exist[i] === undefined ? !!t : !!exist[i];
+    const c = String(colors[i] ?? '').replace(/^#/, '');
+    const st = String(sub[i] ?? '').trim();
+    return { id: String(i), type: present ? `${String(t ?? '').trim()}${st && st.toUpperCase() !== 'NONE' && st.toUpperCase() !== 'BASIC' ? ' ' + st : ''}` : '', color: c ? `#${c.slice(0, 6)}` : '#FFFFFF', active: i === active };
+  });
+  return [{ id: '0', trays }];
+}
+
 export class MoonrakerConnection extends HttpPrinter {
   readonly kind = 'moonraker' as const;
   protected defaultPort = 7125;
 
   /** Extruder objects Klipper reports (extruder, extruder1…): read once, a tool changer has one per head. */
   private extruders: string[] | null = null;
+  /** Snapmaker U1 reports loaded filament (RFID / user-set) in print_task_config. */
+  private hasTaskConfig = false;
 
   protected async poll(): Promise<PrinterStatus> {
     if (!this.extruders) {
@@ -89,11 +108,12 @@ export class MoonrakerConnection extends HttpPrinter {
         const names = ((l.result?.objects ?? []) as string[]).filter((o) => /^extruder\d*$/.test(o));
         this.extruders = names.sort((a, b) => (Number(a.slice(8)) || 0) - (Number(b.slice(8)) || 0));
         if (!this.extruders.length) this.extruders = ['extruder'];
+        this.hasTaskConfig = ((l.result?.objects ?? []) as string[]).includes('print_task_config');
       } catch { /* older Moonraker or not reachable yet: single extruder for now, asked again next poll */ }
     }
     const exts = this.extruders ?? ['extruder'];
     const extra = exts.filter((e) => e !== 'extruder').join('&');
-    const r = await this.req(`/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks&toolhead${extra ? `&${extra}` : ''}`);
+    const r = await this.req(`/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks&toolhead${extra ? `&${extra}` : ''}${this.hasTaskConfig ? '&print_task_config' : ''}`);
     const s = r.result.status;
     const heads = exts.length > 1 ? exts.map((e) => ({ temp: s[e]?.temperature, target: s[e]?.target })) : undefined;
     const activeName = String(s.toolhead?.extruder ?? '');
@@ -116,6 +136,7 @@ export class MoonrakerConnection extends HttpPrinter {
       bedTemp: s.heater_bed?.temperature, bedTarget: s.heater_bed?.target,
       fanPercent: s.fan ? Math.round(Number(s.fan.speed) * 100) : undefined,
       speedPercent: s.gcode_move ? Math.round(Number(s.gcode_move.speed_factor) * 100) : undefined,
+      ams: taskConfigTrays(s.print_task_config, active),
     };
   }
   async upload(fileName: string, data: ArrayBuffer, onProgress?: (f: number) => void) {

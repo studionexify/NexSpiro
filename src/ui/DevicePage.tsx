@@ -157,26 +157,38 @@ function DeviceModal({ dev, isNew, onClose }: { dev: SavedDevice; isNew: boolean
         }}>
           {vendors.map((v) => <optgroup key={v} label={v}>{PRINTERS.filter((x) => x.vendor === v).map((x) => <option key={x.id} value={x.id}>{printerName(x)}</option>)}</optgroup>)}
         </select>
-        <span>Connection</span>
-        <select className="select" value={cfg.kind} onChange={(e) => setCfg({ kind: e.target.value as ConnectionKind })}>
-          {kinds.map((k) => <option key={k} value={k}>{CONNECTION_INFO[k].label}{p.connections.includes(k) ? '' : ' (generic)'}</option>)}
-        </select>
+        {p.connections.length !== 1 && <>
+          <span>Connection</span>
+          <select className="select" value={cfg.kind} onChange={(e) => setCfg({ kind: e.target.value as ConnectionKind })}>
+            {kinds.map((k) => <option key={k} value={k}>{CONNECTION_INFO[k].label}{p.connections.includes(k) ? '' : ' (generic)'}</option>)}
+          </select>
+        </>}
         {cfg.kind !== 'serial' && <><span>IP address / host</span><input className="input mono" placeholder="192.168.1.50" value={cfg.host ?? ''} onChange={(e) => setCfg({ host: e.target.value.trim() })} /></>}
         {cfg.kind === 'bbl_lan' && <>
           <span>Serial number</span><input className="input mono" placeholder="01P00A..." value={cfg.serial ?? ''} onChange={(e) => setCfg({ serial: e.target.value.trim().toUpperCase() })} />
           <span>Access code</span><input className="input mono" type="password" placeholder="8 characters" value={cfg.accessCode ?? ''} onChange={(e) => setCfg({ accessCode: e.target.value.trim() })} />
         </>}
-        {(cfg.kind === 'moonraker' || cfg.kind === 'octoprint') && <>
-          <span>Port</span><input className="input mono" placeholder={cfg.kind === 'moonraker' ? '7125' : '80'} value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} />
-          <span>API key{cfg.kind === 'moonraker' ? ' (optional)' : ''}</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
+        {cfg.kind === 'octoprint' && <>
+          <span>API key</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
         </>}
+      </div>
+      <details style={{ marginTop: 10 }}>
+        <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>Advanced (only if your printer needs it)</summary>
+      <div className="form-grid" style={{ gridTemplateColumns: '150px 1fr', marginTop: 8 }}>
+        {cfg.kind === 'moonraker' && <>
+          <span>Port</span><input className="input mono" placeholder={cfg.kind === 'moonraker' ? '7125' : '80'} value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} />
+          <span>API key (optional)</span><input className="input mono" type="password" value={cfg.apiKey ?? ''} onChange={(e) => setCfg({ apiKey: e.target.value.trim() })} />
+        </>}
+        {cfg.kind === 'octoprint' && <><span>Port</span><input className="input mono" placeholder="80" value={cfg.port ?? ''} onChange={(e) => setCfg({ port: e.target.value ? Number(e.target.value) : undefined })} /></>}
         {cfg.kind === 'serial' && <>
           <span>Baud rate</span>
           <select className="select" value={cfg.baudRate ?? 115200} onChange={(e) => setCfg({ baudRate: Number(e.target.value) })}>
             {[250000, 230400, 115200, 57600].map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </>}
+        {cfg.kind === 'bbl_lan' && <span className="muted" style={{ gridColumn: '1 / -1', fontSize: 12 }}>Nothing else needed.</span>}
       </div>
+      </details>
       <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{CONNECTION_INFO[cfg.kind].description}</p>
       {cfg.kind === 'bbl_lan' && <p className="muted" style={{ fontSize: 12 }}>On the printer screen: <b>Settings → Network</b> (A1/P1) or <b>Settings → General</b> (X1) shows the IP and the access code; the serial number is under <b>Settings → Device</b>. Insert a microSD card — the printer stores LAN jobs on it.</p>}
       {desktopOnly && <p style={{ color: '#E5484D', fontSize: 12 }}>This connection needs the NexSpiro desktop app.</p>}

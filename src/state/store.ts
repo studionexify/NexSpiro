@@ -167,6 +167,8 @@ interface State {
 
   slice: SliceState;
   colorScheme: ColorScheme;
+  /** Printers the user owns: the only ones listed in the right-panel printer picker. Empty = not chosen yet. */
+  myPrinters: string[];
   hiddenFeatures: string[];
   showTravel: boolean;
   layerRange: [number, number];
@@ -339,6 +341,7 @@ export const useStore = create<State>((set, get) => ({
   slice: { status: 'idle', stage: '', progress: 0, result: null, error: null, dirty: true, plate: 0 },
   // real filament colours by default: what the print will look like (line types are one click away)
   colorScheme: COLOR_SCHEMES.includes(prefs.colorScheme) ? prefs.colorScheme : 'filament',
+  myPrinters: Array.isArray(prefs.myPrinters) ? prefs.myPrinters.filter((x: unknown) => typeof x === 'string') : [],
   hiddenFeatures: [],
   showTravel: false,
   layerRange: [0, 0],
@@ -419,7 +422,7 @@ useStore.subscribe((s) => {
     localStorage.setItem(LS, JSON.stringify({
       theme: s.theme, printerId: s.printerId, plate: s.plate, filaments: s.filaments,
       presetId: s.presetId, overrides: s.overrides, machineOverrides: s.machineOverrides,
-      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, colorScheme: s.colorScheme, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
+      plugins: s.plugins, dock: s.dock, liveToolpaths: s.liveToolpaths, threadView: s.threadView, colorScheme: s.colorScheme, myPrinters: s.myPrinters, configVersion: CONFIG_VERSION, userPresetId: s.userPresetId,
     }));
     if (s.userPresets !== lastUserPresets) {
       lastUserPresets = s.userPresets;

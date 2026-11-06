@@ -43,8 +43,14 @@ export const Body = ({ closed, children }: { closed: boolean; children: ReactNod
 const TAB_ICONS: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 
 export function PrinterCard() {
-  const { printerId, plate, machineOverrides, set, markDirty, setMachine } = useStore();
+  const { printerId, plate, machineOverrides, set, markDirty, setMachine, myPrinters } = useStore();
   const [edit, setEdit] = useState(false);
+  const [pick, setPick] = useState(false);
+  const savedDevices = useDevices((d) => d.devices);
+  // Only the user's printers are listed: their chosen list, else the printers they have connected, plus the current one.
+  const mine = new Set(myPrinters.length ? myPrinters : savedDevices.map((d) => d.printerId));
+  mine.add(printerId);
+  const listed = PRINTERS.filter((p) => mine.has(p.id));
   const [closed, toggle] = useCollapsed('printer');
   const printer = printerById(printerId);
   const nozzle = effectiveNozzle(printerId, machineOverrides);
@@ -67,12 +73,13 @@ export function PrinterCard() {
             set({ printerId: p.id, plate: p.plates.some((x) => x.type === plate) ? plate : p.plates[0].type, machineOverrides: {} });
             markDirty();
           }}>
-            {vendors.map((v) => (
+            {vendors.filter((v) => listed.some((p) => p.vendor === v)).map((v) => (
               <optgroup key={v} label={v}>
-                {PRINTERS.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{p.vendor === 'Generic' ? p.model : `${p.vendor} ${p.model}`}</option>)}
+                {listed.filter((p) => p.vendor === v).map((p) => <option key={p.id} value={p.id}>{p.vendor === 'Generic' ? p.model : `${p.vendor} ${p.model}`}</option>)}
               </optgroup>
             ))}
           </select>
+          <button className="icon-btn" title="Add or remove printers" aria-label="Add or remove printers" onClick={() => setPick(true)}><Icon name="add" size={16} /></button>
         </div>
         <div className="row compact-row">
           <Icon name="plate" size={15} style={{ color: 'var(--text-muted)' }} />
@@ -88,7 +95,45 @@ export function PrinterCard() {
         {arcSupportNote(printer) && <p className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}><Icon name="info" size={11} /> {arcSupportNote(printer)}</p>}
       </Body>
       {edit && <PrinterModal onClose={() => setEdit(false)} />}
+      {pick && <MyPrintersModal initial={[...mine]} onClose={() => setPick(false)} />}
     </section>
+  );
+}
+
+function MyPrintersModal({ initial, onClose }: { initial: string[]; onClose: () => void }) {
+  const [sel, setSel] = useState(new Set(initial));
+  const vendors = [...new Set(PRINTERS.map((p) => p.vendor))];
+  const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const save = () => {
+    const ids = PRINTERS.filter((p) => sel.has(p.id)).map((p) => p.id);
+    if (!ids.length) return;
+    const st = useStore.getState();
+    st.set({ myPrinters: ids });
+    if (!ids.includes(st.printerId)) {
+      const p = printerById(ids[0]);
+      st.set({ printerId: p.id, plate: p.plates[0].type, machineOverrides: {} });
+      st.markDirty();
+    }
+    onClose();
+  };
+  return (
+    <Modal title="My printers" onClose={onClose} footer={<><span className="spacer" />
+      <button className="btn-secondary btn-small" onClick={onClose}>Cancel</button>
+      <button className="btn-primary btn-small" disabled={!sel.size} onClick={save}>Save</button></>}>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Tick the printers you own. Only these appear in the printer list.</p>
+      <div style={{ maxHeight: 420, overflow: 'auto' }}>
+        {vendors.map((v) => (
+          <div key={v} style={{ marginBottom: 8 }}>
+            <b style={{ fontSize: 12 }}>{v}</b>
+            {PRINTERS.filter((p) => p.vendor === v).map((p) => (
+              <label key={p.id} className="row" style={{ gap: 6, padding: '2px 0', fontSize: 13 }}>
+                <input type="checkbox" checked={sel.has(p.id)} onChange={() => toggle(p.id)} />{p.model}
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 
