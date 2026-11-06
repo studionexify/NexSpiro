@@ -68,8 +68,13 @@ export function classifyLines(segs: Segs, layerCount: number, width: (s: number)
   const outerGrid: Map<string, number[]>[] = Array.from({ length: layerCount }, () => new Map());
   for (let s = 0; s < n; s++) {
     const f = segs.feature[s], li = segs.layer[s];
-    if (TOP.has(f)) topCells[li].add(key(mid(s, 0), mid(s, 1)));
-    else if (f === BOTTOM) botCells[li].add(key(mid(s, 0), mid(s, 1)));
+    if (TOP.has(f) || f === BOTTOM) {
+      // every cell the skin line passes, not just its middle: long skin lines cover their whole width
+      const cells = TOP.has(f) ? topCells[li] : botCells[li];
+      const ax = P[s * 6], ay = P[s * 6 + 1], ex = P[s * 6 + 3] - ax, ey = P[s * 6 + 4] - ay;
+      const steps = Math.max(1, Math.ceil(Math.hypot(ex, ey) / CELL));
+      for (let k = 0; k <= steps; k++) cells.add(key(ax + (ex * k) / steps, ay + (ey * k) / steps));
+    }
     else if (OUTER.has(f)) {
       // points every ~0.5 mm along the outer wall, binned in 1 mm cells
       const ax = P[s * 6], ay = P[s * 6 + 1], ex = P[s * 6 + 3] - ax, ey = P[s * 6 + 4] - ay;

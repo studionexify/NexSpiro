@@ -143,3 +143,20 @@ describe('walls from the 3D model', () => {
     expect(makeDraft({ result: out, rules: [o], now: {}, boxes: [], brushOf: (id) => PRESETS.find((x) => x.id === id), cfg: cfg(), printerId: 'snapmaker-u1' })!.limited).toHaveLength(0);
   });
 });
+
+describe('model preview with infill and skins', () => {
+  it('adds bottom, top, solid and sparse lines, numbered like a slice', async () => {
+    const { wallsFromModel } = await import('../../src/plugins/motionex/select/modelWalls');
+    const mesh = { id: 'p', name: 'p', ...weld(box(110, 110, 0, 30, 30, 6)) };
+    const r = wallsFromModel([mesh], { layerH: 0.2, firstH: 0.2, walls: 2, outerW: 0.42, innerW: 0.45, fill: true, top: 4, bottom: 3, density: 15, fillW: 0.45 })!;
+    const has = (f: string) => r.moveFeatures.includes(FEATURE_ORDER.indexOf(f as never));
+    for (const f of ['bottom_surface', 'top_surface', 'internal_solid_infill', 'sparse_infill']) expect(has(f), f).toBe(true);
+    const segs = (await import('../../src/plugins/motionex/ui/selectView')).segmentsOf;
+    const sg = segs(r);
+    const lc = classifyLines(sg, r.layers.length, () => 0.45);
+    expect(lc.max.top).toBe(4);
+    expect(lc.max.bottom).toBe(3);
+    const off = wallsFromModel([mesh], { layerH: 0.2, firstH: 0.2, walls: 2, outerW: 0.42, innerW: 0.45, fill: false })!;
+    expect(off.moveFeatures.includes(FEATURE_ORDER.indexOf('sparse_infill'))).toBe(false);
+  });
+});

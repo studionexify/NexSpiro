@@ -47,6 +47,7 @@ const ACTIVE = hexRgb('#ff3d7f'), OTHER = hexRgb('#4f8cff');
 let lastFilter: LineFilter = { ...SHOW_ALL };
 let lastOrtho = false;
 let lastSource: 'model' | 'slice' = 'model';
+let lastFill = true;
 const cubeListeners = new Set<(m: ArrayLike<number>) => void>();
 
 interface ObjBox { id: string; name: string; min: [number, number, number]; max: [number, number, number] }
@@ -80,13 +81,15 @@ function SelectWindow() {
   const objects = useStore((s) => s.objects);
   const overrides = useStore((s) => s.overrides);
   const presetId = useStore((s) => s.presetId);
+  const [fill, setFillState] = useState(lastFill);
+  const setFill = (v: boolean) => { lastFill = v; setFillState(v); };
   const [source, setSourceState] = useState<'model' | 'slice'>(lastSource);
   const setSource = (v: 'model' | 'slice') => { lastSource = v; setSourceState(v); if (v === 'slice' && !useStore.getState().slice.result) void sliceNow(); };
   // walls straight from the 3D model: layer height and wall count changes show at once, without slicing
   const fromModel = useMemo(() => {
     if (source !== 'model') return null;
-    try { return wallsFromModel(plateMeshes(plateObjects().filter((o) => o.printable !== false)), wallSettings(currentConfig())); } catch (e) { console.warn('model walls failed', e); return null; }
-  }, [source, objects, overrides, presetId]); // eslint-disable-line react-hooks/exhaustive-deps
+    try { return wallsFromModel(plateMeshes(plateObjects().filter((o) => o.printable !== false)), { ...wallSettings(currentConfig()), fill }); } catch (e) { console.warn('model walls failed', e); return null; }
+  }, [source, objects, overrides, presetId, fill]); // eslint-disable-line react-hooks/exhaustive-deps
   const result = source === 'model' ? fromModel : sliced;
   const ws = wallSettings(currentConfig());
   const status = useStore((s) => s.slice.status);
@@ -394,6 +397,7 @@ function SelectWindow() {
                 <label className="sxw-inline" title="Layer height (a real setting: the slice uses it too)">Layer<input className="input sxw-num" type="number" min={0.04} max={1} step={0.02} value={ws.layerH} onChange={(e) => { const v = +e.target.value; if (v >= 0.04 && v <= 1) useStore.getState().setOverride('layer_height', v); }} />mm</label>
                 <label className="sxw-inline" title="First layer height (a real setting)">First<input className="input sxw-num" type="number" min={0.04} max={1} step={0.02} value={ws.firstH} onChange={(e) => { const v = +e.target.value; if (v >= 0.04 && v <= 1) useStore.getState().setOverride('initial_layer_print_height', v); }} />mm</label>
                 <label className="sxw-inline" title="Number of walls (a real setting)">Walls<input className="input sxw-num" type="number" min={1} max={12} step={1} value={ws.walls} onChange={(e) => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 12) useStore.getState().setOverride('wall_loops', v); }} /></label>
+                <label className="sxw-inline" title="Also build the inside from the model: top and bottom skins (from the shell layer counts) and sparse infill (at the infill density), as straight lines"><input type="checkbox" checked={fill} onChange={(e) => setFill(e.target.checked)} />Infill &amp; skins</label>
               </>}
               <label className="sxw-inline">Colour by
                 <select className="select" value={colorBy} onChange={(e) => setColorBy(e.target.value as 'feature' | 'filament')}><option value="feature">Line kind</option><option value="filament">Filament</option></select>
