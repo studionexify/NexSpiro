@@ -5,7 +5,7 @@ import { askPrinterSwitch, importCancelled, importDone, importProgress, importSt
 import { openModelFiles, saveFile } from '../platform';
 import { PRINTERS, printerById } from '../profiles/printers';
 import { arrange, autoOrient, centreOnBed } from './ops';
-import { sliceNow } from './slicing';
+import { plateObjects, sliceNow } from './slicing';
 import { emptyProject, newId, plateOrigin, useStore, type SceneObject } from './store';
 import { centreMesh } from '../io/load';
 
@@ -132,6 +132,25 @@ export async function sliceAndPreview() {
   const after = useStore.getState();
   // cancelled, failed or nothing to slice: back to Prepare (a replaced slice is still running, so stay)
   if (!out && after.slice.status !== 'slicing' && after.workspace === 'preview') after.set({ workspace: 'prepare' });
+}
+
+/** Slice every non-empty plate in turn (Snapmaker Orca's "Slice all"), then show a per-plate summary. The last
+ *  sliced plate stays open in Preview; a cancelled or failed plate stops the run. */
+export async function sliceAllPlates() {
+  const st = useStore.getState();
+  if (st.slice.status === 'slicing') return;
+  const todo = st.plates.map((p, i) => ({ p, i })).filter(({ p, i }) => p.program || plateObjects(i).some((o) => o.printable !== false));
+  if (!todo.length) { st.set({ toast: { kind: 'warn', text: 'Every plate is empty — add a model first.' } }); return; }
+  st.set({ workspace: 'preview' });
+  let secs = 0, grams = 0; const done: string[] = [];
+  for (const { p, i } of todo) {
+    useStore.getState().set({ activePlate: i });
+    const out = await sliceNow();
+    if (!out) { useStore.getState().set({ toast: { kind: 'error', text: `Slice all stopped at ${p.name}.` } }); return; }
+    secs += out.stats.timeSeconds; grams += out.stats.filamentGrams; done.push(p.name);
+  }
+  const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+  useStore.getState().set({ toast: { kind: 'info', text: `Sliced ${done.length} plate${done.length > 1 ? 's' : ''}: ${h ? `${h} h ` : ''}${m} min, ${grams.toFixed(1)} g in total.` } });
 }
 
 export async function exportGcode() {

@@ -3,7 +3,7 @@ import { printerSwitchChoice, resetPrinterSwitchChoice } from '../ImportDialog';
 // Top menu bar (File / Edit / View / Add / Tools / Help) like a desktop app, plus the Preferences
 // dialog and the interface scale that keeps the layout fitting smaller windows.
 import { useEffect, useState } from 'react';
-import { arrange, autoOrient, exportGcode, importDialog, newProject, sliceAndPreview } from '../../state/actions';
+import { arrange, autoOrient, exportGcode, importDialog, newProject, sliceAllPlates, sliceAndPreview } from '../../state/actions';
 import { exportPlateFile } from '../../state/printjob';
 import { openProjectDialog, saveProject } from '../../state/project';
 import { useStore, type Workspace } from '../../state/store';
@@ -66,6 +66,7 @@ function useMenus(openPrefs: () => void): [string, Item[]][] {
       { label: 'Export selection as STL…', onClick: () => void exportStl(), disabled: !sel },
       { sep: true },
       { label: 'Slice plate', kbd: 'Ctrl+R', onClick: sliceAndPreview, disabled: !has && !hasProgram },
+      { label: 'Slice all plates', onClick: () => void sliceAllPlates(), disabled: !has || s.plates.length < 2 },
       { label: 'Export G-code…', kbd: 'Ctrl+G', onClick: exportGcode, disabled: !sliced },
       { label: 'Export sliced plate (.gcode.3mf)…', onClick: () => void exportPlateFile('3mf'), disabled: !sliced },
       { label: 'Print plate…', kbd: 'Ctrl+P', onClick: () => void openPrintDialog(), disabled: !sliced },

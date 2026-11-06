@@ -3,6 +3,7 @@ import { weld, meshBounds, openEdgeCount, type IndexedMesh } from '../engine/mes
 import { parseSTL } from './stl';
 import { parseOBJPolys } from './obj';
 import { ImportCancelled, parse3MF, type Progress } from './threemf';
+import { parseAMF } from './amf';
 export { ImportCancelled };
 
 export interface LoadedModel {
@@ -27,7 +28,7 @@ export function bambuPlateOrigin(i: number, n: number, bed: [number, number]): [
   return [(i % cols) * bed[0] * 1.2, -Math.floor(i / cols) * bed[1] * 1.2];
 }
 
-export const SUPPORTED_EXT = ['.stl', '.obj', '.3mf'];
+export const SUPPORTED_EXT = ['.stl', '.obj', '.3mf', '.amf'];
 
 /** Centre a mesh on XY origin with min Z = 0; returns the original placement offset. */
 export function centreMesh(m: IndexedMesh): [number, number, number] {
@@ -51,6 +52,10 @@ export async function loadModelFile(name: string, data: ArrayBuffer, progress?: 
     if (r.filamentColors.length) filamentColors = r.filamentColors;
     file = { printerModel: r.printerModel, bed: r.bed, plateCount: r.plateCount };
     soups.push(...r.objects.map((o, _i, a) => ({ name: a.length > 1 ? o.name : base, soup: o.soup, color: o.color, filament: o.filament, plate: o.plate })));
+  }
+  else if (lower.endsWith('.amf')) {
+    const objs = await parseAMF(data);
+    soups.push(...objs.map((o) => ({ name: objs.length > 1 ? o.name : base, soup: o.soup, color: o.color })));
   }
   else throw new Error(`Unsupported file type: ${name}. Supported: ${SUPPORTED_EXT.join(', ')}`);
   const out: LoadedModel[] = [];
