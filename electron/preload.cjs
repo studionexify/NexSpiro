@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('nexspiro', {
     disconnect: (id) => ipcRenderer.invoke('nx:dev:disconnect', id),
     call: (id, method, args) => ipcRenderer.invoke('nx:dev:call', id, method, args),
     camera: (id, on) => ipcRenderer.invoke('nx:dev:camera', id, on),
+    discover: () => ipcRenderer.invoke('nx:dev:discover'),
     onStatus: listen('nx:dev:status'),
     onProgress: listen('nx:dev:progress'),
     onFrame: listen('nx:dev:frame'),
