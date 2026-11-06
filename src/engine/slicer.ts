@@ -1405,7 +1405,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       v = Math.min(v, (maxVol || 1e9) / Math.max(xs, 1e-6));
       const noSlow = it.noSlow;
       // support interface fan speed (filament): an exact fan for interfaces, so they bond less to the part
-      const ifaceFan = it.feature === 'support_interface' && it.fanSet === undefined && tnum('support_material_interface_fan_speed') >= 0 ? tnum('support_material_interface_fan_speed') : undefined;
+      const ifaceRaw = Number(toolSet.support_material_interface_fan_speed ?? cfg.support_material_interface_fan_speed ?? -1);
+      const ifaceFan = it.feature === 'support_interface' && it.fanSet === undefined && ifaceRaw >= 0 ? ifaceRaw : undefined;
       const fanSetIt = ifaceFan ?? it.fanSet;
       if (it.closed) pts = [...pts, pts[0], pts[1]];
       let totalLen = 0;

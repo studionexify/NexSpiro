@@ -123,9 +123,9 @@ export const MOVE_STRIDE = 8; // x, y, z, width, height, speed, time, tool
 export const AUX_STRIDE = 2; // part fan %, nozzle temperature
 
 /** Part fan % for a layer, by the cooling rules (fan by layer time, first layers, ramp, keep fan on). */
-export function layerFanSpeed(c: (k: string) => number, b: (k: string) => boolean, layer: number, layerTime: number): number {
-  // first layer fan speed (Orca): an exact speed for the first layer that overrides every other rule
-  if (layer === 0 && c('initial_layer_fan_speed') >= 0 && Number.isFinite(c('initial_layer_fan_speed'))) return Math.max(0, Math.min(100, Math.round(c('initial_layer_fan_speed'))));
+export function layerFanSpeed(c: (k: string) => number, b: (k: string) => boolean, layer: number, layerTime: number, firstLayerFan = -1): number {
+  // first layer fan speed (Orca): an exact speed for the first layer that overrides every other rule (-1 = off)
+  if (layer === 0 && firstLayerFan >= 0) return Math.max(0, Math.min(100, Math.round(firstLayerFan)));
   const first = Math.max(0, Math.round(c('close_fan_the_first_x_layers')));
   if (layer < first) return Math.max(0, c('first_x_layer_part_fan_speed'));
   const fmin = c('fan_min_speed'), fmax = c('fan_max_speed');
@@ -156,7 +156,7 @@ export function auxFanSpeed(c: (k: string) => number, layer: number): number {
  *  - a head that is never picked up again is switched off when it is parked (`offAfterLastUse`)
  * Needs the move times. Heads are filament slots (slot n prints with head n).
  */
-export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; preheatDelta?: number; offAfterLastUse?: boolean } = {}) {
+export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: FilamentSlot[], o: { standbyDelta?: number; preheatDelta?: number; offAfterLastUse?: boolean; ooze?: boolean } = {}) {
   // time at the start of every op, and every pick-up (a tool op that changes the head)
   const at: { li: number; oi: number; t: number }[] = [];
   const picks: { tool: number; t: number; idx: number }[] = [];
@@ -183,7 +183,10 @@ export function preheatParkedHeads(layers: LayerOps[], lead: number, filaments: 
   for (const k of later) {
     const tk = temp(k);
     if (!tk) continue;
-    inserts.push({ li: at[0].li, oi: at[0].oi, text: `M104 T${k} S${Math.max(0, Math.round(tk + delta))} ; T${k} waits ${delta < 0 ? 'at standby' : 'hot'} for its first pick-up` });
+    // a filament's own idle temperature (Orca) replaces the printer's standby variation
+    const idle = o.ooze ? Number(filaments[k]?.settings?.idle_temperature ?? 0) : 0;
+    const wait = idle > 0 ? idle : Math.max(0, Math.round(tk + delta));
+    inserts.push({ li: at[0].li, oi: at[0].oi, text: `M104 T${k} S${wait} ; T${k} waits ${idle > 0 || delta < 0 ? 'at standby' : 'hot'} for its first pick-up` });
     parkedAt.set(k, -1);
   }
   if (lead > 0) {
@@ -284,7 +287,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
   }
   if (changerOf(cfg) === 'toolchanger') {
     const ooze = cfg.ooze_prevention !== false;
-    preheatParkedHeads(layers, ooze ? num('tool_preheat_time') : 0, filaments, { standbyDelta: ooze ? num('standby_temperature_delta') : 0, preheatDelta: num('preheat_delta_temperature'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
+    preheatParkedHeads(layers, ooze ? num('tool_preheat_time') : 0, filaments, { ooze, standbyDelta: ooze ? num('standby_temperature_delta') : 0, preheatDelta: num('preheat_delta_temperature'), offAfterLastUse: cfg.tool_off_after_last_use !== false });
   }
   const total = layerTimes.reduce((a, b) => a + b, 0);
 
@@ -366,6 +369,8 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     in_head_wrap_detect_zone: inZone(zoneOf(cfg.head_wrap_detect_zone), firstBox.obj),
     initial_layer_print_height: Number(cfg.initial_layer_print_height ?? layers[0]?.h ?? 0.2),
     has_wipe_tower: layers.some((L) => L.ops.some((op) => op.k === 'move' && op.feature === 'prime_tower')),
+    initial_no_support_filament_id: firstTool, first_non_support_filaments: [firstTool, -1], first_filaments: [firstTool, -1],
+    max_print_z: Math.ceil(layers[layers.length - 1]?.z ?? 0),
     is_extruder_used: (() => {
       const used = new Set(layers.flatMap((L) => [L.tool ?? 0, ...L.ops.flatMap((op) => (op.k === 'tool' ? [(op as { tool?: number }).tool ?? 0] : []))]));
       const heads = Math.max(filaments.length, Math.round(Number(cfg.toolhead_count ?? 1)) || 1, Math.round(Number(cfg.filament_slots ?? 0)) || 0, ...[...used].map((k) => k + 1));
@@ -429,7 +434,8 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     const moveStart = feats.length;
     const { c } = toolCfg(L.tool);
     const layerIndex = L.layer ?? li;
-    const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li]);
+    const firstFan = Number(filaments[L.tool ?? 0]?.settings?.initial_layer_fan_speed ?? cfg.initial_layer_fan_speed ?? -1);
+    const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li], Number.isFinite(firstFan) ? firstFan : -1);
     const bl = String(cfg.before_layer_change_gcode ?? '');
     if (bl) push(vendor ? macro(bl, 'Before layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z, ...extruded() }) : expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     push(';LAYER_CHANGE');

@@ -26,7 +26,7 @@ const INTS = new Set([
   'first_layer_temperature', 'bed_temperature', 'bed_temperature_initial_layer', 'first_layer_bed_temperature', 'flush_temperatures',
   'timelapse_type', 'chamber_cooling_mode', 'temperature_vitrification', 'min_vitrification_temperature', 'initial_nozzle_id', 'current_nozzle_id',
   'next_nozzle_id', 'current_hotend', 'next_hotend', 'most_used_physical_extruder_id', 'curr_physical_extruder_id', 'current_extruder_id',
-  'required_nozzle_HRC', 'filament_map', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
+  'required_nozzle_HRC', 'filament_map', 'initial_no_support_filament_id', 'first_non_support_filaments', 'first_filaments', 'num_extruders', 'num_printing_extruders', 'num_objects', 'num_instances', 'current_filament_id', 'next_filament_id', 'old_filament_e_feedrate', 'new_filament_e_feedrate', 'chamber_temperature', 'overall_chamber_temperature', 'current_object_idx', 'fan_speed',
   ...VECTOR_INT_KEYS,
 ]);
 
@@ -135,6 +135,14 @@ export function baseTemplateVars(cfg: Config, filaments: FilamentSlot[]): Record
   if (typeof cfg.vendor_template_vars === 'string' && cfg.vendor_template_vars) {
     for (const [k, x] of Object.entries(JSON.parse(cfg.vendor_template_vars) as Record<string, PPValue>)) if (v[k] === undefined && x !== null) v[k] = x;
   }
+  // Bambu Studio H2D start G-code: the first filament on each nozzle (left: the one NexSpiro prints with, right: none)
+  const first = Number(v.initial_no_support_extruder ?? 0);
+  v.initial_no_support_filament_id ??= first;
+  v.first_non_support_filaments ??= [first, -1];
+  v.first_filaments ??= [first, -1];
+  v.is_all_bbl_filament ??= fils.length > 0 && fils.every((s) => /bambu/i.test(String(fset(s, 'filament_vendor') ?? s.settings?.filament_settings_id ?? '')));
+  v.has_tpu_in_first_layer ??= fils.length > 0 && /TPU/i.test(String(fset(fils[0], 'filament_type') ?? fils[0].type));
+  v.max_print_z ??= Math.floor(Number(cfg.printable_height ?? cfg.bed_z ?? 0));
   v.min_vitrification_temperature = Math.min(...(v.temperature_vitrification as number[]).slice(0, Math.max(1, fils.length)));
   // outer wall volumetric speed of a filament (Bambu: the outer wall's flow, capped by the filament)
   const h = Number(cfg.layer_height) || 0.2, w = Number(cfg.outer_wall_line_width) || Number(cfg.nozzle_diameter) || 0.4;
