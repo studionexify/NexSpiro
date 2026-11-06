@@ -10,7 +10,7 @@ import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, 
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import type { IndexedMesh } from './mesh';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from './order';
-import { mixProblems, resolveFilament } from '../profiles/mixing';
+import { mixProblems, mixSubSlots, resolveFilament, subPassCount } from '../profiles/mixing';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from './paint';
 import { sliceMesh, type SlicingMode } from './slice';
 import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engine';
@@ -61,6 +61,8 @@ interface PathItem extends Polyline2 {
 }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
+/** Infill printed in passes with "Apply subdivision to infill". */
+const SUB_FILL = new Set<FeatureType>(['sparse_infill', 'internal_solid_infill']);
 /** Overhang degrees (fraction of the line width hanging over the layer below) that start a new speed step. */
 const OVERHANG_LEVELS = [0.1, 0.25, 0.5, 0.75, 1];
 
@@ -139,7 +141,7 @@ export function slotFromConfig(cfg: Config): FilamentSlot {
   };
 }
 
-interface Island { obj: number; fil: number; ex: ExPolygon; walls: IslandWalls }
+interface Island { obj: number; fil: number; ex: ExPolygon; walls: IslandWalls; /** Subdivided mix: slot of each pass, bottom → top (the last is `fil`). */ sub?: number[] }
 interface Regions {
   top: Paths; bottom: Paths; bridge: Paths; solid: Paths; sparse: Paths;
   sparseMods: { paths: Paths; density: number; pattern: SparsePattern; speed?: number; angle?: number }[];
@@ -220,6 +222,25 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const v = f | 0;
     if (v >= filaments.length && mixes[v - filaments.length]) usedMixes.add(v - filaments.length);
     return clampFil(resolveFilament(v, i, filaments.length, mixes, mixes[v - filaments.length]?.kind === 'gradient' ? heightT(o) : undefined));
+  };
+  // Subdivide Mix Layer (Snapmaker Orca's experimental colour mixing): mix areas print their outer wall (and with
+  // "Apply subdivision to infill" their infill) in thinner passes, one filament per pass, inside each layer.
+  // Without "Full domain" only objects whose own filament is a mix are subdivided; with it painted mixes and
+  // colour changes to a mix are too.
+  const subOn = bool('mix_subdivide') && !bool('spiral_mode'), subFull = bool('mix_subdivide_full_domain'), subInfill = bool('mix_subdivide_infill');
+  type FilRegion = { fil: number; paths: Paths; sub?: number[] };
+  const regionOf = (f: number, i: number, o: number, src: 'object' | 'paint' | 'change'): { fil: number; sub?: number[] } => {
+    const v = f | 0, k = v - filaments.length, m = k >= 0 ? mixes[k] : undefined;
+    if (m && subOn && i > objStart && (src === 'object' || subFull) && !mixProblems(m, filaments.length).length) {
+      const n = subPassCount(m, hs[i]);
+      if (n >= 2) {
+        usedMixes.add(k);
+        const sub = mixSubSlots(m, i, n, m.kind === 'gradient' ? heightT(o) : undefined).map(clampFil);
+        if (new Set(sub).size > 1) return { fil: sub[n - 1], sub };
+        return { fil: sub[0] };
+      }
+    }
+    return { fil: filAt(v, i, o) };
   };
   const nozzle = num('nozzle_diameter');
   const vase = bool('spiral_mode');
@@ -366,8 +387,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const colorActions = (opts.layerActions ?? []).filter((a) => a.type === 'color' && a.filament !== undefined).sort((a, b) => a.z - b.z);
   const baseFilAt = (o: number, i: number) => {
     let f = meshes[o].filament ?? 0;
-    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) f = a.filament!;
-    return filAt(f, i, o);
+    let src: 'object' | 'change' = 'object';
+    for (const a of colorActions) if (zs[i] >= a.z - 1e-6) { f = a.filament!; src = 'change'; }
+    return regionOf(f, i, o, src);
   };
   const colorTris: PaintedTri[][] = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.color));
   const paintDepth = num('mmu_paint_depth') || 1.5;
@@ -387,9 +409,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const regionPlugins = [...sessions.values()].filter((x) => x.regionsAt);
   const transitionPlugins = [...sessions.values()].filter((x) => x.transition);
   const supportBlockPlugins = [...sessions.values()].filter((x) => x.supportBlockersAt);
-  const filRegionsCache = new Map<number, { fil: number; paths: Paths }[]>();
+  const filRegionsCache = new Map<number, FilRegion[]>();
   const paintOverlapWarned = new Set<number>();
-  const filRegions = (o: number, i: number): { fil: number; paths: Paths }[] => {
+  const filRegions = (o: number, i: number): FilRegion[] => {
     const key = o * 1_000_000 + i;
     const hit = filRegionsCache.get(key);
     if (hit) return hit;
@@ -397,24 +419,24 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     filRegionsCache.set(key, r);
     return r;
   };
-  const filRegionsUncached = (o: number, i: number): { fil: number; paths: Paths }[] => {
+  const filRegionsUncached = (o: number, i: number): FilRegion[] => {
     const sl = objSlices[o][i];
     if (!sl.length) return [];
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
-    if (!colorTris[o].length && !contribs.length) return [{ fil: base, paths: sl }];
+    if (!colorTris[o].length && !contribs.length) return [{ ...base, paths: sl }];
     const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepth) : new Map<number, Paths>();
-    let out: { fil: number; paths: Paths }[] = [];
+    let out: FilRegion[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
-      const fil = filAt(c - 1, i, o);
+      const rf = regionOf(c - 1, i, o, 'paint');
       const r = taken.length ? difference(paths, taken) : paths;
       if (!r.length) continue;
-      out.push({ fil, paths: r });
+      out.push({ ...rf, paths: r });
       taken = union(taken, r);
     }
     const rest = taken.length ? difference(sl, taken) : sl;
-    if (rest.length) out.unshift({ fil: base, paths: rest });
+    if (rest.length) out.unshift({ ...base, paths: rest });
     // plugin regions win over paint and the base material; later contributions win over earlier ones
     for (const c of contribs) {
       const r = intersection(c.paths, sl);
@@ -423,13 +445,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         paintOverlapWarned.add(o);
         warnings.push(`${meshes[o].name}: Patternex artwork covers colour paint; the artwork's ink is used there (artwork › paint › object filament).`);
       }
-      out = out.map((e) => ({ fil: e.fil, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
+      out = out.map((e) => ({ ...e, paths: difference(e.paths, r) })).filter((e) => e.paths.length);
       out.push({ fil: filAt(c.fil, i, o), paths: r });
     }
     // merge regions sharing a filament
-    const merged = new Map<number, Paths>();
-    for (const r of out) merged.set(r.fil, merged.has(r.fil) ? union(merged.get(r.fil)!, r.paths) : r.paths);
-    return [...merged].map(([fil, paths]) => ({ fil, paths }));
+    // merge regions sharing a filament (a subdivided mix stays apart: its passes differ)
+    const merged = new Map<string, FilRegion>();
+    for (const r of out) {
+      const key = r.sub ? `${r.fil}|${r.sub.join(',')}` : `${r.fil}`;
+      const m = merged.get(key);
+      merged.set(key, m ? { ...m, paths: union(m.paths, r.paths) } : r);
+    }
+    return [...merged.values()];
   };
 
   // ---------- stage 4: perimeters, per object & filament region
@@ -484,10 +511,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             topOneWall: topOne,
           });
           pushAll(regInner, w.inner);
-          islands.push({ obj: oi, fil: reg.fil, ex, walls: w });
+          islands.push({ obj: oi, fil: reg.fil, ex, walls: w, ...(reg.sub ? { sub: reg.sub } : {}) });
         }
         const u = union(regInner);
-        objMap.set(reg.fil, u);
+        objMap.set(reg.fil, objMap.has(reg.fil) ? union(objMap.get(reg.fil)!, u) : u);
         pushAll(objInner, u);
       }
       inners.push(union(objInner));
@@ -800,6 +827,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     for (const isl of layerIslands[i]) {
       if (flushObj[isl.obj]) continue;
       s.add(featFil(isl.obj, i, 'wall', isl.fil));
+      if (isl.sub) for (const f of isl.sub) s.add(f);
       const rg = regions[i][isl.obj];
       if (rg.sparse.length || rg.sparseMods.length || rg.combined || rg.lines?.length) s.add(featFil(isl.obj, i, 'sparse', isl.fil));
       if (rg.solid.length || rg.top.length || rg.bottom.length || rg.bridge.length || rg.vshell.length || rg.floating.length || rg.subTop.length) s.add(featFil(isl.obj, i, 'solid', isl.fil));
@@ -1163,6 +1191,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       wipeTrail = [];
     };
 
+    /** Pass j (0 = bottom) of n of a subdivided mix layer: 1/n of the layer height, its top j+1 n-ths up. */
+    const toPass = (it: PathItem, j: number, n: number): PathItem => {
+      it.height = h / n;
+      if (it.depth) { it.depth = undefined; it.flows = undefined; } // no scarf ramp on a thin pass
+      if (j < n - 1) it.depth = new Array(it.pts.length / 2 + 2).fill((n - 1 - j) / n);
+      return it;
+    };
     const extrudePath = (it: PathItem) => {
       let pts = it.pts;
       if (pts.length < 4) return;
@@ -1580,6 +1615,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         for (const g of isl.walls.gaps) if (polyLen(g.pts) >= minLen) gapItems.push({ ...g, pts: g.pts.slice(), widths: g.widths!.slice(), flow: 1 } as PathItem);
       }
       const isFill = job.fills.filter((f) => mine(f.fil ?? isl.fil));
+      // subdivided mix: what is printed here is the top pass (the lower passes went first, see subPassPhase)
+      if (isl.sub && job.wallFil === isl.fil) {
+        const n = isl.sub.length;
+        for (const it of wallItems) if (it.wallDepth === 0) toPass(it, n - 1, n);
+        if (subInfill) for (const it of isFill) if (SUB_FILL.has(it.feature) && (it.fil ?? isl.fil) === isl.fil && (it.height === undefined || it.height < h)) toPass(it, n - 1, n);
+      }
       const fillOrdered = () => {
         const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
         const outp: PathItem[] = [];
@@ -1658,6 +1699,38 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         out.push(x + dx, y + dy);
       }
       return out;
+    }
+
+    // --- subdivided mixes: the lower passes of every mix area, bottom up, before anything else at full height
+    //     (the nozzle never goes down next to a line already printed on this layer)
+    {
+      const subJobs: { o: number; job: IslandJob }[] = [];
+      for (const o of (only === null ? objs : [only])) for (const job of jobsByObj.get(o) ?? []) if (job.isl.sub && job.wallFil === job.isl.fil) subJobs.push({ o, job });
+      const maxN = subJobs.length ? Math.max(...subJobs.map((x) => x.job.isl.sub!.length)) : 0;
+      for (let j = 0; j < maxN - 1; j++) {
+        const slots = [...new Set(subJobs.filter((x) => j < x.job.isl.sub!.length - 1).map((x) => x.job.isl.sub![j]))].sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
+        for (const f of slots) {
+          changeTo(f);
+          for (const { o, job } of subJobs) {
+            const sub = job.isl.sub!, n = sub.length;
+            if (j >= n - 1 || sub[j] !== f) continue;
+            const items: PathItem[] = [];
+            for (const loop of job.isl.walls.loops[0] ?? []) {
+              const it: PathItem = { pts: simplify(loop.pts, resolution, loop.closed), closed: loop.closed, feature: loop.feature, width: loop.width, flow: 1, hole: loop.hole, wallDepth: 0 };
+              if (it.pts.length >= 4) items.push(toPass(it, j, n));
+            }
+            if (subInfill) for (const fl of job.fills) if (SUB_FILL.has(fl.feature) && (fl.fil ?? job.isl.fil) === job.isl.fil && (fl.height === undefined || fl.height < h)) items.push(toPass({ ...fl, pts: fl.pts.slice(), height: undefined }, j, n));
+            if (!items.length) continue;
+            objFlow = (onum(o, i, 'flow_ratio_scale') || 1) * (onum(o, i, 'print_flow_ratio') || 1);
+            curObj = o;
+            if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_START NAME=${labelName(o)}` : `M486 S${o}` });
+            for (const it of orderPaths(items, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it);
+            if (labels) ops.push({ k: 'raw', text: flavor === 'klipper' ? `EXCLUDE_OBJECT_END NAME=${labelName(o)}` : 'M486 S-1' });
+            objFlow = 1; curObj = -1;
+          }
+        }
+      }
+      if (maxN) order.sort((a, b) => (a === curTool ? -1 : b === curTool ? 1 : a - b));
     }
 
     // --- per filament: islands (walls, gap fill, fills) of every object

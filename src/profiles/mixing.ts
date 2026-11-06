@@ -194,3 +194,26 @@ export function matchMixes(target: string, colors: string[], max = 6): MixMatch[
   for (const m of out) { if (seen.length >= max) break; if (!seen.some((s) => deltaE(s.color, m.color) < 2.5)) seen.push(m); }
   return seen;
 }
+
+// ---------- Subdivide Mix Layer: print mix areas in thinner passes inside each layer
+/** Thinnest pass a subdivided layer may use (mm). */
+export const MIN_SUBLAYER = 0.04;
+
+/** Passes per layer for a mix: one per filament it uses (2 or 3+), fewer when the passes would be too thin; 1 = off. */
+export function subPassCount(m: MixedFilament, h: number): number {
+  const distinct = new Set(mixSequence(m)).size;
+  return Math.max(1, Math.min(distinct, Math.floor(h / MIN_SUBLAYER + 1e-9)));
+}
+
+/** Slot of each pass (bottom → top) on layer `layer` when a layer is split into `n` passes. */
+export function mixSubSlots(m: MixedFilament, layer: number, n: number, ts?: ArrayLike<number>): number[] {
+  if (m.kind === 'gradient') {
+    const t = ts?.[layer] ?? 0;
+    const share = gradientShare(m, t >= 0 ? t : 0);
+    const dither = (layer * 0.6180339887498949) % 1;
+    const b = Math.max(0, Math.min(n, Math.floor(share * n + dither)));
+    return Array.from({ length: n }, (_, j) => (Math.floor(((j + 1) * b) / n) > Math.floor((j * b) / n) ? m.b : m.a));
+  }
+  const s = mixSequence(m);
+  return Array.from({ length: n }, (_, j) => s[(layer * n + j) % s.length]);
+}

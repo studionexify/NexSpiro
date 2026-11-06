@@ -128,3 +128,62 @@ describe('slicing a mixed filament on the Snapmaker U1', () => {
     expect(out.warnings.join(' ')).toMatch(/Colour mixing changes filament on every layer/);
   });
 });
+
+describe('Subdivide Mix Layer', () => {
+  const run = (o: Record<string, unknown>, filament = 4, paint = false) => {
+    const c = resolveConfig({ printerId: 'snapmaker-u1', plate: 'textured_pei_plate', filamentId: 'generic-pla', presetId: '0.20', overrides: o as never });
+    const a = slotFromConfig(c);
+    const filaments = [0, 1, 2, 3].map((k) => ({ ...a, name: `PLA ${k + 1}`, color: ['#ffffff', '#cc2222', '#2222cc', '#111111'][k] }));
+    const mesh = weld(box(100, 100, 0, 20, 20, 4));
+    const m: any = { id: 'b', name: 'b', filament, ...mesh };
+    if (paint) m.paint = { color: new Uint8Array(mesh.indices.length / 3).fill(5) };
+    return slice([m], c, () => {}, { filaments, mixes: [{ id: 'm', kind: 'ratio', a: 0, b: 1, ra: 1, rb: 1 }] });
+  };
+  /** Per layer: extrusion Z values in print order, and the tools used. */
+  const layers = (g: string) => g.split(/^;LAYER_CHANGE/m).slice(1).map((chunk) => {
+    let z = NaN, x = NaN, y = NaN;
+    const ez: number[] = [];
+    const tools = new Set<number>();
+    for (const l of chunk.split('\n')) {
+      const t = /^T(\d+)\b/.exec(l); if (t) tools.add(+t[1]);
+      if (!/^G[0-3]\b/.test(l)) continue;
+      const zm = /\bZ([-\d.]+)/.exec(l); if (zm) z = +zm[1];
+      const xm = /\bX([-\d.]+)/.exec(l); if (xm) x = +xm[1];
+      const ym = /\bY([-\d.]+)/.exec(l); if (ym) y = +ym[1];
+      // extrusions on the object only (the prime tower stands apart)
+      if (/\bE[\d.]+/.test(l) && !/\bE-/.test(l) && (xm || ym) && x >= 99 && x <= 121 && y >= 99 && y <= 121) ez.push(z);
+    }
+    return { ez, tools };
+  });
+
+  it('prints the outer wall of a 1:1 mix as two 0.1 mm passes, the lower one first', () => {
+    const off = run({});
+    const on = run({ mix_subdivide: true });
+    const L = layers(on.gcode).slice(3, -3);
+    expect(L.length).toBeGreaterThan(8);
+    for (const l of L) {
+      const top = Math.max(...l.ez);
+      expect(l.ez.some((z) => Math.abs(z - (top - 0.1)) < 1e-3)).toBe(true);
+      // safety: never extrude lower again once the layer top has been printed
+      const firstTop = l.ez.findIndex((z) => Math.abs(z - top) < 1e-3);
+      expect(l.ez.slice(firstTop).every((z) => z > top - 1e-3)).toBe(true);
+    }
+    // both filaments on every layer, and about the same material overall (the passes are half height)
+    expect(on.stats.toolChanges).toBeGreaterThan(off.stats.toolChanges * 1.5);
+    expect(Math.abs(on.stats.filamentGrams - off.stats.filamentGrams) / off.stats.filamentGrams).toBeLessThan(0.03);
+  });
+
+  it('splits infill too with "Apply subdivision to infill"', () => {
+    const walls = run({ mix_subdivide: true });
+    const all = run({ mix_subdivide: true, mix_subdivide_infill: true });
+    const low = (g: string) => layers(g).slice(3, -3).reduce((a, l) => { const top = Math.max(...l.ez); return a + l.ez.filter((z) => z < top - 1e-3).length; }, 0);
+    expect(low(all.gcode)).toBeGreaterThan(low(walls.gcode) * 1.5);
+    expect(Math.abs(all.stats.filamentGrams - walls.stats.filamentGrams) / walls.stats.filamentGrams).toBeLessThan(0.03);
+  });
+
+  it('subdivides painted mixes only with "Full domain"', () => {
+    const low = (g: string) => layers(g).slice(3, -3).reduce((a, l) => { const top = Math.max(...l.ez); return a + l.ez.filter((z) => z < top - 1e-3).length; }, 0);
+    expect(low(run({ mix_subdivide: true }, 0, true).gcode)).toBe(0);
+    expect(low(run({ mix_subdivide: true, mix_subdivide_full_domain: true }, 0, true).gcode)).toBeGreaterThan(20);
+  });
+});

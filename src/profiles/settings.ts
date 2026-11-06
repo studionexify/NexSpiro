@@ -311,6 +311,10 @@ export const PROCESS_PARAMS: ParamDef[] = [
   { key: 'flush_into_objects', label: 'Flush into this object', tab: 'Others', group: 'Flush options', type: 'bool', def: false, advanced: true, tip: 'Per object: the whole object is printed right after filament changes and counted as flush. Its colour will be mixed.' },
   { key: 'flush_into_support', label: 'Flush into objects\' support', tab: 'Others', group: 'Flush options', type: 'bool', def: true, tip: 'After a filament change, the support of the layer is printed with the new filament and counted as flush.' },
 
+  { key: 'mix_subdivide', label: 'Subdivide mix layer', tab: 'Others', group: 'Color Mixing (Experimental)', type: 'bool', def: false, tip: 'Mixed filaments: the outer wall of mix areas is printed in thinner passes inside each layer (one per filament of the mix, at least 0.04 mm each), so the colours blend more finely. Tool changers only: each pass is a head swap.' },
+  { key: 'mix_subdivide_full_domain', label: 'Full domain', tab: 'Others', group: 'Color Mixing (Experimental)', type: 'bool', def: false, tip: 'Subdivide every mix area on the outer walls, also where the mix comes from colour painting or a colour change. Off: only objects whose own filament is a mix.' },
+  { key: 'mix_subdivide_infill', label: 'Apply subdivision to infill', tab: 'Others', group: 'Color Mixing (Experimental)', type: 'bool', def: false, tip: 'Sparse and solid infill inside subdivided mix areas is printed in the same passes.' },
+
   { key: 'slicing_mode', label: 'Slicing mode', tab: 'Others', group: 'Special mode', type: 'enum', def: 'regular', advanced: true, options: o(['regular', 'Regular'], ['even_odd', 'Even-odd'], ['close_holes', 'Close holes']),
     tip: 'Regular merges overlapping shells. Even-odd treats each nested shell as a hole (for 3DLabPrint-style models). Close holes fills all holes.' },
   { key: 'print_sequence', label: 'Print sequence', tab: 'Others', group: 'Special mode', type: 'enum', def: 'by_layer', options: o(['by_layer', 'By layer'], ['by_object', 'By object']),
