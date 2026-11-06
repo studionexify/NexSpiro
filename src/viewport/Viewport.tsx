@@ -1918,6 +1918,11 @@ export function Viewport() {
       if (needsRender) {
         const below = camera.position.z < 0;
         plateGroup.traverse((o) => { if (o.userData.surface) o.visible = !below; });
+        // depth precision follows the zoom: a fixed 1 mm near plane left too little precision close up, so
+        // neighbouring line beads fought for the same pixels and showed as stripes at every joint
+        const dist = camera.position.distanceTo(controls.target);
+        const near = Math.min(50, Math.max(0.05, dist / 60));
+        if (Math.abs(camera.near - near) / near > 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
         renderer.render(scene, camera);
         needsRender = false;
         emitCamera();

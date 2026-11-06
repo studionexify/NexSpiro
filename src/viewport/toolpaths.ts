@@ -43,6 +43,8 @@ attribute vec3 aEnd;
 attribute vec2 aWH;
 attribute vec4 aColor;
 attribute float aIdx;
+attribute vec4 aTurn;
+attribute vec2 aJoin;
 uniform float uMin;
 uniform float uMax;
 uniform float uTopStart;
@@ -58,9 +60,21 @@ void main() {
   vec3 up = vec3(0.0, 0.0, 1.0);
   // body from start to end; the round end caps reach half a width past each end (normal.x = how far, in half widths)
   float t = position.x;
-  vec3 p = aStart + fwd * (t * len + normal.x * aWH.x * 0.5) + vec3(0.0, 0.0, d.z * t)
-         + side * (position.y * aWH.x) + up * (position.z * aWH.y);
-  vec3 n = fwd * normal.x + side * normal.y + up * normal.z;
+  // Where the next move carries on through a gentle bend (aJoin: before, after), the two beads meet in a mitred
+  // joint instead of overlapping round end caps: the end's cross-section lies along the bend's bisector and the
+  // cap is not pushed out. Overlapping caps poked out on the outside of every bend and showed as a thin light
+  // line at each joint, which on a curved wall read as vertical stripes. aTurn: joining move directions.
+  float joined = t < 0.5 ? aJoin.x : aJoin.y;
+  vec2 joinDir = t < 0.5 ? aTurn.xy : aTurn.zw;
+  vec2 sf = joined > 0.5 ? normalize(fwd.xy + joinDir) : fwd.xy;
+  vec3 sside = vec3(-sf.y, sf.x, 0.0);
+  float cap = joined > 0.5 ? 0.0 : 1.0;
+  vec3 p = aStart + fwd * (t * len + normal.x * aWH.x * 0.5 * cap) + vec3(0.0, 0.0, d.z * t)
+         + sside * (position.y * aWH.x / max(0.5, dot(sf, fwd.xy))) + up * (position.z * aWH.y);
+  // at a mitred joint the end dome is folded flat into the bead's centre line, so it draws nothing and can't
+  // fight the next bead's surface for the same pixels
+  if (joined > 0.5 && abs(normal.x) > 1e-4) p = aStart + fwd * (t * len) + vec3(0.0, 0.0, d.z * t) + up * (-0.5 * aWH.y);
+  vec3 n = fwd * normal.x + sside * normal.y + up * normal.z;
   vNormal = normalize(normalMatrix * n);
   vColor = aColor.rgb;
   vDim = 0.0;
@@ -118,7 +132,9 @@ export function unitBead(segs = 12, rings = 4): THREE.BufferGeometry {
     // latitude rings from the body edge (φ = 0) to the tip (φ = π/2)
     for (let r = 0; r <= rings; r++) {
       const phi = (r / rings) * (Math.PI / 2), cp = Math.cos(phi), sp = Math.sin(phi);
-      for (const [c, s2] of ring) { P.push(x, 0.5 * c * cp, -0.5 + 0.5 * s2 * cp); N.push(dir * sp, c * cp, s2 * cp); }
+      // the first ring sits on the body's end; its tiny forward normal marks it as part of the cap, so a mitred
+      // joint folds the whole cap away (the shader folds vertices with normal.x != 0)
+      for (const [c, s2] of ring) { P.push(x, 0.5 * c * cp, -0.5 + 0.5 * s2 * cp); N.push(dir * Math.max(sp, 1e-3), c * cp, s2 * cp); }
     }
     for (let r = 0; r < rings; r++) for (let k = 0; k < segs; k++) {
       const a0 = o + r * segs + k, a1 = o + r * segs + ((k + 1) % segs), b0 = a0 + segs, b1 = a1 + segs;
@@ -167,6 +183,7 @@ export class ToolpathView {
     let ne = 0, nt = 0;
     for (let i = 1; i < count; i++) (f[i] === travelId ? nt++ : ne++);
     const start = new Float32Array(ne * 3), end = new Float32Array(ne * 3), wh = new Float32Array(ne * 2), idx = new Float32Array(ne);
+    const turn = new Float32Array(ne * 4), join = new Float32Array(ne * 2);
     const tPos = new Float32Array(nt * 6), tIdx = new Float32Array(nt * 2);
     this.extrIdx = new Uint32Array(ne);
     let e = 0, t = 0;
@@ -181,6 +198,19 @@ export class ToolpathView {
         end.set([m[b], m[b + 1], m[b + 2]], e * 3);
         wh[e * 2] = m[b + 3]; wh[e * 2 + 1] = m[b + 4];
         idx[e] = i; this.extrIdx[e] = i;
+        // directions of this move and the printed moves joining it (for smooth shading through bends)
+        const dir = (p0: number, p1: number): [number, number] | null => { const dx = m[p1] - m[p0], dy = m[p1 + 1] - m[p0 + 1], l = Math.hypot(dx, dy); return l > 1e-6 ? [dx / l, dy / l] : null; };
+        const own = dir(a, b) ?? [1, 0];
+        const COS = Math.cos((35 * Math.PI) / 180);
+        // a joining move: printed, same line kind and height, and turning less than 35°
+        const pick = (j: number, from: number, to: number): [number, number] | null => {
+          if (j < 1 || j >= count || f[j] === travelId || f[j] !== f[i] || Math.abs(m[j * S + 2] - m[b + 2]) > 1e-3) return null;
+          const d = dir(from, to);
+          return d && d[0] * own[0] + d[1] * own[1] > COS ? d : null;
+        };
+        const before = pick(i - 1, (i - 2) * S, a), after = pick(i + 1, b, (i + 1) * S);
+        turn.set([...(before ?? own), ...(after ?? own)], e * 4);
+        join[e * 2] = before ? 1 : 0; join[e * 2 + 1] = after ? 1 : 0;
         e++;
       }
     }
@@ -193,6 +223,8 @@ export class ToolpathView {
     g.setAttribute('aEnd', new THREE.InstancedBufferAttribute(end, 3));
     g.setAttribute('aWH', new THREE.InstancedBufferAttribute(wh, 2));
     g.setAttribute('aIdx', new THREE.InstancedBufferAttribute(idx, 1));
+    g.setAttribute('aTurn', new THREE.InstancedBufferAttribute(turn, 4));
+    g.setAttribute('aJoin', new THREE.InstancedBufferAttribute(join, 2));
     this.colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(ne * 4), 4);
     g.setAttribute('aColor', this.colorAttr);
     g.instanceCount = ne;
