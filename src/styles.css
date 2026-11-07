@@ -184,7 +184,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toggle:disabled { opacity: 0.4; }
 
 .tooltip {
-  position: fixed; z-index: 100; max-width: 340px; padding: 10px 12px; pointer-events: none;
+  position: fixed; z-index: 1200; max-width: 340px; padding: 10px 12px; pointer-events: none;
   background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); line-height: 1.5;
 }
 .tooltip b { display: block; color: var(--text-strong); margin-bottom: 4px; font-size: 13px; }
@@ -239,7 +239,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* instant tooltip */
 .instant-tip {
-  position: fixed; z-index: 200; pointer-events: none; max-width: 320px; padding: 5px 9px; font-size: 12px; line-height: 1.4;
+  position: fixed; z-index: 1200; pointer-events: none; max-width: 320px; padding: 5px 9px; font-size: 12px; line-height: 1.4;
   color: var(--text-strong); background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); white-space: pre-line;
 }
 
@@ -319,7 +319,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: var(--accent-tint); color: var(--accent); }
 
 /* ---------- modal & toast */
-.modal-bg { position: fixed; inset: 0; z-index: 80; background: rgba(5, 10, 18, 0.55); display: flex; align-items: center; justify-content: center; }
+.modal-bg { position: fixed; inset: 0; z-index: 1000; background: rgba(5, 10, 18, 0.55); display: flex; align-items: center; justify-content: center; }
 .modal { width: min(720px, 92vw); max-height: 86vh; display: flex; flex-direction: column; background: var(--surface-secondary); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
 .modal header { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 700; color: var(--text-strong); }
 .modal .body { padding: 14px 16px; overflow-y: auto; }
@@ -327,7 +327,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .modal textarea { width: 100%; min-height: 150px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-tertiary); font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px; resize: vertical; }
 .form-grid { display: grid; grid-template-columns: 1fr 140px 36px; align-items: center; gap: 6px 10px; }
 .toast {
-  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 10px;
+  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 1100; display: flex; align-items: center; gap: 10px;
   max-width: 640px; padding: 10px 14px; border-radius: 8px; background: var(--surface-secondary); border: 1px solid var(--border); box-shadow: var(--shadow);
 }
 .toast.warn { border-color: var(--warning); } .toast.warn svg { color: var(--warning); }

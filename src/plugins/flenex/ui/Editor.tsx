@@ -17,7 +17,7 @@ import { Card, Select, Slider, Toggle } from './controls';
 import { Seg, useInStudio } from '../../../ui/studio/Studio';
 import {
   addColour, addCut, addPart, addPaint, autoCutsAgain, baseBvh, built, changed, currentMachine, editAnyCut, editPart, export3mf, freezeCuts, fx, hasImport, importModel, loadPreset, nextCutId, removeAnyCut, removePart, respacePart, schedule,
-  sendToPlate, setPaint, setPalette, setPrinter, setTraceStart, traceStart, undoPaint, useFx, coloursUsed, notify,
+  sendToPlate, setPaint, setPalette, setPrinter, setTraceStart, traceStart, useFx, coloursUsed, notify,
 } from './state';
 
 const d = () => fx.design;
@@ -406,7 +406,6 @@ function PaintTab() {
         {fx.tool === 'bucket' && <Slider label="Edge angle that stops the fill" unit="°" value={fx.bucketAngle} min={5} max={90} onChange={(v) => { fx.bucketAngle = v; notify(); }} />}
         <div className="fx-chips">
           <button className="btn-small btn-secondary" onClick={() => addPaint({ kind: 'fill', slot: fx.slot })}>Fill everything</button>
-          <button className="btn-small btn-secondary" onClick={undoPaint}>Undo</button>
           <button className="btn-small btn-secondary" onClick={() => setPaint([{ kind: 'fill', slot: 1 }])}>Clear paint</button>
         </div>
         <div className="mx-sub">Painting follows the model: change the design and the colours stay where they were.</div>

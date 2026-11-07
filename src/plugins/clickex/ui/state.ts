@@ -8,6 +8,7 @@ import { addPlate, arrange, centreOnBed } from '../../../state/ops';
 import { newId, objectPlate, useStore, type SceneObject } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
 import { registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { createHistory } from '../../../ui/studio/history';
 import { beginTransfer, endTransfer } from '../../../state/steps';
 import { adaptWall, bedWarning, registerMachineLink } from '../../../state/machineSync';
 import { artColors, artFromIcon, artFromImage, artFromSvg, artFromText, type Art } from '../art';
@@ -60,37 +61,29 @@ export const useCx = () => useSyncExternalStore(subscribe, () => version);
 export let geometryVersion = 0;
 
 export function changed(geometry = true) {
-  if (geometry) geometryVersion++;
+  if (geometry) { geometryVersion++; undoHistory.touch(); }
   try { storage?.setItem(KEY, JSON.stringify({ spec: cx.spec, tab: cx.tab, view: cx.view, showSwitch: cx.showSwitch, placed: cx.placed })); } catch { /* storage full */ }
   version++;
   listeners.forEach((l) => l());
 }
 
 // ---------------------------------------------------------------- history
-const past: string[] = [], future: string[] = [];
-let lastPush = 0, lastTag = '';
+/** Undo / redo on the shared Studio history: a slider drag or a burst of edits is one step. */
+export const undoHistory = createHistory(() => cx.spec, (spec) => { cx.spec = normalizeSpec(spec); changed(); });
 
-/** Edit the design. Rapid edits with the same tag (a slider drag) share one undo step. */
-export function edit(fn: (s: ClickexSpec) => void, tag = '') {
-  const now = Date.now();
-  if (!tag || tag !== lastTag || now - lastPush > 700) { past.push(JSON.stringify(cx.spec)); if (past.length > 80) past.shift(); future.length = 0; }
-  lastPush = now; lastTag = tag;
+/** Edit the design (recorded for undo once edits pause). */
+export function edit(fn: (s: ClickexSpec) => void, _tag = '') {
   fn(cx.spec);
   changed();
 }
-export const canUndo = () => past.length > 0;
-export const canRedo = () => future.length > 0;
-export function undo() { const p = past.pop(); if (p === undefined) return; future.push(JSON.stringify(cx.spec)); cx.spec = normalizeSpec(JSON.parse(p)); lastTag = ''; changed(); }
-export function redo() { const p = future.pop(); if (p === undefined) return; past.push(JSON.stringify(cx.spec)); cx.spec = normalizeSpec(JSON.parse(p)); lastTag = ''; changed(); }
 export function resetDesign() {
-  past.push(JSON.stringify(cx.spec)); future.length = 0;
   const keep = cx.spec;
   cx.spec = { ...defaultSpec(), source: keep.source, svg: keep.svg, image: keep.image, icon: keep.icon, model: { ...defaultSpec().model, name: keep.model.name }, name: keep.name };
   changed();
 }
 
 export function setTab(id: string) { cx.tab = id; changed(false); }
-export function openStudio(open = true) { cx.studioOpen = open; if (open && !opened) { opened = true; snapToLoaded(); past.length = 0; future.length = 0; } changed(false); }
+export function openStudio(open = true) { cx.studioOpen = open; if (open && !opened) { opened = true; snapToLoaded(); undoHistory.reset(); } changed(false); }
 /** The design has been worked on this session (it then takes part in filament-change prompts). */
 let opened = false;
 export function say(text: string) { cx.toast = text; changed(false); setTimeout(() => { if (cx.toast === text) { cx.toast = ''; changed(false); } }, 4200); }
@@ -270,6 +263,8 @@ export function snapToLoaded() {
   const near = (c: string) => (all.includes(c.toLowerCase()) ? c : fil.reduce((b, f) => (dist(f, c) < dist(b, c) ? f : b), fil[0]));
   const s = cx.spec;
   s.colors.base = near(s.colors.base); s.colors.button = near(s.colors.button); s.colors.ink = near(s.colors.ink);
+  // base and button in different filaments when the machine has more than one
+  if (fil.length > 1 && s.colors.button.toLowerCase() === s.colors.base.toLowerCase()) s.colors.button = fil.find((f) => f.toLowerCase() !== s.colors.base.toLowerCase())!;
   for (const c of designColors()) s.colors.map[c] = near(s.colors.map[c] ?? c);
 }
 
@@ -392,7 +387,7 @@ export function saveDesign() {
   try { storage?.setItem(SAVED, JSON.stringify(list.slice(0, 40))); say(`Saved “${cx.spec.name}”.`); } catch { say('Could not save: browser storage is full.'); }
   changed(false);
 }
-export function openSaved(d: ClickexSpec) { past.push(JSON.stringify(cx.spec)); future.length = 0; cx.spec = normalizeSpec(structuredClone(d)); cx.tab = d.source === 'blocks' ? 'layout' : d.source === 'model' ? 'cut' : 'shape'; changed(); }
+export function openSaved(d: ClickexSpec) { cx.spec = normalizeSpec(structuredClone(d)); cx.tab = d.source === 'blocks' ? 'layout' : d.source === 'model' ? 'cut' : 'shape'; changed(); }
 export function deleteSaved(name: string) { try { storage?.setItem(SAVED, JSON.stringify(savedDesigns().filter((d) => d.name !== name))); } catch { /* ignore */ } changed(false); }
 
 // ---------------------------------------------------------------- project file
@@ -416,6 +411,7 @@ export function loadClickexProject(d: unknown) {
     modelVersion++;
   }
   changed();
+  undoHistory.reset();
 }
 
 export { meshBounds };
@@ -426,8 +422,8 @@ export function applyPlateColours(objs: SceneObject[]) {
   for (const o of objs) {
     const c = o.filament !== undefined ? f[o.filament]?.color : undefined;
     if (!c) continue;
-    if (/· Base\b/.test(o.name)) cx.spec.colors.base = c;
-    else if (/· Button\b/.test(o.name)) cx.spec.colors.button = c;
+    if (/\bbase$/i.test(o.name)) cx.spec.colors.base = c;
+    else if (/\bbutton( \d+)?$/i.test(o.name)) cx.spec.colors.button = c;
   }
   opened = true;
   changed();

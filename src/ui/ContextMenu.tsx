@@ -87,7 +87,12 @@ function objectItems(m: ContextMenuState): MenuItem[] {
       addWallPart(one.id, mode, k, w);
     } })),
   });
+  // plugin steps of the clicked object (or the one selected): reopen any of them in its Studio, first in the menu
+  const target = one ?? s.objects.find((o) => o.id === m.id);
+  const steps = target ? stepsOf(target) : [];
+  const stepItems: MenuItem[] = target && steps.length ? [...steps.map((st, i) => ({ label: `${i === 0 && generatorOf(target) ? 'Edit design in' : 'Edit in'} ${stepLabel(st.plugin)} Studio`, icon: 'edit', onClick: () => editStep(target, st) })), { sep: true }] : [];
   const items: MenuItem[] = [
+    ...stepItems,
     { label: one ? `Rename “${one.name}”…` : `${ids.length} objects`, icon: 'editName', disabled: !one, onClick: () => one && renameObject(one.id) },
     { sep: true },
     { label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', onClick: () => copyObjects(ids) },
@@ -131,11 +136,6 @@ function objectItems(m: ContextMenuState): MenuItem[] {
       { label: `Edit inks and placement${placed ? ` (${placed})` : ''}`, disabled: !placed, onClick: () => editObjectArtwork(ids[0]) },
       { label: 'Remove artwork', disabled: !placed, onClick: () => s.updateObjects((o) => ({ ...o, patternex: undefined }), ids) },
     ] });
-  }
-  // plugin steps of this object: reopen any of them in its Studio
-  const steps = one ? stepsOf(one) : [];
-  if (one && steps.length) {
-    items.push({ sep: true }, ...steps.map((st, i) => ({ label: `${i === 0 && generatorOf(one) ? 'Edit design in' : 'Edit'} ${stepLabel(st.plugin)} Studio`, icon: 'edit' as const, onClick: () => editStep(one, st) })));
   }
   items.push({ sep: true }, { label: 'Export as STL…', icon: 'exportB', onClick: () => exportStl(ids) });
   return items;

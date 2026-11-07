@@ -11,7 +11,8 @@ import { PanelById, tabsFor } from './Panels';
 import { IconButton, LiveBadge, Row, Seg, SideCard, Stat, StudioWindow, ToolGroup } from '../../../ui/studio/Studio';
 import { SourcePanel } from './Sources';
 import { Viewer } from './Viewer';
-import { canRedo, canUndo, changed, compute, cx, download3mf, openStudio, redo, resetDesign, saveDesign, say, setTab, transferToPlate, undo, useCx, type View } from './state';
+import { changed, compute, cx, download3mf, openStudio, resetDesign, saveDesign, say, setTab, transferToPlate, undoHistory, useCx, type View } from './state';
+import { UndoRedo } from '../../../ui/studio/UndoRedo';
 
 export function ClickexStudioHost() {
   useCx();
@@ -75,13 +76,6 @@ function Studio() {
   useCx();
   const c = compute();
   const notes = c.built?.report.warnings ?? [];
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !(e.target instanceof HTMLInputElement && e.target.type === 'text')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); e.stopPropagation(); }
-    };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, []);
   useEffect(() => { if (cx.toast) useStore.getState().set({ toast: { kind: 'info', text: cx.toast } }); }, [cx.toast]);
   const send = () => { const r = transferToPlate(); if (r) { say(`${r.count} part${r.count > 1 ? 's' : ''} placed on ${r.plate}.`); setTimeout(() => openStudio(false), 900); } };
   const tabs = tabsFor(cx.spec.source);
@@ -91,8 +85,7 @@ function Studio() {
         <Row label="Name"><input className="st-text" value={cx.spec.name} aria-label="Design name" onChange={(e) => { cx.spec.name = e.target.value; changed(false); }} /></Row>
         <div className="st-btns">
           <button className="st-btn" onClick={saveDesign} title="Save this design to your library">Save</button>
-          <IconButton icon="undo" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo} />
-          <IconButton icon="redo" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo} />
+          <UndoRedo history={undoHistory} />
           <IconButton icon="rot" title="Reset the settings of this design" onClick={resetDesign} />
         </div>
       </SideCard>
