@@ -140,3 +140,4 @@
 .st-stage-flat { position: absolute; inset: 52px 14px 14px; display: grid; place-items: center; overflow: auto; }
 .st-stage .live3d-float { left: 14px; right: auto; top: 12px; z-index: 4; }
 .st-stage .live3d-off { position: absolute; inset: 0; }
+.st-close .select { height: 26px; width: 100%; border-radius: 6px; }

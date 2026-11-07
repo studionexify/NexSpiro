@@ -13,6 +13,7 @@ import { SCHEMES, type PaintOp } from '../paint';
 import { ORIENTATIONS, type CutOrientation } from '../place';
 import { cutFrame, newCut, type Cut } from '../flexi';
 import { Card, Select, Slider, Toggle } from './controls';
+import { Seg, useInStudio } from '../../../ui/studio/Studio';
 import {
   addColour, addCut, addPart, addPaint, autoCutsAgain, baseBvh, built, changed, currentMachine, editAnyCut, editPart, export3mf, freezeCuts, fx, hasImport, importModel, loadPreset, nextCutId, removeAnyCut, removePart, respacePart, schedule,
   sendToPlate, setPaint, setPalette, setPrinter, setTraceStart, traceStart, undoPaint, useFx, coloursUsed, notify,
@@ -461,18 +462,26 @@ function PrintTab({ onToast }: { onToast: (t: string) => void }) {
   );
 }
 
+function pickTab(t: typeof fx.tab) {
+  fx.tab = t;
+  if (t === 'paint' && fx.tool === 'place') fx.tool = 'orbit';
+  if (t === 'cuts' && (fx.tool === 'brush' || fx.tool === 'bucket' || fx.tool === 'piece')) fx.tool = 'orbit';
+  notify();
+}
+
 export function EditorColumn({ onToast }: { onToast: (t: string) => void }) {
   useFx();
+  const studio = useInStudio();
   return (
     <>
-      <SourceBar />
-      <div className="fx-tabs">
+      {studio ? <section className="st-card"><SourceBar /><div style={{ marginTop: 8 }}><Seg label="Step" value={fx.tab} options={[['design', 'Design'], ['cuts', 'Cuts'], ['paint', 'Paint'], ['print', 'Print']]} onChange={(t) => pickTab(t)} /></div></section> : <SourceBar />}
+      {!studio && <div className="fx-tabs">
         {(['design', 'cuts', 'paint', 'print'] as const).map((t) => (
           <button key={t} className={`fx-tab ${fx.tab === t ? 'on' : ''}`} onClick={() => { fx.tab = t; if (t === 'paint' && fx.tool === 'place') fx.tool = 'orbit'; if (t === 'cuts' && (fx.tool === 'brush' || fx.tool === 'bucket' || fx.tool === 'piece')) fx.tool = 'orbit'; notify(); }}>
             {t === 'design' ? 'Design' : t === 'cuts' ? 'Cuts' : t === 'paint' ? 'Paint' : 'Print'}
           </button>
         ))}
-      </div>
+      </div>}
       {fx.tab === 'design' && (fx.source === 'creature' ? <CreatureDesigner /> : <ImportDesigner />)}
       {fx.tab === 'cuts' && <CutsTab />}
       {fx.tab === 'paint' && <PaintTab />}

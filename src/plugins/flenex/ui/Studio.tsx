@@ -2,7 +2,6 @@
 // the flexi on the selected printer's bed, where cuts are placed and colours painted. Right: report.
 import { useEffect, useRef, useState } from 'react';
 import { Live3D } from '../../../ui/Live3D';
-import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useStore } from '../../../state/store';
@@ -14,15 +13,20 @@ import type { V3 } from '../csg';
 import { defaultJoint } from '../joints';
 import { cutFrame, newCut, probeCut, type Cut } from '../flexi';
 import { EditorColumn, PrinterPicker } from './Editor';
+import { Card } from './controls';
+import { HandleCurve } from '../../../ui/studio/HandleCurve';
+import { LiveBadge, Num, Seg, Stat, StudioWindow, ToolGroup } from '../../../ui/studio/Studio';
+import { PROFILES } from '../presets';
+import { SPINES } from '../design';
 import {
-  addCut, addPart, addPaint, baseBvh, built, building, statusText, currentMachine, editAnyCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, setTraceStart, traceStart, useFx,
+  addCut, addPart, changed, addPaint, baseBvh, built, building, statusText, currentMachine, editAnyCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, setTraceStart, traceStart, useFx,
 } from './state';
 
 export function FlenexStudioHost() {
   useFx();
   const installed = useStore((s) => s.plugins.includes('flenex'));
   if (!installed || !fx.studioOpen || typeof document === 'undefined') return null;
-  return createPortal(<Studio />, document.body);
+  return <Studio />;
 }
 
 const PIECE_HUES = (i: number) => new THREE.Color().setHSL(((i * 0.618) % 1), 0.55, 0.58);
@@ -266,27 +270,30 @@ function Viewer() {
   useEffect(() => { (api.current as { setControls?: () => void } | null)?.setControls?.(); }, [fx.tool]);
 
   return (
-    <div className="lx-viewer">
-      <div ref={host} className="lx-canvas" />
-      <div className="lx-viewbar">
-        {(['colour', 'pieces', 'plain'] as const).map((v) => <button key={v} className={`btn-small ${fx.view === v ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { fx.view = v; notify(); }}>{v === 'colour' ? 'Colours' : v === 'pieces' ? 'Pieces' : 'Plain'}</button>)}
-        <span style={{ width: 10 }} />
-        <button className={`btn-small ${fx.showCuts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { fx.showCuts = !fx.showCuts; notify(); }}>Cuts</button>
-        <button className={`btn-small ${fx.showBed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { fx.showBed = !fx.showBed; notify(); }}>Bed</button>
-        {fx.tool !== 'orbit' && <button className="btn-small btn-secondary" onClick={() => { fx.tool = 'orbit'; notify(); }}>Stop tool ({fx.tool})</button>}
-      </div>
+    <>
+      <div ref={host} style={{ position: 'absolute', inset: 0 }} />
       {fx.tool !== 'orbit' && (
-        <div className="fx-hint">
-          {fx.tool === 'place' ? 'Press, slide, release' : fx.tool === 'move' ? 'Drag the selected cut along the body' : fx.tool === 'trace' ? (traceStart ? 'Now click the other end of the part' : 'Click one end of the part') : fx.tool === 'brush' ? 'Drag to paint' : fx.tool === 'bucket' ? 'Click to fill a surface area' : 'Click a segment to colour it'}
-          {(fx.tool === 'place' || fx.tool === 'move') && (
-            <span className="fx-dirbar"> · <select className="select" value={fx.orientation} onChange={(e) => { fx.orientation = e.target.value as CutOrientation; notify(); }}>{ORIENTATIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></span>
-          )}
-          <span> · right-drag orbits</span>
+        <div className="st-toolbar" style={{ left: '50%', transform: 'translateX(-50%)', top: 12, alignItems: 'center' }}>
+          <span className="st-ttl" style={{ fontWeight: 500, fontSize: 12 }}>
+            {fx.tool === 'place' ? 'Press, slide, release to place a cut' : fx.tool === 'move' ? 'Drag the selected cut along the body' : fx.tool === 'trace' ? (traceStart ? 'Now click the other end of the part' : 'Click one end of the part') : fx.tool === 'brush' ? 'Drag to paint' : fx.tool === 'bucket' ? 'Click to fill a surface area' : 'Click a segment to colour it'}
+            <span style={{ color: 'var(--ns-text-3)' }}> · right-drag orbits</span>
+          </span>
+          {(fx.tool === 'place' || fx.tool === 'move') && <select className="st-sel" value={fx.orientation} aria-label="Cut direction" onChange={(e) => { fx.orientation = e.target.value as CutOrientation; notify(); }}>{ORIENTATIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select>}
+          <button className="st-btn" onClick={() => { fx.tool = 'orbit'; notify(); }}>Done (Esc)</button>
         </div>
       )}
-      {building && <div className="fx-busy">{statusText || 'Building…'}</div>}
-      <div className="lx-status">{lastError && !built ? lastError : status}</div>
-    </div>
+      <LiveBadge busy={building} text={lastError && !built ? lastError : `Live · ${status}`} />
+      <div className="st-toolbar br">
+        <span className="st-ttl">Preview</span>
+        <ToolGroup label="Colour by"><Seg label="Colour by" value={fx.view} options={[['colour', 'Colours'], ['pieces', 'Pieces'], ['plain', 'Plain']]} onChange={(v) => { fx.view = v; notify(); }} /></ToolGroup>
+        <ToolGroup label="Show">
+          <span className="st-seg" role="group" aria-label="Show">
+            <button className={fx.showCuts ? 'on' : ''} aria-pressed={fx.showCuts} onClick={() => { fx.showCuts = !fx.showCuts; notify(); }}>Cuts</button>
+            <button className={fx.showBed ? 'on' : ''} aria-pressed={fx.showBed} onClick={() => { fx.showBed = !fx.showBed; notify(); }}>Bed</button>
+          </span>
+        </ToolGroup>
+      </div>
+    </>
   );
 }
 
@@ -300,63 +307,86 @@ function Report() {
   const total = b.paint.length;
   return (
     <>
-      <div className="mx-card">
-        <div className="mx-card-title">Summary</div>
+      <Card title="Summary">
         <div className="fx-stat"><span>Pieces</span><b>{b.flexi.pieceCount}</b></div>
         <div className="fx-stat"><span>Joints working</span><b>{ok}{bad ? ` · ${bad} failed` : ''}</b></div>
         <div className="fx-stat"><span>Size</span><b>{b.fit.size.map((x) => x.toFixed(0)).join(' × ')} mm</b></div>
         <div className="fx-stat"><span>Bed {mac.bed.x}×{mac.bed.y}</span><b className={b.fit.fits ? 'ok' : 'bad'}>{b.fit.fits ? 'fits' : 'too big'}</b></div>
         <div className="fx-stat"><span>Solid</span><b className={b.flexi.closed ? 'ok' : 'bad'}>{b.flexi.closed ? 'watertight' : 'open edges'}</b></div>
         <div className="fx-stat"><span>Clearance</span><b>{mac.fit.clearance.toFixed(2)} mm</b></div>
-      </div>
-      <div className="mx-card">
-        <div className="mx-card-title">Colours</div>
+      </Card>
+      <Card title="Colours" open={false}>
         {[...colours].sort((x, y) => x[0] - y[0]).map(([s, n]) => (
           <div key={s} className="fx-stat"><span><i className="fx-dot" style={{ background: fx.palette[s - 1] }} />Colour {s}</span><b>{Math.round((n / total) * 100)}%</b></div>
         ))}
         <div className="mx-sub">{colours.size > 1 ? (mac.multiColour === 'ams' ? 'Printed with the AMS.' : `${mac.printer.model} has no AMS: it pauses for a manual filament swap at every colour change.`) : 'Single colour.'}</div>
-      </div>
-      <div className="mx-card">
-        <div className="mx-card-title">Check ({b.warnings.length})</div>
+      </Card>
+      <Card title={`Check (${b.warnings.length})`} open={b.warnings.length > 0}>
         {!b.warnings.length && <div className="mx-sub">No problems found.</div>}
         {b.warnings.slice(0, 40).map((w, i) => <div key={i} className="fx-warn">{w}</div>)}
-      </div>
+      </Card>
     </>
   );
 }
 
 function Studio() {
   useFx();
-  const printer = printerById(useStore((s) => s.printerId));
-  const [toast, setToast] = useState('');
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (fx.tool !== 'orbit') { fx.tool = 'orbit'; notify(); } else openStudio(false); } };
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, []);
-  const say = (t: string) => { setToast(t); setTimeout(() => setToast(''), 3200); };
-  return (
-    <div className="lx-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) openStudio(false); }}>
-      <div className="lx-studio" role="dialog" aria-label="Flenex Studio">
-        <header className="lx-top">
-          <span className="mx-badge">F</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="mx-title">Flenex Studio · {fx.source === 'import' ? fx.importName : fx.design.name}</div>
-            <div className="mx-sub">{printer.vendor} {printer.model} · nozzle {printer.nozzle} mm · bed {printer.bed.x} × {printer.bed.y} × {printer.bed.z} mm</div>
-          </div>
-          <div style={{ width: 230 }}><PrinterPicker /></div>
-          <button className="btn-secondary" disabled={!built} onClick={async () => { const p = await export3mf(); say(p ? `Saved ${p}` : 'Export cancelled'); }}>Export 3MF</button>
-          <button className="btn-primary" disabled={!built} onClick={() => { const r = sendToPlate(); if (r) say(`Placed on the plate (${r.colours} colour${r.colours === 1 ? '' : 's'}).`); }}>Send to plate</button>
-          <button className="btn-secondary" onClick={() => openStudio(false)} aria-label="Close">✕</button>
-        </header>
-        <div className="lx-body">
-          <aside className="lx-col lx-left"><div className="mx-panel"><EditorColumn onToast={say} /></div></aside>
-          <main className="lx-centre"><Live3D><Viewer /></Live3D></main>
-          <aside className="lx-col lx-right" tabIndex={0} aria-label="Details panel (tap to open)"><div className="mx-panel"><Report /></div></aside>
+  const b = built, mac = currentMachine();
+  const close = () => { if (fx.tool !== 'orbit') { fx.tool = 'orbit'; notify(); } else openStudio(false); };
+  const say = (t: string) => useStore.getState().set({ toast: { kind: 'info', text: t } });
+  const creature = fx.source === 'creature';
+  const body = fx.design.body;
+  const ok = b ? b.flexi.reports.filter((r) => r.ok).length : 0, bad = b ? b.flexi.reports.length - ok : 0;
+  const stage = (
+    <>
+      <Live3D><Viewer /></Live3D>
+      {b && (
+        <div className="st-stats" style={{ top: 52 }}>
+          <Stat label="Pieces" value={String(b.flexi.pieceCount)} />
+          <Stat label="Joints working" value={bad ? `${ok} · ${bad} failed` : String(ok)} tone={bad ? 'warn' : 'ok'} />
+          <Stat label={`Bed ${mac.bed.x} × ${mac.bed.y}`} value={b.fit.fits ? 'Fits' : 'Too big'} tone={b.fit.fits ? 'ok' : 'warn'} />
+          <Stat label="Clearance" value={`${mac.fit.clearance.toFixed(2)} mm`} />
         </div>
-        {toast && <div className="lx-toast">{toast}</div>}
+      )}
+    </>
+  );
+  const editor = (
+    <>
+      <div className="st-editor-head">
+        <span className="st-ttl">{creature ? 'Thickness' : 'Body'}</span>
+        {creature && (
+          <>
+            <ToolGroup label="Preset"><select className="st-sel" value="" aria-label="Thickness preset" onChange={(e) => { const p = PROFILES[e.target.value]; if (p) { body.profile = p.handles.slice(); changed(); } }}><option value="">Pick a profile…</option>{Object.entries(PROFILES).map(([k, p]) => <option key={k} value={k}>{p.name}</option>)}</select></ToolGroup>
+            <ToolGroup label="Size">
+              <Num label="Length (mm)" value={body.length} min={40} max={500} onChange={(v) => { body.length = v; changed(); }} /><span className="st-unit">mm long</span>
+              <Num label="Thickness (mm)" value={body.thickness} min={4} max={40} step={0.5} digits={1} onChange={(v) => { body.thickness = v; changed(); }} /><span className="st-unit">mm thick</span>
+            </ToolGroup>
+            <ToolGroup label="Spine"><select className="st-sel" value={body.spine.kind} aria-label="Spine shape" onChange={(e) => { body.spine.kind = e.target.value as typeof body.spine.kind; changed(); }}>{SPINES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></ToolGroup>
+          </>
+        )}
+        <span style={{ flex: 1 }} />
+        <ToolGroup label="Step"><Seg label="Step" value={fx.tab} options={[['design', 'Design'], ['cuts', 'Cuts'], ['paint', 'Paint'], ['print', 'Print']]} onChange={(t) => { fx.tab = t; notify(); }} /></ToolGroup>
       </div>
-    </div>
+      <div className="st-editor-body">
+        {creature
+          ? <HandleCurve values={body.profile} min={0.1} max={1.8} mirror color="#7C3AED" startLabel="head" endLabel="tail"
+              valueLabel={(v) => `${(v * body.thickness).toFixed(1)} mm`} hint="Body seen from above: drag a handle to make the body thicker or thinner there"
+              onChange={(i, v) => { body.profile[i] = v; changed(); }} />
+          : <div className="st-hint" style={{ padding: 16 }}>Imported model: place cuts in the 3D view (Cuts step) and paint it (Paint step). The thickness editor is for designed creatures.</div>}
+      </div>
+    </>
+  );
+  return (
+    <StudioWindow name="Flenex" letter="F" gradient="linear-gradient(135deg,#7C3AED,#DB2777)" onClose={close} sideWidth={310}
+      version={creature ? fx.design.name : fx.importName}
+      side={<div className="mx-panel" style={{ display: 'contents' }}><EditorColumn onToast={say} /><Report /></div>}
+      rail={<><small>Colours</small>{fx.palette.map((c, i) => <button key={i} className={`st-sw ${fx.slot === i + 1 ? 'on' : ''}`} style={{ background: c, width: 24, height: 24 }} title={`Colour ${i + 1}`} aria-label={`Paint colour ${i + 1}`} onClick={() => { fx.slot = i + 1; notify(); }} />)}</>}
+      stage={stage} editor={editor} editorHeight={250}
+      actions={<>
+        <div style={{ width: 210 }}><PrinterPicker /></div>
+        <button className="st-btn" disabled={!built} onClick={async () => { const p = await export3mf(); say(p ? `Saved ${p}` : 'Export cancelled'); }}>Export 3MF</button>
+        <button className="st-btn" disabled={!built} onClick={() => { const r = sendToPlate(); if (r) say(`Placed on the plate (${r.colours} colour${r.colours === 1 ? '' : 's'}).`); }}>Send to plate</button>
+      </>} />
   );
 }
 void triNormal;

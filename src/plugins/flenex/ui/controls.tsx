@@ -1,5 +1,6 @@
 // Small form controls used by the Flenex panels (same look as the other plugins).
 import type { ReactNode } from 'react';
+import { SideCard, useInStudio } from '../../../ui/studio/Studio';
 
 export function Slider({ label, value, min, max, step = 1, unit, onChange, hint }: { label: string; value: number; min: number; max: number; step?: number; unit?: string; onChange: (v: number) => void; hint?: string }) {
   return (
@@ -33,6 +34,8 @@ export function Toggle({ label, on, onChange }: { label: string; on: boolean; on
 }
 
 export function Card({ title, children, open = true }: { title: string; children: ReactNode; open?: boolean }) {
+  // inside the Studio the same content is a collapsible side card
+  if (useInStudio()) return <SideCard title={title} defaultOpen={open} id={`fx-${title.split(' (')[0].toLowerCase().replace(/[^a-z]+/g, '-')}`}><div className="st-card-body">{children}</div></SideCard>;
   return (
     <details className="mx-card" open={open}>
       <summary className="mx-card-title" style={{ cursor: 'pointer' }}>{title}</summary>
