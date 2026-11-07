@@ -2,7 +2,7 @@
 // preview with a floating toolbar, and the plugin's editor underneath. Rules (docs/design/studio-mockups):
 // no Apply button, two numbers on one line, tiny labels above tool groups, numbered filament slots everywhere,
 // hover previews / click commits in libraries, collapsible side, state always visible.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../../state/store';
 import { filamentById } from '../../profiles/filaments';
@@ -55,7 +55,18 @@ export interface StudioProps {
   version?: string;
   /** Overlays above the main column (library, dialogs). */
   overlay?: ReactNode;
+  /** Buttons beside Done (Render, Transfer to plate…). */
+  actions?: ReactNode;
+  /** Width of the settings column (px). */
+  sideWidth?: number;
 }
+
+/**
+ * True inside a Studio's settings column. Plugins whose panels are built from their own card component render
+ * those cards as Studio side cards when this is set, so one editor serves both the dock and the Studio.
+ */
+export const InStudio = createContext(false);
+export const useInStudio = () => useContext(InStudio);
 
 const COLLAPSE_KEY = 'nexspiro.studio.collapsed';
 
@@ -78,7 +89,7 @@ export function StudioWindow(p: StudioProps) {
   if (typeof document === 'undefined') return null;
   return createPortal(
     <div className="st-back" role="dialog" aria-label={`${p.name} Studio`}>
-      <div className={`st ${collapsed ? 'collapsed' : ''}`} style={{ '--st-editor-h': `${editorH}px` } as CSSProperties}>
+      <div className={`st ${collapsed ? 'collapsed' : ''}`} style={{ '--st-editor-h': `${editorH}px`, ...(p.sideWidth && !collapsed ? { gridTemplateColumns: `${p.sideWidth}px minmax(0, 1fr)` } : {}) } as CSSProperties}>
         {collapsed ? (
           <aside className="st-rail" aria-label="Settings (collapsed)">
             <div className="st-logo" style={{ background: p.gradient }}>{p.letter}</div>
@@ -95,14 +106,14 @@ export function StudioWindow(p: StudioProps) {
               </div>
               <div className="st-meta">{p.version && <span className="mono">{p.version}</span>}{p.links?.map((l) => <button key={l.label} onClick={l.onClick}>{l.label}</button>)}</div>
             </div>
-            {p.side}
+            <InStudio.Provider value={true}>{p.side}</InStudio.Provider>
           </aside>
         )}
         <div className="st-main">
           <section className="st-stage" aria-label="Preview">
             <div className="st-stage-bg" />
             {p.stage}
-            <div className="st-close"><button className="st-btn primary" onClick={p.onClose} title="Back to the model (Esc)">Done</button></div>
+            <div className="st-close">{p.actions}<button className="st-btn primary" onClick={p.onClose} title="Back to the model (Esc)">Done</button></div>
           </section>
           {p.editor && (
             <section className="st-editor" aria-label="Editor">

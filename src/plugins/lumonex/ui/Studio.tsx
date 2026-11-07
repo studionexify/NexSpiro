@@ -11,7 +11,10 @@ import { useStore } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
 import { assembled, buildLamp, rotateXYZ, type BuiltPart } from '../build';
 import { bounds, toMesh, translate, type Soup } from '../geom';
-import { EditorColumn, ReportColumn } from './LumonexPanel';
+import { EditorColumn, ReportColumn, useReport } from './LumonexPanel';
+import { LiveBadge, Seg, Stat, StudioWindow, ToolGroup } from '../../../ui/studio/Studio';
+import { StackEditorBody, StackEditorHead } from './StackEditor';
+import { swatch } from '../catalog';
 import { RenexStudio } from '../../../renex/ui/RenexStudio';
 import { lumonexRenexSource } from '../renexSource';
 import { bedOf, changed, geometryVersion, groupByFilament, lx, openStudio, transferToPlate, useLx, type StudioView } from './state';
@@ -204,65 +207,62 @@ function Viewer() {
   }, [sig]);
 
   return (
-    <div className="lx-viewer">
-      <div ref={host} className="lx-canvas" />
-      <div className="lx-viewbar">
-        {(['assembled', 'exploded', 'pieces'] as StudioView[]).map((v) => (
-          <button key={v} className={`btn-small ${lx.view === v ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { lx.view = v; changed(false); }}>
-            {v === 'assembled' ? 'Assembled' : v === 'exploded' ? 'Exploded' : 'Print plates'}
-          </button>
-        ))}
-        <span style={{ width: 10 }} />
-        <button className={`btn-small ${lx.lit ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { lx.lit = !lx.lit; changed(false); }}>💡 Lit</button>
-        <button className={`btn-small ${lx.cutaway ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { lx.cutaway = !lx.cutaway; changed(false); }}>Cutaway</button>
-        <button className={`btn-small ${lx.showCuts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { lx.showCuts = !lx.showCuts; changed(false); }}>Cut-outs</button>
-      </div>
+    <>
+      <div ref={host} style={{ position: 'absolute', inset: 0 }} />
       {beds.length > 0 && (
-        <div className="lx-legend">
-          {beds.map((b) => <div key={b.key}><i style={{ background: b.hex }} />{b.key} · {b.count} plate{b.count > 1 ? 's' : ''}</div>)}
+        <div className="st-stats" style={{ top: 52, right: 'auto', left: 14 }}>
+          {beds.map((b) => <div key={b.key} className="st-stat"><small><i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: b.hex, marginRight: 5 }} />{b.key}</small><b>{b.count} plate{b.count > 1 ? 's' : ''}</b></div>)}
         </div>
       )}
-      <div className="lx-status">{status}</div>
-    </div>
+      <LiveBadge text={status ? `Live · ${status}` : 'Live'} />
+      <div className="st-toolbar br">
+        <span className="st-ttl">Preview</span>
+        <ToolGroup label="Show"><Seg label="Show" value={lx.view} options={[['assembled', 'Assembled'], ['exploded', 'Exploded'], ['pieces', 'Print plates']]} onChange={(v) => { lx.view = v; changed(false); }} /></ToolGroup>
+        <ToolGroup label="Look">
+          <span className="st-seg" role="group" aria-label="Look">
+            <button className={lx.lit ? 'on' : ''} aria-pressed={lx.lit} title="Light the bulb" onClick={() => { lx.lit = !lx.lit; changed(false); }}>Lit</button>
+            <button className={lx.cutaway ? 'on' : ''} aria-pressed={lx.cutaway} title="Cut the lamp open" onClick={() => { lx.cutaway = !lx.cutaway; changed(false); }}>Cutaway</button>
+            <button className={lx.showCuts ? 'on' : ''} aria-pressed={lx.showCuts} title="Show the cut-outs (cable, switch…)" onClick={() => { lx.showCuts = !lx.showCuts; changed(false); }}>Cut-outs</button>
+          </span>
+        </ToolGroup>
+      </div>
+    </>
   );
 }
 
 function Studio() {
   useLx();
   const printer = printerById(useStore((s) => s.printerId));
-  const [toast, setToast] = useState('');
   const [renex, setRenex] = useState(false);
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !renex) openStudio(false); };
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [renex]);
+  const report = useReport();
   const transfer = () => {
     const r = transferToPlate();
-    setToast(`${r.objects} pieces placed on ${r.plates.length} plate(s): ${r.plates.map((p) => `${p.name} (${p.parts})`).join(', ')}`);
-    setTimeout(() => openStudio(false), 1400);
+    useStore.getState().set({ toast: { kind: 'info', text: `${r.objects} pieces placed on ${r.plates.length} plate(s): ${r.plates.map((p) => `${p.name} (${p.parts})`).join(', ')}` } });
+    openStudio(false);
   };
-  return (
-    <div className="lx-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) openStudio(false); }}>
-      <div className="lx-studio" role="dialog" aria-label="Lumonex Studio">
-        <header className="lx-top">
-          <span className="mx-badge">L</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="mx-title">Lumonex Studio · {lx.design.name}</div>
-            <div className="mx-sub">{printer.vendor} {printer.model} · bed {printer.bed.x} × {printer.bed.y} × {printer.bed.z} mm</div>
-          </div>
-          <button className="btn-secondary" title="Photorealistic render of the printed lamp (Renex)" onClick={() => setRenex(true)}>📷 Render</button>
-          <button className="btn-primary" onClick={transfer}>Transfer to plate</button>
-          <button className="btn-secondary" onClick={() => openStudio(false)} aria-label="Close">✕</button>
-        </header>
-        <div className="lx-body">
-          <aside className="lx-col lx-left"><div className="mx-panel"><EditorColumn /></div></aside>
-          <main className="lx-centre"><Live3D><Viewer /></Live3D></main>
-          <aside className="lx-col lx-right" tabIndex={0} aria-label="Details panel (tap to open)"><div className="mx-panel"><ReportColumn onTransfer={transfer} /></div></aside>
-        </div>
-        {toast && <div className="lx-toast">{toast}</div>}
-        {renex && <RenexStudio source="lumonex" build={lumonexRenexSource} onClose={() => setRenex(false)} />}
+  const misfit = report.parts.filter((p) => !p.fits).length;
+  const stage = (
+    <>
+      <Live3D><Viewer /></Live3D>
+      <div className="st-stats" style={{ top: 52 }}>
+        <Stat label="Lamp height" value={`${report.height.toFixed(0)} mm`} />
+        <Stat label={`Pieces · ${printer.model}`} value={`${report.pieces}`} />
+        <Stat label="Printer fit" value={misfit ? `${misfit} too big` : 'All fit'} tone={misfit ? 'warn' : 'ok'} />
+        {report.bulbGap !== null && <Stat label="Bulb gap" value={`${report.bulbGap.toFixed(0)} mm`} tone={report.bulbGap < report.minGap ? 'warn' : undefined} />}
       </div>
-    </div>
+    </>
+  );
+  return (
+    <>
+      <StudioWindow name="Lumonex" letter="L" gradient="linear-gradient(135deg,#F59E0B,#B45309)" onClose={() => { if (!renex) openStudio(false); }}
+        version={lx.design.name} sideWidth={300}
+        side={<div className="mx-panel" style={{ display: 'contents' }}><EditorColumn stack={false} /><ReportColumn onTransfer={transfer} /></div>}
+        rail={<><small>Parts</small>{lx.design.sections.map((s) => <button key={s.id} className={`st-sw ${s.id === lx.selected ? 'on' : ''}`} style={{ background: swatch(s.material, s.color).hex, width: 24, height: 24 }} title={s.name} aria-label={s.name} onClick={() => { lx.selected = s.id; changed(false); }} />)}</>}
+        stage={stage}
+        editor={<><StackEditorHead /><div className="st-editor-body"><StackEditorBody /></div></>}
+        editorHeight={270}
+        actions={<><button className="st-btn" title="Photorealistic render of the printed lamp (Renex)" onClick={() => setRenex(true)}>Render</button><button className="st-btn" onClick={transfer} title="Take the lamp apart onto print plates">Transfer to plate</button></>} />
+      {renex && <RenexStudio source="lumonex" build={lumonexRenexSource} onClose={() => setRenex(false)} />}
+    </>
   );
 }

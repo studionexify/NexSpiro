@@ -3,6 +3,7 @@
 // wall, joint, piece count), fitting and bulb preview, wire routing, lamp-type hardware, the printer
 // fit and thermal report, and placing the lamp on the plate (assembled preview or print layout).
 import { useMemo, useState, type ReactNode } from 'react';
+import { SideCard, useInStudio } from '../../../ui/studio/Studio';
 import { useStore } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
 import { BATTERIES, BOLTS, BULBS, CABLES, HOLDERS, MAGNETS, PALETTE, PIPES, SWITCHES, holderById, swatch, type MaterialKind } from '../catalog';
@@ -48,6 +49,8 @@ function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange:
 }
 
 function Card({ title, children, open = true }: { title: string; children: ReactNode; open?: boolean }) {
+  // inside a Studio the same content becomes a collapsible side card
+  if (useInStudio()) return <SideCard title={title} defaultOpen={open} id={`lx-${title.split(' ·')[0].toLowerCase().replace(/[^a-z]+/g, '-')}`}><div className="st-card-body">{children}</div></SideCard>;
   return (
     <details className="mx-card" open={open}>
       <summary className="mx-card-title" style={{ cursor: 'pointer' }}>{title}</summary>
@@ -248,7 +251,8 @@ export function useReport() {
     [JSON.stringify(design), printerId]);
 }
 
-export function EditorColumn() {
+/** The design editor. `stack` false leaves out the part stack card (the Studio shows the stack in its editor). */
+export function EditorColumn({ stack = true }: { stack?: boolean } = {}) {
   useLx();
   const [size, setSize] = useState<Size>('M');
   const [msg, setMsg] = useState('');
@@ -287,7 +291,7 @@ export function EditorColumn() {
         )}
       </Card>
 
-      <Card title={`Part stack · ${design.sections.length} parts`}>
+      {stack && <Card title={`Part stack · ${design.sections.length} parts`}>
         <Profile design={design} selected={sel?.id ?? ''} />
         <p className="mx-muted">Dashed lines: printer height ({printer.bed.z} mm). Red lines: where a part is cut into pieces. Click a part here or in the 3D view to edit it.</p>
         {design.sections.map((s, i) => (
@@ -306,7 +310,7 @@ export function EditorColumn() {
             <button key={r} className="btn-secondary btn-small" onClick={() => edit((x) => { const top = x.sections.filter((q) => q.attach === 'stack').pop(); const n = section({ role: r, name: `${r[0].toUpperCase()}${r.slice(1)} ${x.sections.length + 1}`, attach: r === 'shade' ? 'hung' : 'stack' }); if (top) { n.shape.diameter = top.shape.diameter; n.shape.height = Math.min(200, top.shape.height); } x.sections.push(n); lx.selected = n.id; })}>+ {r}</button>
           ))}
         </div>
-      </Card>
+      </Card>}
 
       {sel && <SectionCard key={sel.id} s={sel} index={design.sections.indexOf(sel)} />}
 
