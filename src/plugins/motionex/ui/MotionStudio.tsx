@@ -15,7 +15,11 @@ import type { PrintProfiles } from '../core/profiles';
 import type { Toolpath, ToolpathPoint } from '../core/types';
 import { CURVE_INFO, pt, type CurveKey, type EventType, type Interpolation, type LayerEffect, type LayerMode, type WaveShape, type MotionApplication, type MotionBrush, type MotionEvent } from '../model';
 import { CurveEditor } from './curveEditor';
-import { activate, activeApp, addApplication, brushOf, changed, lastPreview, mx, surfaceOf, useMx, Wave } from './MotionexPanel';
+import { activate, activeApp, addApplication, brushOf, changed, lastPreview, motionexPreview, mx, surfaceOf, toFaces, useMx, Wave } from './MotionexPanel';
+import { motionCounts } from '../../../state/motionPaint';
+import { Icon, IconButton, LiveBadge, Num, Row, Seg, SideCard, Stat, StudioWindow, Tabs, ToolGroup, VSep } from '../../../ui/studio/Studio';
+import { LinePreview3D, type LinePreviewControls } from '../../../ui/studio/LinePreview3D';
+import { openMotionStudio } from './studioWindow';
 
 /** The motion being edited: the placement's own copy, or a copy of the library motion with its size slider baked in. */
 function draftOf(a: MotionApplication): MotionBrush | undefined {
@@ -84,7 +88,8 @@ export function MotionStudio({ layout = 'dock' }: { layout?: 'dock' | 'three' } 
   const draft = useMemo(() => (a ? draftOf(a) : undefined), [a, a?.brush, a?.brush_id, a?.scale]); // eslint-disable-line react-hooks/exhaustive-deps
   const profiles = useMemo(() => profilesFromConfig(currentConfig(), printerId), [printerId, overrides]); // eslint-disable-line react-hooks/exhaustive-deps
   const [layer, setLayer] = useState(10);
-  useEffect(() => { if (layout === 'three' && !mx.applications.length) { addApplication('preset-sine'); changed(); } }, [layout, apps.length]);
+  // the Studio always has a motion to show: a Wave on the whole plate, so it is on the model straight away
+  useEffect(() => { if (layout === 'three' && !mx.applications.length) { const n = addApplication('preset-sine'); n.target = { ...n.target, type: 'body' }; changed(); } }, [layout, apps.length]);
 
   if (!a || !draft) {
     if (layout === 'three') return null;
@@ -120,7 +125,7 @@ export function MotionStudio({ layout = 'dock' }: { layout?: 'dock' | 'three' } 
     useStore.getState().set({ toast: { kind: 'info', text: `Saved “${name}” under My motions.` } });
   };
 
-  if (layout === 'three') return <StudioThree a={a} draft={draft} edit={edit} profiles={profiles} layer={layer} setLayer={setLayer} saveToLibrary={saveToLibrary} />;
+  if (layout === 'three') return <StudioShell a={a} draft={draft} edit={edit} profiles={profiles} layer={layer} setLayer={setLayer} saveToLibrary={saveToLibrary} />;
 
   return (
     <aside className="studio" aria-label="Motion editor">
@@ -624,31 +629,35 @@ function setStudio(p: Partial<typeof ui>) {
 }
 function useStudio() { useSyncExternalStore((l) => { uiL.add(l); return () => { uiL.delete(l); }; }, () => uiVer); return ui; }
 
-/** Undo, redo and snapping, for the studio window's header. */
-export function StudioToolbar() {
-  useMx(); useStudio();
-  const a = activeApp();
-  const x = a ? histOf(a) : null;
-  return (
-    <div className="ms-tools" role="toolbar" aria-label="Edit">
-      <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!x?.past.length} onClick={undoMotion}>↶</button>
-      <button className="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!x?.future.length} onClick={redoMotion}>↷</button>
-      <button className={`ms-snap ${ui.snap ? 'on' : ''}`} aria-pressed={ui.snap} title="Snap points and stops to a grid (24 steps per repeat)" onClick={() => setStudio({ snap: !ui.snap })}>
-        <span aria-hidden>#</span> Snap
-      </button>
-    </div>
-  );
-}
-
 type Edit = (fn: (b: MotionBrush) => void) => void;
 
-function StudioThree({ a, draft, edit, profiles, layer, setLayer, saveToLibrary }: { a: MotionApplication; draft: MotionBrush; edit: Edit; profiles: PrintProfiles; layer: number; setLayer: (n: number) => void; saveToLibrary: () => void }) {
+/** Mini picture of a curve for the shape tiles. */
+function CurveTile({ curve, on, label, onPick }: { curve: MotionBrush['curves']['lateral_offset']; on: boolean; label: string; onPick: () => void }) {
+  const d = useMemo(() => Array.from({ length: 49 }, (_, i) => { const t = (i / 48) * 2; return `${i ? 'L' : 'M'}${(2 + (i / 48) * 36).toFixed(1)},${(11 - evalCurve(curve, t % 1) * 8).toFixed(1)}`; }).join(''), [curve]);
+  return <button className={`st-tile ${on ? 'on' : ''}`} onClick={onPick} title={label}><svg width="40" height="22" aria-hidden><path d={d} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" /></svg>{label}</button>;
+}
+const sameCurve = (a: MotionBrush['curves']['lateral_offset'], b: MotionBrush['curves']['lateral_offset']) => a.interpolation === b.interpolation && a.points.length === b.points.length && a.points.every((p, i) => Math.abs(p.t - b.points[i].t) < 1e-6 && Math.abs(p.v - b.points[i].v) < 1e-6);
+const SHAPE_CURVES = SHAPES.map((s) => ({ ...s, curve: s.make() }));
+
+type Stage = 'model' | 'closeup';
+type Plane = 'offset' | 'lift';
+
+/** Motion Studio on the shared Studio shell: settings cards, the motion live on the model, the wave editor below. */
+function StudioShell({ a, draft, edit, profiles, layer, setLayer, saveToLibrary }: { a: MotionApplication; draft: MotionBrush; edit: Edit; profiles: PrintProfiles; layer: number; setLayer: (n: number) => void; saveToLibrary: () => void }) {
   histOf(a); // start the history before the first in-place curve drag
+  useStudio();
   const apps = mx.applications;
   const base = mx.library.get(a.brush_id);
   const lh = profiles.process.layerHeight || 0.2;
+  const [stage, setStage] = useState<Stage>('model');
+  const [plane, setPlane] = useState<Plane>('offset');
+  const [lib, setLib] = useState(false);
+  const [spin, setSpin] = useState(false);
+  const [built, setBuilt] = useState<{ ms: number; n: number } | null>(null);
+  const ctl = useRef<LinePreviewControls | null>(null);
+  const x = histOf(a);
   const pick = (id: string) => { if (id === a.brush_id) return; if (a.brush && !askOk('Switching motion drops your changes to this one. Switch anyway?')) return; a.brush_id = id; a.brush = undefined; hist.delete(a); changed(); };
-  const zEdit: Edit = (fn) => edit((x) => { fn(x); if (!(x.z_amplitude && x.z_amplitude > 0)) x.z_amplitude = Math.min(0.3, lh * 1.5); });
+  const zEdit: Edit = (fn) => edit((b) => { fn(b); if (!(b.z_amplitude && b.z_amplitude > 0)) b.z_amplitude = Math.min(0.3, lh * 1.5); });
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -659,78 +668,142 @@ function StudioThree({ a, draft, edit, profiles, layer, setLayer, saveToLibrary 
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, []);
-  return (
+  const lead = r3((((draft.layers?.shift_deg ?? 0) / 360) * draft.period_mm));
+  const drool = lastPreview?.drool;
+  const onPlate = a.target.type === 'body';
+  const stack = stackId(draft);
+
+  const side = (
     <>
-      <aside className="ms-pane ms-left" aria-label="Motion library">
+      <SideCard title="Motion" id="mx-motion">
         {apps.length > 1 && (
-          <div className="studio-places">
-            {apps.map((x, i) => (
-              <button key={i} className={`studio-place ${x === a ? 'on' : ''}`} onClick={() => activate(i)} title={brushOf(x)?.name}>
-                <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(x) - 1] }} />{brushOf(x)?.name ?? x.brush_id}
-              </button>
-            ))}
-          </div>
+          <Row label="Editing">
+            <select className="st-sel" style={{ flex: 1, minWidth: 0 }} value={apps.indexOf(a)} aria-label="Placement" onChange={(e) => activate(+e.target.value)}>
+              {apps.map((p, i) => <option key={i} value={i}>{i + 1}. {brushOf(p)?.name ?? p.brush_id}</option>)}
+            </select>
+          </Row>
         )}
-        <LibraryRail current={a.brush_id} onPick={pick} onSave={saveToLibrary} />
-      </aside>
-
-      <main className="ms-pane ms-centre" aria-label="Motion stage">
-        <div className="ms-axes" aria-hidden>
-          <span><i style={{ background: AX.lat }} />Offset (in / out)</span>
-          <span><i style={{ background: AX.z }} />Z lift (up / down)</span>
-          <span><i style={{ background: AX.stop }} />Stops &amp; blobs</span>
-          <span className="spacer" />
-          <span className="mx-muted">Drag dots · double-click adds · Delete removes</span>
+        <Row label="Motion">
+          <button className="st-btn" style={{ flex: 1, minWidth: 0, justifyContent: 'flex-start' }} onClick={() => setLib(true)} title="Pick a motion from the library">
+            <i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{base?.name ?? a.brush_id}</span>
+          </button>
+        </Row>
+        <Row label="Applies to"><Seg label="Applies to" value={onPlate ? 'plate' : 'faces'} options={[['plate', 'Whole plate', 'Every object on the plate'], ['faces', 'Picked faces', 'Faces you pick on the model (Click, Paint, Lasso… in the Motionex bar)']]} onChange={(v) => { if (v === 'plate') a.target = { ...a.target, type: 'body' }; else toFaces(a); changed(); }} /></Row>
+        {!onPlate && <div className="st-hint">{motionCounts(useStore.getState().objects, surfaceOf(a)).tris ? 'On the faces you picked.' : 'No faces picked yet: press Done and pick them with Click, Paint or Lasso in the Motionex bar.'}</div>}
+        <div className="st-btns">
+          <button className="st-btn" disabled={!a.brush} onClick={() => { if (askOk('Go back to the library motion?')) { remember(a); a.brush = undefined; settle(a); changed(); } }}>Reset</button>
+          <button className="st-btn" onClick={() => setLib(true)}>Library</button>
         </div>
-        <div className="ms-planes">
-          <PlaneEditor b={draft} k="lateral_offset" color={AX.lat} title="Top view · offset from the wall" sub={`±${draft.amplitude.toFixed(2)} mm`} onEdit={edit} />
-          <PlaneEditor b={draft} k="z_offset" color={AX.z} title="Side view · Z lift" sub={(draft.z_amplitude ?? 0) > 0 ? `±${(draft.z_amplitude ?? 0).toFixed(2)} mm` : 'flat · drag a dot to lift'} onEdit={zEdit} />
+        <div className={`st-status ${a.brush ? '' : 'ok'}`}><b>●</b> {a.brush ? 'Edited · on this placement only' : 'As in the library'}</div>
+      </SideCard>
+      <SideCard title="Shape" id="mx-shape">
+        <div className="st-tiles" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {SHAPE_CURVES.map((s) => <CurveTile key={s.id} label={s.label} curve={s.curve} on={sameCurve(draft.curves.lateral_offset, s.curve)} onPick={() => edit((b) => { b.curves.lateral_offset = s.make(); })} />)}
         </div>
-        <Timeline b={draft} onEdit={edit} />
-        <CloseUps b={draft} profiles={profiles} layer={layer} setLayer={setLayer} />
-        <ViewPicker />
-      </main>
-
-      <aside className="ms-pane ms-right" aria-label="Motion settings">
-        <section className="mx-card ms-status">
-          <div className="ms-status-name"><i className="mx-dot" style={{ background: SURFACE_COLORS[surfaceOf(a) - 1] }} /><b>{base?.name ?? a.brush_id}</b>{a.brush && <span className="ms-chip">edited</span>}</div>
-          <span className="mx-muted" style={{ margin: 0 }}>{a.brush ? 'Changes apply to this placement only.' : 'As in the library.'}</span>
-          <div className="row" style={{ gap: 6, margin: 0 }}>
-            <button className="btn-secondary btn-small" disabled={!a.brush} onClick={() => { if (askOk('Go back to the library motion?')) { remember(a); a.brush = undefined; settle(a); changed(); } }}>Reset</button>
-            <button className="btn-primary btn-small" style={{ flex: 1 }} onClick={saveToLibrary} title="Keep this motion in My motions; it stays there next time NexSpiro opens">Save as preset</button>
-          </div>
-        </section>
-
-        <section className="mx-card">
-          <div className="mx-card-title">Basics</div>
-          <Slider label="Depth / offset" unit="mm" dot={AX.lat} min={0} max={Math.max(3, draft.amplitude * 1.5)} step={0.05} value={draft.amplitude} onChange={(v) => edit((b) => { b.amplitude = v; })} />
-          <Slider label="Vertical lift" unit="mm" dot={AX.z} min={0} max={3} step={0.05} value={draft.z_amplitude ?? 0} onChange={(v) => edit((b) => { b.z_amplitude = v; })} />
-          <Slider label="Repeat spacing" unit="mm" min={0.4} max={Math.max(30, draft.period_mm * 1.5)} step={0.1} value={draft.period_mm} onChange={(v) => edit((b) => { b.period_mm = v; })} />
-          <Slider label="Print speed" unit="×" min={0.2} max={2} step={0.05} value={speedOf(draft)} onChange={(v) => edit((b) => scaleSpeed(b, v))} />
-        </section>
-
+      </SideCard>
+      <SideCard title="Size" id="mx-size">
+        <Row label="Depth" title="How far the line swings in and out of the wall"><Num label="Depth (mm)" value={r3(draft.amplitude)} step={0.05} digits={2} min={0} max={10} modified={!!base && Math.abs(base.amplitude - draft.amplitude) > 1e-6} onChange={(v) => edit((b) => { b.amplitude = v; })} /><span className="st-unit">mm in / out</span></Row>
+        <Row label="Lift" title="How far the line rises and drops within the layer"><Num label="Lift (mm)" value={r3(draft.z_amplitude ?? 0)} step={0.05} digits={2} min={0} max={3} modified={!!base && Math.abs((base.z_amplitude ?? 0) - (draft.z_amplitude ?? 0)) > 1e-6} onChange={(v) => edit((b) => { b.z_amplitude = v; })} /><span className="st-unit">mm up / down</span></Row>
+        <Row label="Spacing" title="Length of one repeat along the wall"><Num label="Repeat spacing (mm)" value={r3(draft.period_mm)} step={0.1} digits={2} min={0.4} max={200} modified={!!base && Math.abs(base.period_mm - draft.period_mm) > 1e-6} onChange={(v) => edit((b) => { b.period_mm = v; })} /><span className="st-unit">mm a repeat</span></Row>
+        <Row label="Speed" title="Print speed of the motion, times normal"><Num label="Speed (×)" value={speedOf(draft)} step={0.05} digits={2} min={0.2} max={2} onChange={(v) => edit((b) => scaleSpeed(b, v))} /><span className="st-unit">× normal</span></Row>
+        <Row label="Fit" title="Whole repeats round each loop: no seam where a loop closes"><Seg label="Fit" value={draft.repeat_mode === 'stretch' ? 'stretch' : 'tile'} options={[['tile', 'Exact spacing'], ['stretch', 'Whole repeats']]} onChange={(v) => edit((b) => { b.repeat_mode = v; })} /></Row>
+      </SideCard>
+      <SideCard title="Layers" id="mx-layers">
+        <div className="st-tiles" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          {STACKS.map((s) => <button key={s.id} className={`st-tile ${stack === s.id ? 'on' : ''}`} title={s.hint} onClick={() => edit((b) => { b.layers = s.make(b); })} style={{ padding: '6px 2px' }}>{s.label}</button>)}
+        </div>
+        <Row label="Each layer" title="How far each layer's motion sits ahead of the layer below"><Num label="Lead per layer (mm)" value={lead} step={0.05} digits={2} min={-draft.period_mm / 2} max={draft.period_mm / 2} onChange={(v) => edit((b) => { b.layers = { mode: 'steady', every: 1, band_on: 0, band_off: 0, ...b.layers, shift_deg: r3((v / b.period_mm) * 360) }; })} /><span className="st-unit">mm {lead >= 0 ? 'lead' : 'lag'}</span></Row>
+        <div className="st-hint">{STACKS.find((s) => s.id === stack)?.hint ?? 'Your own stacking (see Advanced).'}</div>
+      </SideCard>
+      <SideCard title="Stops & ooze" id="mx-stops" defaultOpen={false} right={draft.events.some((e) => e.type === 'dwell') ? <span className="st-badge">{draft.events.filter((e) => e.type === 'dwell').length}</span> : undefined}>
         <StopsCard b={draft} onEdit={edit} />
-
-        <details className="ms-adv">
-          <summary>Advanced<span className="mx-muted">stacking · phase · ramps · flow</span></summary>
-          <Stacking b={draft} onEdit={edit} />
-          <LeadLag b={draft} layerHeight={lh} onEdit={edit} />
-          <section className="mx-card">
-            <div className="mx-card-title">Phase and fit</div>
-            <Slider label="Start shift" unit="mm" min={0} max={draft.period_mm} step={0.05} value={r3((draft.phase_deg / 360) * draft.period_mm)} onChange={(v) => edit((b) => { b.phase_deg = r3((v / b.period_mm) * 360) % 360; })} />
-            <label className="row" style={{ gap: 8, margin: 0 }}>
-              <span style={{ flex: 1, fontSize: 12 }}>Whole repeats round each loop<div className="mx-muted" style={{ margin: 0 }}>No seam where a loop closes.</div></span>
-              <button className={`toggle ${draft.repeat_mode === 'stretch' ? 'on' : ''}`} aria-label="Fit evenly" onClick={() => edit((b) => { b.repeat_mode = b.repeat_mode === 'stretch' ? 'tile' : 'stretch'; })} />
-            </label>
-            <div className="mx-label">Wave shape (offset)</div>
-            <div className="studio-shapes">
-              {SHAPES.map((sh) => <button key={sh.id} className="mx-tool" onClick={() => edit((b) => { b.curves.lateral_offset = sh.make(); })}>{sh.label}</button>)}
-            </div>
-          </section>
-          <Advanced b={draft} onEdit={edit} profiles={profiles} three />
-        </details>
-      </aside>
+      </SideCard>
+      <SideCard title="Advanced" id="mx-adv" defaultOpen={false}>
+        <LeadLag b={draft} layerHeight={lh} onEdit={edit} />
+        <section className="mx-card">
+          <div className="mx-card-title">Phase</div>
+          <Slider label="Start shift" unit="mm" min={0} max={draft.period_mm} step={0.05} value={r3((draft.phase_deg / 360) * draft.period_mm)} onChange={(v) => edit((b) => { b.phase_deg = r3((v / b.period_mm) * 360) % 360; })} />
+        </section>
+        <Advanced b={draft} onEdit={edit} profiles={profiles} three />
+      </SideCard>
+      <SideCard title="Print check" id="mx-check" defaultOpen={false} right={<span className={`st-badge ${drool && drool.level !== 'ok' ? 'warn' : ''}`}>{!drool ? '—' : drool.level === 'ok' ? 'All good' : 'Look at this'}</span>}>
+        <div className="st-hint">{drool ? `Worst unsupported reach ${drool.worstMm.toFixed(2)} mm (safe up to ${drool.safeMm.toFixed(2)} mm)${drool.sagging ? ` · ${drool.sagging} sagging` : ''}${drool.dripping ? ` · ${drool.dripping} dripping` : ''}.` : 'Shows once the motion is on the model.'}</div>
+      </SideCard>
     </>
+  );
+
+  const rail = (
+    <>
+      <small>Shape</small>
+      {SHAPE_CURVES.slice(0, 4).map((s) => <button key={s.id} className={`st-ib ${sameCurve(draft.curves.lateral_offset, s.curve) ? 'on' : ''}`} title={s.label} aria-label={s.label} onClick={() => edit((b) => { b.curves.lateral_offset = s.make(); })}><Icon name="smooth" /></button>)}
+      <small>Undo</small>
+      <IconButton icon="undo" title="Undo (Ctrl+Z)" disabled={!x.past.length} onClick={undoMotion} />
+    </>
+  );
+
+  const stageEl = (
+    <>
+      <Tabs value={stage} options={[['model', 'Model'], ['closeup', 'Close-up']]} onChange={setStage} />
+      {stage === 'model'
+        ? <LinePreview3D build={motionexPreview} controls={ctl} onBuilt={(ms, n) => setBuilt({ ms, n })} />
+        : <div style={{ position: 'absolute', inset: '52px 14px 14px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}><CloseUps b={draft} profiles={profiles} layer={layer} setLayer={setLayer} /></div>}
+      {stage === 'model' && (
+        <>
+          <div className="st-stats">
+            <Stat label="Depth × spacing" value={`${draft.amplitude.toFixed(2)} × ${draft.period_mm.toFixed(1)} mm`} />
+            <Stat label="Layer lead" value={lead ? `${lead > 0 ? '+' : ''}${lead.toFixed(2)} mm` : 'lined up'} />
+            <Stat label="Drool check" value={!drool ? '—' : drool.level === 'ok' ? 'OK' : drool.level} tone={!drool ? undefined : drool.level === 'ok' ? 'ok' : 'warn'} />
+          </div>
+          <LiveBadge text={built ? `Live · walls redrawn in ${Math.round(built.ms)} ms as you edit` : 'Live'} />
+          <div className="st-toolbar br">
+            <span className="st-ttl">Preview</span>
+            <ToolGroup label="Zoom"><IconButton icon="fit" title="Fit the plate" onClick={() => ctl.current?.fit()} /></ToolGroup>
+            <ToolGroup label="Rotate">
+              <IconButton icon="undo" title="Turn left 45°" onClick={() => ctl.current?.rotate(-45)} />
+              <IconButton icon="redo" title="Turn right 45°" onClick={() => ctl.current?.rotate(45)} />
+              <IconButton icon="rot" title="Spin slowly" on={spin} onClick={() => { ctl.current?.setSpin(!spin); setSpin(!spin); }} />
+            </ToolGroup>
+            <ToolGroup label="Colour by"><Seg label="Colour by" value={mx.previewView} options={VIEWS.map(([v, l, h]) => [v, l, h])} onChange={setView} /></ToolGroup>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const editor = (
+    <>
+      <div className="st-editor-head">
+        <span className="st-ttl">Wave</span>
+        <ToolGroup label="Edit">
+          <IconButton icon="undo" title="Undo (Ctrl+Z)" disabled={!x.past.length} onClick={undoMotion} />
+          <IconButton icon="redo" title="Redo (Ctrl+Y)" disabled={!x.future.length} onClick={redoMotion} />
+          <button className={`st-ib ${ui.snap ? 'on' : ''}`} style={{ width: 'auto', padding: '0 7px', fontSize: 11 }} aria-pressed={ui.snap} title="Snap points and stops to 24 steps per repeat" onClick={() => setStudio({ snap: !ui.snap })}># Snap</button>
+        </ToolGroup>
+        <VSep />
+        <ToolGroup label="Curve"><Seg label="Curve" value={plane} options={[['offset', 'In / out', 'Top view: offset from the wall'], ['lift', 'Up / down', 'Side view: Z lift within the layer']]} onChange={setPlane} /></ToolGroup>
+        <VSep />
+        <ToolGroup label="Next layer"><Seg label="Next layer" value={(['aligned', 'twist', 'bricks', 'wavy'] as const).find((s) => s === stack) ?? 'aligned'} options={[['aligned', 'Same'], ['twist', 'Lead'], ['bricks', 'Bricks'], ['wavy', 'Wavy']]} onChange={(v) => edit((b) => { b.layers = STACKS.find((s) => s.id === v)!.make(b); })} /></ToolGroup>
+        <span style={{ flex: 1 }} />
+        <button className="st-btn" onClick={saveToLibrary} title="Keep this motion in My motions">Save to library</button>
+      </div>
+      <div className="st-editor-body" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
+        {plane === 'offset' && <PlaneEditor b={draft} k="lateral_offset" color={AX.lat} title="Top view · offset from the wall" sub={`±${draft.amplitude.toFixed(2)} mm · drag dots, double-click adds, Delete removes`} onEdit={edit} />}
+        {plane === 'lift' && <PlaneEditor b={draft} k="z_offset" color={AX.z} title="Side view · Z lift" sub={(draft.z_amplitude ?? 0) > 0 ? `±${(draft.z_amplitude ?? 0).toFixed(2)} mm` : 'flat · drag a dot to lift'} onEdit={zEdit} />}
+        <Timeline b={draft} onEdit={edit} />
+      </div>
+    </>
+  );
+
+  return (
+    <StudioWindow name="Motionex" letter="M" gradient="linear-gradient(135deg,#2563EB,#7C3AED)" onClose={() => openMotionStudio(false)}
+      version="Motion" side={side} rail={rail} stage={stageEl} editor={editor} editorHeight={320}
+      links={[{ label: 'Shortcuts', onClick: () => useStore.getState().set({ toast: { kind: 'info', text: 'Drag curve dots · double-click adds · Delete removes · Ctrl+Z / Ctrl+Y · Esc closes' } }) }]}
+      overlay={lib ? (
+        <div className="st-lib" role="dialog" aria-label="Motion library" style={{ maxHeight: 'calc(100% - 20px)', height: 'min(560px, calc(100% - 20px))' }}>
+          <div className="st-lib-head"><b style={{ fontSize: 13 }}>Motion library</b><span className="st-hint" style={{ margin: 0 }}>click a motion to use it here</span><span style={{ flex: 1 }} /><IconButton icon="close" title="Close" onClick={() => setLib(false)} /></div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 10 }} className="ms-pane"><LibraryRail current={a.brush_id} onPick={(id) => { pick(id); setLib(false); }} onSave={saveToLibrary} /></div>
+        </div>
+      ) : null} />
   );
 }
 

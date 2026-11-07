@@ -202,7 +202,7 @@ export function addApplication(brushId: string): MotionApplication {
 }
 
 /** Make the motion go on picked surfaces (its own surface set). */
-function toFaces(a: MotionApplication) {
+export function toFaces(a: MotionApplication) {
   const n = surfaceOf(a);
   if (a.target.type !== 'faces' || a.target.faces?.[0] !== String(n)) a.target = { ...a.target, type: 'faces', faces: [String(n)] };
 }
