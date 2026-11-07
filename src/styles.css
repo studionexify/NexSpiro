@@ -162,8 +162,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .group-title svg { transition: transform 0.15s; color: var(--text-muted); }
 .group-title.closed svg { transform: rotate(-90deg); }
-.prow { display: grid; grid-template-columns: 1fr 18px minmax(0, 132px); align-items: center; gap: 6px; line-height: 28px; }
-.prow .plabel { color: var(--text); opacity: 0.88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(96px, 132px); align-items: center; gap: 6px; line-height: 28px; min-height: 28px; }
+/* labels wrap instead of truncating: every word of a setting name stays readable at any dock width */
+.prow .plabel { color: var(--text); opacity: 0.88; white-space: normal; overflow-wrap: break-word; hyphens: manual; line-height: 1.3; padding: 4px 0; cursor: help; }
 .prow .crumb { color: var(--text-muted); font-size: 10px; line-height: 1; margin-bottom: -6px; }
 .prow.disabled .plabel { color: var(--text-disabled); }
 .prow .reset { border: 0; background: none; padding: 0; color: var(--modified); cursor: pointer; display: flex; }

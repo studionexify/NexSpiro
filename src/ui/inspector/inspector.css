@@ -38,7 +38,7 @@
 .insp .chip.on { background: var(--i-active); color: var(--i-on-active); border-color: var(--i-active); }
 
 /* param rows with pin star (ParamRow pin prop) */
-.insp .prow.has-pin { grid-template-columns: 1fr 18px minmax(0, 120px) 16px; }
+.insp .prow.has-pin { grid-template-columns: minmax(0, 1fr) 18px minmax(90px, 120px) 16px; }
 .insp .pinb { border: 0; background: none; cursor: pointer; padding: 0; color: var(--i-t2); opacity: 0; font-size: 13px; line-height: 1; }
 .insp .prow:hover .pinb, .insp .pinb.on, .insp .pinb:focus-visible { opacity: 1; }
 .insp .pinb.on { color: var(--ns-primary, var(--accent)); }

@@ -17,7 +17,12 @@ import { mixColor, type MixedFilament } from '../profiles/mixing';
 import { sanitizeUserPresets, type UserPreset } from '../profiles/userPresets';
 
 export type Workspace = 'home' | 'prepare' | 'preview' | 'motion' | 'device' | 'project' | 'calibration';
-export type Tool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges' | 'sculpt_pick';
+/** Tools the core slicer owns. */
+export type CoreTool = 'select' | 'move' | 'rotate' | 'scale' | 'face' | 'paint_support' | 'paint_seam' | 'paint_color' | 'vlh' | 'cut' | 'text' | 'measure' | 'boolean' | 'paint_adv' | 'brim_ears' | 'edges';
+/** Tool ids reserved for optional plugins. Core code never depends on them; a plugin registers
+ *  its own id here (or the generic `plugin:<name>` form) so a core build compiles without it. */
+export type PluginTool = 'paint_motion' | 'pick_motion' | 'lasso_motion' | 'band_motion' | 'object_motion' | 'place_pattern' | 'sculpt_pick' | `plugin:${string}`;
+export type Tool = CoreTool | PluginTool;
 export type Theme = 'dark' | 'light';
 export type ColorScheme = 'feature' | 'filament' | 'wave' | 'speed' | 'height' | 'width' | 'flow' | 'layer_time' | 'layer_time_log' | 'fan' | 'temperature';
 const COLOR_SCHEMES: unknown[] = ['feature', 'filament', 'wave', 'speed', 'height', 'width', 'flow', 'layer_time', 'layer_time_log', 'fan', 'temperature'] satisfies ColorScheme[];

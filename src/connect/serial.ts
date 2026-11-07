@@ -56,7 +56,7 @@ export class MarlinHost {
     this.lineNo = 1;
     await this.raw('M155 S2', true).catch(() => {}); // temperature auto-report (not all firmwares)
     this.set({ state: 'idle', message: undefined });
-    this.timer = setInterval(() => { if (!this.job || this.paused) void this.command('M105').catch(() => {}); }, 5000);
+    this.timer = setInterval(() => { if (!this.job || this.paused) void this.command('M105').catch((e) => console.warn('serial M105 poll failed', e)); }, 5000);
   }
   async stop() {
     if (this.timer) clearInterval(this.timer);

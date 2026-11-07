@@ -1438,7 +1438,8 @@ export function Viewport() {
         return;
       }
       if (partId) { s.set({ selected: [id], selectedPart: partId }); return; }
-      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) s.set({ selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id], selectedPart: null });
+      // Boolean mode: plain clicks build the operand list (first click = base), like Shift+click elsewhere
+      if (s.tool === 'boolean' || ev.shiftKey || ev.ctrlKey || ev.metaKey) s.set({ selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id], selectedPart: null });
       else s.set({ selected: [id], selectedPart: null });
       const pi = plateAt(hit.point.x, hit.point.y, s.printerId, s.plates.length);
       if (pi !== s.activePlate) s.set({ activePlate: pi });
