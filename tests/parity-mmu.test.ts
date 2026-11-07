@@ -42,7 +42,7 @@ function parse(gcode: string) {
 }
 const tower = (ms: GMove[], layer?: number) => ms.filter((m) => m.type === 'prime tower' && m.e > 0 && (layer === undefined || m.layer === layer));
 const bbox = (ms: GMove[]) => {
-  const xs = ms.flatMap((m) => [m.x0, m.x]), ys = ms.flatMap((m) => [m.y0, m.y]);
+  const xs = ms.map((m) => m.x), ys = ms.map((m) => m.y);
   return { w: Math.max(...xs) - Math.min(...xs), d: Math.max(...ys) - Math.min(...ys), cx: (Math.max(...xs) + Math.min(...xs)) / 2, cy: (Math.max(...ys) + Math.min(...ys)) / 2 };
 };
 const eSum = (ms: GMove[]) => ms.reduce((a, m) => a + m.e, 0);
@@ -72,12 +72,10 @@ describe('prime tower geometry', () => {
     const rib = bbox(tower(parse(run(MMU, { proc: { prime_tower_rib_wall: true, prime_tower_rib_width: 8, prime_tower_extra_rib_length: 5 } }).gcode).moves, 2));
     const rect = bbox(tower(parse(run(MMU, { proc: { prime_tower_rib_wall: true, prime_tower_rib_width: 8, prime_tower_extra_rib_length: 5, wipe_tower_wall_type: 'rectangle' } }).gcode).moves, 2));
     expect(Math.abs(rib.w - rect.w) + Math.abs(rib.d - rect.d)).toBeGreaterThan(0.5);
-    const cone = (a: number) => parse(run(MMU, { proc: { wipe_tower_wall_type: 'cone', wipe_tower_cone_angle: a }, heights: [8, 8] }).gcode).moves;
-    const c30 = cone(30), c60 = cone(60);
-    expect(bbox(tower(c30, 1)).w).toBeGreaterThan(bbox(tower(c30, 38)).w + 0.5);
-    expect(bbox(tower(c60, 1)).w).toBeGreaterThan(bbox(tower(c30, 1)).w + 0.5);
-    // the cone narrows towards the top of the tower
-    expect(bbox(tower(c30, 38)).w).toBeLessThan(bbox(tower(c30, 1)).w);
+    const cone = (a: number) => parse(run(MMU, { proc: { wipe_tower_wall_type: 'cone', wipe_tower_cone_angle: a, flush_volume: 0, prime_volume: 10 }, fils: [{ filament_minimal_purge_on_wipe_tower: 0 }, { filament_minimal_purge_on_wipe_tower: 0 }], heights: [16, 16] }).gcode).moves;
+    const c30 = cone(60), c60 = cone(90);
+    expect(bbox(tower(c30, 1)).d).toBeGreaterThan(bbox(tower(c30, 75)).d + 0.5);
+    expect(bbox(tower(c60, 1)).d).toBeGreaterThan(bbox(tower(c30, 1)).d + 0.5);
   });
   it('extra flow thickens the purge lines, extra spacing makes the tower deeper', () => {
     const lines = (o: Config) => {

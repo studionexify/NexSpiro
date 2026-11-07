@@ -6,7 +6,7 @@ Reference keys considered (print + filament + printer presets, union of the thre
 
 Every NexSpiro definition is read by the engine (enforced by `tests/settings-wiring.test.ts`), so an option is only added together with its behaviour; options that could not be implemented are listed under *Still missing* instead of being added as dummies.
 
-## Added and implemented (65)
+## Added and implemented (217)
 
 Defaults follow the references. Where an option exists only in OrcaSlicer / Snapmaker Orca and its reference default would change the G-code of every existing Bambu-style profile, the default is the neutral value that keeps the current output (marked *neutral*).
 
@@ -94,6 +94,160 @@ Defaults follow the references. Where an option exists only in OrcaSlicer / Snap
 | `brim_ears_outer_only` | print | Others / Bed adhesion | `False` | o=false | false: auto ears also on hole corners; true: no ears in holes or on enclosed parts | tests/parity-support.test.ts |
 | `brim_use_efc_outline` | print | Others / Bed adhesion | `True` *neutral* | o=false | brim follows the EFC outline (true, previous behaviour) or the uncompensated one | tests/parity-support.test.ts |
 | `combine_brims` | print | Others / Bed adhesion | `False` | o=false | brims of all objects merged into one area and filled once (not per-object skirt / by object) | tests/parity-support.test.ts |
+| `wipe_tower_bridging` | print | Others / Prime tower | `10` | o=10 / s=10 | sparse tower line spacing capped at the bridging distance | tests/parity-mmu.test.ts |
+| `wipe_tower_cone_angle` | print | Others / Prime tower | `30` | o=30 | stabilization cone radius tan(a/2)·(top−z) | tests/parity-mmu.test.ts |
+| `wipe_tower_extra_flow` | print | Others / Prime tower | `100` | o=100 | purge line flow, spaced to match | tests/parity-mmu.test.ts |
+| `wipe_tower_extra_spacing` | print | Others / Prime tower | `100` | o=100 | purge line spacing / tower depth | tests/parity-mmu.test.ts |
+| `wipe_tower_filament` | print | Others / Prime tower | `0` | o=0 | tower walls printed with that filament when it is on the layer | tests/parity-mmu.test.ts |
+| `wipe_tower_max_purge_speed` | print | Others / Prime tower | `90` | o=90 | speed cap of purge bands | tests/parity-mmu.test.ts |
+| `wipe_tower_no_sparse_layers` | print | Others / Prime tower | `False` | o=false / b=false | no tower on layers without a change; nozzle goes down to the tower top | tests/parity-mmu.test.ts |
+| `wipe_tower_rotation_angle` | print | Others / Prime tower | `0` | o=0 | tower body, bands and MMU moves rotated about the centre | tests/parity-mmu.test.ts |
+| `wipe_tower_sparse_layers_combination` | print | Others / Prime tower | `False` | o=false | sparse tower layers merged up to the max layer height | tests/parity-mmu.test.ts |
+| `wipe_tower_wall_type` | print | Others / Prime tower | `rib` | o=wtwRib | rectangle / cone / rib (rib = prime_tower_rib_wall) | tests/parity-mmu.test.ts |
+| `prime_tower_enable_framework` | print | Others / Prime tower | `True` *neutral* | o=false / b=false | on: full depth every layer (previous behaviour); off: depth of the bands still needed above | tests/parity-mmu.test.ts |
+| `tool_change_on_wipe_tower` | printer | Basic information / Multi-material | `False` | o=false | tool changers travel over the tower before the change | tests/parity-mmu.test.ts |
+| `wait_for_temp_on_wipe_tower` | printer | Basic information / Multi-material | `False` | o=false | M109 over the tower when the new filament has another temperature | tests/parity-mmu.test.ts |
+| `filament_minimal_purge_on_wipe_tower` | filament | Advanced / Multimaterial | `15` | o=15 / b=15 / s=15 | floor of the tower band volume | tests/parity-mmu.test.ts |
+| `wiping_volumes_extruders` | print | Others / Prime tower | ```` *neutral* | o=70,70,… | purge p→n = unload[p] + load[n] when no flushing matrix | tests/parity-mmu.test.ts |
+| `single_extruder_multi_material_priming` | print | Others / Prime tower | `False` | o=false | prime line of each used filament at the front edge on layer 1 | tests/parity-mmu.test.ts |
+| `enable_filament_ramming` | printer | Basic information / Single extruder multi-material | `False` *neutral* | o=true | MMU unload/load sequence on the tower (tower-purging filament units); vendor values flow through | tests/parity-mmu.test.ts |
+| `filament_ramming_parameters` | filament | Advanced / Toolchange parameters (SEMM) | `o default` | o=120 100 6.6 … | ramming line width / step / mm³/s per 0.25 s | tests/parity-mmu.test.ts |
+| `filament_multitool_ramming` | filament | Advanced / Toolchange parameters (multi-tool) | `False` | o=false | tool changer ramming on the tower before parking | tests/parity-mmu.test.ts |
+| `filament_multitool_ramming_flow` | filament | Advanced / Toolchange parameters (multi-tool) | `10` | o=10 | ramming flow | tests/parity-mmu.test.ts |
+| `filament_multitool_ramming_volume` | filament | Advanced / Toolchange parameters (multi-tool) | `10` | o=10 | ramming volume | tests/parity-mmu.test.ts |
+| `filament_cooling_moves` | filament | Advanced / Toolchange parameters (SEMM) | `4` | o=4 | cooling moves in the cooling tube | tests/parity-mmu.test.ts |
+| `filament_cooling_initial_speed` | filament | Advanced / Toolchange parameters (SEMM) | `2.2` | o=2.2 | first cooling move speed | tests/parity-mmu.test.ts |
+| `filament_cooling_final_speed` | filament | Advanced / Toolchange parameters (SEMM) | `3.4` | o=3.4 | last cooling move speed | tests/parity-mmu.test.ts |
+| `cooling_tube_length` | printer | Basic information / Single extruder multi-material | `5` | o=5 | cooling move travel | tests/parity-mmu.test.ts |
+| `cooling_tube_retraction` | printer | Basic information / Single extruder multi-material | `91.5` | o=91.5 | unload pull to the cooling tube | tests/parity-mmu.test.ts |
+| `parking_pos_retraction` | printer | Basic information / Single extruder multi-material | `92` | o=92 | park move / load distance | tests/parity-mmu.test.ts |
+| `extra_loading_move` | printer | Basic information / Single extruder multi-material | `-2` | o=-2 | added to the load distance | tests/parity-mmu.test.ts |
+| `filament_loading_speed` | filament | Advanced / Toolchange parameters (SEMM) | `28` | o=28 | fast load phase | tests/parity-mmu.test.ts |
+| `filament_loading_speed_start` | filament | Advanced / Toolchange parameters (SEMM) | `3` | o=3 | first load phase | tests/parity-mmu.test.ts |
+| `filament_unloading_speed` | filament | Advanced / Toolchange parameters (SEMM) | `90` | o=90 | unload pull | tests/parity-mmu.test.ts |
+| `filament_unloading_speed_start` | filament | Advanced / Toolchange parameters (SEMM) | `100` | o=100 | first 15 mm after ramming | tests/parity-mmu.test.ts |
+| `filament_stamping_distance` | filament | Advanced / Toolchange parameters (SEMM) | `0` | o=0 | stamping between cooling moves | tests/parity-mmu.test.ts |
+| `filament_stamping_loading_speed` | filament | Advanced / Toolchange parameters (SEMM) | `0` | o=0 | stamping speed | tests/parity-mmu.test.ts |
+| `filament_toolchange_delay` | filament | Advanced / Toolchange parameters (SEMM) | `0` | o=0 | G4 before parking | tests/parity-mmu.test.ts |
+| `high_current_on_filament_swap` | printer | Basic information / Single extruder multi-material | `False` | o=false | M907 E750 / E550 around the swap | tests/parity-mmu.test.ts |
+| `deretract_speed_extruder_change` | printer | Extruder / Retraction | `0` | o=0 | first deretraction speed after a change | tests/parity-mmu.test.ts |
+| `preheat_steps` | print | Others / Prime tower | `1` | o=1 | parked head preheat repeated over the preheat time | tests/parity-mmu.test.ts |
+| `activate_air_filtration` | filament | Cooling / Exhaust fan | `False` | o=false | M106 P3 exhaust fan | tests/parity-mmu.test.ts |
+| `activate_air_filtration_during_print` | filament | Cooling / Exhaust fan | `True` | o=true | exhaust fan at the print start | tests/parity-mmu.test.ts |
+| `activate_air_filtration_on_completion` | filament | Cooling / Exhaust fan | `True` | o=true | exhaust fan before the end G-code | tests/parity-mmu.test.ts |
+| `during_print_exhaust_fan_speed` | filament | Cooling / Exhaust fan | `60` | o=60 | speed (max over filaments) | tests/parity-mmu.test.ts |
+| `complete_print_exhaust_fan_speed` | filament | Cooling / Exhaust fan | `80` | o=80 | speed (max over filaments) | tests/parity-mmu.test.ts |
+| `chamber_minimal_temperature` | filament | Filament / Print temperature | `0` | o=0 | template variable only (no M141/M191) | tests/parity-mmu.test.ts |
+| `adaptive_pressure_advance` | filament | Filament / Basic information | `False` | o=false | PCHIP PA model per line type | tests/parity-mmu.test.ts |
+| `adaptive_pressure_advance_bridges` | filament | Filament / Basic information | `0` | o=0 | static PA on bridges | tests/parity-mmu.test.ts |
+| `adaptive_pressure_advance_model` | filament | Filament / Basic information | `0,0,0\n0,0,0` | o=same | pa,flow,accel measurements | tests/parity-mmu.test.ts |
+| `adaptive_pressure_advance_overhangs` | filament | Filament / Basic information | `False` | o=false | PA re-evaluated on flow changes inside a feature | tests/parity-mmu.test.ts |
+| `default_junction_deviation` | print | Speed / Jerk(XY) | `0` | o=0 | M205 J (Marlin), capped at the machine maximum | tests/parity-mmu.test.ts |
+| `machine_max_junction_deviation` | printer | Motion ability / Machine limits | `0` *neutral* | o=0.01 | M205 J in machine limits; cap | tests/parity-mmu.test.ts |
+| `part_cooling_fan_min_pwm` | printer | Basic information / Cooling fan | `0` | o=0 | non-zero fan raised to at least this | tests/parity-mmu.test.ts |
+| `farthest_point_timelapse` | printer | Basic information / Advanced | `False` | o=false / b=false | traditional snapshot at the farthest point of the last layer | tests/parity-mmu.test.ts |
+| `filament_change_extrusion_role_gcode` | filament | Advanced / Change extrusion role G-code | ```` | o=`` | after the printer role G-code | tests/parity-mmu.test.ts |
+| `process_change_extrusion_role_gcode` | print | Others / G-code output | ```` | o=`` | after the filament role G-code | tests/parity-mmu.test.ts |
+| `calib_flowrate_topinfill_special_order` | print | Others / G-code output | `False` | o=false | top Archimedean chords keep order, spiral inside-out last | tests/parity-mmu.test.ts |
+| `supertack_plate_temp` | filament | Filament / Print temperature | `35` | o=35 / b=35 | new plate type Cool Plate SuperTack (Bambu printers) | tests/parity-mmu.test.ts |
+| `supertack_plate_temp_initial_layer` | filament | Filament / Print temperature | `35` | o=35 / b=35 | new plate type | tests/parity-mmu.test.ts |
+| `textured_cool_plate_temp` | filament | Filament / Print temperature | `40` | o=40 | new plate type Textured Cool Plate (Bambu printers) | tests/parity-mmu.test.ts |
+| `textured_cool_plate_temp_initial_layer` | filament | Filament / Print temperature | `40` | o=40 | new plate type | tests/parity-mmu.test.ts |
+| `adaptive_infill_gradient` | print | Strength / Sparse infill | `linear` | o=Linear | density curve of adaptive gyroid | tests/parity-infill.test.ts |
+| `adaptive_infill_interior_density` | print | Strength / Sparse infill | `5` | o=5 | gyroid density at the centre | tests/parity-infill.test.ts |
+| `adaptive_infill_mode` | print | Strength / Sparse infill | `disabled` | o=Disabled | gyroid graded in distance shells (normal Z/Y/X: in-plane / one axis; other modes add Z distance; all modes are stepped shells, no warp/blend) | tests/parity-infill.test.ts |
+| `align_infill_direction_to_model` | print | Strength / Advanced | `False` | o=false | infill / solid / bridge / ironing / top-bottom angles + object Z rotation | tests/parity-infill.test.ts |
+| `bottom_layer_direction` | print | Strength / Top/bottom shells | `-1` | o=-1 | fixed bottom surface angle | tests/parity-infill.test.ts |
+| `top_layer_direction` | print | Strength / Top/bottom shells | `-1` | o=-1 | fixed top surface (and ironing) angle | tests/parity-infill.test.ts |
+| `bottom_surface_fill_order` | print | Strength / Top/bottom shells | `default` | o=Default | centre-based bottom patterns outward / inward, order kept | tests/parity-infill.test.ts |
+| `top_surface_fill_order` | print | Strength / Top/bottom shells | `default` | o=Default | centre-based top patterns outward / inward, order kept | tests/parity-infill.test.ts |
+| `center_of_surface_pattern` | print | Strength / Top/bottom shells | `each_surface` | o=Each_Surface | spiral centre per surface / island / object | tests/parity-infill.test.ts |
+| `gyroid_optimized` | print | Strength / Sparse infill | `False` | o=false | gyroid Z frequency x omega (Orca formula) | tests/parity-infill.test.ts |
+| `infill_combination_max_layer_height` | print | Strength / Advanced | `100%` | o=100% | combined block height | tests/parity-infill.test.ts |
+| `infill_complete_top` | print | Strength / Sparse infill | `False` | o=false | 3D honeycomb cell tops on the turning layer | tests/parity-infill.test.ts |
+| `infill_lock_depth` | print | Strength / Sparse infill | `1` | o=1 | new Locked Zag pattern: skeleton reaches into the 2 mm skin (skin depth / densities fixed at Orca defaults; skin_infill_* not added) | tests/parity-infill.test.ts |
+| `infill_overhang_angle` | print | Strength / Sparse infill | `60` | o=60 | new Lateral Honeycomb pattern | tests/parity-infill.test.ts |
+| `infill_shift_step` | print | Strength / Sparse infill | `0.4` | o=0.4 | new Cross Zag / Locked Zag patterns (Zig Zag added too) | tests/parity-infill.test.ts |
+| `lateral_lattice_angle_1` | print | Strength / Sparse infill | `-45` | o=-45 | new Lateral Lattice pattern | tests/parity-infill.test.ts |
+| `lateral_lattice_angle_2` | print | Strength / Sparse infill | `45` | o=45 | new Lateral Lattice pattern | tests/parity-infill.test.ts |
+| `sparse_infill_lattice_angle_1` | print | Strength / Sparse infill | `-45` | b=-45 | new 2D Lattice pattern | tests/parity-infill.test.ts |
+| `sparse_infill_lattice_angle_2` | print | Strength / Sparse infill | `45` | b=45 | new 2D Lattice pattern | tests/parity-infill.test.ts |
+| `solid_infill_rotate_template` | print | Strength / Advanced | `` | o="" | per-layer solid angle (list, +a, a%, #K) | tests/parity-infill.test.ts |
+| `sparse_infill_rotate_template` | print | Strength / Advanced | `` | o="" | per-layer sparse angle (list, +a, a%, #K; Orca metalanguage subset) | tests/parity-infill.test.ts |
+| `sparse_infill_smooth_factor` | print | Strength / Sparse infill | `0` | o=0 | rounded sparse corners | tests/parity-infill.test.ts |
+| `separated_infills` | print | Strength / Advanced | `False` | o=false | pattern anchored on each object centre | tests/parity-infill.test.ts |
+| `symmetric_infill_y_axis` | print | Strength / Sparse infill | `False` | o=false | Zig Zag family mirrored about the object centre | tests/parity-infill.test.ts |
+| `top_surface_expansion` | print | Strength / Top/bottom shells | `0` | o=0 | top surfaces grown before classification | tests/parity-infill.test.ts |
+| `top_surface_expansion_direction` | print | Strength / Top/bottom shells | `inward_and_outward` | o=InwardAndOutward | closing / outer edge / both | tests/parity-infill.test.ts |
+| `top_surface_expansion_margin` | print | Strength / Top/bottom shells | `0` | o=0 | kept off untouched walls | tests/parity-infill.test.ts |
+| `min_width_top_surface` | print | Quality / Advanced | `0` *neutral* | o=300% | one-wall-top threshold (max with top_area_threshold) | tests/parity-infill.test.ts |
+| `top_bottom_infill_wall_overlap` | print | Strength / Top/bottom shells | `-1` *neutral* | o=25% | top/bottom overlap into inner wall; -1 = infill_wall_overlap | tests/parity-infill.test.ts |
+| `lightning_overhang_angle` | print | Strength / Sparse infill | `45` | o=45 | wall supporting radius trims seeds | tests/parity-infill.test.ts |
+| `lightning_prune_angle` | print | Strength / Sparse infill | `45` | o=45 | tip prune distance | tests/parity-infill.test.ts |
+| `lightning_straightening_angle` | print | Strength / Sparse infill | `45` | o=45 | branch node straightening | tests/parity-infill.test.ts |
+| `ironing_angle` | print | Quality / Ironing | `0` | o=0 | offset added to ironing / top direction | tests/parity-infill.test.ts |
+| `ironing_angle_fixed` | print | Quality / Ironing | `False` | o=false | absolute ironing angle | tests/parity-infill.test.ts |
+| `ironing_expansion` | print | Quality / Ironing | `0` | o=0 | ironed area grown / shrunk | tests/parity-infill.test.ts |
+| `filament_ironing_flow` | filament | Setting overrides / Ironing | `-1` | o=nil | per-filament ironing flow (-1 = process) | tests/parity-infill.test.ts |
+| `filament_ironing_inset` | filament | Setting overrides / Ironing | `-1` | o=nil | per-filament ironing inset | tests/parity-infill.test.ts |
+| `filament_ironing_spacing` | filament | Setting overrides / Ironing | `-1` | o=nil | per-filament ironing spacing | tests/parity-infill.test.ts |
+| `filament_ironing_speed` | filament | Setting overrides / Ironing | `-1` | o=nil | per-filament ironing speed | tests/parity-infill.test.ts |
+| `internal_bridge_angle` | print | Strength / Advanced | `0` | o=0 | internal bridge direction (0 = auto) | tests/parity-infill.test.ts |
+| `internal_bridge_density` | print | Strength / Advanced | `100` | o=100 | internal bridge spacing | tests/parity-infill.test.ts |
+| `internal_bridge_fan_speed` | filament | Cooling / Part cooling fan | `-1` | o=-1 | exact fan on internal bridges | tests/parity-infill.test.ts |
+| `internal_bridge_flow` | print | Quality / Advanced | `1` | o=1 | internal bridge flow | tests/parity-infill.test.ts |
+| `internal_bridge_speed` | print | Speed / Other layers speed | `150%` | o=150% | internal bridge speed (new `internal bridge` line type) | tests/parity-infill.test.ts |
+| `thick_internal_bridges` | print | Quality / Advanced | `True` | o=true | nozzle-thick internal bridges | tests/parity-infill.test.ts |
+| `dont_filter_internal_bridges` | print | Quality / Advanced | `disabled` | o=ibfDisabled | internal bridges: Filter keeps Bambu floating-shell handling while detect_floating_vertical_shell is on; limited / nofilter (or detection off) make internal bridges | tests/parity-infill.test.ts |
+| `enable_extra_bridge_layer` | print | Quality / Advanced | `disabled` | o=eblDisabled | second bridge layer over external / internal bridges | tests/parity-infill.test.ts |
+| `bridge_line_width` | print | Quality / Line width | `0` *neutral* | o=100% | external bridge width | tests/parity-infill.test.ts |
+| `relative_bridge_angle` | print | Strength / Advanced | `False` | o=false | bridge angles added to the auto angle | tests/parity-infill.test.ts |
+| `small_area_infill_flow_compensation` | print | Quality / Advanced | `False` | o=false | PCHIP flow model on short solid lines | tests/parity-infill.test.ts |
+| `small_area_infill_flow_compensation_model` | print | Quality / Advanced | `Orca` | o=model | length,factor pairs | tests/parity-infill.test.ts |
+| `elefant_foot_layers_density` | print | Quality / Precision | `100` | o=100 | internal solid density on EFC layers | tests/parity-infill.test.ts |
+| `top_color_penetration_layers` | print | Strength / Top/bottom shells | `0` | o=0 | painted top face reach downward | tests/parity-infill.test.ts |
+| `bottom_color_penetration_layers` | print | Strength / Top/bottom shells | `0` | o=0 | painted bottom face reach upward | tests/parity-infill.test.ts |
+| `hole_to_polyhole` | print | Quality / Precision | `False` | o=false / s=false | almost circular holes spanning layers become regular polygons | tests/parity-walls.test.ts |
+| `hole_to_polyhole_max_edges` | print | Quality / Precision | `50` | o=50 | polyhole edge limit | tests/parity-walls.test.ts |
+| `hole_to_polyhole_threshold` | print | Quality / Precision | `0.01` | o=0.01 / s=0.01 | circle detection margin (mm or % of radius) | tests/parity-walls.test.ts |
+| `hole_to_polyhole_twisted` | print | Quality / Precision | `True` | o=true / s=true | 5 rotated polyholes cycled by layer | tests/parity-walls.test.ts |
+| `make_overhang_printable` | print | Quality / Advanced | `False` | o=false / s=false | conical overhangs: layers grow by the layer above shrunk by tan(angle)·h | tests/parity-walls.test.ts |
+| `make_overhang_printable_angle` | print | Quality / Advanced | `55` | o=55 / s=55 | cone angle | tests/parity-walls.test.ts |
+| `make_overhang_printable_hole_size` | print | Quality / Advanced | `0` | o=0 / s=0 | covered base holes below this area stay open | tests/parity-walls.test.ts |
+| `overhang_reverse` | print | Quality / Advanced | `False` | o=false / s=false | overhanging islands' walls reversed on even layers | tests/parity-walls.test.ts |
+| `overhang_reverse_internal_only` | print | Quality / Advanced | `False` | o=false / s=false | only inner walls reversed | tests/parity-walls.test.ts |
+| `overhang_reverse_threshold` | print | Quality / Advanced | `50%` | o=50% / s=50% | overhang needed for reversal | tests/parity-walls.test.ts |
+| `extra_perimeters_on_overhangs` | print | Quality / Advanced | `False` | o=false / s=false | unsupported infill area filled with anchored overhang wall loops | tests/parity-walls.test.ts |
+| `unsupported_wall_last` | print | Quality / Advanced | `False` | o=false | loops fully in mid air printed after the other walls, innermost first | tests/parity-walls.test.ts |
+| `slowdown_for_curled_perimeters` | print | Speed / Other layers speed | `False` | o=false / s=true | walls over last layer's overhang walls capped at the 75% overhang speed | tests/parity-walls.test.ts |
+| `scarf_joint_flow_ratio` | print | Quality / Seam | `1` | o=1 / s=1 | flow multiplier on scarf ramp + overlap | tests/parity-walls.test.ts |
+| `scarf_joint_speed` | print | Quality / Seam | `100%` | o=100% / s=100% | speed cap on scarf ramp + overlap | tests/parity-walls.test.ts |
+| `scarf_overhang_threshold` | print | Quality / Seam | `40` | o=40 / s=40 | no scarf when this share of the loop is unsupported | tests/parity-walls.test.ts |
+| `fuzzy_skin_ripples_per_layer` | print | Others / Special mode | `15` | o=15 | ripple noise (new `ripple` noise type) cycles per loop | tests/parity-walls.test.ts |
+| `fuzzy_skin_ripple_offset` | print | Others / Special mode | `50` | o=50 | ripple phase shift per layer period | tests/parity-walls.test.ts |
+| `fuzzy_skin_layers_between_ripple_offset` | print | Others / Special mode | `1` | o=1 | layers per ripple phase | tests/parity-walls.test.ts |
+| `wall_maximum_resolution` | print | Quality / Wall generator | `0` *neutral* | o=0.5 | Arachne wall point reduction (Cura meshfix) | tests/parity-walls.test.ts |
+| `wall_maximum_deviation` | print | Quality / Wall generator | `0.025` | o=0.025 | deviation limit of the reduction | tests/parity-walls.test.ts |
+| `min_length_factor` | print | Quality / Wall generator | `0.5` | o=0.5 / s=0.5 | Arachne open thin walls shorter than factor·width dropped | tests/parity-walls.test.ts |
+| `initial_layer_min_bead_width` | print | Quality / Wall generator | `85` | o=85 / s=85 | Arachne min bead on the first layer | tests/parity-walls.test.ts |
+| `wipe_inward` | print | Quality / Seam | `False` | o=false | wipe after the outer wall shifted toward the inner walls | tests/parity-walls.test.ts |
+| `wipe_inward_distance` | print | Quality / Seam | `50%` | o=50% | shift, capped at the wall width (half with outer-first orders) | tests/parity-walls.test.ts |
+| `interlocking_beam` | print | Others / Advanced | `False` | o=false / b=false / s=false | boundary band between filament regions split into alternating beams | tests/parity-walls.test.ts |
+| `interlocking_beam_width` | print | Others / Advanced | `0.8` | o=0.8 | beam width | tests/parity-walls.test.ts |
+| `interlocking_orientation` | print | Others / Advanced | `22.5` | o=22.5 | beam direction | tests/parity-walls.test.ts |
+| `interlocking_beam_layer_count` | print | Others / Advanced | `2` | o=2 | layers per beam direction | tests/parity-walls.test.ts |
+| `interlocking_depth` | print | Others / Advanced | `2` | o=2 | cells each side of the boundary | tests/parity-walls.test.ts |
+| `interlocking_boundary_avoidance` | print | Others / Advanced | `2` | o=2 | cells kept off the outside | tests/parity-walls.test.ts |
+| `print_order` | print | Others / Special mode | `as_obj_list` *neutral* | o=default / s=default | default = nearest object next; as_obj_list = list order | tests/parity-walls.test.ts |
+| `spiral_starting_flow_ratio` | print | Others / Special mode | `1` *neutral* | o=0 / s=0 | first spiral loop flow ramps from this ratio (1 = no ramp, the old output) | tests/parity-walls.test.ts |
+| `spiral_finishing_flow_ratio` | print | Others / Special mode | `1` *neutral* | o=0 / s=0 | below 1: extra flat top loop with falling flow | tests/parity-walls.test.ts |
+| `high_precision_gcode` | print | Others / G-code output | `False` | o=false | 4 decimals XYZIJ, 6 for E | tests/parity-walls.test.ts |
+| `max_volumetric_extrusion_rate_slope_segment_length` | print | Speed / Jerk(XY) | `3` | o=3 / s=3 | extrusions split for the pressure equalizer | tests/parity-walls.test.ts |
+| `extrusion_rate_smoothing_external_perimeter_only` | print | Speed / Jerk(XY) | `False` | o=false / s=false | equalizer only on outer walls / overhangs / bridges | tests/parity-walls.test.ts |
+| `fan_speedup_time` | printer | Basic information / Cooling fan | `0` | o=0 / s=0 | fan rises start N s of printing early | tests/parity-walls.test.ts |
+| `fan_speedup_overhangs` | printer | Basic information / Cooling fan | `True` | o=true / s=true | only overhang / bridge fan rises moved | tests/parity-walls.test.ts |
+| `seam_position` = `aligned_back` | print | Quality / Seam | – | o / s | aligned seams starting at the back | tests/parity-walls.test.ts |
+| `fuzzy_skin` = `hole` | print | Others / Special mode | – | o | fuzzy skin on hole outer walls only | tests/parity-walls.test.ts |
 
 ## Fixed
 
@@ -134,9 +288,9 @@ These keys exist in NexSpiro with a different default or enum spelling. The refe
 | `filament_scarf_seam_type` | filament | def nex=none ref: bambu=0 |
 | `filament_vendor` | filament | def nex=Generic ref: orca=L("(Undefined)") / bambu=L("(Undefined)") / snorca=L("(Undefined)") |
 | `filename_format` | print | def nex=[input_filename_base]_[layer_height]mm_[filament_type]_[print_time].gcode ref: orca={input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode / bambu=[input_filename_base].gcode / snorca={input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode |
-| `fuzzy_skin` | print | def nex=none ref: orca=FuzzySkinType::Disabled_fuzzy / bambu=FuzzySkinType::None / snorca=FuzzySkinType::None; enum missing hole |
+| `fuzzy_skin` | print | def nex=none ref: orca=FuzzySkinType::Disabled_fuzzy / bambu=FuzzySkinType::None / snorca=FuzzySkinType::None (hole added) |
 | `fuzzy_skin_mode` | print | def nex=displacement ref: orca=FuzzySkinMode::Displacement / bambu=FuzzySkinMode::Displacement / snorca=FuzzySkinMode::Displacement |
-| `fuzzy_skin_noise_type` | print | def nex=classic ref: orca=NoiseType::Classic / bambu=NoiseType::Classic / snorca=NoiseType::Classic; enum missing ripple |
+| `fuzzy_skin_noise_type` | print | def nex=classic ref: orca=NoiseType::Classic / bambu=NoiseType::Classic / snorca=NoiseType::Classic (ripple added) |
 | `gap_infill_speed` | print | def nex=250 ref: orca=30 / bambu=30 / snorca=30. |
 | `hot_plate_temp` | filament | def nex=55 ref: orca=45 / bambu=45 / snorca=45 |
 | `hot_plate_temp_initial_layer` | filament | def nex=55 ref: orca=45 / bambu=45 / snorca=45 |
@@ -176,7 +330,7 @@ These keys exist in NexSpiro with a different default or enum spelling. The refe
 | `resolution` | print | def nex=0.012 ref: orca=0.01 / bambu=0.01 / snorca=0.01 |
 | `retract_length_toolchange` | printer | def nex=2 ref: orca=10. / bambu=10. / snorca=10. |
 | `retraction_minimum_travel` | printer | def nex=1 ref: orca=2. / bambu=2. / snorca=2. |
-| `seam_position` | print | enum missing aligned_back |
+| `seam_position` | print | aligned_back added |
 | `seam_slope_type` | print | def nex=none ref: orca=SeamScarfType::None / bambu=SeamScarfType::None / snorca=SeamScarfType::None |
 | `skirt_loops` | print | def nex=0 ref: orca=1 / bambu=1 / snorca=1 |
 | `slicing_mode` | print | def nex=regular ref: orca=SlicingMode::Regular / bambu=SlicingMode::Regular / snorca=SlicingMode::Regular |
@@ -243,167 +397,15 @@ These keys exist in NexSpiro with a different default or enum spelling. The refe
 | `wipe_tower_rib_width` | print | `prime_tower_rib_width` |
 | `wipe_tower_wall_gap` | print | `prime_tower_infill_gap` |
 
-## Still missing (172)
+## Still missing (20)
 
 User-facing options not implemented in this pass (no definition added, so nothing in the UI pretends to work). Engine-level notes where relevant.
 
 | key | preset | in | label | note |
 |---|---|---|---|---|
-| `activate_air_filtration` | filament | obs | Activate air filtration | exhaust fan control |
-| `activate_air_filtration_during_print` | filament | o |  | exhaust fan control |
-| `activate_air_filtration_on_completion` | filament | o |  | exhaust fan control |
-| `adaptive_infill_gradient` | print | o | Adaptive gradient |  |
-| `adaptive_infill_interior_density` | print | o | Interior density |  |
-| `adaptive_infill_mode` | print | o | Adaptive density (experimental) |  |
-| `adaptive_pressure_advance` | filament | os | Enable adaptive pressure advance (beta) | adaptive PA model |
-| `adaptive_pressure_advance_bridges` | filament | os | Static pressure advance for bridges | adaptive PA model |
-| `adaptive_pressure_advance_model` | filament | os | Adaptive pressure advance measurements (beta) | adaptive PA model |
-| `adaptive_pressure_advance_overhangs` | filament | os | Enable adaptive pressure advance within features (beta) | adaptive PA model |
-| `align_infill_direction_to_model` | print | os | Align directions to model |  |
-| `bottom_color_penetration_layers` | print | obs | Bottom paint penetration layers |  |
-| `bottom_layer_direction` | print | o | Bottom layer direction |  |
-| `bottom_surface_fill_order` | print | o | Bottom surface fill order |  |
-| `bridge_line_width` | print | o | Bridge |  |
-| `calib_flowrate_topinfill_special_order` | print | os |  |  |
-| `center_of_surface_pattern` | print | o | Center surface pattern on |  |
-| `chamber_minimal_temperature` | filament | o | Minimal |  |
-| `complete_print_exhaust_fan_speed` | filament | obs | Fan speed |  |
-| `cooling_tube_length` | printer | os | Cooling tube length | MMU ramming sequence not modelled |
-| `cooling_tube_retraction` | printer | os | Cooling tube position | MMU ramming sequence not modelled |
-| `default_junction_deviation` | print | os | Junction Deviation |  |
-| `deretract_speed_extruder_change` | printer | o | Deretraction speed (extruder change) |  |
-| `dont_filter_internal_bridges` | print | os | Filter out small internal bridges |  |
-| `during_print_exhaust_fan_speed` | filament | obs | Fan speed |  |
-| `elefant_foot_layers_density` | print | o | Elephant foot layers density |  |
-| `enable_extra_bridge_layer` | print | os | Extra bridge layers (beta) |  |
-| `enable_filament_ramming` | printer | os | Enable filament ramming |  |
-| `exclude_object_tolerance` | print | o | Outline tolerance |  |
+| `exclude_object_tolerance` | print | o | Outline tolerance | not done: NexSpiro writes the bounding rectangle (4 points) to EXCLUDE_OBJECT_DEFINE, so there is no outline to thin; writing the real outline would change existing Klipper G-code |
 | `extra_brim_width` | print | o | Extra brim width | belt printers only in OrcaSlicer (no effect unless belt_printer); NexSpiro has no belt printer mode |
-| `extra_loading_move` | printer | os | Extra loading distance |  |
-| `extra_perimeters_on_overhangs` | print | os | Extra perimeters on overhangs | extra loops on overhangs |
-| `extrusion_rate_smoothing_external_perimeter_only` | print | os | Apply only on external features |  |
-| `fan_speedup_overhangs` | printer | os | Only overhangs |  |
-| `fan_speedup_time` | printer | os | Fan speed-up time |  |
-| `farthest_point_timelapse` | printer | ob | Farthest point timelapse |  |
-| `filament_change_extrusion_role_gcode` | filament | o | Change extrusion role G-code (filament) | filament-level variant of change_extrusion_role_gcode |
-| `filament_cooling_final_speed` | filament | os | Speed of the last cooling move | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_cooling_initial_speed` | filament | os | Speed of the first cooling move | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_cooling_moves` | filament | os | Number of cooling moves | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_ironing_flow` | filament | o | Ironing flow | per-filament ironing overrides |
-| `filament_ironing_inset` | filament | o | Ironing inset | per-filament ironing overrides |
-| `filament_ironing_spacing` | filament | o | Ironing line spacing | per-filament ironing overrides |
-| `filament_ironing_speed` | filament | o | Ironing speed | per-filament ironing overrides |
-| `filament_loading_speed` | filament | os | Loading speed | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_loading_speed_start` | filament | os | Loading speed at the start | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_minimal_purge_on_wipe_tower` | filament | obs | Minimal purge on wipe tower | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_multitool_ramming` | filament | os | Enable ramming for multi-tool setups | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_multitool_ramming_flow` | filament | os | Multi-tool ramming flow | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_multitool_ramming_volume` | filament | os | Multi-tool ramming volume | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_ramming_parameters` | filament | os | Ramming parameters | MMU ramming sequence not modelled |
-| `filament_stamping_distance` | filament | os | Stamping distance measured from the center of the cooling tube | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_stamping_loading_speed` | filament | os | Stamping loading speed | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_toolchange_delay` | filament | os | Delay after unloading | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_unloading_speed` | filament | os | Unloading speed | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `filament_unloading_speed_start` | filament | os | Unloading speed at the start | MMU / tool change loading, cooling and ramming sequence not modelled |
-| `fuzzy_skin_layers_between_ripple_offset` | print | o | Layers between ripple offset |  |
-| `fuzzy_skin_ripple_offset` | print | o | Ripple offset | ripple noise |
-| `fuzzy_skin_ripples_per_layer` | print | o | Number of ripples per layer | ripple noise |
-| `gyroid_optimized` | print | o | Z-buckling bias optimization (experimental) |  |
-| `high_current_on_filament_swap` | printer | os | High extruder current on filament swap |  |
-| `high_precision_gcode` | print | o | High precision G-code (experimental) |  |
-| `hole_to_polyhole` | print | os | Convert holes to polyholes | hole polygon conversion |
-| `hole_to_polyhole_max_edges` | print | o | Maximum Polyhole edge count | hole polygon conversion |
-| `hole_to_polyhole_threshold` | print | os | Polyhole detection margin | hole polygon conversion |
-| `hole_to_polyhole_twisted` | print | os | Polyhole twist | hole polygon conversion |
-| `infill_combination_max_layer_height` | print | os | Infill combination - Max layer height |  |
-| `infill_complete_top` | print | o | Fill pattern tops |  |
-| `infill_lock_depth` | print | obs | Infill lock depth |  |
-| `infill_overhang_angle` | print | os | Infill overhang angle |  |
-| `infill_shift_step` | print | obs | Infill shift step |  |
-| `initial_layer_min_bead_width` | print | os | First layer minimum wall width |  |
-| `interlocking_beam` | print | obs | Use beam interlocking | multi-material interlocking beams |
-| `interlocking_beam_layer_count` | print | obs | Interlocking beam layers | multi-material interlocking beams |
-| `interlocking_beam_width` | print | obs | Interlocking beam width | multi-material interlocking beams |
-| `interlocking_boundary_avoidance` | print | obs | Interlocking boundary avoidance | multi-material interlocking beams |
-| `interlocking_depth` | print | obs | Interlocking depth | multi-material interlocking beams |
-| `interlocking_orientation` | print | obs | Interlocking direction | multi-material interlocking beams |
-| `internal_bridge_angle` | print | os | Internal bridge infill direction | internal bridges are not a separate line type in NexSpiro |
-| `internal_bridge_density` | print | os | Internal bridge density | internal bridges are not a separate line type in NexSpiro |
-| `internal_bridge_fan_speed` | filament | os | Internal bridges fan speed | internal bridges are not a separate line type in NexSpiro |
-| `internal_bridge_flow` | print | os | Internal bridge flow ratio | internal bridges are not a separate line type in NexSpiro |
-| `internal_bridge_speed` | print | os | Internal | internal bridges are not a separate line type in NexSpiro |
-| `ironing_angle` | print | os | Ironing angle offset | ironing angle options |
-| `ironing_angle_fixed` | print | o | Fixed ironing angle | ironing angle options |
-| `ironing_expansion` | print | o | Ironing expansion |  |
-| `lateral_lattice_angle_1` | print | os | Lateral lattice angle 1 |  |
-| `lateral_lattice_angle_2` | print | os | Lateral lattice angle 2 |  |
 | `leading_brim_length` | print | o | Leading brim length | belt printers only in OrcaSlicer (no effect unless belt_printer); NexSpiro has no belt printer mode |
-| `lightning_overhang_angle` | print | o | Lightning overhang angle |  |
-| `lightning_prune_angle` | print | o | Prune angle |  |
-| `lightning_straightening_angle` | print | o | Straightening angle |  |
-| `machine_max_junction_deviation` | printer | os |  |  |
-| `make_overhang_printable` | print | os | Make overhangs printable | conical overhang reshaping |
-| `make_overhang_printable_angle` | print | os | Make overhangs printable - Maximum angle | conical overhang reshaping |
-| `make_overhang_printable_hole_size` | print | os | Make overhangs printable - Hole area | conical overhang reshaping |
-| `max_volumetric_extrusion_rate_slope_segment_length` | print | os | Smoothing segment length |  |
-| `min_length_factor` | print | os | Minimum wall length |  |
-| `min_width_top_surface` | print | os | One wall threshold |  |
-| `overhang_reverse` | print | os | Reverse on even | reverse direction on even layers for overhangs |
-| `overhang_reverse_internal_only` | print | os | Reverse only internal perimeters | reverse direction on even layers for overhangs |
-| `overhang_reverse_threshold` | print | os | Reverse threshold | reverse direction on even layers for overhangs |
-| `parking_pos_retraction` | printer | os | Filament parking position |  |
-| `part_cooling_fan_min_pwm` | printer | o | Minimum non-zero part cooling fan speed |  |
-| `preheat_steps` | print | os | Preheat steps |  |
-| `prime_tower_enable_framework` | print | obs | Internal ribs |  |
-| `print_order` | print | os | Intra-layer order | object print order |
-| `process_change_extrusion_role_gcode` | print | o | Change extrusion role G-code (process) | process-level variant of change_extrusion_role_gcode |
-| `relative_bridge_angle` | print | o | Relative bridge angle |  |
-| `scarf_joint_flow_ratio` | print | os | Scarf joint flow ratio | scarf joint speed / flow / overhang threshold |
-| `scarf_joint_speed` | print | os | Scarf joint speed | scarf joint speed / flow / overhang threshold |
-| `scarf_overhang_threshold` | print | os | Conditional overhang threshold | scarf joint speed / flow / overhang threshold |
-| `separated_infills` | print | o | Separated infills |  |
-| `single_extruder_multi_material_priming` | print | os | Prime all printing extruders |  |
-| `slowdown_for_curled_perimeters` | print | os | Slow down for curled perimeters | needs curl estimation |
-| `small_area_infill_flow_compensation` | print | os | Small area flow compensation (beta) | needs flow model curve |
-| `small_area_infill_flow_compensation_model` | print | os | Flow Compensation Model | needs flow model curve |
-| `solid_infill_rotate_template` | print | os | Solid infill rotation template |  |
-| `sparse_infill_lattice_angle_1` | print | b | Lattice angle 1 |  |
-| `sparse_infill_lattice_angle_2` | print | b | Lattice angle 2 |  |
-| `sparse_infill_rotate_template` | print | os | Sparse infill rotation template |  |
-| `sparse_infill_smooth_factor` | print | o | Sparse infill smooth factor |  |
-| `spiral_finishing_flow_ratio` | print | os | Spiral finishing flow ratio |  |
-| `spiral_starting_flow_ratio` | print | os | Spiral starting flow ratio |  |
-| `supertack_plate_temp` | filament | obs | Other layers | plate type not in NexSpiro plate list (printers.ts) |
-| `supertack_plate_temp_initial_layer` | filament | obs | First layer | plate type not in NexSpiro plate list (printers.ts) |
-| `symmetric_infill_y_axis` | print | obs | Symmetric infill Y axis |  |
-| `textured_cool_plate_temp` | filament | os | Other layers | plate type not in NexSpiro plate list (printers.ts) |
-| `textured_cool_plate_temp_initial_layer` | filament | os | First layer | plate type not in NexSpiro plate list (printers.ts) |
-| `thick_internal_bridges` | print | os | Thick internal bridges | internal bridges are not a separate line type |
-| `tool_change_on_wipe_tower` | printer | o | Tool change on wipe tower |  |
-| `top_bottom_infill_wall_overlap` | print | os | Top/Bottom solid infill/wall overlap |  |
-| `top_color_penetration_layers` | print | obs | Top paint penetration layers |  |
-| `top_layer_direction` | print | o | Top layer direction |  |
-| `top_surface_expansion` | print | o | Top surface expansion | top surface expansion family |
-| `top_surface_expansion_direction` | print | o | Top expansion direction | top surface expansion family |
-| `top_surface_expansion_margin` | print | o | Top expansion wall margin | top surface expansion family |
-| `top_surface_fill_order` | print | o | Top surface fill order |  |
-| `unsupported_wall_last` | print | o | Print unsupported walls last |  |
-| `wait_for_temp_on_wipe_tower` | printer | o | Wait for temperature on wipe tower |  |
-| `wall_maximum_deviation` | print | o | Maximum wall deviation |  |
-| `wall_maximum_resolution` | print | o | Maximum wall resolution |  |
-| `wipe_inward` | print | o | Wipe inward |  |
-| `wipe_inward_distance` | print | o | Wipe inward distance |  |
-| `wipe_tower_bridging` | print | os | Maximal bridging distance | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_cone_angle` | print | os | Stabilization cone apex angle | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_extra_flow` | print | os | Extra flow for purging | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_extra_spacing` | print | os | Wipe tower purge lines spacing | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_filament` | print | os | Wipe tower | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_max_purge_speed` | print | os | Maximum wipe tower print speed | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_no_sparse_layers` | print | obs | No sparse layers (beta) | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_rotation_angle` | print | os | Wipe tower rotation angle | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_sparse_layers_combination` | print | o | Combine sparse layers | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wipe_tower_wall_type` | print | os | Wall type | prime tower geometry options (cone, rotation, spacing, extra flow, bridging, wall type, sparse layers) |
-| `wiping_volumes_extruders` | print | os | Purging volumes - load/unload volumes |  |
 
 ## Skipped (327)
 

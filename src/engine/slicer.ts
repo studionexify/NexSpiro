@@ -1406,6 +1406,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   let safeZ: number | null = null; // by-object: travel to the next object above everything printed
   /** The last extruded path, newest point last (for wipe moves). */
   let wipeTrail: number[] = [];
+  /** The wipe trail ends shifted off the last path (wipe inward): the wipe starts by stepping onto it. */
+  let wipeShifted = false;
   /** Line type of the last extrusion, across layers (role based wipe speed). */
   let lastPrinted: FeatureType | null = null;
   let maxPrinted = 0;
@@ -1513,7 +1515,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         // walk back along the trail
         const pts: number[] = [];
         let left = wipeLen, cx = px, cy = py;
-        for (let k = wipeTrail.length - 4; k >= 0 && left > 1e-6; k -= 2) {
+        for (let k = wipeTrail.length - (wipeShifted ? 2 : 4); k >= 0 && left > 1e-6; k -= 2) {
           const nx = wipeTrail[k], ny = wipeTrail[k + 1];
           const seg = Math.hypot(nx - cx, ny - cy);
           if (seg < 1e-6) continue;
@@ -1618,8 +1620,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         } else {
           ops.push({ k: 'move', x, y, z: zz, e: 0, f: sv, feature: 'travel', w: 0, h, travel: true });
         }
-        if (it.wipeShift) wipeTrail.push(x - ((y - py) / len) * it.wipeShift, y + ((x - px) / len) * it.wipeShift);
-        else wipeTrail.push(x, y);
+        if (it.wipeShift) {
+          // wipe inward: both ends of the segment move to its left, so the wipe runs parallel to the wall
+          const sx = -((y - py) / len) * it.wipeShift, sy = ((x - px) / len) * it.wipeShift;
+          if (wipeTrail.length >= 2) { wipeTrail[wipeTrail.length - 2] = px + sx; wipeTrail[wipeTrail.length - 1] = py + sy; }
+          wipeTrail.push(x + sx, y + sy);
+          wipeShifted = true;
+        } else { wipeTrail.push(x, y); wipeShifted = false; }
         px = x; py = y; curZ = zz;
         if (wipeTrail.length > 400) wipeTrail = wipeTrail.slice(-200);
       }
@@ -1904,7 +1911,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         if (ironRegion.length && (ironing === 'top' || ironing === 'solid' || (ironing === 'topmost' && i === objLast[o]))) {
           // filament ironing overrides (-1 = the process value)
           const ifl = filaments[Math.max(0, fil)]?.settings;
-          const ifo = (k: string, d: number) => { const v = ifl?.[`filament_${k}`]; return v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d; };
+          const ifo = (k: string, d: number) => { const v = ifl?.[`filament_${k}`] ?? cfg[`filament_${k}`]; return v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d; };
           const reg = intersection(offset(ironRegion, -twid / 2 - ifo('ironing_inset', onum(o, i, 'ironing_inset')) + onum(o, i, 'ironing_expansion')), fInner);
           const sp = Math.max(0.01, ifo('ironing_spacing', onum(o, i, 'ironing_spacing')));
           const ip = ostr(o, i, 'ironing_pattern');
