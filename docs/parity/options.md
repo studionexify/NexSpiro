@@ -397,7 +397,7 @@ These keys exist in NexSpiro with a different default or enum spelling. The refe
 | `wipe_tower_rib_width` | print | `prime_tower_rib_width` |
 | `wipe_tower_wall_gap` | print | `prime_tower_infill_gap` |
 
-## Still missing (20)
+## Still missing (3)
 
 User-facing options not implemented in this pass (no definition added, so nothing in the UI pretends to work). Engine-level notes where relevant.
 
