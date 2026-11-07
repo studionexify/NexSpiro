@@ -11,6 +11,8 @@ import { activeUserPreset, currentPresetValue, isActiveUserPresetModified, selec
 import { USER_PREFIX } from '../profiles/userPresets';
 import { amsUnavailableReason, syncAmsFromPrinter } from '../state/amsSync';
 import { useDevices } from '../state/devices';
+import { activeKey, relink, useHolders } from '../state/holders';
+import { HolderBadge } from './FilamentHolders';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
 import { isWaveZone } from '../plugins/motionex/weave/zones';
@@ -171,6 +173,9 @@ export function SyncAmsLink() {
 
 export function FilamentCard() {
   const { filaments, plate, printerId, set, markDirty } = useStore();
+  const linked = useHolders((h) => h.linked);
+  const holders = useHolders((h) => h.lists[activeKey()]);
+  useDevices((d) => d.selected); // the active machine follows the selected device
   const [edit, setEdit] = useState<number | null>(null);
   const [flush, setFlush] = useState(false);
   const [closed, toggle] = useCollapsed('filament');
@@ -195,10 +200,19 @@ export function FilamentCard() {
         <CardTitle icon="filamentB" label="Filament" closed={closed} onToggle={toggle} />
         <span className="spacer" />
         <span className="badge" title={ams ? `Automatic filament changes (${changerLabel(printerById(printerId).machine)})` : 'Manual filament changes (M600 pause)'}>{ams ? changerLabel(printerById(printerId).machine) : <Icon name="edit" size={12} />}</span>
+        {!linked && <a role="button" tabIndex={0} className="sync-ams" title="The project's filaments differ from what is loaded in the machine" onClick={relink} onKeyDown={(e) => { if (e.key === 'Enter') relink(); }}>Use machine filaments</a>}
         <SyncAmsLink />
         {filaments.length > 1 && <button className="icon-btn" title="Flushing volumes" aria-label="Flushing volumes" onClick={() => setFlush(true)}><Icon name="flush" /></button>}
         <button className="icon-btn" title="Add filament" aria-label="Add filament" disabled={filaments.length >= 16}
-          onClick={() => { const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5']; if (useStore.getState().mixes.length) shiftFilamentRefs(null, filaments.length, 1); set({ filaments: [...filaments, { presetId: filaments[filaments.length - 1].presetId, color: palette[(filaments.length - 1) % palette.length] }], flushMatrix: null }); }}>
+          onClick={() => {
+            const palette = ['#FF5C8D', '#85A3B2', '#E9D8C8', '#732553', '#142030', '#FFC107', '#1E88E5'];
+            // a new holder goes before the planned (not loaded) slots
+            const at = filaments.findIndex((f) => f.planned), k = at < 0 ? filaments.length : at;
+            if (at >= 0 || useStore.getState().mixes.length) shiftFilamentRefs(null, k, 1);
+            const loaded = filaments.filter((f) => !f.planned);
+            const add = { presetId: (loaded[loaded.length - 1] ?? filaments[0]).presetId, color: palette[(k - 1 + palette.length) % palette.length] };
+            set({ filaments: [...filaments.slice(0, k), add, ...filaments.slice(k)], flushMatrix: null });
+          }}>
           <Icon name="add" />
         </button>
       </div>
@@ -216,6 +230,9 @@ export function FilamentCard() {
                 {FILAMENTS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
               <span className="badge mat" title={f.overrides ? 'Filament type · settings changed on this slot' : 'Filament type'}>{String(f.overrides?.filament_type ?? fil.type)}{f.overrides ? '*' : ''}</span>
+              {f.planned
+                ? <button className="badge planned" title="A design uses this filament but it is not loaded in the machine. Click once it is loaded." onClick={() => set({ filaments: filaments.map((x, i) => (i === k ? { ...x, planned: undefined } : x)) })}>Load before printing</button>
+                : linked && <HolderBadge h={holders?.[filaments.slice(0, k).filter((x) => !x.planned).length]} />}
               {!bed && <span title="Not recommended on this build plate" style={{ color: 'var(--warning)', display: 'flex' }}><Icon name="warn" size={14} /></span>}
               <button className="icon-btn" title="Filament details" onClick={() => setEdit(k)}><Icon name="edit" size={16} /></button>
               {filaments.length > 1 && <button className="icon-btn" title="Remove filament" onClick={() => remove(k)}><Icon name="close" size={14} /></button>}

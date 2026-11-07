@@ -2,7 +2,7 @@
 import type { AmsUnit, PrinterStatus } from '../connect/types';
 import { FILAMENTS } from './filaments';
 
-export interface AmsSlot { presetId: string; color: string; /** Tray label, e.g. "A1" (AMS unit letter + tray number). */ tray: string; trayType: string; matched: boolean }
+export interface AmsSlot { presetId: string; color: string; /** Tray label, e.g. "A1" (AMS unit letter + tray number). */ tray: string; trayType: string; matched: boolean; rfid?: boolean }
 
 /** Closest filament preset for an AMS tray type ("PLA", "PLA Matte", "PETG HF", "TPU-AMS"…); exact preset type first, then the material family. */
 export function closestFilament(trayType: string): { id: string; matched: boolean } {
@@ -36,7 +36,7 @@ export function amsToSlots(ams: AmsUnit[] | undefined): AmsSlot[] {
     if (!t.type?.trim()) return; // empty tray
     const { id, matched } = closestFilament(t.type);
     const fil = FILAMENTS.find((f) => f.id === id)!;
-    out.push({ presetId: id, color: normColor(t.color ?? '', fil.color), tray: `${String.fromCharCode(65 + (Number(u.id) >= 0 ? Number(u.id) : ui) % 26)}${(Number(t.id) >= 0 ? Number(t.id) : ti) + 1}`, trayType: t.type.trim(), matched });
+    out.push({ presetId: id, color: normColor(t.color ?? '', fil.color), tray: `${String.fromCharCode(65 + (Number(u.id) >= 0 ? Number(u.id) : ui) % 26)}${(Number(t.id) >= 0 ? Number(t.id) : ti) + 1}`, trayType: t.type.trim(), matched, rfid: !!t.rfid });
   }));
   return out;
 }

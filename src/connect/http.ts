@@ -1,6 +1,6 @@
 // HTTP-based connections: Klipper/Moonraker and OctoPrint. Uses fetch only, so the same code
 // runs in the Electron main process (no CORS limits) and in the browser build.
-import { Emitter, type ConnectionConfig, type PrinterConnection, type PrinterStatus, type PrintOptions, type RemoteFile } from './types';
+import { Emitter, type AmsTray, type ConnectionConfig, type PrinterConnection, type PrinterStatus, type PrintOptions, type RemoteFile } from './types';
 
 abstract class HttpPrinter implements PrinterConnection {
   abstract readonly kind: 'moonraker' | 'octoprint';
@@ -82,14 +82,37 @@ export function taskConfigTrays(tc: any, active = -1): PrinterStatus['ams'] {
   const colors: unknown[] = tc.filament_color_rgba ?? tc.filament_color ?? tc.filament_colors ?? [];
   const exist: unknown[] = tc.filament_exist ?? [];
   const sub: unknown[] = tc.filament_sub_type ?? [];
+  // RFID-read spools (official tags) are flagged by the firmware; hand-set heads are not
+  const tag: unknown[] = tc.filament_rfid ?? tc.filament_official ?? tc.filament_is_official ?? [];
   if (!Array.isArray(types) || !types.length) return undefined;
   const trays = types.map((t, i) => {
     const present = exist[i] === undefined ? !!t : !!exist[i];
     const c = String(colors[i] ?? '').replace(/^#/, '');
     const st = String(sub[i] ?? '').trim();
-    return { id: String(i), type: present ? `${String(t ?? '').trim()}${st && st.toUpperCase() !== 'NONE' && st.toUpperCase() !== 'BASIC' ? ' ' + st : ''}` : '', color: c ? `#${c.slice(0, 6)}` : '#FFFFFF', active: i === active };
+    return { id: String(i), type: present ? `${String(t ?? '').trim()}${st && st.toUpperCase() !== 'NONE' && st.toUpperCase() !== 'BASIC' ? ' ' + st : ''}` : '', color: c ? `#${c.slice(0, 6)}` : '#FFFFFF', active: i === active, rfid: present && (tag[i] === true || tag[i] === 1 || tag[i] === 'true') };
   });
   return [{ id: '0', trays }];
+}
+
+/** Happy Hare `mmu` object → one unit with a tray per gate (gate_status 0 = empty). */
+export function mmuTrays(mmu: any): PrinterStatus['ams'] {
+  const mats: unknown[] = mmu?.gate_material;
+  if (!Array.isArray(mats) || !mats.length) return undefined;
+  const cols: unknown[] = mmu.gate_color ?? [], st: unknown[] = mmu.gate_status ?? [];
+  const trays = mats.map((m, i) => {
+    const c = String(cols[i] ?? '').replace(/^#/, '');
+    const loaded = st[i] === undefined ? !!m : Number(st[i]) !== 0;
+    return { id: String(i), type: loaded ? String(m ?? '').trim() : '', color: /^[0-9a-f]{6}/i.test(c) ? `#${c.slice(0, 6)}` : '#FFFFFF', active: Number(mmu.gate) === i };
+  });
+  return [{ id: '0', trays }];
+}
+
+/** A Spoolman spool record → a tray (material + colour the user entered in Spoolman). */
+export function spoolmanTray(spool: any): AmsTray | undefined {
+  const f = spool?.filament;
+  if (!f?.material) return undefined;
+  const c = String(f.color_hex ?? f.multi_color_hexes?.split(',')[0] ?? '').replace(/^#/, '');
+  return { id: '0', type: String(f.material).trim(), color: /^[0-9a-f]{6}/i.test(c) ? `#${c.slice(0, 6)}` : '#FFFFFF', active: true };
 }
 
 export class MoonrakerConnection extends HttpPrinter {
@@ -100,6 +123,10 @@ export class MoonrakerConnection extends HttpPrinter {
   private extruders: string[] | null = null;
   /** Snapmaker U1 reports loaded filament (RFID / user-set) in print_task_config. */
   private hasTaskConfig = false;
+  /** Happy Hare MMU (ERCF, Tradrack…): reports a material + colour per gate. */
+  private hasMmu = false;
+  /** Spoolman's active spool (single-tool Klipper printers), re-read every few polls. */
+  private spool: { at: number; tray?: AmsTray } = { at: 0 };
 
   protected async poll(): Promise<PrinterStatus> {
     if (!this.extruders) {
@@ -109,11 +136,12 @@ export class MoonrakerConnection extends HttpPrinter {
         this.extruders = names.sort((a, b) => (Number(a.slice(8)) || 0) - (Number(b.slice(8)) || 0));
         if (!this.extruders.length) this.extruders = ['extruder'];
         this.hasTaskConfig = ((l.result?.objects ?? []) as string[]).includes('print_task_config');
+        this.hasMmu = ((l.result?.objects ?? []) as string[]).includes('mmu');
       } catch { /* older Moonraker or not reachable yet: single extruder for now, asked again next poll */ }
     }
     const exts = this.extruders ?? ['extruder'];
     const extra = exts.filter((e) => e !== 'extruder').join('&');
-    const r = await this.req(`/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks&toolhead${extra ? `&${extra}` : ''}${this.hasTaskConfig ? '&print_task_config' : ''}`);
+    const r = await this.req(`/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&fan&gcode_move&webhooks&toolhead${extra ? `&${extra}` : ''}${this.hasTaskConfig ? '&print_task_config' : ''}${this.hasMmu ? '&mmu' : ''}`);
     const s = r.result.status;
     const heads = exts.length > 1 ? exts.map((e) => ({ temp: s[e]?.temperature, target: s[e]?.target })) : undefined;
     const activeName = String(s.toolhead?.extruder ?? '');
@@ -136,8 +164,23 @@ export class MoonrakerConnection extends HttpPrinter {
       bedTemp: s.heater_bed?.temperature, bedTarget: s.heater_bed?.target,
       fanPercent: s.fan ? Math.round(Number(s.fan.speed) * 100) : undefined,
       speedPercent: s.gcode_move ? Math.round(Number(s.gcode_move.speed_factor) * 100) : undefined,
-      ams: taskConfigTrays(s.print_task_config, active),
+      ams: taskConfigTrays(s.print_task_config, active) ?? mmuTrays(s.mmu) ?? (await this.spoolTray()),
     };
+  }
+  /** The active Spoolman spool as one holder (most Klipper printers have one spool and no AMS). */
+  private async spoolTray(): Promise<PrinterStatus['ams']> {
+    if (Date.now() - this.spool.at > 15000) {
+      this.spool.at = Date.now();
+      try {
+        const id = (await this.req('/server/spoolman/spool_id')).result?.spool_id;
+        if (id == null) this.spool.tray = undefined;
+        else {
+          const r = await this.req('/server/spoolman/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_method: 'GET', path: `/v1/spool/${id}` }) });
+          this.spool.tray = spoolmanTray(r.result ?? r);
+        }
+      } catch { this.spool.tray = undefined; /* no Spoolman on this printer */ }
+    }
+    return this.spool.tray ? [{ id: '0', trays: [this.spool.tray] }] : undefined;
   }
   async upload(fileName: string, data: ArrayBuffer, onProgress?: (f: number) => void) {
     const fd = new FormData();

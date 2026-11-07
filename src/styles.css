@@ -1074,3 +1074,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mxw-body { flex: 1; min-height: 0; display: flex; }
 .mxw-body .studio { flex: 1; width: 100%; border-left: 0; padding: 14px; }
 .mxw-body .mx-muted { display: block !important; }
+
+/* filament holders */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--border); vertical-align: middle; }
+.holder-src { font-size: 10px; white-space: nowrap; }
+.holder-src.rfid { color: var(--accent); }
+.holder-src.user { opacity: .8; }
+.badge.planned { color: var(--warning); border-color: var(--warning); }
+.holders-tile .select { flex: 1; min-width: 0; }

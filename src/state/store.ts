@@ -74,7 +74,8 @@ export interface HeightRange { id: string; z0: number; z1: number; overrides: Co
 /** Values found with the Calibration workspace, applied on top of the filament preset. */
 export interface FilamentTuning { flowRatio?: number; pressureAdvance?: number; maxVolumetricSpeed?: number; nozzleTemp?: number; retractionLength?: number }
 /** A filament slot: preset, colour, the user's own setting edits and calibration results. */
-export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning; overrides?: Config }
+/** planned: a filament a design needs that is not in the machine's holders yet ("load before printing"). */
+export interface FilamentSlotState { presetId: string; color: string; tuning?: FilamentTuning; overrides?: Config; planned?: boolean }
 export interface ProjectInfo { title: string; author: string; description: string; license: string; notes: string; photos: { name: string; dataUrl: string }[] }
 export const emptyProject = (): ProjectInfo => ({ title: '', author: '', description: '', license: '', notes: '', photos: [] });
 /** A build plate. bedType / spiralVase override the global settings for this plate (undefined = same as global). */

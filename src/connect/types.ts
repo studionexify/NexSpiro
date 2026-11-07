@@ -10,7 +10,8 @@
 
 export type ConnectionKind = 'bbl_lan' | 'moonraker' | 'octoprint' | 'serial';
 
-export interface AmsTray { id: string; type: string; color: string; remain?: number; active?: boolean }
+/** rfid: the printer identified the spool itself (RFID tag); otherwise type/colour are what someone set on the printer. */
+export interface AmsTray { id: string; type: string; color: string; remain?: number; active?: boolean; rfid?: boolean }
 export interface AmsUnit { id: string; humidity?: number; temp?: number; trays: AmsTray[] }
 export interface HmsEntry { code: string; message: string; severity: 'info' | 'warning' | 'error' }
 

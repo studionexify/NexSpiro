@@ -4,6 +4,7 @@ import { filamentById } from '../profiles/filaments';
 import type { PrinterStatus } from '../connect/types';
 import { useDevices } from './devices';
 import { useStore, type FilamentSlotState } from './store';
+import { adoptTrays, startHolderSync } from './holders';
 
 /** The connected device to sync from: the selected one if it reports AMS, else any connected device that does. */
 export function amsSource(d = useDevices.getState()): { id: string; name: string; status: PrinterStatus } | null {
@@ -42,31 +43,14 @@ export function syncAmsFromPrinter(): boolean {
       paint: o.paint?.color ? { ...o.paint, color: o.paint.color.map((c) => (c > n ? 0 : c)) } : o.paint,
     }), s.objects.map((o) => o.id));
   }
-  s.set({ filaments: slotsFromAms(trays, s.filaments), flushMatrix: null });
+  s.set({ filaments: [...slotsFromAms(trays, s.filaments), ...s.filaments.filter((f) => f.planned)], flushMatrix: null });
   s.markDirty();
+  adoptTrays(src.id, trays, true);
   const unmatched = trays.filter((t) => !t.matched);
   const list = trays.map((t) => `${t.tray} ${t.trayType}`).join(', ');
   s.set({ toast: { kind: unmatched.length ? 'warn' : 'info', text: `Synced ${n} filament slot${n > 1 ? 's' : ''} from ${src.name}: ${list}.${unmatched.length ? ` No matching preset for ${unmatched.map((t) => t.trayType).join(', ')} — using ${filamentById('generic-pla').name}.` : ''}` } });
   return true;
 }
 
-/** Keep the project's filament slots in step with what the selected printer reports (AMS / U1 heads).
- *  Runs whenever a connected printer of the project's model reports a different set of loaded filaments. */
-let autoStarted = false;
-export function startAutoFilamentSync() {
-  if (autoStarted) return;
-  autoStarted = true;
-  const sig = (t: AmsSlot[]) => t.map((x) => `${x.presetId}${x.color}`).join('|');
-  const check = () => {
-    const d = useDevices.getState(), s = useStore.getState();
-    const dev = d.devices.find((x) => x.printerId === s.printerId && statusHasAms(d.status[x.id]));
-    if (!dev) return;
-    const trays = amsToSlots(d.status[dev.id].ams);
-    if (!trays.length) return;
-    const cur = s.filaments.map((f) => `${f.presetId}${f.color.toUpperCase()}`).join('|');
-    if (sig(trays) === cur) return;
-    syncAmsFromPrinter();
-  };
-  useDevices.subscribe(check);
-  useStore.subscribe((s, p) => { if (s.printerId !== p.printerId) check(); });
-}
+/** Keep the project's filament slots in step with the machine's filament holders (and live printers). */
+export function startAutoFilamentSync() { startHolderSync(); }

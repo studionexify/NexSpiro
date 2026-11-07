@@ -16,6 +16,7 @@ import { CalibrationPage, HomePage, ProjectPage } from './ui/Pages';
 import { DevicePage } from './ui/DevicePage';
 import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './ui/ToolPanels';
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
+import { HolderPromptHost } from './ui/FilamentHolders';
 import { openProjectDialog, saveProject } from './state/project';
 import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
 import { LayerSlider, Legend, MoveSlider, PreviewEmpty } from './ui/PreviewOverlays';
@@ -175,6 +176,7 @@ export default function App() {
         {!is3d && <div className="float sh-modes-float"><ModeTabs /></div>}
       </div>
       <Toast />
+      <HolderPromptHost />
       <ContextMenu />
       <PrintDialogHost />
       <PlateSettingsHost />

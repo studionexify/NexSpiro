@@ -9,6 +9,7 @@ import { newId, useStore } from '../state/store';
 import { isDesktop } from '../platform';
 import { Icon } from './icons';
 import { Modal } from './Modals';
+import { HoldersTile } from './FilamentHolders';
 
 const STATE_LABEL: Record<PrinterStatus['state'], string> = {
   offline: 'Offline', connecting: 'Connecting', idle: 'Idle', printing: 'Printing', paused: 'Paused', finished: 'Finished', error: 'Error',
@@ -250,6 +251,7 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
         </div>
         <Controls dev={dev} st={st} online={online} printing={active} />
         {st.ams?.length ? <Ams st={st} /> : null}
+        <HoldersTile deviceKey={dev.id} />
         {st.hms?.length ? (
           <div className="tile">
             <h3 style={{ marginTop: 0 }}>Health (HMS)</h3>

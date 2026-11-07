@@ -45,6 +45,8 @@ export function statusFromReport(p: Record<string, any>): PrinterStatus {
       color: t.tray_color ? `#${String(t.tray_color).slice(0, 6)}` : '',
       remain: t.remain != null && t.remain >= 0 ? Number(t.remain) : undefined,
       active: String(Number(u.id) * 4 + Number(t.id)) === String(p.ams?.tray_now),
+      // a Bambu spool read by the AMS has a non-zero tag / tray UUID; hand-set trays report zeros
+      rfid: /[1-9a-f]/i.test(String(t.tray_uuid ?? '')) || /[1-9a-f]/i.test(String(t.tag_uid ?? '')),
     })),
   }));
   const hms: HmsEntry[] = (p.hms ?? []).map((h: any) => {
