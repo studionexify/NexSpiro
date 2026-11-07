@@ -16,7 +16,8 @@ export interface Fit {
   minPin: number;
 }
 
-export interface FitOverrides { clearance?: number; gap?: number; layer?: number }
+/** nozzle: the nozzle actually fitted (the project's nozzle setting), else the printer's default. */
+export interface FitOverrides { clearance?: number; gap?: number; layer?: number; nozzle?: number }
 
 export function fitFor(nozzle: number, o: FitOverrides = {}): Fit {
   const layer = o.layer ?? Math.min(0.2, nozzle * 0.5);
@@ -39,8 +40,8 @@ export function machineFor(printerId: string, o: FitOverrides = {}): MachineInfo
   const printer = printerById(printerId);
   const ams = autoChanges(printer.machine);
   return {
-    printer, bed: printer.bed, nozzle: printer.nozzle,
+    printer, bed: printer.bed, nozzle: o.nozzle && o.nozzle > 0 ? o.nozzle : printer.nozzle,
     colours: ams ? 16 : 1, multiColour: ams ? 'ams' : 'manual',
-    fit: fitFor(printer.nozzle, o),
+    fit: fitFor(o.nozzle && o.nozzle > 0 ? o.nozzle : printer.nozzle, o),
   };
 }

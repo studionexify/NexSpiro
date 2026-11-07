@@ -22,6 +22,8 @@ export interface BuildRequest {
   manualCuts: Cut[];
   groups: CutGroup[];
   printerId: string;
+  /** The fitted nozzle (project setting); the printer's default when missing. */
+  nozzle?: number;
   clearance: number;
   gap: number;
   paintOps: PaintOp[];
@@ -65,7 +67,7 @@ function importBase(src: IndexedMesh, rot: [number, number, number], scale: numb
 export async function runBuild(req: BuildRequest, cache: BuildCache, progress?: (msg: string) => void): Promise<BuildResult> {
   const t0 = performance.now();
   await initKernel();
-  const mac = machineFor(req.printerId, { clearance: req.clearance || undefined, gap: req.gap || undefined });
+  const mac = machineFor(req.printerId, { clearance: req.clearance || undefined, gap: req.gap || undefined, nozzle: req.nozzle });
   let base: IndexedMesh, stations: Station[] = [], marks: Mark[] = [], chains: Chain[] = [], warnings: string[] = [];
   progress?.(req.source === 'creature' ? 'Shaping the body…' : 'Preparing the model…');
   if (req.source === 'creature') {

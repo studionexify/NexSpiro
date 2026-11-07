@@ -15,6 +15,7 @@ import { patternMask } from '../patternLink';
 import { autoChanges } from '../../../profiles/changer';
 import { registerFilamentLink } from '../../../state/holders';
 import { beginTransfer, endTransfer } from '../../../state/steps';
+import { adaptWall, registerMachineLink } from '../../../state/machineSync';
 import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.plantex.v1';
@@ -252,3 +253,17 @@ export function applyPlateColours(objs: SceneObject[]) {
   changed();
 }
 export function setPlaced(ids: string[]) { pt.placed = ids; }
+
+registerMachineLink({
+  id: 'plantex',
+  label: () => (opened ? `Plantex “${pt.spec.name || 'planter'}”` : null),
+  adapt: (from, to) => {
+    const changes: string[] = [], sp = pt.spec;
+    // spiral vase mode prints one line: its wall follows the line width by itself
+    const wall = sp.vaseMode ? null : adaptWall('Wall', sp.wall, from, to, changes);
+    const saucer = sp.saucer.enabled ? adaptWall('Saucer wall', sp.saucer.wall, from, to, changes) : null;
+    const insert = sp.selfWater.enabled ? adaptWall('Insert wall', sp.selfWater.wall, from, to, changes) : null;
+    return { changes, warnings: [], apply: () => { if (wall !== null) sp.wall = wall; if (saucer !== null) sp.saucer.wall = saucer; if (insert !== null) sp.selfWater.wall = insert; changed(); } };
+  },
+  refresh: () => changed(),
+});

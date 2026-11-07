@@ -3,7 +3,10 @@
 import { useSyncExternalStore } from 'react';
 import { newId, plateOrigin, useStore, type SceneObject } from '../../../state/store';
 import { registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { effectiveNozzle } from '../../../profiles/resolve';
 import { beginTransfer, endTransfer } from '../../../state/steps';
+import { bedWarning, registerMachineLink } from '../../../state/machineSync';
+import { fitFor } from '../fit';
 import { centreOnBed } from '../../../state/ops';
 import { centreMesh } from '../../../io/load';
 import { openEdgeCount, type IndexedMesh } from '../../../engine/mesh';
@@ -128,7 +131,8 @@ export let meshVersion = 0;
 export let paintVersion = 0;
 export let lastError = '';
 
-const machine = () => machineFor(useStore.getState().printerId, { clearance: fx.clearance || undefined, gap: fx.gap || undefined });
+const nozzleNow = () => { const s = useStore.getState(); return effectiveNozzle(s.printerId, s.machineOverrides); };
+const machine = () => machineFor(useStore.getState().printerId, { clearance: fx.clearance || undefined, gap: fx.gap || undefined, nozzle: nozzleNow() });
 export const currentMachine = machine;
 
 export function notify(): void {
@@ -193,7 +197,7 @@ function request(req: BuildRequest): Promise<BuildResult> {
 
 const requestNow = (): BuildRequest => ({
   source: fx.source, design: fx.design, importId, importRot: fx.importRot, importScale: fx.importScale, cutsMode: fx.cutsMode, manualCuts: fx.manualCuts, groups: fx.groups,
-  printerId: useStore.getState().printerId, clearance: fx.clearance, gap: fx.gap, paintOps: fx.paintOps,
+  printerId: useStore.getState().printerId, nozzle: nozzleNow(), clearance: fx.clearance, gap: fx.gap, paintOps: fx.paintOps,
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -407,3 +411,18 @@ export function applyPlateColours(objs: SceneObject[]) {
   notify();
 }
 export function setPlaced(ids: string[]) { fx.placed = ids; }
+
+registerMachineLink({
+  id: 'flenex',
+  label: () => (opened ? `Flenex “${baseName()}”` : null),
+  adapt: (from, to) => {
+    const changes: string[] = [], warnings: string[] = [];
+    if (!fx.clearance) {
+      const a = fitFor(from.nozzle).clearance, b = fitFor(to.nozzle).clearance;
+      if (Math.abs(a - b) > 0.005) changes.push(`Joint clearance ${a.toFixed(2)} → ${b.toFixed(2)} mm (follows the nozzle)`);
+    }
+    if (built) { const v = built.flexi.mesh.vertices; const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < v.length; i++) { lo[i % 3] = Math.min(lo[i % 3], v[i]); hi[i % 3] = Math.max(hi[i % 3], v[i]); } const w = bedWarning('The flexi', [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]], to); if (w) warnings.push(w); }
+    return { changes, warnings };
+  },
+  refresh: () => schedule(),
+});

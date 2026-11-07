@@ -18,6 +18,8 @@ import { BooleanPanel, CutPanel, EdgesPanel, MeasurePanel, TextPanel } from './u
 import { PrintDialogHost, openPrintDialog } from './ui/PrintModal';
 import { HolderPromptHost } from './ui/FilamentHolders';
 import { StepPromptHost } from './ui/StepPrompt';
+import { MachinePromptHost } from './ui/MachinePrompt';
+import { startMachineSync } from './state/machineSync';
 import { startStepTracking } from './state/steps';
 import { openProjectDialog, saveProject } from './state/project';
 import { BrimEarsPanel, LiveChip, ObjectInfo, PaintPanel, Toolbar, TransformPanel, ViewCube, VlhPanel } from './ui/PrepareOverlays';
@@ -42,7 +44,7 @@ import { AdvPaintPanel } from './ui/advanced/AdvPaintPanel';
 function Toast() {
   const { toast, set } = useStore();
   // Reconnect saved printers as soon as NexSpiro opens.
-  useEffect(() => { startAutoFilamentSync(); startStepTracking(); void initDevices(); }, []);
+  useEffect(() => { startAutoFilamentSync(); startStepTracking(); startMachineSync(); void initDevices(); }, []);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => set({ toast: null }), toast.kind === 'error' ? 9000 : 5000);
@@ -180,6 +182,7 @@ export default function App() {
       <Toast />
       <HolderPromptHost />
       <StepPromptHost />
+      <MachinePromptHost />
       <ContextMenu />
       <PrintDialogHost />
       <PlateSettingsHost />

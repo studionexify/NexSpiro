@@ -9,6 +9,7 @@ import { newId, objectPlate, useStore, type SceneObject } from '../../../state/s
 import { printerById } from '../../../profiles/printers';
 import { registerFilamentLink, slotForFilament } from '../../../state/holders';
 import { beginTransfer, endTransfer } from '../../../state/steps';
+import { adaptWall, bedWarning, registerMachineLink } from '../../../state/machineSync';
 import { artColors, artFromIcon, artFromImage, artFromSvg, artFromText, type Art } from '../art';
 import { buildClicker, printParts, type BuiltClicker, type Part } from '../build';
 import { build3mf } from '../export3mf';
@@ -433,3 +434,17 @@ export function applyPlateColours(objs: SceneObject[]) {
 }
 /** The plate objects this design replaces on the next send. */
 export function setPlaced(ids: string[]) { cx.placed = ids; }
+
+registerMachineLink({
+  id: 'clickex',
+  label: () => (opened ? `Clickex “${cx.spec.name || 'clicker'}”` : null),
+  adapt: (from, to) => {
+    const changes: string[] = [], warnings: string[] = [];
+    const wall = adaptWall('Button wall', cx.spec.body.wall, from, to, changes);
+    const rim = adaptWall('Rim wall', cx.spec.body.rimWall, from, to, changes);
+    const c = compute();
+    if (c.built) { const w = bedWarning('The clicker', c.built.report.size, to); if (w) warnings.push(w); }
+    return { changes, warnings, apply: () => edit((x) => { if (wall !== null) x.body.wall = wall; if (rim !== null) x.body.rimWall = rim; }) };
+  },
+  refresh: () => changed(),
+});

@@ -14,6 +14,7 @@ import { defaultDesign, type LampDesign } from '../model';
 import { createHistory } from '../../../ui/studio/history';
 import { colourDistance, registerFilamentLink, slotForFilament } from '../../../state/holders';
 import { beginTransfer, endTransfer } from '../../../state/steps';
+import { adaptWall, bedWarning, registerMachineLink } from '../../../state/machineSync';
 import { materialForPreset, swatch } from '../catalog';
 
 const KEY = 'nexspiro.lumonex.v1';
@@ -340,3 +341,15 @@ export function applyPlateColours(objs: SceneObject[]) {
   changed();
 }
 export function setPlaced(ids: string[]) { lx.placed = ids; }
+
+registerMachineLink({
+  id: 'lumonex',
+  label: () => (opened ? `Lumonex “${lx.design.name || 'lamp'}”` : null),
+  adapt: (from, to) => {
+    const changes: string[] = [], warnings: string[] = [];
+    const walls = lx.design.sections.map((sec) => adaptWall(`${sec.name} wall`, sec.shape.wall, from, to, changes));
+    for (const sec of lx.design.sections) { const w = bedWarning(sec.name, [sec.shape.diameter, sec.shape.diameter, sec.shape.height], to); if (w) warnings.push(w); }
+    return { changes, warnings, apply: () => { lx.design.sections.forEach((sec, i) => { const w = walls[i]; if (w !== null) sec.shape.wall = w; }); changed(); } };
+  },
+  refresh: () => changed(),
+});
