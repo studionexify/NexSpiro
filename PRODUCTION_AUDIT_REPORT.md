@@ -90,4 +90,12 @@
 
 ## Build and test verification
 
-See the commit message and the final section below for the outputs of `npx tsc --noEmit` and `npx vitest run`.
+```
+$ npx tsc --noEmit
+(no errors)
+
+$ npx vitest run
+ Test Files  106 passed | 1 skipped (107)
+      Tests  2397 passed | 1 skipped (2398)
+```
+No regressions: 2395 tests passed before the changes, and 2397 pass after, counting the 2 new macro tests.
