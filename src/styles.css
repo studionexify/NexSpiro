@@ -1086,3 +1086,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cx-colour-row { display: flex; align-items: center; gap: 6px; }
 .cx-colour-row .cx-orig { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); flex: none; }
 .fx-sw.unloaded { outline: 2px dashed var(--warning); outline-offset: 1px; }
+.cx-edge { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 4px; }
+.cx-edge-sketch polygon { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.2; stroke-linejoin: round; }

@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { artToSvg } from '../art';
 import { BASE_SHAPES, baseShapePaths } from '../catalog';
 import { effectiveSwitch } from '../plan';
-import { LAYOUTS, type BlockLayout, type ClickexSpec, type DesignMode, type ModelCut } from '../model';
+import { LAYOUTS, type BlockLayout, type ClickexSpec, type DesignMode, type EdgeKind, type EdgeProfile, type ModelCut } from '../model';
+import { clampEdge, edgeInset } from '../build';
 import { fontList } from '../../patternex/tools/text';
 import { SWITCHES } from '../catalog';
 import { Cards, Ico, Note, Row, Seg, Slider, Toggle } from './controls';
@@ -95,6 +96,42 @@ function ShapePanel() {
   );
 }
 
+/** Side view of an edge profile: the part's corner, top face up, outside to the right. */
+function EdgeSketch({ p }: { p: EdgeProfile }) {
+  const W = 56, H = 34, pad = 4, sx = (W - 2 * pad) / Math.max(p.width, p.height, 0.5) * 0.6, x0 = W - pad, y0 = pad;
+  const pts: [number, number][] = [[pad, y0]];
+  const q = clampEdge(p, 99, 99);
+  if (q.kind === 'none') pts.push([x0, y0], [x0, H - pad]);
+  else {
+    const n = 40;
+    for (let j = 0; j <= n; j++) { const d = (q.height * j) / n; const e = edgeInset(q, Math.min(d, q.height - 1e-6)); pts.push([x0 - e * sx, y0 + d * sx]); if (q.kind === 'step' && j < n) { const d2 = (q.height * (j + 1)) / n; const e2 = edgeInset(q, Math.min(d2, q.height - 1e-6)); if (e2 !== e) pts.push([x0 - e * sx, y0 + d2 * sx]); } }
+    pts.push([x0, y0 + q.height * sx], [x0, H - pad]);
+  }
+  pts.push([pad, H - pad]);
+  return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="cx-edge-sketch" aria-hidden><polygon points={pts.map((p) => p.join(',')).join(' ')} /></svg>;
+}
+
+const EDGE_KINDS: [EdgeKind, string][] = [['none', 'Square'], ['fillet', 'Fillet'], ['chamfer', 'Chamfer'], ['step', 'Steps']];
+
+/** Edge profile of the button or the base: kind and its sizes. */
+function EdgeEditor({ label, which, maxH, help }: { label: string; which: 'capEdge' | 'baseEdge'; maxH: number; help: string }) {
+  const p = cx.spec.body[which];
+  const set = (f: (e: EdgeProfile) => void, tag = '') => edit((x) => { f(x.body[which]); if (which === 'capEdge') x.body.capRound = x.body.capEdge.kind === 'fillet' ? x.body.capEdge.width : 0; }, tag && `${which}-${tag}`);
+  return (
+    <div className="cx-edge">
+      <Row label={label} help={help} right={<EdgeSketch p={p} />}>
+        <Seg value={p.kind} options={EDGE_KINDS} set={(v) => set((e) => { e.kind = v; })} />
+      </Row>
+      {p.kind === 'fillet' && <Slider label="Radius" value={p.width} min={0.2} max={Math.max(0.4, Math.min(4, maxH))} step={0.1} unit="mm" tag={`${which}-r`} set={(v) => set((e) => { e.width = v; e.height = v; }, 'r')} />}
+      {(p.kind === 'chamfer' || p.kind === 'step') && <>
+        <Slider label={p.kind === 'step' ? 'Total width' : 'Width'} value={p.width} min={0.2} max={5} step={0.1} unit="mm" tag={`${which}-w`} help="How far the edge reaches in from the side." set={(v) => set((e) => { e.width = v; }, 'w')} />
+        <Slider label={p.kind === 'step' ? 'Total height' : 'Height'} value={Math.min(p.height, maxH)} min={0.2} max={Math.max(0.4, maxH)} step={0.1} unit="mm" tag={`${which}-h`} help="How far down the edge reaches." set={(v) => set((e) => { e.height = v; }, 'h')} />
+      </>}
+      {p.kind === 'step' && <Slider label="Steps" value={p.steps} min={1} max={8} step={1} tag={`${which}-n`} help="Number of ledges; each is one even part of the width and height." set={(v) => set((e) => { e.steps = Math.round(v); }, 'n')} />}
+    </div>
+  );
+}
+
 function BodyPanel() {
   const s = cx.spec, b = s.body;
   return (
@@ -102,7 +139,8 @@ function BodyPanel() {
       <div className="cx-title">Body</div>
       <Slider label="Button wall" value={b.wall} min={0.8} max={3} step={0.1} unit="mm" tag="wall" help="Wall of the button's skirt." set={(v) => edit((x) => { x.body.wall = v; }, 'wall')} />
       <Slider label="Button top" value={b.capTop} min={1.2} max={3.2} step={0.1} unit="mm" tag="captop" help="Thickness of the button's top plate (the coloured layer is cut into it)." set={(v) => edit((x) => { x.body.capTop = v; }, 'captop')} />
-      <Slider label="Button edge rounding" value={b.capRound} min={0} max={Math.min(3, b.capTop)} step={0.1} unit="mm" tag="capround" set={(v) => edit((x) => { x.body.capRound = v; }, 'capround')} />
+      <EdgeEditor label="Button top edge" which="capEdge" maxH={b.capTop} help="Shape of the button's top edge: a round, a straight bevel or a stair of ledges." />
+      <EdgeEditor label="Base top edge" which="baseEdge" maxH={6} help="Shape of the base's top edge around the buttons." />
       <Slider label="Corner rounding" value={b.baseRound} min={0} max={8} step={0.1} unit="mm" tag="baseround" help="Rounds the corners of the outline in plan view." set={(v) => edit((x) => { x.body.baseRound = v; }, 'baseround')} />
       <Slider label="Rim wall" value={b.rimWall} min={0.8} max={2.5} step={0.1} unit="mm" tag="rim" help="The ring the button slides over; it hides the gap." set={(v) => edit((x) => { x.body.rimWall = v; }, 'rim')} />
       <Toggle label="Hide the gap" value={b.hideGap} help="Prints the rim in the button's colour so the gap under the button looks like part of the button." set={(v) => edit((x) => { x.body.hideGap = v; })} />

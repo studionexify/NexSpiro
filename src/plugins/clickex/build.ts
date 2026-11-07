@@ -10,7 +10,7 @@ import type { Paths } from '../../engine/types';
 import { meshVolume } from '../../engine/mesh';
 import type { Art } from './art';
 import { boundsMm, circlePath, crossPaths, flipOnBed, grow, isEmpty, meshOfShells, netArea, prism, rectPath, shrink, type PartMesh, type Shell } from './geom';
-import type { ClickexSpec } from './model';
+import type { ClickexSpec, EdgeProfile } from './model';
 import { effectiveSwitch, rimInset, pocketSize, type Plan, type Unit } from './plan';
 
 export interface Heights {
@@ -68,6 +68,45 @@ const PLA = 1.24e-3; // g per mm³
 export const mapColor = (spec: ClickexSpec, hex: string) => (spec.colors.map[hex.toLowerCase()] ?? hex).toLowerCase();
 
 
+/* ---------- edge profiles (button top edge, base top edge) */
+
+/** The profile fitted to the part: no wider than maxW, no deeper than maxH (a fillet is round: width = height). */
+export function clampEdge(p: EdgeProfile, maxW: number, maxH: number): EdgeProfile {
+  const w = Math.max(0, Math.min(p.width, maxW)), h = Math.max(0, Math.min(p.height, maxH));
+  if (p.kind === 'none' || w < 0.05 || (p.kind !== 'fillet' && h < 0.05)) return { ...p, kind: 'none', width: 0, height: 0 };
+  if (p.kind === 'fillet') { const r = Math.min(w, Math.max(0, maxH)); return r < 0.05 ? { ...p, kind: 'none', width: 0, height: 0 } : { ...p, width: r, height: r }; }
+  return { ...p, width: w, height: h, steps: Math.max(1, Math.min(8, Math.round(p.steps))) };
+}
+
+/** How far the outline is moved in at depth d below the top face (0 at the top, 0 below the profile). */
+export function edgeInset(p: EdgeProfile, d: number): number {
+  if (p.kind === 'none' || d < 0 || d >= p.height) return 0;
+  if (p.kind === 'fillet') { const r = p.width, t = r - d; return r - Math.sqrt(Math.max(0, r * r - t * t)); }
+  if (p.kind === 'chamfer') return p.width * (1 - d / p.height);
+  const n = p.steps, i = Math.min(n - 1, Math.floor(d / (p.height / n)));
+  return (p.width * (n - i)) / n;
+}
+
+/** Depths below the top where the profile changes: slab boundaries. */
+export function edgeCuts(p: EdgeProfile): number[] {
+  if (p.kind === 'none') return [];
+  const n = p.kind === 'step' ? p.steps : p.kind === 'fillet' ? 6 : Math.max(2, Math.min(12, Math.ceil(p.height / 0.15)));
+  return Array.from({ length: n + 1 }, (_, j) => (p.height * j) / n);
+}
+
+/** Splits [z0, z1] where a profile hanging down from `top` changes; returns slabs with their inset. */
+function profiledSlabs(p: EdgeProfile, top: number, z0: number, z1: number, extra: number[] = []): { za: number; zb: number; e: number }[] {
+  const cuts = new Set<number>([z0, z1, ...extra.filter((z) => z > z0 && z < z1)]);
+  for (const c of edgeCuts(p)) { const z = top - c; if (z > z0 + 1e-9 && z < z1 - 1e-9) cuts.add(z); }
+  const zs = [...cuts].sort((a, b) => a - b), out: { za: number; zb: number; e: number }[] = [];
+  for (let i = 0; i + 1 < zs.length; i++) {
+    const za = zs[i], zb = zs[i + 1];
+    if (zb - za < 0.02) continue;
+    out.push({ za, zb, e: edgeInset(p, top - (za + zb) / 2) });
+  }
+  return out;
+}
+
 export function baseShells(spec: ClickexSpec, plan: Plan, H: Heights): Shell[] {
   const sw = effectiveSwitch(spec), tol = spec.fit.switchTol, out: Shell[] = [];
   const { base, loop, units } = plan;
@@ -75,10 +114,19 @@ export function baseShells(spec: ClickexSpec, plan: Plan, H: Heights): Shell[] {
   const holes = units.map((u) => rectPath(u.cx, u.cy, sw.cutout + tol, sw.cutout + tol, u.angle));
   const pockets = units.map((u) => rectPath(u.cx, u.cy, pocketSize(spec), pocketSize(spec), u.angle));
   const add = (paths: Paths, z0: number, z1: number, slot = 0) => out.push({ soup: prism(paths, z0, z1), slot });
-  if (H.floor > 0 && spec.body.floor === 'solid') add(base, 0, H.floor);
-  add(difference(base, wells), H.floor, H.plateBottom);
-  add(difference(base, holes), H.plateBottom, H.plateTop);
-  add(difference(base, pockets), H.plateTop, H.shoulder);
+  // the base's top edge profile runs down from the shoulder through every layer it reaches
+  const bb = boundsMm(base);
+  const edge = clampEdge(spec.body.baseEdge, 0.45 * Math.min(bb.w, bb.h), Math.max(0, H.shoulder - 0.4));
+  const layer = (inner: Paths | null, z0: number, z1: number) => {
+    for (const { za, zb, e } of profiledSlabs(edge, H.shoulder, z0, z1)) {
+      const outer = e > 0.001 ? shrink(base, e) : base;
+      add(inner ? difference(outer, inner) : outer, za, zb);
+    }
+  };
+  if (H.floor > 0 && spec.body.floor === 'solid') layer(null, 0, H.floor);
+  layer(wells, H.floor, H.plateBottom);
+  layer(holes, H.plateBottom, H.plateTop);
+  layer(pockets, H.plateTop, H.shoulder);
   // rim: a ring per button, inside the button's skirt; coloured like the button when the gap is hidden
   const inset = rimInset(spec);
   const rims = units.flatMap((u) => difference(shrink(u.cap, inset), shrink(u.cap, inset + spec.body.rimWall)));
@@ -93,22 +141,16 @@ export function capShells(spec: ClickexSpec, H: Heights, u: Unit, palette: strin
   const sw = effectiveSwitch(spec), b = spec.body, c = spec.colors;
   const out: Shell[] = [];
   const add = (paths: Paths, z0: number, z1: number, slot = 0) => { if (paths.length) out.push({ soup: prism(paths, z0, z1), slot }); };
-  const top = H.capTop, R = Math.max(0, Math.min(b.capRound, b.capTop, 0.45 * Math.min(boundsMm(u.cap).w, boundsMm(u.cap).h)));
+  const top = H.capTop, cb = boundsMm(u.cap);
+  const edge = clampEdge(b.capEdge, 0.45 * Math.min(cb.w, cb.h), b.capTop);
+  const topInset = edgeInset(edge, 0);
   const inlay = c.mode === 'raise' ? 0 : Math.min(c.inlay, b.capTop);
   const groups = u.art.map((g) => ({ slot: Math.max(0, palette.indexOf(mapColor(spec, g.color))), paths: g.paths }));
   const everything = union(groups.flatMap((g) => g.paths));
 
-  // top plate in slabs: full outline, then the rounded edge; the inlay zone is split by colour
-  const K = R > 0.05 ? 4 : 0;
-  const cuts = new Set<number>([H.ceil, top]);
-  if (inlay > 0) cuts.add(top - inlay);
-  for (let j = 0; j <= K; j++) cuts.add(top - R + (R * j) / Math.max(1, K));
-  const zs = [...cuts].filter((z) => z >= H.ceil - 1e-9 && z <= top + 1e-9).sort((p, q) => p - q);
-  for (let i = 0; i + 1 < zs.length; i++) {
-    const za = zs[i], zb = zs[i + 1], zm = (za + zb) / 2;
-    if (zb - za < 0.02) continue;
-    const t = zm - (top - R);
-    const e = R > 0 && t > 0 ? R - Math.sqrt(Math.max(0, R * R - t * t)) : 0;
+  // top plate in slabs: full outline, then the edge profile; the inlay zone is split by colour
+  for (const { za, zb, e } of profiledSlabs(edge, top, H.ceil, top, inlay > 0 ? [top - inlay] : [])) {
+    const zm = (za + zb) / 2;
     const outline = e > 0.001 ? shrink(u.cap, e) : u.cap;
     if (zm > top - inlay && c.mode === 'color' && groups.length) {
       const used: Paths[] = [];
@@ -119,7 +161,7 @@ export function capShells(spec: ClickexSpec, H: Heights, u: Unit, palette: strin
     } else add(outline, za, zb, 0);
   }
   if (c.mode === 'raise') {
-    const face = R > 0 ? shrink(u.cap, R) : u.cap;
+    const face = topInset > 0.001 ? shrink(u.cap, topInset) : u.cap;
     for (const g of groups) add(intersection(g.paths, face), top, top + c.raise, g.slot);
   }
   // skirt: slides over the base's rim
