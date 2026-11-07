@@ -119,7 +119,7 @@ ${objs.map((o, i) => `  <item objectid="${i + 1}" transform="${xform(o)}"/>`).jo
     objects: objs.map((o, i) => ({
       id: o.id, name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges,
       filament: o.filament, overrides: o.overrides, layerHeights: o.layerHeights, printable: o.printable, patternex: o.patternex, meshIndex: i, faceGroups: objs[i].mesh.faceGroups ? u32(objs[i].mesh.faceGroups!) : undefined, groupKind: objs[i].mesh.groupKind,
-      heightRanges: o.heightRanges, brimEars: o.brimEars, hidden: o.hidden, prim: o.prim,
+      heightRanges: o.heightRanges, brimEars: o.brimEars, hidden: o.hidden, prim: o.prim, steps: o.steps,
       parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type, position: p.position, rotation: p.rotation, scale: p.scale, overrides: p.overrides, prim: p.prim, v: f32(p.mesh.vertices), i: u32(p.mesh.indices) })),
       paint: o.paint ? Object.fromEntries(Object.entries(o.paint).filter(([, a]) => a).map(([k, a]) => [k, b64(a as Uint8Array)])) : undefined,
     })),
@@ -166,7 +166,7 @@ export async function loadProject(data: ArrayBuffer) {
   const objects: SceneObject[] = json.objects.map((o) => ({
     id: o.id || newId(), name: o.name, position: o.position, rotation: o.rotation, scale: o.scale, openEdges: o.openEdges ?? 0,
     filament: o.filament, overrides: o.overrides ? migrateConfig(o.overrides, json.version) : undefined, layerHeights: o.layerHeights, printable: o.printable,
-    heightRanges: o.heightRanges?.map((r) => ({ ...r, overrides: migrateConfig(r.overrides, json.version) })), brimEars: o.brimEars, hidden: o.hidden, prim: o.prim,
+    heightRanges: o.heightRanges?.map((r) => ({ ...r, overrides: migrateConfig(r.overrides, json.version) })), brimEars: o.brimEars, hidden: o.hidden, prim: o.prim, steps: Array.isArray(o.steps) ? o.steps : undefined,
     patternex: o.patternex ?? legacyPatternex(json.patternex, o.id),
     mesh: o.faceGroups ? { ...meshes[o.meshIndex], faceGroups: toU32(o.faceGroups), ...(o.groupKind ? { groupKind: o.groupKind } : {}) } : meshes[o.meshIndex],
     parts: o.parts?.map((p) => ({ id: p.id, name: p.name, type: p.type as any, position: p.position as any, rotation: p.rotation as any, scale: p.scale as any, overrides: p.overrides ?? {}, prim: p.prim, mesh: { vertices: toF32(p.v), indices: toU32(p.i) } })),

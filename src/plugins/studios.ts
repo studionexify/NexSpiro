@@ -3,6 +3,7 @@
 import { openStudio as openLumonex } from './lumonex/ui/state';
 import { openStudio as openClickex } from './clickex/ui/state';
 import { openStudio as openFlenex } from './flenex/ui/state';
+import { openStudio as openPlantex } from './plantex/ui/state';
 import { PLUGINS } from './registry';
 import { openMotionStudio } from './motionex/ui/studioWindow';
 import { openPatternexStudio } from './patternex/ui/chartStudio';
@@ -13,6 +14,7 @@ const STUDIOS: Record<string, { label: string; open: () => void; about: string }
   lumonex: { label: 'Lumonex Studio', open: () => openLumonex(true), about: 'Full-screen lamp designer.' },
   clickex: { label: 'Clickex Studio', open: () => openClickex(true), about: 'Full-screen snap-fit and joint designer.' },
   flenex: { label: 'Flenex Studio', open: () => openFlenex(true), about: 'Full-screen flexure designer.' },
+  plantex: { label: 'Plantex Studio', open: () => openPlantex(true), about: 'Full-screen planter and vase designer.' },
 };
 
 /** The plugin's Studio, or null when it only has its settings bar. */

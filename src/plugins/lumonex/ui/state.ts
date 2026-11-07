@@ -13,6 +13,7 @@ import { translate, toMesh, bounds, type Soup } from '../geom';
 import { defaultDesign, type LampDesign } from '../model';
 import { createHistory } from '../../../ui/studio/history';
 import { colourDistance, registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { beginTransfer, endTransfer } from '../../../state/steps';
 import { materialForPreset, swatch } from '../catalog';
 
 const KEY = 'nexspiro.lumonex.v1';
@@ -226,6 +227,7 @@ export interface TransferResult { objects: number; plates: { index: number; name
 export function transferToPlate(): TransferResult {
   const s = useStore.getState();
   s.checkpoint();
+  const tx = beginTransfer('lumonex', lx.placed);
   clearPrevious();
   const result = buildLamp(lx.design, bedOf());
   const groups = groupByFilament(result.parts);
@@ -253,6 +255,7 @@ export function transferToPlate(): TransferResult {
     }
   }
   lx.placed = all;
+  endTransfer(tx, all, projectData(), (old) => { lx.placed = old; changed(false); });
   lx.plates = platesOut.map((p) => useStore.getState().plates[p.index].id);
   lx.mode = 'print';
   useStore.getState().set({ activePlate: platesOut[0]?.index ?? 0, workspace: 'prepare' } as never);
@@ -323,3 +326,17 @@ export function loadProject(data: unknown): void {
   changed();
   undoHistory.reset();
 }
+
+/** Plate → design: a part whose filament was changed on the plate takes that filament in the design. */
+export function applyPlateColours(objs: SceneObject[]) {
+  const f = useStore.getState().filaments;
+  for (const o of objs) {
+    const slot = o.filament !== undefined ? f[o.filament] : undefined;
+    if (!slot) continue;
+    const sec = lx.design.sections.find((x) => o.name.includes(`· ${x.name}`));
+    if (sec) { sec.color = slot.color; sec.material = materialForPreset(slot.presetId, sec.material); }
+  }
+  opened = true;
+  changed();
+}
+export function setPlaced(ids: string[]) { lx.placed = ids; }

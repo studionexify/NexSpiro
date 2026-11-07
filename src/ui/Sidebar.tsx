@@ -13,6 +13,8 @@ import { amsUnavailableReason, syncAmsFromPrinter } from '../state/amsSync';
 import { useDevices } from '../state/devices';
 import { activeKey, relink, useHolders } from '../state/holders';
 import { HolderBadge } from './FilamentHolders';
+import { generatorOf, stepLabel, stepsOf } from '../state/steps';
+import { editStep } from '../plugins/stepEdit';
 import { isOutOfBounds, objectPlate, slotColor, useStore } from '../state/store';
 import { updateHeightRange, updatePart } from '../state/ops';
 import { isWaveZone } from '../plugins/motionex/weave/zones';
@@ -448,6 +450,10 @@ export function ObjectsCard() {
                         <Icon name={o.hidden ? 'eyeOff' : 'eye'} size={13} />
                       </button>
                       <span className="name" title={o.name}>{o.name}</span>
+                      {stepsOf(o).map((st, i) => (
+                        <button key={st.plugin + i} className={`badge step ${generatorOf(o) === st ? 'gen' : ''}`} title={`${i === 0 && generatorOf(o) ? 'Made with' : 'Then'} ${stepLabel(st.plugin)} — click to edit in its Studio`}
+                          onClick={(e) => { e.stopPropagation(); editStep(o, st); }}>{stepLabel(st.plugin).slice(0, 2)}</button>
+                      ))}
                       {paintBadges(o).map(([k, t]) => <span key={k} className="badge paint" title={t}>{k}</span>)}
                       {o.layerHeights && <span className="badge" title="Variable layer height">VLH</span>}
                       {o.openEdges > 0 && <span className="warn" title={`${o.openEdges} open edges — mesh is not watertight`}><Icon name="warn" size={14} /></span>}

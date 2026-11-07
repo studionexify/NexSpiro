@@ -1,4 +1,5 @@
 // Application state (zustand). Scene objects are immutable records; meshes are shared by reference.
+import type { PluginStep } from './steps';
 import type { CalibProgram } from '../engine/calibGcode';
 import type { MeasureFeature, MeasureMode } from './measure';
 import type { BrushType } from '../engine/brush';
@@ -67,6 +68,8 @@ export interface SceneObject {
   brimEars?: [number, number, number?][];
   /** Hidden in the 3D view (object list eye); still sliced unless not printable. */
   hidden?: boolean;
+  /** Plugins that made this object and were applied to it, in order (each can be reopened in its Studio). */
+  steps?: PluginStep[];
 }
 
 export interface HeightRange { id: string; z0: number; z1: number; overrides: Config }

@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { newId, plateOrigin, useStore, type SceneObject } from '../../../state/store';
 import { registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { beginTransfer, endTransfer } from '../../../state/steps';
 import { centreOnBed } from '../../../state/ops';
 import { centreMesh } from '../../../io/load';
 import { openEdgeCount, type IndexedMesh } from '../../../engine/mesh';
@@ -349,6 +350,7 @@ export function sendToPlate(): { objects: number; colours: number } | null {
   if (!built) return null;
   const s = useStore.getState();
   s.checkpoint();
+  const tx = beginTransfer('flenex', fx.placed);
   s.set({ objects: s.objects.filter((o) => !fx.placed.includes(o.id)), selected: [] });
   const mesh = { vertices: built.flexi.mesh.vertices.slice(), indices: built.flexi.mesh.indices.slice() };
   centreMesh(mesh);
@@ -363,6 +365,7 @@ export function sendToPlate(): { objects: number; colours: number } | null {
   const placed = centreOnBed(o, s.printerId, s.activePlate);
   useStore.setState({ objects: [...useStore.getState().objects, placed], selected: [placed.id] });
   fx.placed = [placed.id];
+  endTransfer(tx, fx.placed, projectData(), (old) => { fx.placed = old; notify(); });
   s.set({ workspace: 'prepare' } as never);
   s.markDirty();
   fx.studioOpen = false;
@@ -394,3 +397,13 @@ export function loadProject(data: unknown): void {
 }
 
 void plateOrigin;
+
+/** Plate → design: the flexi's main filament changed on the plate becomes its first colour. */
+export function applyPlateColours(objs: SceneObject[]) {
+  const o = objs[0], c = o?.filament !== undefined ? useStore.getState().filaments[o.filament]?.color : undefined;
+  const used = coloursUsed();
+  if (c && used.length) fx.palette = fx.palette.map((x, i) => (i === used[0] - 1 ? c : x));
+  opened = true;
+  notify();
+}
+export function setPlaced(ids: string[]) { fx.placed = ids; }

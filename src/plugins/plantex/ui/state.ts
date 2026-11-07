@@ -14,6 +14,7 @@ import { paintBody } from '../paint';
 import { patternMask } from '../patternLink';
 import { autoChanges } from '../../../profiles/changer';
 import { registerFilamentLink } from '../../../state/holders';
+import { beginTransfer, endTransfer } from '../../../state/steps';
 import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.plantex.v1';
@@ -142,6 +143,7 @@ export function transferToPlate(asNew = false): string[] {
   const keyOf = (p: PartBuild) => slotsOf(p).map((k) => `filament ${k + 1} (${typeOf(k)} ${s.filaments[k]?.color ?? ''})`).join(' + ');
 
   s.checkpoint();
+  const tx = beginTransfer('plantex', asNew ? [] : pt.placed);
   if (!asNew && pt.placed.length) {
     const gone = new Set(pt.placed);
     s.set({ objects: s.objects.filter((o) => !gone.has(o.id)) });
@@ -202,6 +204,7 @@ export function transferToPlate(asNew = false): string[] {
   s.set({ activePlate: home, selected: placed, selectedPart: null });
   s.markDirty();
   pt.placed = asNew ? [...pt.placed, ...placed] : placed;
+  endTransfer(tx, placed, plantexProject(), (old) => { pt.placed = old; changed(false); });
   pt.warnings = warnings;
   pt.lastTransfer = lines.join('\n');
   changed(false);
@@ -235,3 +238,17 @@ export function loadPlantexProject(d: unknown) {
   changed();
   undoHistory.reset();
 }
+
+/** Plate → design: a part whose filament was changed on the plate takes that slot in the design. */
+export function applyPlateColours(objs: SceneObject[]) {
+  const f = pt.spec.filaments, name = pt.spec.name;
+  for (const o of objs) {
+    if (o.filament === undefined) continue;
+    if (o.name === `${name} saucer`) f.saucer = o.filament;
+    else if (o.name === `${name} insert`) f.insert = o.filament;
+    else if (o.name === name) f.body = o.filament;
+  }
+  opened = true;
+  changed();
+}
+export function setPlaced(ids: string[]) { pt.placed = ids; }

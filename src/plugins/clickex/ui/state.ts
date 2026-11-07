@@ -8,6 +8,7 @@ import { addPlate, arrange, centreOnBed } from '../../../state/ops';
 import { newId, objectPlate, useStore, type SceneObject } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
 import { registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { beginTransfer, endTransfer } from '../../../state/steps';
 import { artColors, artFromIcon, artFromImage, artFromSvg, artFromText, type Art } from '../art';
 import { buildClicker, printParts, type BuiltClicker, type Part } from '../build';
 import { build3mf } from '../export3mf';
@@ -333,6 +334,7 @@ export function transferToPlate(label = 'Clickex'): { count: number; plate: stri
   if (!c.built || !c.built.parts.length) { say('Nothing to place yet: pick a design first.'); return null; }
   const s = useStore.getState();
   s.checkpoint();
+  const tx = beginTransfer('clickex', cx.placed);
   const gone = new Set(cx.placed);
   if (gone.size) s.set({ objects: s.objects.filter((o) => !gone.has(o.id)) });
   let st = useStore.getState();
@@ -347,6 +349,7 @@ export function transferToPlate(label = 'Clickex'): { count: number; plate: stri
   st.set({ activePlate: plate, selected: objs.map((o) => o.id), selectedPart: null, workspace: 'prepare' } as never);
   st.markDirty();
   cx.placed = objs.map((o) => o.id);
+  endTransfer(tx, cx.placed, clickexProject(), (old) => { cx.placed = old; changed(false); });
   changed(false);
   return { count: objs.length, plate: useStore.getState().plates[plate].name };
 }
@@ -415,3 +418,18 @@ export function loadClickexProject(d: unknown) {
 }
 
 export { meshBounds };
+
+/** Plate → design: filaments changed on the plate objects this design placed come back into the design. */
+export function applyPlateColours(objs: SceneObject[]) {
+  const f = useStore.getState().filaments;
+  for (const o of objs) {
+    const c = o.filament !== undefined ? f[o.filament]?.color : undefined;
+    if (!c) continue;
+    if (/· Base\b/.test(o.name)) cx.spec.colors.base = c;
+    else if (/· Button\b/.test(o.name)) cx.spec.colors.button = c;
+  }
+  opened = true;
+  changed();
+}
+/** The plate objects this design replaces on the next send. */
+export function setPlaced(ids: string[]) { cx.placed = ids; }

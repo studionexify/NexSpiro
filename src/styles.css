@@ -1088,3 +1088,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fx-sw.unloaded { outline: 2px dashed var(--warning); outline-offset: 1px; }
 .cx-edge { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 4px; }
 .cx-edge-sketch polygon { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.2; stroke-linejoin: round; }
+.badge.step { cursor: pointer; font-size: 9.5px; padding: 0 4px; border: 1px solid var(--border); background: transparent; color: inherit; }
+.badge.step.gen { border-color: var(--accent); color: var(--accent); }
+.badge.step:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }

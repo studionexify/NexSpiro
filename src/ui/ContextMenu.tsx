@@ -18,6 +18,8 @@ import { Icon, ShapeIcon } from './icons';
 import type { PartType } from '../engine/types';
 import { applyMotionToObjects } from '../plugins/motionex/ui/MotionexPanel';
 import { editObjectArtwork, openPatternLibrary } from '../plugins/patternex/ui/PatternexPanel';
+import { generatorOf, stepLabel, stepsOf } from '../state/steps';
+import { editStep } from '../plugins/stepEdit';
 
 export interface MenuItem {
   label?: string;
@@ -129,6 +131,11 @@ function objectItems(m: ContextMenuState): MenuItem[] {
       { label: `Edit inks and placement${placed ? ` (${placed})` : ''}`, disabled: !placed, onClick: () => editObjectArtwork(ids[0]) },
       { label: 'Remove artwork', disabled: !placed, onClick: () => s.updateObjects((o) => ({ ...o, patternex: undefined }), ids) },
     ] });
+  }
+  // plugin steps of this object: reopen any of them in its Studio
+  const steps = one ? stepsOf(one) : [];
+  if (one && steps.length) {
+    items.push({ sep: true }, ...steps.map((st, i) => ({ label: `${i === 0 && generatorOf(one) ? 'Edit design in' : 'Edit'} ${stepLabel(st.plugin)} Studio`, icon: 'edit' as const, onClick: () => editStep(one, st) })));
   }
   items.push({ sep: true }, { label: 'Export as STL…', icon: 'exportB', onClick: () => exportStl(ids) });
   return items;
