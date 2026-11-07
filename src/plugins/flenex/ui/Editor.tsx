@@ -6,6 +6,7 @@ import { loadModelFile } from '../../../io/load';
 import { ADDONS, RELIEFS, SECTION_KINDS, SPINES, addOn, type AddOn, type AddOnKind, type CreatureDesign } from '../design';
 import { JOINTS, defaultJoint, type JointKind, type PinShape } from '../joints';
 import { JointPicker } from './JointPicker';
+import { FilamentPicker } from '../../../ui/studio/Studio';
 import { autoBodyPath, centrelineAt, longestRay, mainAxisPath } from '../place';
 import { pathLength, type CutGroup } from '../groups';
 import { FAMILIES, PRESETS, PROFILES } from '../presets';
@@ -375,21 +376,27 @@ function CutsTab() {
 
 // ---------------------------------------------------------------- paint
 function PaintTab() {
+  const [pick, setPick] = useState<number | null>(null);
+  const filaments = useStore((s) => s.filaments);
   const mac = currentMachine();
   const used = coloursUsed();
   const tools: [typeof fx.tool, string, string][] = [['orbit', 'Orbit', 'Just look around'], ['brush', 'Brush', 'Paint with a round brush'], ['bucket', 'Fill area', 'Fill a smooth surface region'], ['piece', 'Fill piece', 'Colour a whole segment']];
   return (
     <>
       <Card title="Colours">
-        <div className="fx-palette">
-          {fx.palette.map((c, i) => (
-            <label key={i} className={`fx-sw ${fx.slot === i + 1 ? 'on' : ''}`} style={{ background: c }} title={`Colour ${i + 1} (click to paint with, double-click to change)`}
-              onClick={() => { fx.slot = i + 1; notify(); }}>
-              <input type="color" value={c} onChange={(e) => setPalette(i, e.target.value)} />
-              <span>{i + 1}</span>
-            </label>
-          ))}
-          {fx.palette.length < 16 && <button className="fx-sw add" onClick={() => addColour()}>+</button>}
+        <div className="fx-palette" style={{ position: 'relative' }}>
+          {fx.palette.map((c, i) => {
+            const k = filaments.findIndex((f) => f.color.toLowerCase() === c.toLowerCase());
+            return (
+              <button key={i} className={`fx-sw ${fx.slot === i + 1 ? 'on' : ''} ${k < 0 || filaments[k].planned ? 'unloaded' : ''}`} style={{ background: c }}
+                title={`Colour ${i + 1}: ${k >= 0 ? `filament ${k + 1}${filaments[k].planned ? ' (load before printing)' : ''}` : 'not loaded'} — click to paint with, double-click to choose the filament`}
+                onClick={() => { fx.slot = i + 1; notify(); }} onDoubleClick={() => setPick(i)} onContextMenu={(e) => { e.preventDefault(); setPick(i); }}>
+                <span>{k >= 0 ? k + 1 : '!'}</span>
+              </button>
+            );
+          })}
+          {fx.palette.length < 16 && <button className="fx-sw add" title="Add a colour from the loaded filaments" onClick={() => setPick(-1)}>+</button>}
+          {pick !== null && <FilamentPicker title={pick < 0 ? 'Add a colour' : `Colour ${pick + 1}`} onClose={() => setPick(null)} onPick={(j) => { const hex = useStore.getState().filaments[j]?.color; if (!hex) return; if (pick < 0) addColour(hex); else setPalette(pick, hex); }} />}
         </div>
         <div className="mx-sub">{mac.multiColour === 'ams' ? `${mac.printer.model}: up to 16 colours with the AMS.` : `${mac.printer.model} has no AMS: every colour change is a pause for a manual swap.`} This design uses {used.length} colour{used.length === 1 ? '' : 's'}.</div>
       </Card>

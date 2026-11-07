@@ -13,6 +13,7 @@ import { defaultSpec, normalizeSpec, type PlantexSpec } from '../model';
 import { paintBody } from '../paint';
 import { patternMask } from '../patternLink';
 import { autoChanges } from '../../../profiles/changer';
+import { registerFilamentLink } from '../../../state/holders';
 import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.plantex.v1';
@@ -70,7 +71,26 @@ export const undoHistory = createHistory(() => pt.spec, (spec) => { pt.spec = sp
 
 export const masks = (key: string) => patternMask(key);
 
-export function openStudio(open = true) { pt.studioOpen = open; changed(false); }
+export function openStudio(open = true) { pt.studioOpen = open; if (open) opened = true; changed(false); }
+let opened = false;
+
+/** Slots the design uses. */
+export function designSlots(spec = pt.spec): number[] {
+  const planter = spec.kind === 'planter' && !spec.vaseMode;
+  return [...new Set([spec.filaments.body, ...(planter && spec.saucer.enabled ? [spec.filaments.saucer] : []), ...(planter && spec.selfWater.enabled ? [spec.filaments.insert] : []), ...spec.textures.filter((t) => t.enabled && t.filament >= 0).map((t) => t.filament)])];
+}
+
+registerFilamentLink({
+  id: 'plantex',
+  label: () => (opened ? `Plantex “${pt.spec.name || 'planter'}”` : null),
+  slotsUsed: () => designSlots(),
+  remap: (map) => {
+    const f = pt.spec.filaments, m = (k: number) => map[k] ?? 0;
+    f.body = m(f.body); f.saucer = m(f.saucer); f.insert = m(f.insert);
+    for (const t of pt.spec.textures) if (t.filament >= 0) t.filament = m(t.filament);
+    changed();
+  },
+});
 
 const SLOT_COLORS = ['#5DBE7A', '#E85D4A', '#3D7DD8', '#F2C14E', '#2F2F33', '#F4F1EA', '#9B59B6', '#F28C28'];
 /** Make sure filament slots 0..k exist (new ones copy slot 1's filament with a distinct colour). */
@@ -78,7 +98,8 @@ export function ensureSlot(k: number) {
   const s = useStore.getState();
   if (k < s.filaments.length) return;
   const base = s.filaments[0];
-  const add = Array.from({ length: k + 1 - s.filaments.length }, (_, j) => ({ presetId: base?.presetId ?? 'generic-pla', color: SLOT_COLORS[(s.filaments.length + j) % SLOT_COLORS.length] }));
+  // a design that refers to a slot the machine does not have: planned slots ("load before printing")
+  const add = Array.from({ length: k + 1 - s.filaments.length }, (_, j) => ({ presetId: base?.presetId ?? 'generic-pla', color: SLOT_COLORS[(s.filaments.length + j) % SLOT_COLORS.length], planned: true }));
   s.set({ filaments: [...s.filaments, ...add] });
   s.markDirty();
 }

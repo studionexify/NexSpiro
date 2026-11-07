@@ -82,7 +82,21 @@ export const filamentLinks = () => [...links.values()];
 const objectSlots = (o: SceneObject) => {
   const out = new Set<number>([o.filament ?? 0]);
   o.paint?.color?.forEach((c) => { if (c > 0) out.add(c - 1); });
+  for (const a of o.patternex?.actions ?? []) {
+    if (a.material.mode !== 'keep') out.add(a.material.slot_index);
+    if (a.dither) out.add(a.dither.slot_index);
+  }
   return out;
+};
+
+/** Patternex artwork on an object, its filament slots renumbered. */
+const remapPatternex = (px: SceneObject['patternex'], map: number[]): SceneObject['patternex'] => px && {
+  ...px,
+  actions: px.actions.map((a) => ({
+    ...a,
+    material: a.material.mode === 'keep' ? a.material : { ...a.material, slot_index: map[a.material.slot_index] ?? 0 },
+    dither: a.dither ? { ...a.dither, slot_index: map[a.dither.slot_index] ?? 0 } : a.dither,
+  })),
 };
 
 /** What uses each project slot: object names and plugin designs. */
@@ -105,6 +119,7 @@ function commit(next: FilamentSlotState[], map: number[], recolour: boolean) {
       ...o,
       filament: o.filament === undefined ? undefined : map[o.filament] ?? 0,
       paint: o.paint?.color ? { ...o.paint, color: o.paint.color.map((c) => (c > 0 ? (map[c - 1] ?? 0) + 1 : 0)) } : o.paint,
+      patternex: remapPatternex(o.patternex, map),
     }), s.objects.filter((o) => [...objectSlots(o)].some((k) => map[k] !== k)).map((o) => o.id));
   }
   applying = true;
@@ -280,3 +295,30 @@ export function startHolderSync() {
   });
   if (!holdersOf()) pushToMachine(); else pullFromMachine();
 }
+
+/* ---------- plugins asking for a filament */
+
+/** Slot that has this filament: an exact loaded slot, else a planned slot (added, "load before printing").
+ *  `presetId` omitted: any material with that colour. Full (16 slots): the nearest colour. */
+export function slotForFilament(hex: string, presetId?: string): number {
+  const s = useStore.getState();
+  const eq = (f: FilamentSlotState) => f.color.toLowerCase() === hex.toLowerCase() && (!presetId || f.presetId === presetId);
+  const i = s.filaments.findIndex(eq);
+  if (i >= 0) return i;
+  if (s.filaments.length >= 16) return nearestSlot(hex);
+  s.set({ filaments: [...s.filaments, { presetId: presetId ?? s.filaments.find((f) => !f.planned)?.presetId ?? 'generic-pla', color: hex.toUpperCase(), planned: true }], flushMatrix: null });
+  s.markDirty();
+  return useStore.getState().filaments.length - 1;
+}
+
+const rgb = (h: string) => { const n = parseInt(h.replace('#', '').slice(0, 6), 16) || 0; return [n >> 16, (n >> 8) & 255, n & 255]; };
+export const colourDistance = (a: string, b: string) => { const p = rgb(a), q = rgb(b); return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; };
+/** Loaded slot nearest in colour (planned slots only when nothing is loaded). */
+export function nearestSlot(hex: string): number {
+  const f = useStore.getState().filaments;
+  const pool = f.map((x, i) => ({ x, i })).filter((e) => !e.x.planned);
+  const list = pool.length ? pool : f.map((x, i) => ({ x, i }));
+  return list.reduce((b, e) => (colourDistance(e.x.color, hex) < colourDistance(f[b].color, hex) ? e.i : b), list[0]?.i ?? 0);
+}
+/** Is a colour (optionally a material) loaded in the machine? */
+export const isLoaded = (hex: string, presetId?: string) => useStore.getState().filaments.some((f) => !f.planned && f.color.toLowerCase() === hex.toLowerCase() && (!presetId || f.presetId === presetId));

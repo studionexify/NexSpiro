@@ -6,7 +6,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { SideCard, useInStudio } from '../../../ui/studio/Studio';
 import { useStore } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
-import { BATTERIES, BOLTS, BULBS, CABLES, HOLDERS, MAGNETS, PALETTE, PIPES, SWITCHES, holderById, swatch, type MaterialKind } from '../catalog';
+import { BATTERIES, BOLTS, BULBS, CABLES, HOLDERS, MAGNETS, PIPES, SWITCHES, holderById, materialForPreset, swatch, type MaterialKind } from '../catalog';
+import { FilamentButton } from '../../../ui/studio/Studio';
 import { JOINTS, defaultJoint, type JointKind } from '../joinery';
 import { LAMP_KINDS, WIRE_ROUTES, defaultDesign, section, type LampDesign, type Section, type SectionRole } from '../model';
 import { PATTERNS, SECTIONS, SILHOUETTES, handleAt, pattern, type Envelope, type PatternKind, type ShapeSpec } from '../shape';
@@ -177,16 +178,18 @@ function PatternEditor({ s }: { s: Section }) {
   );
 }
 
+const PLA_FINISHES: MaterialKind[] = ['PLA+', 'PLA Stone', 'PLA Wood', 'PLA Silk'];
+
+/** The part's filament: one of the machine's loaded filaments (or one marked to load before printing). */
 function MaterialPicker({ s }: { s: Section }) {
-  const mats = [...new Set(PALETTE.map((p) => p.material))];
+  const hex = swatch(s.material, s.color).hex;
   return (
     <>
-      <Select label="Material" value={s.material} options={mats.map((m) => [m, m] as [MaterialKind, string])} onChange={(v) => { s.material = v; s.color = PALETTE.find((p) => p.material === v)!.name; changed(); }} />
-      <div className="mx-chips">
-        {PALETTE.filter((p) => p.material === s.material).map((p) => (
-          <label key={p.name} className={`mx-chip ${s.color === p.name ? 'on' : ''}`} onClick={() => { s.color = p.name; changed(false); }}><i style={{ background: p.hex }} />{p.name}</label>
-        ))}
-      </div>
+      <div className="mx-label">Filament</div>
+      <FilamentButton label={`${s.name} filament`} hex={hex} onPick={(_, f) => { s.material = materialForPreset(f.presetId, s.material); s.color = f.color; changed(); }} />
+      {PLA_FINISHES.includes(s.material) && (
+        <Select label="PLA finish" value={s.material} options={PLA_FINISHES.map((m) => [m, m] as [MaterialKind, string])} onChange={(v) => { s.material = v; changed(); }} />
+      )}
     </>
   );
 }

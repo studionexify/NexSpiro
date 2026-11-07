@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { useStore } from '../../state/store';
 import { filamentById } from '../../profiles/filaments';
 import { LIBRARY_COLOURS, MATERIALS, type LibraryColour } from './colours';
+import { activeKey, machineName, slotForFilament, useHolders } from '../../state/holders';
 import './studio.css';
 
 /* ---------- icons */
@@ -224,6 +225,7 @@ export function SlotChip({ slot, color }: { slot: number; color?: string }) {
  */
 export function FilamentSlots({ active, onPick, onLibrary, min = 1, note }: { active?: number; onPick?: (slot: number) => void; onLibrary: (slot: number) => void; min?: number; note?: ReactNode }) {
   const filaments = useStore((s) => s.filaments);
+  const trayOf = useTrayLabel();
   const setCount = (n: number) => {
     const s = useStore.getState();
     if (n > s.filaments.length) {
@@ -245,12 +247,93 @@ export function FilamentSlots({ active, onPick, onLibrary, min = 1, note }: { ac
         <div className="st-fil" key={k}>
           <span className="st-idx">{k + 1}</span>
           <button className={`st-sw ${active === k ? 'on' : ''}`} style={{ background: f.color }} title={onPick ? `Paint with filament ${k + 1}` : `Filament ${k + 1}`} aria-label={`Filament ${k + 1}`} onClick={() => (onPick ? onPick(k) : onLibrary(k))} />
-          <div className="st-ftxt"><small>{filamentById(f.presetId).name}</small><b>{colourName(f.color) ?? f.color.toUpperCase()}</b></div>
+          <div className="st-ftxt"><small>{filamentById(f.presetId).name}{trayOf(k) ? ` · ${trayOf(k)}` : ''}</small><b>{colourName(f.color) ?? f.color.toUpperCase()}</b></div>
+          {f.planned && <span className="st-badge warn" title="Not loaded in the machine yet">Load first</span>}
           <IconButton icon="edit" title={`Change filament ${k + 1} (library)`} onClick={() => onLibrary(k)} />
         </div>
       ))}
     </>
   );
+}
+
+/** Tray / head label of a project slot ("A2"), from the machine's holders. */
+export function useTrayLabel() {
+  const filaments = useStore((s) => s.filaments);
+  const holders = useHolders((h) => h.lists[activeKey()]);
+  return (k: number) => { if (filaments[k]?.planned) return ''; const j = filaments.slice(0, k).filter((f) => !f.planned).length; return holders?.[j]?.tray ?? ''; };
+}
+
+/**
+ * Filament picker for plugin colours: the filaments loaded in the machine first (numbered slots with their tray),
+ * then planned ones, then the library of filaments that are not loaded — picking one of those adds a planned slot
+ * ("load before printing"). Returns the slot.
+ */
+export function FilamentPicker({ value, onPick, onClose, title = 'Filament' }: { value?: number; onPick: (slot: number) => void; onClose: () => void; title?: string }) {
+  const filaments = useStore((s) => s.filaments);
+  const trayOf = useTrayLabel();
+  const [lib, setLib] = useState(false);
+  const [mat, setMat] = useState('all');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const down = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    return () => { window.removeEventListener('pointerdown', down, true); window.removeEventListener('keydown', key, true); };
+  }, [onClose]);
+  const loaded = filaments.map((f, i) => ({ f, i })).filter((x) => !x.f.planned), planned = filaments.map((f, i) => ({ f, i })).filter((x) => x.f.planned);
+  const row = ({ f, i }: { f: typeof filaments[number]; i: number }) => (
+    <button key={i} className={`st-fpick-row ${value === i ? 'on' : ''}`} onClick={() => { onPick(i); onClose(); }}>
+      <span className="st-chip" style={{ background: f.color, color: textOn(f.color) }}>{i + 1}</span>
+      <span className="st-ftxt"><small>{filamentById(f.presetId).name}{trayOf(i) ? ` · ${trayOf(i)}` : ''}</small><b>{colourName(f.color) ?? f.color.toUpperCase()}</b></span>
+      {f.planned && <span className="st-badge warn">Load first</span>}
+    </button>
+  );
+  const list = LIBRARY_COLOURS.filter((c) => mat === 'all' || c.material === mat);
+  return (
+    <div ref={ref} className="st-fpick" role="dialog" aria-label={title}>
+      <div className="st-fpick-head"><b>{title}</b><span className="st-hint" style={{ margin: 0 }}>loaded in {machineName()}</span></div>
+      <div className="st-fpick-list">{loaded.map(row)}</div>
+      {planned.length > 0 && <><small className="st-fpick-sub">Not loaded yet</small><div className="st-fpick-list">{planned.map(row)}</div></>}
+      {!lib
+        ? <button className="st-btn" style={{ margin: '6px 10px 10px' }} onClick={() => setLib(true)}>Use a filament that is not loaded…</button>
+        : <>
+          <div className="st-fpick-sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>Not loaded<span style={{ flex: 1 }} />
+            <select className="st-sel" value={mat} onChange={(e) => setMat(e.target.value)} aria-label="Material"><option value="all">Any material</option>{MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+          </div>
+          <div className="st-fpick-lib">
+            {list.map((c) => <button key={c.material + c.name} title={`${c.name} · ${MATERIALS.find((m) => m.id === c.material)?.name}`} style={{ background: c.hex }} onClick={() => { onPick(slotForFilament(c.hex, MATERIALS.find((m) => m.id === c.material)?.presetId)); onClose(); }} />)}
+            <label className="st-fpick-custom" title="Any other colour"><input type="color" defaultValue="#888888" onChange={(e) => { onPick(slotForFilament(e.target.value)); onClose(); }} />+</label>
+          </div>
+          <p className="st-hint" style={{ margin: '0 10px 10px' }}>Adds a slot marked “load before printing”.</p>
+        </>}
+    </div>
+  );
+}
+
+/** A filament control for a plugin colour: shows the slot (number, material, colour, tray) or a warning when the
+ *  colour is not loaded; opens the FilamentPicker. `hex` for colour-bound designs, `slot` for slot-bound ones. */
+export function FilamentButton({ label, hex, slot, onPick }: { label: string; hex?: string; slot?: number; onPick: (slot: number, f: { presetId: string; color: string }) => void }) {
+  const filaments = useStore((s) => s.filaments);
+  const trayOf = useTrayLabel();
+  const [open, setOpen] = useState(false);
+  const k = slot ?? (hex ? filaments.findIndex((f) => f.color.toLowerCase() === hex.toLowerCase()) : -1);
+  const f = k >= 0 ? filaments[k] : undefined;
+  const colour = f?.color ?? hex ?? '#888888';
+  return (
+    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <button className="st-ffield" onClick={() => setOpen(!open)} aria-label={`${label}: ${f ? `filament ${k + 1}` : 'not loaded'}`} title={f ? undefined : 'This colour is not in the filament list: pick a loaded filament'}>
+        <span className="st-chip" style={{ background: colour, color: textOn(colour) }}>{f ? k + 1 : '!'}</span>
+        <span className="st-ftxt"><small>{f ? `${filamentById(f.presetId).name}${trayOf(k) ? ` · ${trayOf(k)}` : ''}` : 'Not loaded'}</small><b>{colourName(colour) ?? colour.toUpperCase()}</b></span>
+        {(!f || f.planned) && <span className="st-badge warn">{f ? 'Load first' : 'Pick'}</span>}
+      </button>
+      {open && <FilamentPicker title={label} value={k >= 0 ? k : undefined} onClose={() => setOpen(false)} onPick={(j) => { const x = useStore.getState().filaments[j]; if (x) onPick(j, x); }} />}
+    </div>
+  );
+}
+
+/** FilamentButton in a labelled Studio row. */
+export function FilamentField({ label, help, ...p }: { label: string; hex?: string; slot?: number; onPick: (slot: number, f: { presetId: string; color: string }) => void; help?: string }) {
+  return <Row label={label} title={help}><FilamentButton label={label} {...p} /></Row>;
 }
 
 /** Set one slot's colour (and material). */

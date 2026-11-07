@@ -12,6 +12,8 @@ import { assembled, buildLamp, rotateXYZ, type BuildResult, type BuiltPart } fro
 import { translate, toMesh, bounds, type Soup } from '../geom';
 import { defaultDesign, type LampDesign } from '../model';
 import { createHistory } from '../../../ui/studio/history';
+import { colourDistance, registerFilamentLink, slotForFilament } from '../../../state/holders';
+import { materialForPreset, swatch } from '../catalog';
 
 const KEY = 'nexspiro.lumonex.v1';
 const SAVED = 'nexspiro.lumonex.designs.v1';
@@ -73,7 +75,11 @@ export function setDesign(d: LampDesign): void {
   changed();
 }
 
-export function openStudio(open = true): void { lx.studioOpen = open; changed(false); }
+export function openStudio(open = true): void {
+  lx.studioOpen = open;
+  if (open && !opened) { opened = true; snapToLoaded(); undoHistory.reset(); changed(); }
+  changed(false);
+}
 
 export const bedOf = () => printerById(useStore.getState().printerId).bed;
 
@@ -105,16 +111,45 @@ export function groupByFilament(parts: BuiltPart[]): FilamentGroup[] {
 /** Filament preset for a Lumonex material. */
 const presetFor = (material: string) => (material.startsWith('PETG') ? 'generic-petg' : material === 'PLA Matte' ? 'generic-pla-matte' : 'generic-pla');
 
-/** Slot index for a filament, adding a slot when the colour/material is not loaded yet. */
+/** Slot index for a filament: the loaded one with that colour and material, else that colour, else a planned slot
+ *  ("load before printing"). */
 function slotFor(material: string, hex: string): number {
-  const s = useStore.getState();
+  const f = useStore.getState().filaments;
   const preset = presetFor(material);
-  const i = s.filaments.findIndex((f) => f.color.toLowerCase() === hex.toLowerCase() && f.presetId === preset);
-  if (i >= 0) return i;
-  if (s.filaments.length >= 16) return 0;
-  s.set({ filaments: [...s.filaments, { presetId: preset, color: hex }] });
-  return useStore.getState().filaments.length - 1;
+  const exact = f.findIndex((x) => x.color.toLowerCase() === hex.toLowerCase() && x.presetId === preset);
+  if (exact >= 0) return exact;
+  const colour = f.findIndex((x) => !x.planned && x.color.toLowerCase() === hex.toLowerCase());
+  return colour >= 0 ? colour : slotForFilament(hex, preset);
 }
+
+/** Sections whose colour is not in the filament list move to the nearest loaded filament (a design opened for the
+ *  first time picks up what is in the machine). */
+function snapToLoaded() {
+  const f = useStore.getState().filaments, loaded = f.filter((x) => !x.planned);
+  if (!loaded.length) return;
+  for (const sec of lx.design.sections) {
+    const hex = swatch(sec.material, sec.color).hex;
+    if (f.some((x) => x.color.toLowerCase() === hex.toLowerCase())) continue;
+    const near = loaded.reduce((b, x) => (colourDistance(x.color, hex) < colourDistance(b.color, hex) ? x : b), loaded[0]);
+    sec.color = near.color; sec.material = materialForPreset(near.presetId, sec.material);
+  }
+}
+let opened = false;
+
+registerFilamentLink({
+  id: 'lumonex',
+  label: () => (opened ? `Lumonex “${lx.design.name || 'lamp'}”` : null),
+  slotsUsed: (f) => { const u = new Set(lx.design.sections.map((x) => swatch(x.material, x.color).hex.toLowerCase())); return f.map((x, i) => (u.has(x.color.toLowerCase()) ? i : -1)).filter((i) => i >= 0); },
+  follow: (from, to) => {
+    let hit = false;
+    for (const sec of lx.design.sections) {
+      const hex = swatch(sec.material, sec.color).hex.toLowerCase();
+      const i = from.findIndex((x) => x.color.toLowerCase() === hex);
+      if (i >= 0 && to[i] && (to[i].color.toLowerCase() !== hex || to[i].presetId !== from[i].presetId)) { sec.color = to[i].color; sec.material = materialForPreset(to[i].presetId, sec.material); hit = true; }
+    }
+    if (hit) changed();
+  },
+});
 
 function objectFor(p: BuiltPart, soupIn: Soup, cutsIn: Soup[], name: string, printable: boolean): { o: SceneObject; off: [number, number, number] } {
   const soup = [...soupIn], cuts = cutsIn.map((c) => [...c]);

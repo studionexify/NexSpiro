@@ -6,7 +6,8 @@ import { effectiveSwitch } from '../plan';
 import { LAYOUTS, type BlockLayout, type ClickexSpec, type DesignMode, type ModelCut } from '../model';
 import { fontList } from '../../patternex/tools/text';
 import { SWITCHES } from '../catalog';
-import { Cards, ColorField, Ico, Note, Row, Seg, Slider, Toggle } from './controls';
+import { Cards, Ico, Note, Row, Seg, Slider, Toggle } from './controls';
+import { FilamentButton } from '../../../ui/studio/Studio';
 import { compute, cx, designColors, edit, matchFilaments, modelInfo, say, setTab, transferFitTest, turnModel, useCx } from './state';
 import { blockKeys } from '../plan';
 
@@ -119,13 +120,13 @@ function ColorsPanel() {
   return (
     <>
       <div className="cx-title">Colors</div>
-      <ColorField label="Base" value={s.colors.base} set={(v) => edit((x) => { x.colors.base = v; })} />
-      <ColorField label="Button" value={s.colors.button} set={(v) => edit((x) => { x.colors.button = v; })} />
-      {(s.source === 'icon' || s.source === 'text' || s.source === 'blocks') && <ColorField label={s.source === 'blocks' ? 'Lettering' : 'Design'} value={s.colors.ink} set={(v) => edit((x) => { x.colors.ink = v; })} />}
+      <Row label="Base"><FilamentButton label="Base" hex={s.colors.base} onPick={(_, f) => edit((x) => { x.colors.base = f.color; })} /></Row>
+      <Row label="Button"><FilamentButton label="Button" hex={s.colors.button} onPick={(_, f) => edit((x) => { x.colors.button = f.color; })} /></Row>
+      {(s.source === 'icon' || s.source === 'text' || s.source === 'blocks') && <Row label={s.source === 'blocks' ? 'Lettering' : 'Design'}><FilamentButton label={s.source === 'blocks' ? 'Lettering' : 'Design'} hex={s.colors.ink} onPick={(_, f) => edit((x) => { x.colors.ink = f.color; })} /></Row>}
       {colors.length > 0 && s.source !== 'icon' && s.source !== 'text' && (
         <Row label="Design colours" help="Each colour of the artwork prints in its own filament. Change one to recolour it everywhere." right={<button className="cx-link" onClick={matchFilaments} title="Snap every design colour to the nearest loaded filament">Match loaded filaments</button>}>
           <div className="cx-colours">
-            {colors.map((c) => <label key={c} className="cx-colour"><span style={{ background: c }} /><i style={{ background: s.colors.map[c] ?? c }}><input type="color" value={s.colors.map[c] ?? c} onChange={(e) => edit((x) => { x.colors.map[c] = e.target.value; })} /></i></label>)}
+            {colors.map((c) => <div key={c} className="cx-colour-row"><span className="cx-orig" style={{ background: c }} title={`Artwork colour ${c}`} /><FilamentButton label={`Artwork ${c}`} hex={s.colors.map[c] ?? c} onPick={(_, f) => edit((x) => { x.colors.map[c] = f.color; })} /></div>)}
           </div>
         </Row>
       )}
@@ -135,7 +136,7 @@ function ColorsPanel() {
       {mode === 'raise'
         ? <Slider label="Raise height" value={s.colors.raise} min={0.2} max={3} step={0.1} unit="mm" tag="raise" help="Relief hangs below the face when printing: switch on supports for the button." set={(v) => edit((x) => { x.colors.raise = v; }, 'raise')} />
         : <Slider label={mode === 'engrave' ? 'Engrave depth' : 'Inlay depth'} value={s.colors.inlay} min={0.2} max={Math.max(0.4, s.body.capTop)} step={0.1} unit="mm" tag="inlay" set={(v) => edit((x) => { x.colors.inlay = v; }, 'inlay')} />}
-      <Note>Colours that no loaded filament has are added as new filament slots when you send the clicker to the plate.</Note>
+      <Note>Every colour is a filament from the machine's list. A colour marked “Pick” is not loaded: choose a loaded filament, or keep it and it is added as “load before printing”.</Note>
     </>
   );
 }
@@ -255,7 +256,7 @@ function LetteringPanel() {
       <Row label="Style" help="Color: letters inlaid flush in their own colour. Raise: letters stand proud. Engrave: letters cut into the key.">
         <Seg<DesignMode> value={s.colors.mode} options={[['color', 'Color'], ['raise', 'Raise'], ['engrave', 'Engrave']]} set={(v) => edit((x) => { x.colors.mode = v; })} />
       </Row>
-      <ColorField label="Lettering colour" value={s.colors.ink} set={(v) => edit((x) => { x.colors.ink = v; })} />
+      <Row label="Lettering colour"><FilamentButton label="Lettering colour" hex={s.colors.ink} onPick={(_, f) => edit((x) => { x.colors.ink = f.color; })} /></Row>
       {s.colors.mode === 'raise'
         ? <Slider label="Raise height" value={s.colors.raise} min={0.2} max={3} step={0.1} unit="mm" tag="raise" set={(v) => edit((x) => { x.colors.raise = v; }, 'raise')} />
         : <Slider label="Depth" value={s.colors.inlay} min={0.2} max={Math.max(0.4, s.body.capTop)} step={0.1} unit="mm" tag="inlay" set={(v) => edit((x) => { x.colors.inlay = v; }, 'inlay')} />}

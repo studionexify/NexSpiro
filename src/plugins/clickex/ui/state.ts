@@ -7,6 +7,7 @@ import { meshBounds, openEdgeCount, type IndexedMesh } from '../../../engine/mes
 import { addPlate, arrange, centreOnBed } from '../../../state/ops';
 import { newId, objectPlate, useStore, type SceneObject } from '../../../state/store';
 import { printerById } from '../../../profiles/printers';
+import { registerFilamentLink, slotForFilament } from '../../../state/holders';
 import { artColors, artFromIcon, artFromImage, artFromSvg, artFromText, type Art } from '../art';
 import { buildClicker, printParts, type BuiltClicker, type Part } from '../build';
 import { build3mf } from '../export3mf';
@@ -87,7 +88,9 @@ export function resetDesign() {
 }
 
 export function setTab(id: string) { cx.tab = id; changed(false); }
-export function openStudio(open = true) { cx.studioOpen = open; changed(false); }
+export function openStudio(open = true) { cx.studioOpen = open; if (open && !opened) { opened = true; snapToLoaded(); past.length = 0; future.length = 0; } changed(false); }
+/** The design has been worked on this session (it then takes part in filament-change prompts). */
+let opened = false;
 export function say(text: string) { cx.toast = text; changed(false); setTimeout(() => { if (cx.toast === text) { cx.toast = ''; changed(false); } }, 4200); }
 
 export function setSource(s: Source) {
@@ -256,22 +259,52 @@ export const modelInfo = () => {
 const hexRgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 const dist = (a: string, b: string) => { const p = hexRgb(a), q = hexRgb(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
 
+/** Colours that are not in the filament list move to the nearest loaded filament (a design opened for the first
+ *  time picks up what is in the machine). */
+export function snapToLoaded() {
+  const fil = useStore.getState().filaments.filter((f) => !f.planned).map((f) => f.color);
+  if (!fil.length) return;
+  const all = useStore.getState().filaments.map((f) => f.color.toLowerCase());
+  const near = (c: string) => (all.includes(c.toLowerCase()) ? c : fil.reduce((b, f) => (dist(f, c) < dist(b, c) ? f : b), fil[0]));
+  const s = cx.spec;
+  s.colors.base = near(s.colors.base); s.colors.button = near(s.colors.button); s.colors.ink = near(s.colors.ink);
+  for (const c of designColors()) s.colors.map[c] = near(s.colors.map[c] ?? c);
+}
+
 /** Map every design colour to the nearest colour among the loaded filaments. */
 export function matchFilaments() {
-  const fil = useStore.getState().filaments.map((f) => f.color.toLowerCase());
+  const fil = useStore.getState().filaments.filter((f) => !f.planned).map((f) => f.color.toLowerCase());
   if (!fil.length) return;
   edit((s) => { for (const c of designColors()) s.colors.map[c] = fil.reduce((b, f) => (dist(f, c) < dist(b, c) ? f : b), fil[0]); });
 }
 
-/** Filament slot for a colour; adds one (copying slot 1's filament) when no loaded filament has it. */
-function slotFor(hex: string): number {
-  const s = useStore.getState();
-  const i = s.filaments.findIndex((f) => f.color.toLowerCase() === hex.toLowerCase());
-  if (i >= 0) return i;
-  if (s.filaments.length >= 16) { const fil = s.filaments.map((f) => f.color.toLowerCase()); return fil.reduce((b, f, k) => (dist(f, hex) < dist(fil[b], hex) ? k : b), 0); }
-  s.set({ filaments: [...s.filaments, { presetId: s.filaments[0]?.presetId ?? 'generic-pla', color: hex }] });
-  return useStore.getState().filaments.length - 1;
+/** Filament slot for a colour: the loaded one, else a planned slot ("load before printing"). */
+const slotFor = (hex: string) => slotForFilament(hex);
+
+/** Every filament colour the design uses. */
+export function usedColours(s = cx.spec): string[] {
+  const out = [s.colors.base, s.colors.button];
+  if (s.source === 'icon' || s.source === 'text' || s.source === 'blocks') out.push(s.colors.ink);
+  else for (const c of designColors()) out.push(s.colors.map[c] ?? c);
+  return [...new Set(out.map((c) => c.toLowerCase()))];
 }
+
+registerFilamentLink({
+  id: 'clickex',
+  label: () => (opened ? `Clickex “${cx.spec.name || 'clicker'}”` : null),
+  slotsUsed: (f) => { const u = new Set(usedColours()); return f.map((x, i) => (u.has(x.color.toLowerCase()) ? i : -1)).filter((i) => i >= 0); },
+  follow: (from, to) => {
+    const m = new Map<string, string>();
+    from.forEach((f, i) => { if (to[i] && f.color.toLowerCase() !== to[i].color.toLowerCase()) m.set(f.color.toLowerCase(), to[i].color); });
+    if (!m.size) return;
+    const r = (c: string) => m.get(c.toLowerCase()) ?? c;
+    const s = cx.spec;
+    s.colors.base = r(s.colors.base); s.colors.button = r(s.colors.button); s.colors.ink = r(s.colors.ink);
+    for (const k of Object.keys(s.colors.map)) s.colors.map[k] = r(s.colors.map[k]);
+    for (const c of designColors()) if (!s.colors.map[c] && m.has(c.toLowerCase())) s.colors.map[c] = m.get(c.toLowerCase())!;
+    changed();
+  },
+});
 
 // ---------------------------------------------------------------- out: the plate
 export const bedOf = () => printerById(useStore.getState().printerId).bed;

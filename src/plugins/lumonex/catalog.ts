@@ -157,8 +157,18 @@ export const PALETTE: Swatch[] = [
   ...sw('PLA Silk', [['Silk Silver', '#c9ccd0'], ['Silk Antique Gold', '#b8953f'], ['Silk Copper', '#b8703e'], ['Silk Black', '#2a2a2a']]),
 ];
 
+/** A section's swatch: `name` is a palette colour name, or a filament colour (#rrggbb) taken from a filament slot. */
 export const swatch = (material: string, name: string): Swatch =>
-  PALETTE.find((s) => s.material === material && s.name === name) ?? PALETTE.find((s) => s.name === name) ?? PALETTE[0];
+  /^#[0-9a-f]{6}$/i.test(name) ? { material: (material as MaterialKind), name, hex: name }
+    : PALETTE.find((s) => s.material === material && s.name === name) ?? PALETTE.find((s) => s.name === name) ?? PALETTE[0];
+
+/** Lumonex material for a filament preset (keeps the PLA finish the part already has). */
+export function materialForPreset(presetId: string, current: MaterialKind): MaterialKind {
+  if (presetId === 'generic-petg') return 'PETG Translucent';
+  if (presetId === 'generic-pla-matte') return 'PLA Matte';
+  if (presetId === 'generic-pla') return current === 'PLA Matte' || current === 'PETG Translucent' ? 'PLA+' : current;
+  return 'PLA+';
+}
 
 /** Softening points and the closest a bulb may come to the wall (LED, mm) per material family. */
 export const THERMAL: Record<MaterialKind, { softens: number; minGap: number; maxWatts: number }> = {

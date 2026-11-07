@@ -147,3 +147,20 @@
 .st-live { background: color-mix(in srgb, var(--ns-panel) 90%, transparent); border: 1px solid var(--ns-line); padding: 4px 10px; border-radius: 999px; }
 .st-editor-body .cx-sources { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .st-editor-body .cx-eyebrow.big { display: none; }
+
+/* filament picker (loaded first, then not-loaded library) */
+.st-ffield { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px 4px 4px; border-radius: 8px; border: 1px solid var(--ns-line); background: var(--ns-panel); color: var(--ns-text); cursor: pointer; text-align: left; }
+.st-ffield:hover { border-color: var(--ns-primary); }
+.st-ffield .st-ftxt, .st-fpick-row .st-ftxt { flex: 1; min-width: 0; line-height: 1.2; }
+.st-ffield .st-ftxt small, .st-fpick-row .st-ftxt small { display: block; color: var(--ns-text-3); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-ffield .st-ftxt b, .st-fpick-row .st-ftxt b { font-size: 11.5px; font-weight: 600; }
+.st-fpick { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: 280px; max-height: 380px; overflow: auto; background: var(--ns-panel); border: 1px solid var(--ns-line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.st-fpick-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 10px 4px; font-size: 12px; }
+.st-fpick-sub { display: block; padding: 6px 10px 2px; color: var(--ns-text-3); font-size: 10.5px; }
+.st-fpick-list { display: flex; flex-direction: column; padding: 2px 6px; }
+.st-fpick-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border: 0; border-radius: 6px; background: none; color: var(--ns-text); cursor: pointer; text-align: left; }
+.st-fpick-row:hover, .st-fpick-row.on { background: color-mix(in srgb, var(--ns-primary) 12%, transparent); }
+.st-fpick-lib { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 4px 10px 8px; }
+.st-fpick-lib button, .st-fpick-custom { aspect-ratio: 1; border-radius: 5px; border: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); cursor: pointer; padding: 0; }
+.st-fpick-custom { display: grid; place-items: center; position: relative; font-size: 14px; color: var(--ns-text-3); background: var(--ns-bg, transparent); }
+.st-fpick-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

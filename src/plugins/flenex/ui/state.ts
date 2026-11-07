@@ -2,6 +2,7 @@
 // (base model → cuts → colours); the Studio and the dock panel read the result.
 import { useSyncExternalStore } from 'react';
 import { newId, plateOrigin, useStore, type SceneObject } from '../../../state/store';
+import { registerFilamentLink, slotForFilament } from '../../../state/holders';
 import { centreOnBed } from '../../../state/ops';
 import { centreMesh } from '../../../io/load';
 import { openEdgeCount, type IndexedMesh } from '../../../engine/mesh';
@@ -319,15 +320,29 @@ export async function export3mf(): Promise<string | null> {
   return saveFile(`${baseName().replace(/[^\w.-]+/g, '_')}.3mf`, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, '3mf');
 }
 
-const presetFilament = () => 'generic-pla';
-function slotFor(hex: string): number {
-  const s = useStore.getState();
-  const i = s.filaments.findIndex((f) => f.color.toLowerCase() === hex.toLowerCase() && f.presetId === presetFilament());
-  if (i >= 0) return i;
-  if (s.filaments.length >= 16) return 0;
-  s.set({ filaments: [...s.filaments, { presetId: presetFilament(), color: hex }] });
-  return useStore.getState().filaments.length - 1;
+/** Filament slot for a palette colour: the loaded one, else a planned slot ("load before printing"). */
+const slotFor = (hex: string) => slotForFilament(hex);
+
+/** Palette taken from the machine: the loaded filaments in slot order (a first-opened design). */
+function paletteFromMachine() {
+  const loaded = useStore.getState().filaments.filter((f) => !f.planned).map((f) => f.color);
+  if (!loaded.length) return;
+  const pal = loaded.slice(0, 16);
+  for (const c of PALETTE_DEFAULT) { if (pal.length >= 2) break; if (!pal.some((x) => x.toLowerCase() === c.toLowerCase())) pal.push(c); }
+  fx.palette = pal;
 }
+let opened = false;
+
+registerFilamentLink({
+  id: 'flenex',
+  label: () => (opened ? `Flenex “${baseName()}”` : null),
+  slotsUsed: (f) => { const u = new Set(coloursUsed().map((k) => (fx.palette[k - 1] ?? '').toLowerCase())); return f.map((x, i) => (u.has(x.color.toLowerCase()) ? i : -1)).filter((i) => i >= 0); },
+  follow: (from, to) => {
+    let hit = false;
+    fx.palette = fx.palette.map((c) => { const i = from.findIndex((f) => f.color.toLowerCase() === c.toLowerCase()); if (i >= 0 && to[i] && to[i].color.toLowerCase() !== c.toLowerCase()) { hit = true; return to[i].color; } return c; });
+    if (hit) notify();
+  },
+});
 
 /** Put the flexi on the plate (centred, painted with filament slots) and open Prepare. */
 export function sendToPlate(): { objects: number; colours: number } | null {
@@ -357,6 +372,7 @@ export function sendToPlate(): { objects: number; colours: number } | null {
 
 export function openStudio(open = true): void {
   fx.studioOpen = open;
+  if (open && !opened) { opened = true; paletteFromMachine(); undoHistory.reset(); }
   if (open && !built) schedule(false, 10);
   notify();
 }

@@ -1082,3 +1082,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .holder-src.user { opacity: .8; }
 .badge.planned { color: var(--warning); border-color: var(--warning); }
 .holders-tile .select { flex: 1; min-width: 0; }
+.cx-colours:has(.cx-colour-row) { flex-direction: column; gap: 4px; }
+.cx-colour-row { display: flex; align-items: center; gap: 6px; }
+.cx-colour-row .cx-orig { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); flex: none; }
+.fx-sw.unloaded { outline: 2px dashed var(--warning); outline-offset: 1px; }

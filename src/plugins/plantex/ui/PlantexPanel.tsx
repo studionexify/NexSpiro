@@ -9,11 +9,12 @@ import { KINDS } from '../textures';
 import { patternEntry } from '../patternLink';
 import { ProfileEditor } from './ProfileEditor';
 import { WallMap } from './WallMap';
-import { changed, deleteDesign, ensureSlot, loadSpec, openStudio, pt, saveDesign, transferToPlate, undoHistory, usePt } from './state';
+import { changed, deleteDesign, loadSpec, openStudio, pt, saveDesign, transferToPlate, undoHistory, usePt } from './state';
 import { StudioViewer } from './StudioViewer';
 import { RenexStudio } from '../../../renex/ui/RenexStudio';
 import { plantexRenexSource } from '../renexSource';
 import { useStore } from '../../../state/store';
+import { FilamentButton } from '../../../ui/studio/Studio';
 import { FILAMENTS } from '../../../profiles/filaments';
 import { designThumb, designOutline, textureThumb } from './thumbs';
 import { Live3D } from '../../../ui/Live3D';
@@ -353,18 +354,12 @@ function TexturesCard() {
   );
 }
 
+/** A part's filament: one of the machine's loaded filaments (the picker can also add one to load before printing). */
 function FilamentSelect({ value, set, allowBody }: { value: number; set: (v: number) => void; allowBody?: boolean }) {
-  const fils = useStore((st) => st.filaments);
-  const opts = Math.max(fils.length, value + 1);
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
       {allowBody && <button className={`mx-chip ${value < 0 ? 'on' : ''}`} onClick={() => { set(-1); changed(); }}>Same as body</button>}
-      {Array.from({ length: opts }, (_, k) => (
-        <button key={k} className={`mx-chip ${value === k ? 'on' : ''}`} title={fils[k] ? fils[k].presetId : 'Not set up yet'} onClick={() => { set(k); changed(); }}>
-          <i style={{ background: fils[k]?.color ?? '#999' }} />{k + 1}
-        </button>
-      ))}
-      <button className="mx-chip" title="Add a filament slot and use it" onClick={() => { ensureSlot(fils.length); set(fils.length); changed(); }}>Add slot</button>
+      <FilamentButton label="Filament" slot={value < 0 ? undefined : value} hex={value < 0 ? useStore.getState().filaments[pt.spec.filaments.body]?.color : undefined} onPick={(k) => { set(k); changed(); }} />
     </div>
   );
 }
@@ -388,7 +383,7 @@ function SlotEditor() {
           <span className="muted" style={{ fontSize: 11, width: 34 }}>{used.has(k) ? 'used' : ''}</span>
         </div>
       ))}
-      <button className="btn-secondary btn-small" onClick={() => ensureSlot(st.filaments.length)}>+ Add filament slot</button>
+      <div className="muted" style={{ fontSize: 11 }}>These are the machine's filaments: changing one here changes what the machine holds.</div>
     </>
   );
 }
