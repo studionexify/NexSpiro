@@ -1663,7 +1663,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       towerUsed = true;
       const n = it.pts.length / 2;
       const out: PathItem = towerH !== h || towerZ < zTop - 1e-6 ? { ...it, height: towerHs ? towerH : h } : it;
-      if (towerZ < zTop - 1e-6) out.depth = new Array(n).fill((zTop - towerZ) / h);
+      if (towerZ < zTop - 1e-6) out.depth = new Array(n + 1).fill((zTop - towerZ) / h);
       return out;
     };
     const towerOutline = (force = false) => {

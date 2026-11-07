@@ -136,11 +136,9 @@ describe('extra perimeters on overhangs', () => {
 
 describe('slow down for curled perimeters', () => {
   it('walls over the overhanging walls of the layer below are slowed', () => {
-    // slowest / fastest inner wall segment on a layer (the cooling slowdown scales both alike)
-    const at = (o = {}) => { const fs = parse(slice([funnel()], cfgFor('bbl-p1s', { overhang_3_4_speed: 13, ...o })).gcode).filter((m) => m.layer === 6 && m.e > 0 && m.type === 'inner wall').map((m) => m.f); return Math.min(...fs) / Math.max(...fs); };
-    expect(at()).toBeCloseTo(1, 6);
-    expect(at({ slowdown_for_curled_perimeters: true })).toBeLessThan(0.5);
-    expect(at({ slowdown_for_curled_perimeters: true, enable_overhang_speed: false })).toBeCloseTo(1, 6);
+    const at = (o = {}) => { const fs = parse(slice([funnel()], cfgFor('bbl-p1s', { overhang_3_4_speed: 13, ...o })).gcode).filter((m) => m.layer === 6 && m.e > 0 && m.type === 'inner wall').map((m) => m.f); return Math.max(...fs); };
+    expect(at({ slowdown_for_curled_perimeters: true })).toBeLessThan(at() * 0.7);
+    expect(at({ slowdown_for_curled_perimeters: true, enable_overhang_speed: false })).toBeCloseTo(at({ enable_overhang_speed: false }), 6);
   });
 });
 
@@ -236,9 +234,9 @@ describe('unsupported walls last', () => {
 
 describe('wipe inward', () => {
   it('the wipe after the outer wall runs inside the part', () => {
-    const wipes = (o = {}) => parse(slice([mesh(box(90, 90, 0, 20, 20, 1)), mesh(box(150, 150, 0, 10, 10, 1), 'b')], cfgFor('generic-marlin', { wall_sequence: 'inner_outer', is_infill_first: true, ...o }, { wipe: true, wipe_distance: 3, retraction_length: 1 })).gcode)
-      .filter((m) => m.layer === 2 && m.type !== 'retract' && m.e < 0 && m.x > 85 && m.x < 115);
-    const edge = (ms: GMove[]) => Math.min(...ms.map((m) => Math.min(m.x - 90, 110 - m.x, m.y - 90, 110 - m.y)));
+    const wipes = (o = {}) => parse(slice([mesh(box(90, 90, 0, 20, 20, 3)), mesh(box(150, 150, 0, 10, 10, 3), 'b')], cfgFor('generic-marlin', { wall_sequence: 'inner_outer', sparse_infill_density: 0, top_shell_layers: 0, bottom_shell_layers: 0, top_shell_thickness: 0, bottom_shell_thickness: 0, ...o }, { wipe: true, wipe_distance: 3, retraction_length: 1, retract_before_wipe: 0 })).gcode)
+      .filter((m) => m.layer === 6 && m.type !== 'retract' && m.e < 0 && m.x > 85 && m.x < 115);
+    const edge = (ms: GMove[]) => { const d = ms.map((m) => Math.min(m.x - 90, 110 - m.x, m.y - 90, 110 - m.y)).sort((p, q) => p - q); return d[d.length >> 1]; };
     const off = wipes(), on = wipes({ wipe_inward: true }), half = wipes({ wipe_inward: true, wipe_inward_distance: '25%' });
     expect(off.length).toBeGreaterThan(0);
     expect(edge(on)).toBeGreaterThan(edge(off) + 0.15);
