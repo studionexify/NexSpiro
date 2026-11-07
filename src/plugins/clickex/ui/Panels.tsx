@@ -313,7 +313,11 @@ function ModelPanel() {
 export function Panel() {
   useCx();
   const tabs = tabsFor(cx.spec.source);
-  const id = (tabs.find((t) => t.id === cx.tab) ?? tabs[0]).id;
+  return <PanelById id={(tabs.find((t) => t.id === cx.tab) ?? tabs[0]).id} />;
+}
+
+/** The settings of one tab (the Studio shows every tab as its own card). */
+export function PanelById({ id }: { id: string }) {
   switch (id) {
     case 'shape': return <ShapePanel />;
     case 'body': return <BodyPanel />;

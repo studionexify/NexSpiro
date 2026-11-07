@@ -141,3 +141,9 @@
 .st-stage .live3d-float { left: 14px; right: auto; top: 12px; z-index: 4; }
 .st-stage .live3d-off { position: absolute; inset: 0; }
 .st-close .select { height: 26px; width: 100%; border-radius: 6px; }
+.cx-shell button { cursor: pointer; }
+.cx-shell button:disabled { opacity: .45; cursor: default; }
+.st-close .cx-plate { height: 26px; background: var(--ns-panel); border: 1px solid var(--ns-line); border-radius: 6px; padding: 0 8px; }
+.st-live { background: color-mix(in srgb, var(--ns-panel) 90%, transparent); border: 1px solid var(--ns-line); padding: 4px 10px; border-radius: 999px; }
+.st-editor-body .cx-sources { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.st-editor-body .cx-eyebrow.big { display: none; }
