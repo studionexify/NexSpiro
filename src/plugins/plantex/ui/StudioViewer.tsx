@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useStore } from '../../../state/store';
+import { IconButton, LiveBadge, ToolGroup } from '../../../ui/studio/Studio';
 import { buildParts, geometryVersion, pt, slotsOf, usePt } from './state';
 
 const GAP = 12;
@@ -126,8 +127,8 @@ export function StudioViewer() {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={host} style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 40%, var(--surface-primary), var(--surface-tertiary))' }} />
-      <div style={{ position: 'absolute', left: 10, bottom: 8, right: 10, fontSize: 12, color: 'var(--text-muted)', pointerEvents: 'none' }}>{busy ? 'Updating…' : info}</div>
-      <button className="btn-secondary btn-small" style={{ position: 'absolute', right: 10, top: 10 }} onClick={frame}>Reset view</button>
+      <LiveBadge busy={busy} text={`Live · ${info}`} />
+      <div className="st-toolbar br"><span className="st-ttl">Preview</span><ToolGroup label="Zoom"><IconButton icon="fit" title="Reset the view" onClick={frame} /></ToolGroup></div>
     </div>
   );
 }

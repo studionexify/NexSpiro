@@ -15,9 +15,16 @@ import { RenexStudio } from '../../../renex/ui/RenexStudio';
 import { plantexRenexSource } from '../renexSource';
 import { useStore } from '../../../state/store';
 import { FILAMENTS } from '../../../profiles/filaments';
-import { createPortal } from 'react-dom';
 import { designThumb, designOutline, textureThumb } from './thumbs';
 import { Live3D } from '../../../ui/Live3D';
+import { Num as StNum, Seg as StSeg, SideCard, Stat, StudioWindow, ToolGroup, useInStudio } from '../../../ui/studio/Studio';
+import { printerById } from '../../../profiles/printers';
+
+/** A card: a collapsible side card in the Studio, a plain card in the dock. */
+function PCard({ title, children }: { title: string; children: React.ReactNode }) {
+  if (useInStudio()) return <SideCard title={title} id={`pt-${title.split(' (')[0].toLowerCase().replace(/[^a-z]+/g, '-')}`}><div className="st-card-body">{children}</div></SideCard>;
+  return <section className="mx-card"><div className="mx-card-title">{title}</div>{children}</section>;
+}
 
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 const num = (v: string, d: number, min = -Infinity, max = Infinity) => { const n = parseFloat(v); return isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
@@ -62,8 +69,7 @@ function DesignLibrary() {
     : PRESETS.filter((p) => cat === 'All' || p.category === cat).map((p) => ({ id: p.id, name: p.spec.name ?? p.id, spec: p.spec, mine: false }));
   const list = items.filter((i) => i.name.toLowerCase().includes(q.toLowerCase()));
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Designs ({PRESETS.length} starting designs{pt.designs.length ? `, ${pt.designs.length} saved` : ''})</div>
+    <PCard title={`Designs (${PRESETS.length} starting designs${pt.designs.length ? `, ${pt.designs.length} saved` : ''})`}>
       <div className="mx-chips">{CATS.map((c) => <button key={c} className={`mx-chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{c === 'Mine' ? 'My designs' : c}</button>)}</div>
       <input className="input" placeholder="Search designs" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="mx-lib-grid" style={{ maxHeight: 300, overflowY: 'auto' }}>
@@ -76,21 +82,21 @@ function DesignLibrary() {
         ))}
         {!list.length && <div className="muted">Nothing here yet{cat === 'Mine' ? ' — save a design below.' : '.'}</div>}
       </div>
-    </section>
+    </PCard>
   );
 }
 
 function BodyCard() {
   const s = pt.spec;
+  const inStudio = useInStudio(); // the Studio shows the profile editor underneath the preview
   const scaleAll = (k: number) => { s.profile.forEach((p) => { p.r = +(p.r * k).toFixed(1); }); changed(); };
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Body</div>
+    <PCard title={`Body`}>
       <label className="mx-field">Name<input className="input" value={s.name} onChange={(e) => { s.name = e.target.value; changed(false); }} /></label>
       <Seg value={s.kind} options={[['planter', 'Planter'], ['vase', 'Vase']]} set={(v) => { s.kind = v; }} />
       <Check label="Spiral vase mode (single wall, turns on Spiral vase in the process)" value={s.vaseMode} set={(v) => { s.vaseMode = v; }} />
-      <ProfileEditor />
-      <div className="muted" style={{ fontSize: 11 }}>Drag points · double-click to add · right-click to remove</div>
+      {!inStudio && <ProfileEditor />}
+      {!inStudio && <div className="muted" style={{ fontSize: 11 }}>Drag points · double-click to add · right-click to remove</div>}
       <div className="mx-two">
         <Num label="Height" unit="mm" value={s.height} set={(v) => { s.height = v; }} min={10} max={400} />
         <Check label="Smooth curve" value={s.smooth} set={(v) => { s.smooth = v; }} />
@@ -107,15 +113,14 @@ function BodyCard() {
           </div>
         ))}
       </details>
-    </section>
+    </PCard>
   );
 }
 
 function SectionCard() {
   const s = pt.spec, c = s.section;
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Cross-section & twist</div>
+    <PCard title={`Cross-section & twist`}>
       <select className="input" value={c.kind} onChange={(e) => { c.kind = e.target.value as SectionKind; changed(); }}>{SECTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       <div className="mx-two">
         {c.kind !== 'circle' && c.kind !== 'superellipse' && <Num label="Sides / lobes" value={c.n} set={(v) => { c.n = Math.round(v); }} min={2} max={120} />}
@@ -141,16 +146,15 @@ function SectionCard() {
           </select>
         </label>
       </div>
-    </section>
+    </PCard>
   );
 }
 
 function PlanterCard() {
   const s = pt.spec, d = s.drain, sa = s.saucer, f = s.feet, w = s.selfWater;
-  if (s.vaseMode) return <section className="mx-card"><div className="mx-card-title">Walls</div><div className="muted">Spiral vase mode: the slicer prints one outer wall and a solid bottom (set wall width with the outer wall line width). Turn vase mode off for a walled planter with drain holes and cut-throughs.</div></section>;
+  if (s.vaseMode) return <PCard title="Walls"><div className="muted">Spiral vase mode: the slicer prints one outer wall and a solid bottom (set wall width with the outer wall line width). Turn vase mode off for a walled planter with drain holes and cut-throughs.</div></PCard>;
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Walls, drainage & saucer</div>
+    <PCard title={`Walls, drainage & saucer`}>
       <div className="mx-two">
         <Num label="Wall" unit="mm" value={s.wall} set={(v) => { s.wall = v; }} min={0.8} max={20} step={0.2} />
         <Num label="Floor" unit="mm" value={s.floor} set={(v) => { s.floor = v; }} min={0.8} max={30} step={0.2} />
@@ -203,7 +207,7 @@ function PlanterCard() {
           <Num label="Drain ribs" value={sa.ribs} set={(v) => { sa.ribs = Math.round(v); }} min={0} max={24} hint="Ribs that lift the pot so water can run off" />
         </div>
       )}
-    </section>
+    </PCard>
   );
 }
 
@@ -307,8 +311,7 @@ function TexturesCard() {
   const add = (l: Partial<TextureLayer>) => { const L = textureLayer({ ...structuredClone(l), id: uid() }); s.textures.push(L); pt.openLayer = L.id; setAdding(''); changed(); };
   const move = (i: number, d: number) => { const j = i + d; if (j < 0 || j >= s.textures.length) return; [s.textures[i], s.textures[j]] = [s.textures[j], s.textures[i]]; changed(false); };
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Wall textures ({s.textures.length})</div>
+    <PCard title={`Wall textures (${s.textures.length})`}>
       {s.textures.map((L, i) => (
         <div key={L.id} className={`mx-app ${L.enabled ? '' : 'off'}`}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -345,7 +348,7 @@ function TexturesCard() {
         </div>
       )}
       {adding === 'patternex' && <PatternexPicker onPick={(key, name) => add({ kind: 'pattern', patternKey: key, name, countU: 8, countV: 3, depth: 1.2, sharp: 0.8 })} />}
-    </section>
+    </PCard>
   );
 }
 
@@ -394,8 +397,7 @@ function FilamentsCard() {
   const planter = s.kind === 'planter' && !s.vaseMode;
   const coloured = s.textures.filter((t) => t.enabled && t.filament >= 0 && t.filament !== f.body);
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Filaments & parts</div>
+    <PCard title={`Filaments & parts`}>
       <SlotEditor />
       <div className="mx-label">Body</div>
       <FilamentSelect value={f.body} set={(v) => { f.body = Math.max(0, v); }} />
@@ -405,7 +407,7 @@ function FilamentsCard() {
         Texture layers can print in their own filament (open a layer → Filament); depth 0 gives a colour-only zone.
         {coloured.length ? ` ${coloured.length} colour layer(s) on the body.` : ''} On transfer the parts are split and each filament set (colour and material) gets its own plate, auto-arranged.
       </div>
-    </section>
+    </PCard>
   );
 }
 
@@ -413,8 +415,7 @@ function QualityCard() {
   const s = pt.spec;
   const [saveName, setSaveName] = useState('');
   return (
-    <section className="mx-card">
-      <div className="mx-card-title">Mesh quality & files</div>
+    <PCard title={`Mesh quality & files`}>
       <div className="mx-two">
         <Num label="Segments around" value={s.around} set={(v) => { s.around = Math.round(v); }} min={48} max={1440} step={4} hint="More = finer texture detail, bigger mesh" />
         <Num label="Row height" unit="mm" value={s.step} set={(v) => { s.step = v; }} min={0.2} max={5} step={0.1} hint="Vertical mesh step" />
@@ -431,56 +432,81 @@ function QualityCard() {
           <input type="file" accept=".json" style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { loadSpec(JSON.parse(await f.text())); } catch { pt.warnings = ['Not a Plantex design file.']; changed(false); } } }} />
         </label>
       </div>
-    </section>
+    </PCard>
   );
 }
 
-const TABS = ['Shape', 'Textures', 'Planter', 'Colours'] as const;
-
-/** Full-screen Plantex studio (98% of the screen): library, live 3D preview, all controls, Transfer to plate. */
+/** Plantex Studio on the shared Studio shell: settings cards, live 3D preview, the profile and wall map underneath. */
 export function PlantexStudio() {
   usePt();
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Shape');
   const [busy, setBusy] = useState(false);
   const [renex, setRenex] = useState(false);
-  const close = () => openStudio(false);
+  const close = () => { if (!renex) openStudio(false); };
+  const s = pt.spec;
   const transfer = (asNew: boolean) => {
     setBusy(true);
-    setTimeout(() => { try { transferToPlate(asNew); if (!pt.warnings.length) close(); } finally { setBusy(false); } }, 20);
+    setTimeout(() => { try { transferToPlate(asNew); if (!pt.warnings.length) openStudio(false); } finally { setBusy(false); } }, 20);
   };
-  return createPortal(
-    <div className="pxl-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="pxl-win" role="dialog" aria-label="Plantex studio">
-        <div className="pxl-head">
-          <span className="mx-badge">Pt</span>
-          <div className="pxl-title">Plantex studio</div>
-          <input className="input" style={{ maxWidth: 260 }} value={pt.spec.name} onChange={(e) => { pt.spec.name = e.target.value; changed(false); }} aria-label="Design name" />
-          <span className="spacer" style={{ flex: 1 }} />
-          <button className="btn-secondary" title="Photorealistic render of the printed design (Renex)" onClick={() => setRenex(true)}>📷 Render</button>
-          {pt.placed.length > 0 && <button className="btn-secondary" disabled={busy} onClick={() => transfer(true)}>Transfer as new copy</button>}
-          <button className="btn-primary" disabled={busy} onClick={() => transfer(false)}>{busy ? 'Building parts…' : pt.placed.length ? 'Transfer to plate (replace)' : 'Transfer to plate'}</button>
-          <button className="icon-btn" aria-label="Close" title="Close" onClick={close}>✕</button>
-        </div>
-        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr) 420px' }}>
-          <div style={{ overflowY: 'auto', padding: 10, borderRight: '1px solid var(--border)' }}><DesignLibrary /></div>
-          <div style={{ minWidth: 0, minHeight: 0, position: 'relative' }}><Live3D flat={<img alt="Outline of the current design" src={designOutline(pt.spec, `big:${JSON.stringify(pt.spec)}`, 320, useStore.getState().theme === 'dark')} />}><StudioViewer /></Live3D></div>
-          <div style={{ overflowY: 'auto', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-            <div className="seg mx-seg" style={{ padding: 8, position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-primary)' }}>
-              {TABS.map((t) => <button key={t} aria-label={`${t} tab`} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}
-            </div>
-            <div className="mx-panel" style={{ padding: 8 }}>
-              {pt.warnings.map((w, i) => <div key={i} className="px-warn" style={{ fontSize: 12 }}>{w}</div>)}
-              {tab === 'Shape' && <><BodyCard /><SectionCard /></>}
-              {tab === 'Textures' && <TexturesCard />}
-              {tab === 'Planter' && <PlanterCard />}
-              {tab === 'Colours' && <><FilamentsCard /><QualityCard /></>}
-            </div>
-          </div>
-        </div>
+  const maxR = Math.max(...s.profile.map((p) => p.r));
+  const layer = s.textures.find((t) => t.id === pt.openLayer) ?? s.textures.find((t) => t.enabled) ?? s.textures[0];
+  const scaleAll = (k: number) => { s.profile.forEach((p) => { p.r = +(p.r * k).toFixed(1); }); changed(); };
+  const bed = printerById(useStore((st) => st.printerId)).bed;
+  const tooBig = maxR * 2 > Math.min(bed.x, bed.y) || s.height > bed.z;
+  const stage = (
+    <>
+      <Live3D flat={<img alt="Outline of the current design" src={designOutline(s, `big:${JSON.stringify(s)}`, 320, useStore.getState().theme === 'dark')} />}><StudioViewer /></Live3D>
+      <div className="st-stats" style={{ top: 52 }}>
+        <Stat label="Size" value={`⌀ ${(maxR * 2).toFixed(0)} × ${s.height} mm`} tone={tooBig ? 'warn' : undefined} />
+        <Stat label="Texture layers" value={`${s.textures.filter((t) => t.enabled).length} on`} />
+        <Stat label="Printer fit" value={tooBig ? 'Too big' : 'Fits'} tone={tooBig ? 'warn' : 'ok'} />
       </div>
+    </>
+  );
+  const editor = (
+    <>
+      <div className="st-editor-head">
+        <span className="st-ttl">Profile</span>
+        <ToolGroup label="Type"><StSeg label="Type" value={s.kind} options={[['planter', 'Planter'], ['vase', 'Vase']]} onChange={(v) => { s.kind = v; changed(); }} /></ToolGroup>
+        <ToolGroup label="Size">
+          <button className="st-btn" style={{ height: 24 }} onClick={() => scaleAll(0.9)} title="Narrower by 10%">−10%</button>
+          <button className="st-btn" style={{ height: 24 }} onClick={() => scaleAll(1.1)} title="Wider by 10%">+10%</button>
+          <StNum label="Height (mm)" value={s.height} min={10} max={400} onChange={(v) => { s.height = v; changed(); }} /><span className="st-unit">mm tall</span>
+        </ToolGroup>
+        <ToolGroup label="Curve"><StSeg label="Curve" value={s.smooth ? 'smooth' : 'straight'} options={[['smooth', 'Smooth'], ['straight', 'Straight']]} onChange={(v) => { s.smooth = v === 'smooth'; changed(); }} /></ToolGroup>
+        <span style={{ flex: 1 }} />
+        {s.textures.length > 0 && (
+          <ToolGroup label="Wall map">
+            <select className="st-sel" value={layer?.id ?? ''} aria-label="Texture layer" onChange={(e) => { pt.openLayer = e.target.value; changed(false); }}>
+              {s.textures.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.name || t.kind}{t.enabled ? '' : ' (off)'}</option>)}
+            </select>
+          </ToolGroup>
+        )}
+      </div>
+      <div className="st-editor-body" style={{ display: 'grid', gridTemplateColumns: s.textures.length ? 'minmax(0, 0.9fr) minmax(0, 1.4fr)' : '1fr', gap: 10, padding: 10 }}>
+        <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <ProfileEditor fill />
+          <div className="st-hint" style={{ margin: 0 }}>Drag points to shape the body · double-click the outline to add one · right-click a point to remove it</div>
+        </div>
+        {layer && <div style={{ minWidth: 0, minHeight: 0, overflow: 'auto' }}><WallMap L={layer} /><div className="st-hint">Wall map of “{layer.name || layer.kind}”: drag the artwork or its band edges.</div></div>}
+      </div>
+    </>
+  );
+  return (
+    <>
+      <StudioWindow name="Plantex" letter="Pt" gradient="linear-gradient(135deg,#65A30D,#047857)" onClose={close} version={s.name} sideWidth={320}
+        side={<div className="mx-panel" style={{ display: 'contents' }}>
+          {pt.warnings.length > 0 && <SideCard title="Look at this" right={<span className="st-badge warn">{pt.warnings.length}</span>}>{pt.warnings.map((w, i) => <div key={i} className="st-hint" style={{ color: 'var(--ns-warn)' }}>{w}</div>)}</SideCard>}
+          <BodyCard /><SectionCard /><TexturesCard /><PlanterCard /><FilamentsCard /><DesignLibrary /><QualityCard />
+        </div>}
+        rail={<><small>Type</small><span className="st-hint" style={{ margin: 0 }}>{s.kind}</span></>}
+        stage={stage} editor={editor} editorHeight={290}
+        actions={<>
+          <button className="st-btn" title="Photorealistic render of the printed design (Renex)" onClick={() => setRenex(true)}>Render</button>
+          {pt.placed.length > 0 && <button className="st-btn" disabled={busy} onClick={() => transfer(true)}>Transfer as new copy</button>}
+          <button className="st-btn" disabled={busy} onClick={() => transfer(false)}>{busy ? 'Building parts…' : pt.placed.length ? 'Transfer (replace)' : 'Transfer to plate'}</button>
+        </>} />
       {renex && <RenexStudio source="plantex" build={plantexRenexSource} onClose={() => setRenex(false)} />}
-    </div>,
-    document.body,
+    </>
   );
 }
 

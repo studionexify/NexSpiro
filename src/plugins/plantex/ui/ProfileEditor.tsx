@@ -6,7 +6,8 @@ import { pt, changed } from './state';
 
 const W = 280, HPX = 230, PAD = 12;
 
-export function ProfileEditor() {
+/** `fill`: grow to the box it sits in (the Studio's editor) instead of the dock's fixed height. */
+export function ProfileEditor({ fill = false }: { fill?: boolean } = {}) {
   const ref = useRef<SVGSVGElement>(null);
   const drag = useRef<number | null>(null);
   const s = pt.spec;
@@ -30,7 +31,7 @@ export function ProfileEditor() {
   const sorted = () => s.profile.sort((a, b) => a.z - b.z);
 
   return (
-    <svg ref={ref} viewBox={`0 0 ${W} ${HPX}`} style={{ width: '100%', maxHeight: 240, background: 'var(--surface-primary)', border: '1px solid var(--border)', borderRadius: 8, touchAction: 'none', cursor: 'crosshair' }}
+    <svg ref={ref} viewBox={`0 0 ${W} ${HPX}`} style={{ width: '100%', ...(fill ? { flex: 1, minHeight: 0, height: '100%' } : { maxHeight: 240 }), background: 'var(--surface-primary)', border: '1px solid var(--border)', borderRadius: 8, touchAction: 'none', cursor: 'crosshair' }}
       onPointerMove={(e) => {
         if (drag.current === null) return;
         const m = toModel(e), p = s.profile[drag.current];
