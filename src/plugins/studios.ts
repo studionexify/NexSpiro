@@ -5,9 +5,11 @@ import { openStudio as openClickex } from './clickex/ui/state';
 import { openStudio as openFlenex } from './flenex/ui/state';
 import { PLUGINS } from './registry';
 import { openMotionStudio } from './motionex/ui/studioWindow';
+import { openPatternexStudio } from './patternex/ui/chartStudio';
 
 const STUDIOS: Record<string, { label: string; open: () => void; about: string }> = {
   motionex: { label: 'Motion Studio', open: () => openMotionStudio(true), about: 'Full-height editor for one motion: its shape, depth, spacing and how layers stack, with close-ups.' },
+  patternex: { label: 'Patternex Studio', open: () => openPatternexStudio(true), about: 'Paint a colourwork chart and watch it wrap round the object as you paint.' },
   lumonex: { label: 'Lumonex Studio', open: () => openLumonex(true), about: 'Full-screen lamp designer.' },
   clickex: { label: 'Clickex Studio', open: () => openClickex(true), about: 'Full-screen snap-fit and joint designer.' },
   flenex: { label: 'Flenex Studio', open: () => openFlenex(true), about: 'Full-screen flexure designer.' },

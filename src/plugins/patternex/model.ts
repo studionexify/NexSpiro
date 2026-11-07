@@ -34,7 +34,8 @@ export type PatternMeta =
   | { kind: 'braille'; spec: unknown }
   | { kind: 'brush'; strokes: { pts: [number, number][]; width: number; color: string }[] }
   | { kind: 'trace'; spec: unknown }
-  | { kind: 'tile'; spec: unknown; base: string };
+  | { kind: 'tile'; spec: unknown; base: string }
+  | { kind: 'chart'; spec: import('./chart').ChartSpec };
 
 export type Projection = 'planar' | 'cylindrical';
 /** Region depth: follow the outer wall thickness, reuse mmu_paint_depth, or a fixed value. */

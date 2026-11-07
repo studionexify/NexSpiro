@@ -373,7 +373,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: React.Rea
  */
 function PluginTab({ id }: { id: string }) {
   const p = PLUGINS.find((x) => x.id === id)!;
-  // Plantex, Lumonex, Clickex and Flenex show their own Studio button; Motionex gets one here
+  // Plantex, Lumonex, Clickex and Flenex show their own Studio button; Motionex and Patternex get one here
   const studio = studioOf(id);
   const Panel = p.Panel;
   const expert = useStore((s) => s.showAdvanced);
@@ -393,7 +393,7 @@ function PluginTab({ id }: { id: string }) {
   useEffect(() => { const el = box.current; return el ? foldPickers(el, setPick) : undefined; }, [id]);
   return (
     <div className={`insp-plugin ${expert ? 'expert' : ''}`} ref={box}>
-      {studio && id === 'motionex' && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
+      {studio && (id === 'motionex' || id === 'patternex') && <button className="btn-secondary btn-small insp-studio" onClick={studio.open}>Open {studio.label} ↗</button>}
       <div className="dock-body"><Panel /></div>
       {pick && <BigPicker target={pick} onClose={() => setPick(null)} />}
     </div>
