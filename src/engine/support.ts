@@ -35,6 +35,12 @@ export interface TreeParams extends SupportParams {
   branchDistance: number; // tip spacing (mm)
   /** Branches thicken going down at this angle (degrees). */
   diameterAngle?: number;
+  /** Organic: preferred branch angle (degrees) when merging, not avoiding the model (tree_support_angle_slow). */
+  slowAngle?: number;
+  /** Organic: tip spacing along the tip rows (connect length from the branch density); rows stay branchDistance apart. */
+  tipSpacingAlong?: number;
+  /** Non-organic trees: brim around the branch feet on the first layer (auto width, or a fixed width in mm). */
+  brim?: { auto: boolean; width: number };
 }
 
 export interface SupportLayers { base: Paths[]; iface: Paths[]; bottomIface?: Paths[] }
@@ -173,7 +179,7 @@ export function generateSupport(slices: Paths[], heights: number[], over: Paths[
 
 // ---------------------------------------------------------------- tree supports
 
-interface Node { x: number; y: number; r: number; dead?: boolean }
+interface Node { x: number; y: number; r: number; dead?: boolean; /** Z of the tip the branch started at. */ top?: number }
 
 function circle(x: number, y: number, r: number, seg = 16): Path {
   const p: Path = [];
@@ -209,12 +215,12 @@ function nearestBoundary(x: number, y: number, paths: Paths): [number, number] {
 }
 
 /** Sample tip points inside an overhang region on a square grid. */
-function sampleTips(region: Paths, spacing: number): [number, number][] {
+function sampleTips(region: Paths, spacing: number, along = spacing): [number, number][] {
   const out: [number, number][] = [];
   const b = bounds(region);
   if (!isFinite(b.minX)) return out;
   const x0 = b.minX / SCALE, y0 = b.minY / SCALE, x1 = b.maxX / SCALE, y1 = b.maxY / SCALE;
-  for (let y = y0 + spacing / 2; y < y1; y += spacing) for (let x = x0 + spacing / 2; x < x1; x += spacing) if (inside(x, y, region)) out.push([x, y]);
+  for (let y = y0 + spacing / 2; y < y1; y += spacing) for (let x = x0 + along / 2; x < x1; x += along) if (inside(x, y, region)) out.push([x, y]);
   if (!out.length) { const p = region[0][0]; out.push([p.X / SCALE, p.Y / SCALE]); }
   return out;
 }
@@ -244,7 +250,11 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
   const bottomGap = gapLayers(heights, p.bottomZDistance ?? p.topZDistance);
   const tan = Math.tan((Math.max(5, Math.min(80, p.branchAngle)) * Math.PI) / 180);
   const grow = Math.tan((Math.max(0, Math.min(15, p.diameterAngle ?? 5)) * Math.PI) / 180);
-  const rTip = (p.tipDiameter / 2) * st.tip, rMax = (p.branchDiameter / 2) * st.trunk;
+  const rTip = (p.tipDiameter / 2) * st.tip, rMax = Math.max(rTip, (p.branchDiameter / 2) * st.trunk);
+  // organic: merging moves at the preferred (slow) angle, below the maximum branch angle
+  const slowTan = st.organic && p.slowAngle !== undefined ? Math.tan((Math.max(0, Math.min(p.slowAngle, Math.max(5, Math.min(80, p.branchAngle)) - 1e-6)) * Math.PI) / 180) : -1;
+  const zAt: number[] = [];
+  heights.reduce((z, h, k) => (zAt[k] = z + h), 0);
   let nodes: Node[] = [];
   // hybrid: large flat overhangs get normal columns
   let flatOver: Paths[] | null = null;
@@ -258,7 +268,7 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
     const h = heights[i + 1];
     const step = h * tan;
     const src = i + 1 + gap < N ? over[i + 1 + gap] : [];
-    if (src.length) for (const [x, y] of sampleTips(src, p.branchDistance)) nodes.push({ x, y, r: rTip });
+    if (src.length) for (const [x, y] of sampleTips(src, p.branchDistance, st.organic && p.tipSpacingAlong ? p.tipSpacingAlong : p.branchDistance)) nodes.push({ x, y, r: rTip, top: zAt[i + 1] });
     if (!nodes.length) continue;
 
     // attraction: move toward nearest neighbour (merging branches)
@@ -270,7 +280,7 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
         if (d < bd) { bd = d; best = m; }
       }
       if (best && Math.sqrt(bd) < p.branchDistance * st.attract) {
-        const d = Math.sqrt(bd), mv = Math.min(step * (st.organic ? 0.8 : 0.5), d / 2);
+        const d = Math.sqrt(bd), mv = Math.min(slowTan >= 0 ? h * slowTan : step * (st.organic ? 0.8 : 0.5), d / 2);
         if (d > 0) { n.x += ((best.x - n.x) / d) * mv; n.y += ((best.y - n.y) / d) * mv; }
       }
     }
@@ -282,6 +292,7 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
         const w = m.r * m.r + n.r * n.r;
         m.x = (m.x * m.r * m.r + n.x * n.r * n.r) / w; m.y = (m.y * m.r * m.r + n.y * n.r * n.r) / w;
         m.r = Math.min(rMax, Math.sqrt(w));
+        m.top = Math.max(m.top ?? 0, n.top ?? 0);
       } else merged.push({ ...n });
     }
     nodes = merged;
@@ -308,7 +319,15 @@ export function generateTreeSupport(slices: Paths[], heights: number[], over: Pa
     }
     nodes = alive;
     if (!nodes.length) continue;
-    const circles = union(nodes.map((n) => circle(n.x, n.y, n.r)));
+    // tree support brim (Orca / Bambu): on the first layer each branch foot grows by the brim width;
+    // auto: max(2, min(r + distance to top / r * 0.5, 12)) - r
+    const brimOf = (n: Node) => {
+      if (i !== 0 || !p.brim || st.organic) return 0;
+      if (!p.brim.auto) return Math.max(0, p.brim.width);
+      const dTop = Math.max(0, (n.top ?? zAt[0]) - zAt[0]);
+      return Math.max(0, Math.max(2, Math.min(n.r + dTop / Math.max(n.r, 1e-3) * 0.5, 12)) - n.r);
+    };
+    const circles = union(nodes.map((n) => { const r = n.r + brimOf(n); return circle(n.x, n.y, r, r > n.r ? 32 : 16); }));
     S[i] = keepOut.length ? difference(circles, keepOut) : circles;
   }
   if (p.buildPlateOnly) {

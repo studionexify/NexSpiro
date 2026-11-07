@@ -122,11 +122,11 @@ export function hilbertFill(region: Paths, spacing: number): Polyline2[] {
 }
 
 /** Archimedean chords: a spiral r = spacing·θ/2π around the region centre, as chords about one spacing long. */
-export function archimedeanFill(region: Paths, spacing: number): Polyline2[] {
+export function archimedeanFill(region: Paths, spacing: number, centre?: [number, number]): Polyline2[] {
   const b = mmBounds(region);
   if (!isFinite(b.x0)) return [];
-  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-  const rMax = Math.hypot(b.x1 - b.x0, b.y1 - b.y0) / 2 + spacing;
+  const cx = centre ? centre[0] : (b.x0 + b.x1) / 2, cy = centre ? centre[1] : (b.y0 + b.y1) / 2;
+  const rMax = Math.max(Math.hypot(b.x0 - cx, b.y0 - cy), Math.hypot(b.x1 - cx, b.y0 - cy), Math.hypot(b.x0 - cx, b.y1 - cy), Math.hypot(b.x1 - cx, b.y1 - cy)) + spacing;
   const a = spacing / (2 * Math.PI);
   const pts: number[] = [cx, cy];
   for (let th = 0.5; a * th < rMax;) {
@@ -138,11 +138,11 @@ export function archimedeanFill(region: Paths, spacing: number): Polyline2[] {
 }
 
 /** Octagram spiral: an eight-pointed star wound outward by one spacing per turn. */
-export function octagramFill(region: Paths, spacing: number): Polyline2[] {
+export function octagramFill(region: Paths, spacing: number, centre?: [number, number]): Polyline2[] {
   const b = mmBounds(region);
   if (!isFinite(b.x0)) return [];
-  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-  const rMax = Math.hypot(b.x1 - b.x0, b.y1 - b.y0) / 2 + spacing;
+  const cx = centre ? centre[0] : (b.x0 + b.x1) / 2, cy = centre ? centre[1] : (b.y0 + b.y1) / 2;
+  const rMax = Math.max(Math.hypot(b.x0 - cx, b.y0 - cy), Math.hypot(b.x1 - cx, b.y0 - cy), Math.hypot(b.x0 - cx, b.y1 - cy), Math.hypot(b.x1 - cx, b.y1 - cy)) + spacing;
   const pts: number[] = [];
   const perTurn = 16;
   for (let k = 0; ; k++) {

@@ -6,7 +6,7 @@ import { floatOrPercent, HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, WAVE_KEY
 import {
   area, bounds, clipLines, difference, exToPaths, intersection, offset, opening, SCALE, toExPolygons, union,
 } from './clipper';
-import { ANCHORED_PATTERNS, concentricFill, linesFill, sparseFill, surfaceFill, type SparsePattern } from './fill';
+import { ANCHORED_PATTERNS, concentricFill, gyroidFill, linesFill, sparseFill, surfaceFill, type SparsePattern } from './fill';
 import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import { flushSplit, inZone, renderVendor, usesVendorTemplates } from './templateVars';
 import type { IndexedMesh } from './mesh';
@@ -19,15 +19,23 @@ import { preparePlugins, programBodyPlugins, runPlugins } from '../plugins/engin
 import { TRANSITION_MARKER, type FaceRegion, type TransitionPlan } from '../plugins/api';
 import { changerOf, flushesIntoTower, slotCount, toolheadCount } from '../profiles/changer';
 import { computeOverhangs, filterOverhangs, generateSupport, generateTreeSupport, treeStyle } from './support';
+import { decimateLoop, enforceFirstLayers, organicTipSpacing, sharpCorners, smallSupportSpeed } from './supportExtras';
 import { anchorInfill, archimedeanFill, cubicFill, honeycombFill } from './patterns';
 import { lightningInfill } from './lightning';
-import { fuzzLoop, type FuzzyMode, type NoiseType } from './noise';
+import {
+  adaptiveGyroid, adaptiveShells, bridgeAngle, bridgeWidth, CENTRED_PATTERNS, centredSurface, DEFAULT_FLOW_MODEL, directionalShrink, expandTop, extraSparseFill,
+  EXTRA_SPARSE, flowModel, gyroidZFactor, honeycombTops, inFrame, internalBridges, smoothCorners, SYMMETRIC_PATTERNS, templateAngle,
+} from './infillOptions';
+import { fuzzLoop, ripplePhase, type FuzzyMode, type NoiseType } from './noise';
 import { isSmoothLoop, loopLength, scarfLoop, seamGapLoop } from './seam';
 import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
+import { applyConicalOverhang, applyPolyholes, nearestObjectOrder, overhangsBy, PointGrid, reverseKeepStart, unsupportedFraction } from './wallParity';
+import { interlockRegions } from './interlock';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, PartInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
 import { checkInputs } from './validate';
+import { calibTopOrder, combinedTowerHeights, coneBody, farthestPoint, loadUnloadFlush, minimalPurge, mmuLoad, mmuUnload, multitoolRam, multitoolRamming, rotatePathsAbout, rotatorAbout, towerBandsPerLayer, towerTuning, type TowerCtx } from './wipeTower';
 import type { BulnexReport } from '../plugins/bulnex/model';
 
 
@@ -55,6 +63,10 @@ interface PathItem extends Polyline2 {
   fanSet?: number;
   /** Extrusion height when it differs from the layer height (infill combination). */
   height?: number;
+  /** Exact speed for the whole path (filament ironing speed). */
+  speedSet?: number;
+  /** Printed in the order generated, not re-sorted (top / bottom surface fill order). */
+  keepOrder?: boolean;
   noSlow?: boolean;
   /** Filament slot the path is printed with (feature filaments); -1 = any (flush into this object). */
   fil?: number;
@@ -66,6 +78,8 @@ interface PathItem extends Polyline2 {
   owner?: number;
   /** Step here, inside the part, right after the path ends (wipe on loops). */
   wipeIn?: [number, number];
+  /** Wipe inward: the wipe trail is shifted this far to the left of the path (mm, signed). */
+  wipeShift?: number;
 }
 
 const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
@@ -73,6 +87,17 @@ const spacingOf = (w: number, h: number) => w - h * (1 - Math.PI / 4);
 const SUB_FILL = new Set<FeatureType>(['sparse_infill', 'internal_solid_infill']);
 /** Overhang degrees (fraction of the line width hanging over the layer below) that start a new speed step. */
 const OVERHANG_LEVELS = [0.1, 0.25, 0.5, 0.75, 1];
+
+/** Per point flow of a closed loop (last point = back at the start): `f(fraction of the length)`. */
+function spiralRamp(pts: number[], f: (t: number) => number): number[] {
+  const n = pts.length / 2;
+  let tot = 0;
+  for (let k = 0; k < n; k++) tot += Math.hypot(pts[((k + 1) % n) * 2] - pts[k * 2], pts[((k + 1) % n) * 2 + 1] - pts[k * 2 + 1]);
+  const out = [f(0)];
+  let run = 0;
+  for (let k = 1; k <= n; k++) { run += Math.hypot(pts[(k % n) * 2] - pts[(k - 1) * 2], pts[(k % n) * 2 + 1] - pts[(k - 1) * 2 + 1]); out.push(f(tot > 0 ? run / tot : 1)); }
+  return out;
+}
 
 function pathToPoly(p: Paths[number]): number[] {
   const out: number[] = [];
@@ -236,6 +261,10 @@ interface Regions {
   combined?: { paths: Paths; height: number };
   /** Precomputed sparse infill lines (lightning, adaptive / support cubic). */
   lines?: Polyline2[];
+  /** Internal bridges: solid infill over the sparse infill of the layer below. */
+  ibridge?: Paths;
+  /** Extra bridge layers: the layer over an external (or internal) bridge, printed as a second bridge. */
+  bridge2?: { paths: Paths; internal: boolean }[];
 }
 
 /**
@@ -447,6 +476,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const closeR = num('slice_closing_radius');
   const smoothR = num('outline_smoothing'), smoothCorner = num('outline_smoothing_corner') || 35;
   const xyc = num('xy_contour_compensation'), xyh = num('xy_hole_compensation'), efc = raftN ? 0 : num('elefant_foot_compensation');
+  const rawFirstLayer = new Map<Paths[], Paths>();
   for (const sl of objSlices) {
     for (let i = objStart; i < N; i++) {
       if (!sl[i].length) continue;
@@ -460,9 +490,15 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       }
       // elephant foot compensation, spread over the first layers: full on the first, less on each one after
       const efcN = Math.max(1, Math.round(num('elefant_foot_compensation_layers') || 1));
+      if (efc > 0 && i === objStart) rawFirstLayer.set(sl, sl[i]); // brim_use_efc_outline off: the brim follows this outline
       if (efc > 0 && i >= objStart && i < objStart + efcN) sl[i] = offset(sl[i], -efc * (1 - (i - objStart) / efcN));
     }
   }
+  // make overhang printable (conical overhangs) and polyholes, per object (OrcaSlicer PrintObject slice step)
+  objSlices.forEach((sl, o) => {
+    if (obool(o, objStart, 'make_overhang_printable')) applyConicalOverhang(sl, objStart, hs, onum(o, objStart, 'make_overhang_printable_angle'), onum(o, objStart, 'make_overhang_printable_hole_size'));
+    if (obool(o, objStart, 'hole_to_polyhole')) applyPolyholes(sl, objStart, { threshold: ocfg(o, objStart).hole_to_polyhole_threshold, maxEdges: onum(o, objStart, 'hole_to_polyhole_max_edges') || 50, twisted: obool(o, objStart, 'hole_to_polyhole_twisted'), nozzle });
+  });
   const layerSlices: Paths[] = Array.from({ length: N }, (_, i) => union(objSlices.flatMap((s) => s[i])));
   /** First and last layer of each object (by-object printing, top-only rules). */
   const objLast = objSlices.map((sl) => { for (let i = N - 1; i >= 0; i--) if (sl[i].length) return i; return -1; });
@@ -481,6 +517,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const segWidth = Math.max(0, num('mmu_segmented_region_max_width')), segInterlock = Math.max(0, num('mmu_segmented_region_interlocking_depth'));
   // with no width limit a painted top / bottom face colours its shell, as deep as the top / bottom shells
   const paintFlatReach = Math.max(0.5, num('top_shell_thickness'), num('bottom_shell_thickness'), num('top_shell_layers') * num('layer_height'), num('bottom_shell_layers') * num('layer_height'));
+  // top / bottom paint penetration layers: how deep the colour of a painted top / bottom face reaches (0 = the shells)
+  const penTop = Math.max(0, Math.round(num('top_color_penetration_layers'))), penBot = Math.max(0, Math.round(num('bottom_color_penetration_layers')));
+  const paintPenetration = penTop || penBot ? { top: penTop ? penTop * num('layer_height') - 1e-3 : paintFlatReach, bottom: penBot ? penBot * num('layer_height') - 1e-3 : paintFlatReach } : undefined;
   const paintDepthAt = (i: number) => (segWidth > 0 ? segWidth + (segInterlock > 0 && i % 2 === 1 ? segInterlock : 0) : 0);
   // plugins that add material regions (Patternex) are set up here, before perimeters
   const sessions = preparePlugins(opts.plugins, {
@@ -514,7 +553,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const base = baseFilAt(o, i);
     const contribs = regionPlugins.flatMap((x) => x.regionsAt!(o, i));
     if (!colorTris[o].length && !contribs.length) return [{ ...base, paths: sl }];
-    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i), paintFlatReach) : new Map<number, Paths>();
+    const map = colorTris[o].length ? colorRegionsAtZ(meshes[o] as IndexedMesh, colorTris[o], sl, planes[i], paintDepthAt(i), paintFlatReach, paintPenetration) : new Map<number, Paths>();
     let out: FilRegion[] = [];
     let taken: Paths = [];
     for (const [c, paths] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
@@ -544,6 +583,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const key = r.sub ? `${r.fil}|${r.sub.join(',')}` : `${r.fil}`;
       const m = merged.get(key);
       merged.set(key, m ? { ...m, paths: union(m.paths, r.paths) } : r);
+    }
+    // beam interlocking where two filaments of the object touch (OrcaSlicer InterlockingGenerator)
+    if (merged.size > 1 && obool(o, i, 'interlocking_beam')) {
+      return interlockRegions([...merged.values()], sl, i - objStart, {
+        beamWidth: onum(o, i, 'interlocking_beam_width'), layerCount: onum(o, i, 'interlocking_beam_layer_count'), orientation: onum(o, i, 'interlocking_orientation'),
+        depth: onum(o, i, 'interlocking_depth'), avoid: onum(o, i, 'interlocking_boundary_avoidance'),
+      });
     }
     return [...merged.values()];
   };
@@ -582,13 +628,17 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           if (!vase && walls > 1 && (topType === 'all_top' || topType === 'topmost')) {
             const ip = exToPaths(ex);
             const t = topType === 'topmost' ? (above.length ? [] : ip) : above.length ? difference(ip, offset(above, wo / 2)) : ip;
-            const minW = (wo * onum(oi, i, 'top_area_threshold')) / 100;
+            // Bambu's top area threshold (% of the outer wall) and Orca's one wall threshold (mm or % of the inner wall)
+            const minW = Math.max((wo * onum(oi, i, 'top_area_threshold')) / 100, floatOrPercent(ocfg(oi, i).min_width_top_surface, wi));
             topOne = t.length ? opening(t, Math.max(0.01, minW / 2)) : null;
             if (topOne && !topOne.length) topOne = null;
           }
           const w = islandWalls(ex, {
             walls, wo, wi, so, si, nozzle, arachne,
-            minBead: (nozzle * onum(oi, i, 'min_bead_width')) / 100 || nozzle * 0.85,
+            minBead: (nozzle * onum(oi, i, first ? 'initial_layer_min_bead_width' : 'min_bead_width')) / 100 || nozzle * 0.85,
+            minLengthFactor: arachne ? onum(oi, i, 'min_length_factor') : 0,
+            maxResolution: arachne ? onum(oi, i, 'wall_maximum_resolution') : 0, maxDeviation: onum(oi, i, 'wall_maximum_deviation'),
+            overhangBelow: !vase && i > objStart && obool(oi, i, 'extra_perimeters_on_overhangs') ? objSlices[oi][i - 1] : null,
             minFeature: (nozzle * onum(oi, i, 'min_feature_size')) / 100 || nozzle * 0.25,
             margin: (nozzle * onum(oi, i, 'wall_transition_filter_deviation')) / 100,
             transitionLength: (nozzle * onum(oi, i, 'wall_transition_length')) / 100,
@@ -629,7 +679,11 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const clean = (p: Paths) => opening(p, sw * 0.25);
       const above = i + 1 < N ? objSlices[o][i + 1] : [];
       const below = i > objStart ? objSlices[o][i - 1] : [];
-      return { top: clean(i + 1 < N ? difference(inner, above) : inner), bottomAll: clean(i > objStart ? difference(inner, below) : inner) };
+      let top = clean(i + 1 < N ? difference(inner, above) : inner);
+      // top surface expansion: joins top surfaces split by raised features (applied before anything else uses them)
+      const tse = onum(o, i, 'top_surface_expansion');
+      if (tse > 0 && top.length) top = expandTop(top, inner, tse, ostr(o, i, 'top_surface_expansion_direction') || 'inward_and_outward', onum(o, i, 'top_surface_expansion_margin'));
+      return { top, bottomAll: clean(i > objStart ? difference(inner, below) : inner) };
     }));
   }
   for (let i = 0; i < N; i++) {
@@ -746,7 +800,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           if (floating.length) solid = difference(solid, floating);
         }
       }
-      per.push({ top, bottom, bridge, solid, sparse, sparseMods, vshell, floating, subTop: [] });
+      // internal bridges (OrcaSlicer): solid infill over sparse infill. With "Filter" they are left to the floating
+      // vertical shell detection while that is on (Bambu Studio behaviour); otherwise they get their own line type.
+      let ibridge: Paths = [];
+      const ibFilter = ostr(o, i, 'dont_filter_internal_bridges') || 'disabled';
+      if (!vase && i > objStart && (ibFilter !== 'disabled' || !obool(o, i, 'detect_floating_vertical_shell'))) {
+        const prev = regions[i - 1]?.[o];
+        if (prev?.sparse.length) {
+          ibridge = clean(internalBridges(union([...solid, ...floating]), prev.sparse, ibFilter, sw));
+          if (ibridge.length) { solid = difference(solid, ibridge); floating = floating.length ? difference(floating, ibridge) : floating; }
+        }
+      }
+      per.push({ top, bottom, bridge, solid, sparse, sparseMods, vshell, floating, subTop: [], ...(ibridge.length ? { ibridge } : {}) });
     }
     regions.push(per);
     if (i % 10 === 0) progress('Classifying surfaces', 0.36 + 0.12 * (i / N));
@@ -758,10 +823,29 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const st = intersection(r.solid, up.top);
     if (st.length) { r.subTop = st; r.solid = difference(r.solid, st); }
   }
+  // extra bridge layers: the solid layer over a bridge is a second bridge (parallel over external bridges,
+  // crosswise over internal ones)
+  for (let i = 0; i + 1 < N; i++) for (let o = 0; o < meshes.length; o++) {
+    const mode = ostr(o, i + 1, 'enable_extra_bridge_layer') || 'disabled';
+    if (mode === 'disabled' || vase) continue;
+    const r = regions[i][o], up = regions[i + 1][o];
+    const src: { paths: Paths; internal: boolean }[] = [];
+    if ((mode === 'external_bridge_only' || mode === 'apply_to_all') && r.bridge.length) src.push({ paths: r.bridge, internal: false });
+    if ((mode === 'internal_bridge_only' || mode === 'apply_to_all') && r.ibridge?.length) src.push({ paths: r.ibridge, internal: true });
+    for (const sp of src) {
+      const avail = union([...up.solid, ...up.subTop, ...up.floating]);
+      const b2 = avail.length ? opening(intersection(avail, sp.paths), olw(o, i + 1, 'internal_solid_infill_line_width')) : [];
+      if (!b2.length) continue;
+      up.solid = difference(up.solid, b2); up.subTop = difference(up.subTop, b2); up.floating = difference(up.floating, b2);
+      (up.bridge2 ??= []).push({ paths: b2, internal: sp.internal });
+    }
+  }
   // infill combination: sparse infill common to a block of layers is printed once, at the block's height
   for (let o = 0; o < meshes.length; o++) {
     if (vase || !obool(o, objStart, 'infill_combination')) continue;
-    const k = Math.max(1, Math.min(4, Math.floor((nozzle + 1e-6) / hN)));
+    // Infill combination - Max layer height (0 or 100% = the nozzle diameter)
+    const maxComb = Math.min(nozzle, floatOrPercent(ocfg(o, objStart).infill_combination_max_layer_height ?? '100%', nozzle) || nozzle);
+    const k = Math.max(1, Math.min(4, Math.floor((maxComb + 1e-6) / hN)));
     if (k < 2) continue;
     for (let b0 = objStart; b0 + k - 1 < N; b0 += k) {
       if (profile && hs.slice(b0, b0 + k).some((h) => Math.abs(h - hN) > 1e-6)) continue;
@@ -795,7 +879,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const solidAbove = union([...up.top, ...up.solid, ...up.bridge, ...up.vshell, ...up.floating, ...up.subTop, ...up.bottom]);
         return solidAbove.length ? intersection(sp[i], solidAbove) : [];
       });
-      const lines = lightningInfill(sp, need, s, hs, 45);
+      const la = (k: string) => (ocfg(o, objStart)[k] === undefined ? undefined : onum(o, objStart, k));
+      const lines = lightningInfill(sp, need, s, hs, 45, { overhang: la('lightning_overhang_angle'), prune: la('lightning_prune_angle'), straighten: la('lightning_straightening_angle') });
       lines.forEach((l, i) => { regions[i][o].lines = l; });
       continue;
     }
@@ -835,12 +920,15 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const supportStyle = str('support_style') || 'default';
   const supType = str('support_type') || 'normal_auto';
   const tree = supType.startsWith('tree');
-  if (bool('enable_support')) {
+  // enforce support for the first N layers: every overhang there, whatever its angle, even with support off
+  const enforceSupportN = Math.max(0, Math.round(num('enforce_support_layers')));
+  if (bool('enable_support') || enforceSupportN > 0) {
     progress('Generating support', 0.5);
-    const manual = supType.endsWith('manual');
+    const manual = supType.endsWith('manual') || !bool('enable_support');
     const sw = lw0('support_line_width');
     let over: Paths[] = manual ? Array.from({ length: N }, () => []) : computeOverhangs(layerSlices, hs, num('support_threshold_angle'), bool('support_remove_small_overhang'), sw);
     if (!manual) over = filterOverhangs(over, layerSlices, sw, { criticalOnly: bool('support_critical_regions_only'), noBridges: bool('bridge_no_support'), maxBridge: num('max_bridge_length'), reach: Math.max(5, num('max_bridge_length') / 2) });
+    over = enforceFirstLayers(over, layerSlices, objStart, enforceSupportN);
     const supTris = meshes.map((m) => paintedTris(m as IndexedMesh, m.paint?.support));
     const blocked: Paths[] = Array.from({ length: N }, () => []);
     for (let i = objStart + 1; i < N; i++) {
@@ -872,12 +960,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       buildPlateOnly: bool('support_on_build_plate_only'), lineWidth: sw, blocked, expansion: num('support_expansion'),
       style: supportStyle, topOverridesXY: bool('top_z_overrides_xy_distance'),
     };
+    // Tree Organic reads its own branch settings (Orca: *_organic, preferred angle, branch density)
+    const organic = supportStyle === 'tree_organic';
     support = tree
       ? generateTreeSupport(layerSlices, hs, over, {
         ...common, style: supportStyle === 'default' ? 'tree_hybrid' : supportStyle,
-        branchAngle: num('tree_support_branch_angle') || 40, tipDiameter: num('tree_support_tip_diameter') || 1.6,
-        branchDiameter: num('tree_support_branch_diameter') || 6, branchDistance: num('tree_support_branch_distance') || 4,
+        branchAngle: organic ? num('tree_support_branch_angle_organic') : num('tree_support_branch_angle') || 40, tipDiameter: num('tree_support_tip_diameter') || 1.6,
+        branchDiameter: (organic ? num('tree_support_branch_diameter_organic') : num('tree_support_branch_diameter')) || 6,
+        branchDistance: (organic ? num('tree_support_branch_distance_organic') : num('tree_support_branch_distance')) || 4,
         diameterAngle: num('tree_support_branch_diameter_angle'),
+        slowAngle: organic ? num('tree_support_angle_slow') : undefined,
+        tipSpacingAlong: organic ? organicTipSpacing(sw, num('tree_support_top_rate'), num('tree_support_tip_diameter') || 1.6) : undefined,
+        brim: !organic && !raftN && (bool('tree_support_auto_brim') || num('tree_support_brim_width') > 0) ? { auto: bool('tree_support_auto_brim'), width: num('tree_support_brim_width') } : undefined,
       })
       : generateSupport(layerSlices, hs, over, common);
   }
@@ -886,7 +980,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const sw = lw0('support_line_width');
     const foot = union([...layerSlices[objStart], ...(support ? [...support.base[objStart], ...support.iface[objStart]] : [])]);
     const exp = num('raft_first_layer_expansion');
-    const body = offset(foot, 1.5, 'round');
+    const body = offset(foot, Math.max(0, num('raft_expansion')), 'round');
     if (!support) support = { base: Array.from({ length: N }, () => []), iface: Array.from({ length: N }, () => []), bottomIface: Array.from({ length: N }, () => []) };
     const ifaceN = Math.min(raftN - 1, Math.max(1, Math.round(num('support_interface_top_layers'))));
     for (let r = 0; r < raftN; r++) {
@@ -950,13 +1044,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   const lastChangeLayer = changesPerLayer.reduce((a, c, i) => (c > 0 ? i : a), -1);
   const tw = num('prime_tower_width') || 35;
   // the largest flush into filament f from any other filament in use (tower-flushing units size their bands from it)
-  const maxFlushInto = (f: number) => Math.max(0, ...[...usedFils].filter((p) => p !== f).map((p) => opts.flushMatrix?.[p]?.[f] ?? num('flush_volume') ?? 0));
+  // purge p → n: the flushing matrix, else the load / unload volumes (wiping_volumes_extruders), else the flush volume
+  const flushOf = (p: number, n: number) => opts.flushMatrix?.[p]?.[n] ?? loadUnloadFlush(cfg.wiping_volumes_extruders, p, n) ?? num('flush_volume') ?? 0;
+  const maxFlushInto = (f: number) => Math.max(0, ...[...usedFils].filter((p) => p !== f).map((p) => flushOf(p, f)));
   const primeVolOf = (f: number) => {
     const fv = Number(filaments[f]?.settings?.filament_prime_volume ?? NaN);
-    return (isFinite(fv) && fv > 0 ? fv : num('prime_volume') || 45) + (towerFlush ? maxFlushInto(f) : hasAms ? 0 : num('flush_volume'));
+    const v = (isFinite(fv) && fv > 0 ? fv : num('prime_volume') || 45) + (towerFlush ? maxFlushInto(f) : hasAms ? 0 : num('flush_volume'));
+    return Math.max(v, minimalPurge(filaments[f]?.settings, cfg));
   };
   const primeVol = Math.max(...[...usedFils].map(primeVolOf), num('prime_volume') || 45);
-  const bandDepth = Math.max(1.5, primeVol / (tw * hN));
+  const tune = towerTuning(cfg);
+  // wipe_tower_extra_spacing spreads the purge lines: the same volume takes more depth (extra flow is spaced to match)
+  const bandDepth = Math.max(1.5, primeVol / (tw * hN)) * tune.extraSpacing;
   const maxChanges = Math.max(1, ...changesPerLayer);
   const td = Math.max(4, bandDepth * maxChanges);
   let tx = num('prime_tower_x'), ty = num('prime_tower_y');
@@ -968,9 +1067,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   if (ty < 0) ty = towerPos ? Math.min(Math.max(brimM, Number(towerPos[2]) * num('bed_y')), num('bed_y') - td - brimM) : Math.max(5, num('bed_y') - td - 25);
   // tower body: a (filleted) rectangle with optional diagonal ribs
   let towerBody: Paths = [rectPath(tx, ty, tx + tw, ty + td)];
+  let towerBody0 = towerBody; // in the tower frame, before the rotation
   if (useTower) {
     const ribW = num('prime_tower_rib_width');
-    if (bool('prime_tower_rib_wall') && ribW > 0) {
+    if (bool('prime_tower_rib_wall') && ribW > 0 && tune.wallType === 'rib') {
       const ext = num('prime_tower_extra_rib_length');
       const cx = tx + tw / 2, cy = ty + td / 2, half = Math.hypot(tw, td) / 2 + ext;
       const ribs = [Math.atan2(td, tw), Math.atan2(-td, tw)].map((a) => {
@@ -981,6 +1081,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       towerBody = union([...towerBody, ...ribs]);
     }
     if (bool('prime_tower_fillet_wall')) towerBody = offset(offset(towerBody, -2, 'round'), 2, 'round');
+    towerBody0 = towerBody;
+    // wipe tower rotation angle: the whole tower turns about its centre
+    towerBody = rotatePathsAbout(towerBody, tune.rotation, tx + tw / 2, ty + td / 2);
     // a default position (not set by the user) keeps the whole tower, ribs and brim included, on the plate
     if (autoTower) {
       const b0 = bounds(towerBody);
@@ -991,6 +1094,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (dx || dy) {
         tx += dx; ty += dy;
         towerBody = towerBody.map((p) => p.map((q) => ({ X: q.X + Math.round(dx * SCALE), Y: q.Y + Math.round(dy * SCALE) })));
+        towerBody0 = towerBody0.map((p) => p.map((q) => ({ X: q.X + Math.round(dx * SCALE), Y: q.Y + Math.round(dy * SCALE) })));
       }
     }
     const tb = offset(towerBody, 3);
@@ -998,6 +1102,13 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const b = bounds(towerBody);
     if (b.minX / SCALE < 0 || b.minY / SCALE < 0 || b.maxX / SCALE > num('bed_x') || b.maxY / SCALE > num('bed_y')) warn('The prime tower does not fit on the plate.');
   }
+  // per layer: the bands a layer holds (Internal ribs off: only what it and the layers above need), the height of the
+  // tower layer printed there (combined sparse layers), the top of the tower (stabilization cone)
+  const towerBands = towerBandsPerLayer(changesPerLayer, maxChanges, tune.framework);
+  const towerHs = tune.combineSparse && !(str('timelapse_type') === 'smooth' && str('time_lapse_gcode')) ? combinedTowerHeights(hs, changesPerLayer, lastChangeLayer, num('max_layer_height') || nozzle * 0.75) : null;
+  const towerTop = lastChangeLayer >= 0 ? zs[lastChangeLayer] : 0;
+  if (useTower && tune.noSparse) warn('No sparse layers: on a filament change the nozzle goes down to the top of the prime tower. Make sure nothing taller stands in the way.');
+  let towerPrintedZ = 0;
 
   // ---------- bed adhesion (first layer)
   const brimLoops: PathItem[] = [];
@@ -1012,7 +1123,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     const bedIn = [rectPath(w / 2, w / 2, num('bed_x') - w / 2, num('bed_y') - w / 2)];
     const offBed = (loops: PathItem[]) => loops.some((l) => { for (let k = 0; k < l.pts.length; k += 2) if (l.pts[k] < w / 2 - 1e-3 || l.pts[k + 1] < w / 2 - 1e-3 || l.pts[k] > num('bed_x') - w / 2 + 1e-3 || l.pts[k + 1] > num('bed_y') - w / 2 + 1e-3) return true; return false; });
     /** Brim of one object; with `clip`, only the part of each kind of brim that lies in that region (the bed). */
-    const brimFor = (paths: Paths, o: number, clip?: Paths) => {
+    const earMax = num('brim_ears_max_angle'), earDetect = num('brim_ears_detection_length'), earsOuterOnly = bool('brim_ears_outer_only');
+    /** Combine brims: the brim area of each object (filled once, merged, below) instead of its loops. */
+    const brimAreas: Paths[] = [];
+    const brimFor = (paths: Paths, o: number, clip?: Paths, area?: boolean) => {
       let type = brimType;
       if (type === 'auto_brim') {
         const b = bounds(paths);
@@ -1029,22 +1143,30 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         // round ears on the painted points, or on the sharp convex corners of the first layer
         const painted = meshes[o].brimEars ?? [];
         const centers: [number, number][] = painted.length ? painted : [];
-        if (!painted.length) for (const c of outers) {
-          const pts = pathToPoly(c), n = pts.length / 2;
-          for (let k = 0; k < n; k++) {
-            const p0 = (k - 1 + n) % n, p1 = (k + 1) % n;
-            const ax = pts[p0 * 2] - pts[k * 2], ay = pts[p0 * 2 + 1] - pts[k * 2 + 1], bx = pts[p1 * 2] - pts[k * 2], by = pts[p1 * 2 + 1] - pts[k * 2 + 1];
-            const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
-            if (la < 1e-3 || lb < 1e-3) continue;
-            const ang = Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)))) * 180 / Math.PI;
-            const convex = ax * by - ay * bx < 0; // CCW contour: left turn
-            if (convex && ang < 125) centers.push([pts[k * 2], pts[k * 2 + 1]]);
-          }
+        // auto ears: convex corners sharper than the max angle, on the outline simplified by the detection radius;
+        // hole corners too unless outer only
+        const filled = union(outers);
+        const holeLoops = earsOuterOnly ? [] : exs0.flatMap((e) => e.holes);
+        if (!painted.length) for (const c of [...outers, ...holeLoops]) {
+          // ears outer only: no corners of parts enclosed by a hole
+          if (earsOuterOnly && exs0.some((e) => e.contour !== c && e.holes.length && intersection([c], e.holes.map((h) => h.slice().reverse())).length)) continue;
+          pushAll(centers, sharpCorners(decimateLoop(c, earDetect), earMax));
         }
         if (!centers.length) return out;
         let ears = difference(union(centers.map(([x, y]) => circlePath(x, y, bw))), offset(paths, gap + w / 2));
+        if (earsOuterOnly) ears = difference(ears, filled);
         if (clip) ears = intersection(ears, clip);
+        if (area) { brimAreas.push(ears); return out; }
         for (const p of concentricFill(ears, s, w / 2)) out.push({ ...p, feature: 'brim', width: w, flow: 1 });
+        return out;
+      }
+      if (area) {
+        // the bands the loops below would cover
+        if (type === 'outer_only' || type === 'outer_and_inner') brimAreas.push(difference(offset(outers, gap + count * s), offset(outers, gap)));
+        if (type === 'inner_only' || type === 'outer_and_inner') {
+          const holes = exs0.flatMap((e) => e.holes.map((h) => h.slice().reverse()));
+          brimAreas.push(difference(offset(holes, -gap), offset(holes, -(gap + count * s))));
+        }
         return out;
       }
       if (type === 'outer_only' || type === 'outer_and_inner') {
@@ -1064,10 +1186,20 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       return out;
     };
     let clipped = false;
-    for (let o = 0; o < meshes.length; o++) {
-      let b = brimFor(objSlices[o][objStart] ?? [], o);
+    // brim follows compensated outline (on) or the first layer before elephant foot compensation (off)
+    const brimBase = (o: number) => (!bool('brim_use_efc_outline') && rawFirstLayer.get(objSlices[o])) || (objSlices[o][objStart] ?? []);
+    // combine brims (Orca): one brim for all objects, merged where they meet; not with per-object skirts or by-object printing
+    const combine = bool('combine_brims') && meshes.length > 1 && !byObject && !(str('skirt_type') === 'perobject' && num('skirt_loops') > 0);
+    if (combine) {
+      for (let o = 0; o < meshes.length; o++) brimFor(brimBase(o), o, undefined, true);
+      const keep = union(meshes.flatMap((_, o) => offset(brimBase(o), gap + w / 2)));
+      let region = brimAreas.length ? difference(union(brimAreas.flat()), keep) : [];
+      if (region.length && difference(region, bedIn).length) { region = intersection(region, bedIn); clipped = true; }
+      for (const p of concentricFill(region, s, w / 2)) brimLoops.push({ ...p, feature: 'brim', width: w, flow: 1 });
+    } else for (let o = 0; o < meshes.length; o++) {
+      let b = brimFor(brimBase(o), o);
       // a brim wider than the room around the part: keep only what is on the bed, same brim type
-      if (b.length && offBed(b)) { b = brimFor(objSlices[o][objStart] ?? [], o, bedIn); clipped = true; }
+      if (b.length && offBed(b)) { b = brimFor(brimBase(o), o, bedIn); clipped = true; }
       if (b.length) { brimByObj.set(o, b); pushAll(brimLoops, b); }
     }
     if (clipped) warn('The brim is cut at the edge of the plate: the part is too close to the edge for the full brim width.');
@@ -1113,6 +1245,19 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   progress('Generating infill & toolpaths', 0.58);
   const resolution = num('resolution');
   const solidDir = num('solid_infill_direction');
+  // centre of each object's footprint on the plate (separated infills, symmetric infill, surface pattern centres)
+  const objCentres = new Map<number, [number, number]>();
+  const objCentre = (o: number): [number, number] => {
+    let c = objCentres.get(o);
+    if (!c) {
+      const v = meshes[o].vertices;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let k = 0; k < v.length; k += 3) { x0 = Math.min(x0, v[k]); x1 = Math.max(x1, v[k]); y0 = Math.min(y0, v[k + 1]); y1 = Math.max(y1, v[k + 1]); }
+      c = v.length ? [(x0 + x1) / 2, (y0 + y1) / 2] : [0, 0];
+      objCentres.set(o, c);
+    }
+    return c;
+  };
   const wallSeq = str('wall_sequence');
 
   let curObj = -1; // object being emitted: per-object speeds apply to its features
@@ -1141,6 +1286,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       case 'internal_solid_infill': case 'bottom_surface': return cn('internal_solid_infill_speed');
       case 'top_surface': return cn('top_surface_speed');
       case 'bridge': return cn('bridge_speed');
+      case 'internal_bridge': return floatOrPercent((curObj >= 0 ? ocfg(curObj, curLayer) : cfg).internal_bridge_speed ?? '150%', cn('bridge_speed')) || cn('bridge_speed');
       case 'gap_infill': return cn('gap_infill_speed');
       case 'ironing': return cn('ironing_speed');
       case 'support': return cn('support_speed');
@@ -1195,6 +1341,10 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     outer_wall: 'outer_wall_flow_ratio', inner_wall: 'inner_wall_flow_ratio', overhang_wall: 'overhang_flow_ratio', sparse_infill: 'sparse_infill_flow_ratio',
     internal_solid_infill: 'internal_solid_infill_flow_ratio', gap_infill: 'gap_fill_flow_ratio', support: 'support_flow_ratio', support_interface: 'support_interface_flow_ratio',
   };
+  // small area infill flow compensation: short solid infill lines get less flow (OrcaSlicer's model)
+  const smallArea = bool('small_area_infill_flow_compensation') ? flowModel(str('small_area_infill_flow_compensation_model') || DEFAULT_FLOW_MODEL) : null;
+  if (bool('small_area_infill_flow_compensation') && !smallArea) warn('Small area flow compensation: the flow compensation model is not valid and was ignored.');
+  const SMALL_AREA_ROLES = new Set<FeatureType>(['internal_solid_infill', 'top_surface', 'bottom_surface']);
   const roleFlow = (f: FeatureType) => { const k = ROLE_FLOW[f]; return k ? (Number.isFinite(cn(k)) && cfg[k] !== undefined ? cn(k) : 1) : 1; };
   const travelSpeed = num('travel_speed');
   const reduceMode = str('reduce_infill_retraction_mode') || 'auto';
@@ -1248,6 +1398,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   };
   let toolchangeCount = 0;
   let pendingDeretract: number | null = null;
+  /** deretract_speed_extruder_change: the speed of the first deretraction after a filament change. */
+  let changeDeretract: number | null = null;
   let prevSeams: [number, number][] = [];
   let curZ = 0;
   let curTool = -1;
@@ -1259,6 +1411,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
   let maxPrinted = 0;
 
   // emission of one layer (all objects, or one object when printing by object)
+  const curled = new Map<number, PointGrid>();
+  const isWall = (f: FeatureType) => f === 'outer_wall' || f === 'inner_wall' || f === 'overhang_wall';
   const emitLayer = (i: number, only: number | null) => {
     const h = hs[i], zTop = zs[i];
     curLayer = i;
@@ -1409,15 +1563,15 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         // wipe before external loop: arrive (retracted) just inside the part, prime there, then move onto the seam
         travel(it.primeAt[0], it.primeAt[1], it.feature, startZ);
         if (retracted) {
-        const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false;
+        const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: changeDeretract ?? deretractSpeed }); changeDeretract = null; retracted = false;
         }
       }
       travel(pts[0], pts[1], it.feature, startZ);
-      if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: deretractSpeed }); retracted = false; } // a negative extra can cancel the prime, never pull filament back
+      if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: changeDeretract ?? deretractSpeed }); changeDeretract = null; retracted = false; } // a negative extra can cancel the prime, never pull filament back
       const a = Math.min(accelFor(it.feature, i), capH.a);
       if (a !== accelSet) { ops.push({ k: 'accel', a }); accelSet = a; }
       if (jerkOn) { const j = jerkFor(it.feature, i); if (j !== jerkSet) { ops.push({ k: 'jerk', j }); jerkSet = j; } }
-      const thick = it.feature === 'bridge' && bool('thick_bridges');
+      const thick = (it.feature === 'bridge' && bool('thick_bridges')) || (it.feature === 'internal_bridge' && cfg.thick_internal_bridges !== false);
       const hEff = thick ? Math.min(it.width, nozzle) : hItem;
       const xsOf = (w: number) => (w > hItem ? (w - hItem) * hItem + Math.PI * (hItem / 2) ** 2 : w * hItem);
       const xs = thick ? Math.PI * (nozzle / 2) ** 2 : xsOf(it.width);
@@ -1426,7 +1580,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const flowMul = (fl.flowRatio || 1) * it.flow * objFlow * layerFlow * surfFlow;
       const ePerMm = (xs / filArea) * flowMul;
       const varW = it.widths && it.widths.length * 2 === pts.length ? it.widths : null;
-      let v = it.speed !== undefined ? Math.min(speedFor(it.feature, i), it.speed) : speedFor(it.feature, i);
+      let v = it.speedSet !== undefined ? it.speedSet : it.speed !== undefined ? Math.min(speedFor(it.feature, i), it.speed) : speedFor(it.feature, i);
       v = Math.min(v, capH.v);
       const maxVol = 'filament_max_volumetric_speed' in live ? live.filament_max_volumetric_speed : fl.maxVolumetricSpeed;
       v = Math.min(v, (maxVol || 1e9) / Math.max(xs, 1e-6));
@@ -1450,7 +1604,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const len3 = Math.hypot(len, zz - curZ);
         const feat = it.feats?.[idx] ?? it.feature;
         const segFlow = it.flows?.[idx] ?? 1;
-        const roleF = otherFlow ? roleFlow(feat) : 1;
+        const roleF = (otherFlow ? roleFlow(feat) : 1) * (smallArea && SMALL_AREA_ROLES.has(feat) ? smallArea(len) : 1);
         let sv = v;
         const cap = it.speeds?.[idx];
         if (cap !== undefined && cap > 0) sv = Math.min(sv, cap);
@@ -1464,8 +1618,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         } else {
           ops.push({ k: 'move', x, y, z: zz, e: 0, f: sv, feature: 'travel', w: 0, h, travel: true });
         }
+        if (it.wipeShift) wipeTrail.push(x - ((y - py) / len) * it.wipeShift, y + ((x - px) / len) * it.wipeShift);
+        else wipeTrail.push(x, y);
         px = x; py = y; curZ = zz;
-        wipeTrail.push(x, y);
         if (wipeTrail.length > 400) wipeTrail = wipeTrail.slice(-200);
       }
       if (it.wipeIn) {
@@ -1487,29 +1642,75 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     // --- prime tower
     let towerOutlineDone = false;
     let bandsDone = 0;
+    let towerUsed = false;
+    let priming = false;
+    let layerOrder: number[] = [];
     const towerW = () => (i === 0 ? lw0('initial_layer_line_width') : lw0('support_line_width'));
-    const towerOutline = () => {
+    const towerCx = tx + tw / 2, towerCy = ty + td / 2;
+    const toBed = rotatorAbout(tune.rotation, towerCx, towerCy);
+    // this layer's tower: as deep as its bands (Internal ribs off), widened by the stabilization cone, rotated
+    const layerDepth = Math.min(td, Math.max(bandDepth, towerBands[i] * bandDepth));
+    const layerBody = (() => {
+      let b = layerDepth < td - 1e-6 ? intersection(towerBody0, [rectPath(tx - 1e4, ty - 1e4, tx + tw + 1e4, ty + layerDepth)]) : towerBody0;
+      if (tune.wallType === 'cone' && tune.coneAngle > 0) b = coneBody(b, tune.coneAngle, towerTop, zTop, towerCx, ty + layerDepth / 2, layerDepth);
+      return rotatePathsAbout(b, tune.rotation, towerCx, towerCy);
+    })();
+    // the tower layer printed here: its height (combined sparse layers) and Z (no sparse layers: the top of the tower + a layer)
+    const towerH = towerHs ? towerHs[i] : h;
+    const towerSkip = i > 0 && ((tune.noSparse && changesPerLayer[i] === 0) || (towerHs !== null && towerHs[i] === 0));
+    const towerZ = tune.noSparse && i > 0 ? Math.min(zTop, towerPrintedZ + h) : zTop;
+    const towerItem = (it: PathItem): PathItem => {
+      towerUsed = true;
+      const n = it.pts.length / 2;
+      const out: PathItem = towerH !== h || towerZ < zTop - 1e-6 ? { ...it, height: towerHs ? towerH : h } : it;
+      if (towerZ < zTop - 1e-6) out.depth = new Array(n).fill((zTop - towerZ) / h);
+      return out;
+    };
+    const towerOutline = (force = false) => {
       if (towerOutlineDone) return;
+      // wipe tower filament: the walls wait for that filament when this layer prints it
+      if (!force && tune.wallFilament >= 0 && curTool !== tune.wallFilament && layerOrder.includes(tune.wallFilament)) return;
       towerOutlineDone = true;
       const w = towerW();
       const loops: PathItem[] = [];
       if (i === 0) {
         const bw = num('prime_tower_brim_width');
         const n = Math.max(0, Math.round((bw < 0 ? 3 : bw) / w));
-        for (let k = n; k >= 1; k--) for (const p of offset(towerBody, k * w)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
+        for (let k = n; k >= 1; k--) for (const p of offset(layerBody, k * w)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'brim', width: w, flow: 1 });
       }
-      for (const p of offset(towerBody, -w / 2)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'prime_tower', width: w, flow: 1 });
-      for (const it of orderPaths(loops, px, py).paths) extrudePath(it);
+      for (const p of offset(layerBody, -w / 2)) loops.push({ pts: pathToPoly(p), closed: true, feature: 'prime_tower', width: w, flow: 1 });
+      for (const it of orderPaths(loops, px, py).paths) extrudePath(towerItem(it));
     };
-    const towerBand = (k: number, solid: boolean) => {
+    /** Band k of the tower: a purge (solid, after a change; `skip` mm already used by ramming) or a sparse layer. */
+    const towerBand = (k: number, solid: boolean, skip = 0) => {
       const w = towerW();
-      const y0 = ty + k * bandDepth, y1 = Math.min(ty + td, y0 + bandDepth);
-      const reg = offset([rectPath(tx, y0, tx + tw, y1)], -w);
+      const y0 = ty + k * bandDepth + skip, y1 = Math.min(ty + layerDepth, ty + (k + 1) * bandDepth);
+      if (y1 - y0 < w) return;
+      const reg = rotatePathsAbout(offset([rectPath(tx, y0, tx + tw, y1)], -w), tune.rotation, towerCx, towerCy);
       const gapPct = Math.max(100, num('prime_tower_infill_gap') || 150) / 100;
-      const lines = linesFill(reg, solid ? spacingOf(w, h) : Math.max(w * gapPct, 4), solid ? (i % 2 ? 45 : -45) : 90);
-      for (const it of orderPaths(lines.map((l) => ({ ...l, feature: 'prime_tower' as FeatureType, width: w, flow: 1 })), px, py).paths) extrudePath(it);
+      // purge lines: extra flow, spaced to match (and by the extra spacing); sparse lines no farther apart than the bridging distance
+      const sparseGap = Math.max(w * gapPct, 4);
+      const spacing = solid ? spacingOf(w, h) * tune.wipeSpacing : tune.bridging > 0 ? Math.min(sparseGap, tune.bridging) : sparseGap;
+      const lines = linesFill(reg, spacing, (solid ? (i % 2 ? 45 : -45) : 90) + tune.rotation);
+      const cap = solid && tune.maxPurgeSpeed > 0 ? { speed: tune.maxPurgeSpeed } : {};
+      for (const it of orderPaths(lines.map((l) => ({ ...l, feature: 'prime_tower' as FeatureType, width: w, flow: solid ? tune.extraFlow : 1, ...cap })), px, py).paths) extrudePath(towerItem(it));
     };
     const towerActive = useTower && i <= lastChangeLayer;
+    /** Box of band k in the tower frame, for the MMU / ramming sequences. */
+    const bandCtx = (k: number, fs: Config | undefined): TowerCtx => ({
+      xl: tx, xr: tx + tw, y0: ty + k * bandDepth, y1: Math.min(ty + layerDepth, ty + (k + 1) * bandDepth), w: towerW(), h: towerH, z: towerZ,
+      filArea: Math.PI * ((filaments[Math.max(0, curTool)]?.diameter ?? 1.75) / 2) ** 2, toBed, cfg, fs, extraSpacing: tune.extraSpacing, verbose: bool('gcode_comments'),
+    });
+    /** Run a tower sequence: travel to its start, prime if retracted, then its moves. */
+    const runTowerOps = (seq: Op[]) => {
+      const first = seq.find((op) => op.k === 'move') as Extract<Op, { k: 'move' }> | undefined;
+      if (!first) { pushAll(ops, seq); return; }
+      travel(first.x, first.y, 'prime_tower', towerZ);
+      if (retracted) { const back = pendingDeretract ?? retractLen + restartExtra; pendingDeretract = null; if (back > 0) ops.push({ k: 'retract', len: -back, speed: changeDeretract ?? deretractSpeed }); changeDeretract = null; retracted = false; }
+      pushAll(ops, seq);
+      towerUsed = true;
+      for (let k = seq.length - 1; k >= 0; k--) { const op = seq[k]; if (op.k === 'move') { px = op.x; py = op.y; curZ = op.z; break; } }
+    };
 
     // --- items of this layer, grouped by filament (walls / fills of each island; support; flush candidates)
     interface IslandJob { isl: Island; fills: PathItem[]; wallFil: number; gapFil: number; inside?: (x: number, y: number) => boolean }
@@ -1525,14 +1726,31 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const w0 = lw0('initial_layer_line_width'), wb = (Number(cfg.initial_layer_infill_line_width) || w0);
       const overlap = onum(o, i, 'infill_wall_overlap') / 100;
       const solidAngle = solidDir + (i % 2 ? 90 : 0);
+      // rotation templates, fixed top / bottom directions and "Align directions to model"
+      const ocf = ocfg(o, i);
+      const li = i - objStart;
+      const modelRot = ocf.align_infill_direction_to_model === true ? (meshes[o].rotationZ ?? 0) : 0;
+      const solidTpl = templateAngle(String(ocf.solid_infill_rotate_template ?? ''), li);
+      const solidA = (solidTpl ?? solidAngle) + modelRot, solidD = (solidTpl ?? solidDir) + modelRot;
+      const fixedDir = (k: string) => { const v = ocf[k]; return v === undefined || v === '' ? -1 : Number(v); };
+      const topDir = fixedDir('top_layer_direction'), botDir = fixedDir('bottom_layer_direction');
+      const topDirs: [number, number] | undefined = topDir >= 0 ? [topDir + modelRot, topDir + modelRot] : undefined;
+      const botDirs: [number, number] | undefined = botDir >= 0 ? [botDir + modelRot, botDir + modelRot] : undefined;
+      // top / bottom surfaces overlap the inner wall by their own amount (% of the inner wall width; -1 = infill/wall overlap)
+      const tbRaw = ocf.top_bottom_infill_wall_overlap;
+      const tbOv = tbRaw === undefined || tbRaw === '' || Number(tbRaw) < 0 ? undefined : (Number(tbRaw) / 100) * olw(o, i, 'inner_wall_line_width');
+      // elephant foot layers density: internal solid infill of the compensated layers grows from this to 100%
+      const efcLayers = Math.max(1, Math.round(onum(o, i, 'elefant_foot_compensation_layers') || 1));
+      const efd = Math.max(0.05, Math.min(1, (Number(ocf.elefant_foot_layers_density ?? 100) || 100) / 100));
+      const efcDensity = efd < 1 && !raftN && li >= 1 && li < efcLayers && onum(o, i, 'elefant_foot_compensation') > 0 ? efd + ((1 - efd) * (li - 1)) / Math.max(1, efcLayers - 1) : 1;
       const jobs: IslandJob[] = objIslands.map((isl) => ({ isl, fills: [], wallFil: featFil(o, i, 'wall', isl.fil), gapFil: featFil(o, i, 'wall', isl.fil) }));
       jobsByObj.set(o, jobs);
       for (const fil of new Set(objIslands.map((s) => s.fil))) {
         const fInner = filInner[i][o].get(fil) ?? [];
         const clipLimit = new Map<number, Paths>(); // the same fill limit is asked for by many regions of one layer
-        const clipTo = (r: Paths, w: number) => {
+        const clipTo = (r: Paths, w: number, ovMm?: number) => {
           if (!r.length || !fInner.length) return [];
-          const d = -(w / 2) + overlap * w;
+          const d = -(w / 2) + (ovMm ?? overlap * w);
           let lim = clipLimit.get(d);
           if (!lim) { lim = offset(fInner, d); clipLimit.set(d, lim); }
           return intersection(r, lim);
@@ -1542,19 +1760,37 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           for (const p of polys) fills.push({ ...p, pts: simplify(p.pts, resolution, p.closed), feature, width, flow, ...extra });
         };
         const solidFil = featFil(o, i, 'solid', fil), sparseFil = featFil(o, i, 'sparse', fil);
-        const surface = (r: Paths, pattern: string, w: number, feature: FeatureType, density = 1, extra: Partial<PathItem> = {}) => {
-          const reg = clipTo(r, w);
+        const surface = (r: Paths, pattern: string, w: number, feature: FeatureType, density = 1, extra: Partial<PathItem> = {}, dirs?: [number, number]) => {
+          const topBot = feature === 'top_surface' || feature === 'bottom_surface';
+          const reg = clipTo(r, w, topBot ? tbOv : undefined);
           if (!reg.length) return;
           const s = spacingOf(w, h) / Math.max(0.01, Math.min(1, density));
+          // centre-based top / bottom patterns: centre (surface / model / assembly) and fill order (outward / inward)
+          if (topBot && CENTRED_PATTERNS.has(pattern)) {
+            const order = ostr(o, i, feature === 'top_surface' ? 'top_surface_fill_order' : 'bottom_surface_fill_order') || 'default';
+            const cmode = ostr(o, i, 'center_of_surface_pattern') || 'each_surface';
+            if (pattern !== 'concentric' || order !== 'default') {
+              const groups: [Paths, [number, number] | null][] = pattern === 'concentric' || cmode === 'each_surface' ? [[reg, null]]
+                : cmode === 'each_assembly' ? [[reg, objCentre(o)]]
+                : objIslands.map((isl) => { const b = bounds([isl.ex.contour]); return [intersection(reg, exToPaths(isl.ex)), [(b.minX + b.maxX) / 2 / SCALE, (b.minY + b.maxY) / 2 / SCALE]]; });
+              for (const [g, c] of groups) {
+                if (!g.length) continue;
+                const cs = centredSurface(g, pattern, s, c, order);
+                add(cs.lines, feature, w, 1, { fil: solidFil, ...extra, ...(cs.keep ? { keepOrder: true } : {}) });
+              }
+              return;
+            }
+          }
           // monotonic line travel extend: each line is approached from inside the wall
           const ext = (pattern === 'monotonic' || pattern === 'monotonicline') ? (onum(o, i, 'monotonic_travel_into_wall') / 100) * w : 0;
-          add(surfaceFill(reg, pattern, s, solidAngle, solidDir), feature, w, 1, { fil: solidFil, ...(ext > 0 ? { leadIn: ext } : {}), ...extra });
+          const [a1, a2] = dirs ?? [solidA, solidD];
+          add(surfaceFill(reg, pattern, s, a1, a2), feature, w, 1, { fil: solidFil, ...(ext > 0 ? { leadIn: ext } : {}), ...extra });
         };
         /** Internal solid: narrow areas get concentric loops instead of short zig-zags. */
-        const solidFill = (r: Paths, pattern: string, w: number, extra: Partial<PathItem> = {}) => {
+        const solidFill = (r: Paths, pattern: string, w: number, extra: Partial<PathItem> = {}, density = 1) => {
           const reg = clipTo(r, w);
           if (!reg.length) return;
-          const s = spacingOf(w, h);
+          const s = spacingOf(w, h) / density;
           let wide = reg;
           if (obool(o, i, 'detect_narrow_internal_solid_infill')) {
             const keep = opening(reg, w * 1.5);
@@ -1562,23 +1798,39 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             wide = keep;
             if (narrow.length) add(concentricFill(narrow, s, w / 2), 'internal_solid_infill', w, 1, { fil: solidFil, ...extra });
           }
-          if (wide.length) add(surfaceFill(wide, pattern, s, solidAngle, solidDir), 'internal_solid_infill', w, 1, { fil: solidFil, ...extra });
+          if (wide.length) add(surfaceFill(wide, pattern, s, solidA, solidD), 'internal_solid_infill', w, 1, { fil: solidFil, ...extra });
         };
-        surface(rg.bottom, ostr(o, i, 'bottom_surface_pattern'), i === 0 ? wb : sw, 'bottom_surface', onum(o, i, 'bottom_surface_density') / 100 || 1);
-        if (rg.bridge.length) {
-          for (const ex of toExPolygons(clipTo(rg.bridge, nozzle))) {
-            const b = bounds([ex.contour]);
-            const ang = num('bridge_angle') > 0 ? num('bridge_angle') : (b.maxX - b.minX) > (b.maxY - b.minY) ? 90 : 0;
+        surface(rg.bottom, ostr(o, i, 'bottom_surface_pattern'), i === 0 ? wb : sw, 'bottom_surface', onum(o, i, 'bottom_surface_density') / 100 || 1, {}, botDirs);
+        const autoBridge = (ex: ExPolygon) => { const b = bounds([ex.contour]); return (b.maxX - b.minX) > (b.maxY - b.minY) ? 90 : 0; };
+        const relBridge = ocf.relative_bridge_angle === true;
+        const bfs = filaments[solidFil]?.settings;
+        const bridgeFan = (bfs?.enable_overhang_bridge_fan ?? cfg.enable_overhang_bridge_fan) !== false ? Number(bfs?.overhang_fan_speed ?? cfg.overhang_fan_speed ?? 100) : undefined;
+        const extBridge = (paths: Paths) => {
+          for (const ex of toExPolygons(clipTo(paths, nozzle))) {
+            const ang = bridgeAngle(num('bridge_angle'), autoBridge(ex), relBridge, modelRot);
             const thick = bool('thick_bridges');
-            const bw = thick ? nozzle : sw;
-            const fs = filaments[solidFil]?.settings;
-            const bridgeFan = (fs?.enable_overhang_bridge_fan ?? cfg.enable_overhang_bridge_fan) !== false ? Number(fs?.overhang_fan_speed ?? cfg.overhang_fan_speed ?? 100) : undefined;
+            const bw = bridgeWidth(ocf, nozzle, sw, thick);
             // external bridge density: line spacing over air (above 100% the lines overlap)
             const bd = Math.max(0.1, Math.min(1.25, (cfg.bridge_density === undefined ? 100 : num('bridge_density')) / 100));
-            add(linesFill(exToPaths(ex), (thick ? nozzle : spacingOf(sw, h)) / bd, ang), 'bridge', bw, num('bridge_flow') || 1, { fil: solidFil, fanMin: bridgeFan });
+            add(linesFill(exToPaths(ex), (thick ? bw : spacingOf(bw, h)) / bd, ang), 'bridge', bw, num('bridge_flow') || 1, { fil: solidFil, fanMin: bridgeFan });
           }
-        }
-        if (rg.solid.length) solidFill(rg.solid, ostr(o, i, 'internal_solid_infill_pattern'), i === 0 ? w0 : sw);
+        };
+        /** Internal bridges: own direction, density, flow, speed (line type), fan and thickness. */
+        const intBridge = (paths: Paths, cross: boolean) => {
+          const ibThick = ocf.thick_internal_bridges !== false;
+          const ibFan = Number(bfs?.internal_bridge_fan_speed ?? cfg.internal_bridge_fan_speed ?? -1);
+          const ibd = Math.max(0.1, Math.min(1.25, Number(ocf.internal_bridge_density ?? 100) / 100));
+          for (const ex of toExPolygons(clipTo(paths, sw))) {
+            const ang = bridgeAngle(onum(o, i, 'internal_bridge_angle'), autoBridge(ex), relBridge, modelRot) + (cross ? 90 : 0);
+            const ibw = ibThick ? nozzle : sw;
+            add(linesFill(exToPaths(ex), (ibThick ? nozzle : spacingOf(sw, h)) / ibd, ang), 'internal_bridge', ibw, Number(ocf.internal_bridge_flow ?? 1) || 1,
+              { fil: solidFil, ...(ibFan >= 0 ? { fanSet: ibFan } : { fanMin: bridgeFan }) });
+          }
+        };
+        if (rg.bridge.length) extBridge(rg.bridge);
+        if (rg.ibridge?.length) intBridge(rg.ibridge, false);
+        for (const b2 of rg.bridge2 ?? []) { if (b2.internal) intBridge(b2.paths, true); else extBridge(b2.paths); }
+        if (rg.solid.length) solidFill(rg.solid, ostr(o, i, 'internal_solid_infill_pattern'), i === 0 ? w0 : sw, {}, efcDensity);
         if (rg.vshell.length) solidFill(rg.vshell, ostr(o, i, 'internal_solid_infill_pattern'), sw, { speed: floatOrPercent(ocfg(o, i).vertical_shell_speed, onum(o, i, 'internal_solid_infill_speed')) || undefined });
         if (rg.floating.length) solidFill(rg.floating, ostr(o, i, 'internal_solid_infill_pattern'), sw, { speed: onum(o, i, 'bridge_speed') || undefined });
         if (rg.subTop.length) surface(rg.subTop, ostr(o, i, 'sub_top_surface_pattern'), sw, 'internal_solid_infill');
@@ -1588,9 +1840,47 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         // anchors hug the inner wall; where Motionex moves walls it trims infill near them, so anchors would only be cut up
         const motionHere = motionAt(zTop);
         const anchorLen = motionHere ? 0 : floatOrPercent(ocfg(o, i).sparse_infill_anchor, spw), anchorMax = motionHere ? 0 : floatOrPercent(ocfg(o, i).sparse_infill_anchor_max, spw);
+        // sparse rotation template (replaces the infill direction), separated infills, symmetric infill Y axis
+        const sparseTpl = templateAngle(String(ocf.sparse_infill_rotate_template ?? ''), li);
+        const separated = ocf.separated_infills === true;
+        const adaptiveMode = ostr(o, i, 'adaptive_infill_mode') || 'disabled';
+        const smooth = onum(o, i, 'sparse_infill_smooth_factor') / 100;
+        /** Distance from the object's surface, by adaptive density mode: in the layer (normal Z), or across one axis, plus Z. */
+        const deepFrom = (mode: string) => (dd: number): Paths => {
+          const inner = layerInner[i][o];
+          const axis = mode === 'normal_x' ? 'y' : mode === 'normal_y' ? 'x' : 'xy';
+          let acc = directionalShrink(inner, dd, axis);
+          if (mode === 'normal_z' || !acc.length) return acc;
+          const m = Math.ceil(dd / Math.max(h, 1e-3)), stride = Math.max(1, Math.ceil(m / 6));
+          for (let j = i - m; j <= i + m && acc.length; j += stride) {
+            const jj = Math.min(Math.max(j, i - m), i + m);
+            if (jj < objStart || jj >= N || !layerInner[jj][o].length) return [];
+            acc = intersection(acc, layerInner[jj][o]);
+          }
+          return acc;
+        };
         const sparseLines = (reg: Paths, p: SparsePattern, d: number, angle: number) => {
-          const lines = sparseFill(reg, p, spw, d, i, zTop, angle);
-          return ANCHORED_PATTERNS.has(p) && (anchorLen > 0 || anchorMax > 0) ? anchorInfill(lines, reg, spw, anchorLen, anchorMax) : lines;
+          const a = (sparseTpl ?? angle) + modelRot;
+          const L = sparseTpl !== null ? 0 : i; // a template sets the angle of every layer: no alternation
+          const sp = spw / Math.min(1, d);
+          let lines: Polyline2[];
+          if (p === 'gyroid' && adaptiveMode !== 'disabled') {
+            const core = (ocf.adaptive_infill_interior_density === undefined ? 5 : onum(o, i, 'adaptive_infill_interior_density')) / 100;
+            const shells = adaptiveShells(reg, deepFrom(adaptiveMode), adaptiveMode, ostr(o, i, 'adaptive_infill_gradient') || 'linear', d, core, spw);
+            lines = adaptiveGyroid(shells, spw, zTop, ocf.gyroid_optimized === true ? gyroidZFactor(d, spw, h) : 1);
+          } else {
+            const mirror = ocf.symmetric_infill_y_axis === true && SYMMETRIC_PATTERNS.has(p);
+            const c = separated || mirror ? objCentre(o) : null;
+            lines = inFrame(reg, c ? c[0] : 0, c && separated ? c[1] : 0, mirror, (r) => {
+              if (EXTRA_SPARSE.has(p)) return extraSparseFill(r, p, sp, i, zTop, a, ocf, sparseTpl !== null);
+              if (p === 'gyroid' && ocf.gyroid_optimized === true) return gyroidFill(r, sp, zTop, gyroidZFactor(d, spw, h));
+              const out = sparseFill(r, p, spw, d, L, zTop, a);
+              if (p === '3dhoneycomb' && ocf.infill_complete_top === true && i > objStart) pushAll(out, honeycombTops(r, sp, zTop, zs[i - 1], a));
+              return out;
+            });
+          }
+          if (ANCHORED_PATTERNS.has(p) && (anchorLen > 0 || anchorMax > 0)) lines = anchorInfill(lines, reg, spw, anchorLen, anchorMax);
+          return smooth > 0 ? smoothCorners(lines, smooth) : lines;
         };
         if (rg.lines?.length) {
           const reg = clipTo(rg.sparse, spw);
@@ -1608,16 +1898,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           const reg = clipTo(m.paths, spw);
           if (reg.length) add(sparseLines(reg, m.pattern, m.density, m.angle ?? onum(o, i, 'infill_direction')), 'sparse_infill', spw, 1, { fil: sparseFil, speed: m.speed });
         }
-        if (rg.top.length) surface(rg.top, ostr(o, i, 'top_surface_pattern'), twid, 'top_surface', onum(o, i, 'top_surface_density') / 100 || 1);
+        if (rg.top.length) surface(rg.top, ostr(o, i, 'top_surface_pattern'), twid, 'top_surface', onum(o, i, 'top_surface_density') / 100 || 1, {}, topDirs);
         const ironing = ostr(o, i, 'ironing_type');
         const ironRegion = ironing === 'solid' ? union([...rg.top, ...rg.solid, ...rg.subTop]) : rg.top;
         if (ironRegion.length && (ironing === 'top' || ironing === 'solid' || (ironing === 'topmost' && i === objLast[o]))) {
-          const reg = intersection(offset(ironRegion, -twid / 2 - onum(o, i, 'ironing_inset')), fInner);
-          const sp = onum(o, i, 'ironing_spacing');
+          // filament ironing overrides (-1 = the process value)
+          const ifl = filaments[Math.max(0, fil)]?.settings;
+          const ifo = (k: string, d: number) => { const v = ifl?.[`filament_${k}`]; return v !== undefined && v !== '' && Number(v) >= 0 ? Number(v) : d; };
+          const reg = intersection(offset(ironRegion, -twid / 2 - ifo('ironing_inset', onum(o, i, 'ironing_inset')) + onum(o, i, 'ironing_expansion')), fInner);
+          const sp = Math.max(0.01, ifo('ironing_spacing', onum(o, i, 'ironing_spacing')));
           const ip = ostr(o, i, 'ironing_pattern');
-          const lines = ip === 'concentric' ? concentricFill(reg, sp, sp / 2) : ip === 'archimedeanchords' ? archimedeanFill(reg, sp) : linesFill(reg, sp, onum(o, i, 'ironing_direction'));
-          const ifs = Number(filaments[Math.max(0, fil)]?.settings?.ironing_fan_speed ?? cfg.ironing_fan_speed ?? -1);
-          for (const p of lines) fills.push({ ...p, feature: 'ironing', width: sp, flow: (onum(o, i, 'ironing_flow') / 100) * (h / sp), fil: solidFil, ...(ifs >= 0 ? { fanSet: ifs } : {}) });
+          // ironing angle: the ironing direction (or the fixed top layer direction) plus the offset, or the offset alone when fixed
+          const ironA = (ocf.ironing_angle_fixed === true ? 0 : topDir >= 0 ? topDir : onum(o, i, 'ironing_direction')) + onum(o, i, 'ironing_angle') + modelRot;
+          const lines = ip === 'concentric' ? concentricFill(reg, sp, sp / 2) : ip === 'archimedeanchords' ? archimedeanFill(reg, sp) : linesFill(reg, sp, ironA);
+          const ifs = Number(ifl?.ironing_fan_speed ?? cfg.ironing_fan_speed ?? -1);
+          const ispd = ifo('ironing_speed', -1);
+          for (const p of lines) fills.push({ ...p, feature: 'ironing', width: sp, flow: (ifo('ironing_flow', onum(o, i, 'ironing_flow')) / 100) * (h / sp), fil: solidFil, ...(ifs >= 0 ? { fanSet: ifs } : {}), ...(ispd > 0 ? { speedSet: ispd } : {}) });
         }
         // assign fills to islands by first point
         const filIslands = jobs.filter((j) => j.isl.fil === fil);
@@ -1646,7 +1942,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const fl = filaments[next];
       const prev = curTool < 0 ? 0 : curTool;
       // a tool changer picks up a head that is already loaded: only the ooze of the parked head is primed
-      let flushVol = toolChanger ? num('tool_prime_volume') : opts.flushMatrix?.[prev]?.[next] ?? num('flush_volume') ?? 0;
+      let flushVol = toolChanger ? num('tool_prime_volume') : flushOf(prev, next);
       let plan: TransitionPlan | undefined;
       for (const x of transitionPlugins) plan = x.transition!({ layer: i, from: prev, to: next, flushVolume: flushVol }) ?? plan;
       if (plan?.flushVolume !== undefined) flushVol = toolChanger ? Math.min(flushVol, plan.flushVolume) : plan.flushVolume;
@@ -1665,6 +1961,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (plan?.label && !hasAms) ops.push({ k: 'raw', text: `M117 Load ${plan.label.replace(/[;\n]/g, ' ')}` });
       // no chute: the tower band printed right after the change takes the flush, the change G-code purges nothing
       const flushLen = towerFlush && towerActive ? 0 : (flushVol || 0) / (Math.PI * (fl.diameter / 2) ** 2);
+      // the tower takes the old filament first: the MMU unload (ramming, cooling tube, parking) or a tool changer's ramming
+      let ramDepth = 0, unloaded = false;
+      const towerSeq = towerActive && curTool >= 0 && !plan?.skipTower && !priming;
+      if (towerSeq && tune.wallFilament >= 0 && curTool === tune.wallFilament) towerOutline();
+      if (towerSeq && hasAms && !toolChanger && towerFlush && bool('enable_filament_ramming')) {
+        const c = bandCtx(bandsDone, filaments[curTool]?.settings);
+        const u = mmuUnload(c, c.xl + c.w, c.y0);
+        if (u.ops.length) { runTowerOps(u.ops); ramDepth = u.depth; unloaded = true; retracted = true; pendingDeretract = 0; }
+      } else if (towerSeq && toolChanger) {
+        const r = multitoolRamming(filaments[curTool]?.settings, cfg);
+        if (r) { const c = bandCtx(bandsDone, filaments[curTool]?.settings); const m = multitoolRam(c, r, c.xl, c.y0); runTowerOps(m.ops); ramDepth = m.depth; }
+      }
       // a head is parked retracted by its normal length, which comes back when it is next picked up
       if (toolChanger && curTool >= 0) {
         const want = num('retract_length_toolchange') || retractLen;
@@ -1673,6 +1981,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         parkedRetract.set(curTool, Math.max(want, have));
       } else if (!retracted && curTool >= 0) ops.push({ k: 'retract', len: num('retract_length_toolchange') || retractLen, speed: retractSpeed });
       if (curTool >= 0) { const eg = String(filaments[curTool]?.settings?.filament_end_gcode ?? ''); if (eg) ops.push({ k: 'raw', text: expandMacro(eg, cfg, { filament_extruder_id: curTool }) }); }
+      // tool change on wipe tower: the head is swapped over the tower, not over the part
+      if (toolChanger && curTool >= 0 && useTower && bool('tool_change_on_wipe_tower')) travel(towerCx, towerCy, 'travel', curZ);
       ops.push({
         k: 'raw', resetPos: true, time: num('filament_change_time'),
         text: vendorTpl
@@ -1705,7 +2015,8 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       loadRetraction();
       const sg = String(toolSet.filament_start_gcode ?? '');
       if (sg) ops.push({ k: 'raw', text: expandMacro(sg, cfg, { filament_extruder_id: next }) });
-      if (num('retract_restart_extra_toolchange')) ops.push({ k: 'raw', text: `G1 E${num('retract_restart_extra_toolchange').toFixed(3)} F${Math.round(deretractSpeed * 60)}` });
+      changeDeretract = num('deretract_speed_extruder_change') > 0 ? num('deretract_speed_extruder_change') : null;
+      if (num('retract_restart_extra_toolchange')) ops.push({ k: 'raw', text: `G1 E${num('retract_restart_extra_toolchange').toFixed(3)} F${Math.round((changeDeretract ?? deretractSpeed) * 60)}` });
       retracted = hasAms; // the AMS sequence ends with a retraction, a parked head was retracted; M600 leaves the nozzle primed
       // a head picked up for the first time was never retracted (the start G-code primed it)
       pendingDeretract = toolChanger ? (parkedRetract.get(next) ?? 0) : null;
@@ -1713,7 +2024,19 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       wipeTrail = [];
       const wasFirst = curTool === -1;
       curTool = next;
-      if (towerActive && (!wasFirst || towerFlush) && !plan?.skipTower) { towerOutline(); towerBand(bandsDone++, true); }
+      // MMU: load the new filament back to the nozzle over the band
+      if (unloaded) {
+        const c = bandCtx(bandsDone, fl.settings);
+        const ld = mmuLoad(c, c.xl + c.w, c.y0 + ramDepth + c.w);
+        if (ld.length) { retracted = false; pendingDeretract = null; runTowerOps(ld); }
+      }
+      // wait for temperature on wipe tower: a filament with another temperature heats up over the tower
+      const newT = Math.round(i === 0 ? fl.nozzleTempInitial : fl.nozzleTemp);
+      if (bool('wait_for_temp_on_wipe_tower') && towerActive && !wasFirst && !priming && newT > 0 && newT !== Math.round(i === 0 ? filaments[prev].nozzleTempInitial : filaments[prev].nozzleTemp)) {
+        travel(towerCx, towerCy, 'travel', curZ);
+        ops.push({ k: 'raw', text: `M109 ${toolChanger ? `T${next} ` : ''}S${newT} ; wait for the temperature over the prime tower` });
+      }
+      if (towerActive && (!wasFirst || towerFlush) && !plan?.skipTower && !priming) { towerOutline(); towerBand(bandsDone++, true, ramDepth); }
       // flush targets, printed with the new filament
       if (deferred.length) { for (const it of orderPaths(deferred, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it); deferred = []; }
       if (deferredJobs.length) { const dj = deferredJobs; deferredJobs = []; for (const d of dj) emitJob(d.o, d.job, () => true); }
@@ -1733,11 +2056,17 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     }
     // timelapse snapshot at the start of the layer (smooth: park over the prime tower first)
     if (timelapse && i > 0) {
+      // farthest point timelapse (traditional): the snapshot at the point of the last layer farthest from the bed origin
+      const far = !smoothLapse && bool('farthest_point_timelapse') ? farthestPoint(layerOps[layerOps.length - 1]?.ops ?? []) : null;
       if (smoothLapse && useTower) {
         retract();
         travel(tx + tw / 2, ty + td / 2, 'travel', curZ);
+      } else if (far) {
+        retract();
+        travel(far[0], far[1], 'travel', curZ);
       }
       ops.push({ k: 'raw', text: vendorTpl ? renderVendor(timelapse, cfg, filaments, {
+        ...(far ? { timelapse_pos_x: Math.round(far[0]), timelapse_pos_y: Math.round(far[1]), has_timelapse_safe_pos: true } : {}), farthest_point_timelapse_enabled: !!far,
         layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h), timelapse_type: smoothLapse ? 1 : 0, spiral_mode: vase,
         in_head_wrap_detect_zone: inHeadWrapZone(), total_layer_count: N, ...firstLayerVars(),
       }, 'Time lapse G-code') : timelapse });
@@ -1746,9 +2075,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     // order filaments: current first
     const fils = only === null ? layerFils[i] : [...new Set(jobsByObj.get(only)?.flatMap((j) => [j.wallFil, ...j.fills.map((f) => f.fil ?? j.isl.fil)]) ?? [])];
     const order = orderLayerTools(fils, curTool, i, opts.filamentSequence);
+    layerOrder = order;
     if (!order.length && curTool === -1) changeTo(supportFil >= 0 ? supportFil : 0);
 
     // --- first-layer adhesion (printed with the first filament of the layer)
+    // prime all printing extruders: a line of each filament along the front edge before the first layer
+    if (i === 0 && useTower && bool('single_extruder_multi_material_priming') && order.length && usedFils.size > 1) {
+      priming = true;
+      const seq = [...[...usedFils].sort((a, b) => a - b).filter((f) => f !== order[0]), order[0]];
+      const w = towerW();
+      seq.forEach((f, k) => {
+        changeTo(f);
+        const len = Math.max(5, Math.min(num('bed_x') - 20, primeVolOf(f) / (w * h)));
+        extrudePath({ pts: [10, 3 + k * 2 * w, 10 + len, 3 + k * 2 * w], closed: false, feature: 'prime_tower', width: w, flow: 1 });
+      });
+      priming = false;
+    }
     if (order.length) changeTo(order[0]);
     // draft shield: the skirt rises with the tallest object; single loop: only the innermost loop above the first layer
     const skirtLayers = str('draft_shield') === 'enabled' ? N : Math.round(num('skirt_height'));
@@ -1800,6 +2142,16 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const wipeLoops = obool(o, i, 'wipe_on_loops');
         const wipeBeforeOuter = obool(o, i, 'wipe_before_external_loop') && (wallSeq === 'outer_inner' || wallSeq === 'inner_outer_inner');
         const lower = lowerSupport ? lowerSupport[o] : null;
+        // reverse on even layers: loops hanging over the layer below by more than the threshold run the other way
+        const revOn = obool(o, i, 'overhang_reverse') && !!lower && (i - objStart) % 2 === 1, revInternal = obool(o, i, 'overhang_reverse_internal_only');
+        const revTesters = new Map<number, (x: number, y: number) => boolean>();
+        const revTester = (w: number) => { const d = floatOrPercent(ocfg(o, i).overhang_reverse_threshold ?? '50%', w); let t = revTesters.get(d); if (!t) revTesters.set(d, (t = insideTester(offset(lower!, d)))); return t; };
+        // (decided per island from its outer loops, as OrcaSlicer does per region)
+        const revIsland = revOn && (isl.walls.loops[0] ?? []).some((l) => l.closed && overhangsBy(l.pts, revTester(l.width)));
+        let lowerIn: ((x: number, y: number) => boolean) | null = null;
+        const supported = () => (lowerIn ??= insideTester(lower!));
+        const scarfFlowRatio = ocfg(o, i).scarf_joint_flow_ratio !== undefined ? onum(o, i, 'scarf_joint_flow_ratio') : 1;
+        const wipeInward = obool(o, i, 'wipe_inward') && isl.walls.loops.length > 1;
         for (const k of seq) {
           const ordered = orderPaths(isl.walls.loops[k].map((l) => ({ ...l })), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
           for (const loop of ordered) {
@@ -1808,7 +2160,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             let pts = simplify(loop.pts, resolution, true);
             // wall loop direction: contours run the chosen way seen from above, holes the other way
             if (pts.length >= 6 && (signedArea2(pts) > 0) !== ((wallCw ? !!loop.hole : !loop.hole))) pts = reverseLoop(pts);
-            const prev = seamMode === 'aligned' && prevSeams.length
+            const prev = (seamMode === 'aligned' || seamMode === 'aligned_back') && prevSeams.length
               ? prevSeams.reduce((b, s) => ((s[0] - pts[0]) ** 2 + (s[1] - pts[1]) ** 2 < (b[0] - pts[0]) ** 2 + (b[1] - pts[1]) ** 2 ? s : b))
               : null;
             const avoid = obool(o, i, 'seam_placement_away_from_overhangs') && lower ? overhangPoints(pts, lower, loop.width) : null;
@@ -1816,14 +2168,18 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             pts = rotateLoop(pts, si);
             if (k > 0 && staggerSeams) pts = shiftLoopStart(pts, k * loop.width);
             if (k === 0) seams.push([pts[0], pts[1]]);
+            const reversed = revIsland && (!revInternal || k > 0) && pts.length >= 6;
+            if (reversed) pts = reverseKeepStart(pts);
             let flows: number[] | undefined;
-            const fuzzThis = fuzzyOn && (fuzzy === 'allwalls' || (k === 0 && (fuzzy === 'all' || (fuzzy === 'external' && !loop.hole))));
+            const fuzzThis = fuzzyOn && (fuzzy === 'allwalls' || (k === 0 && (fuzzy === 'all' || (fuzzy === 'external' && !loop.hole) || (fuzzy === 'hole' && !!loop.hole))));
             if (fuzzThis) {
               const fz = fuzzLoop(pts, {
                 thickness: onum(o, i, 'fuzzy_skin_thickness'), pointDistance: onum(o, i, 'fuzzy_skin_point_distance'),
                 mode: ostr(o, i, 'fuzzy_skin_mode') as FuzzyMode, noise: ostr(o, i, 'fuzzy_skin_noise_type') as NoiseType,
                 scale: onum(o, i, 'fuzzy_skin_scale'), octaves: onum(o, i, 'fuzzy_skin_octaves'), persistence: onum(o, i, 'fuzzy_skin_persistence'),
                 z: zTop, rnd, width: loop.width,
+                ripples: onum(o, i, 'fuzzy_skin_ripples_per_layer') || 15,
+                ripplePhase: ripplePhase(i - objStart, onum(o, i, 'fuzzy_skin_ripple_offset'), onum(o, i, 'fuzzy_skin_layers_between_ripple_offset') || 1),
               });
               pts = fz.pts; flows = fz.flows;
             }
@@ -1831,25 +2187,45 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             const small = smallT > 0 && len <= smallT ? floatOrPercent(ocfg(o, i).small_perimeter_speed, speedFor(feature, i)) : undefined;
             const noSlow = k === 0 && tbool('no_slow_down_for_cooling_on_outwalls');
             let item: PathItem;
+            let scarfMask: boolean[] | null = null;
             if (vase && i >= objStart + Math.round(onum(o, i, 'bottom_shell_layers'))) {
               item = { pts: smoothSpiral(pts, o, i, loop.width), closed: true, feature, width: loop.width, flow: 1, spiral: true, hole: loop.hole };
+              // spiral transition: the first spiral loop ramps its flow up from the starting ratio
+              const startRatio = ocfg(o, i).spiral_starting_flow_ratio !== undefined ? onum(o, i, 'spiral_starting_flow_ratio') : 1;
+              if (k === 0 && i === objStart + Math.round(onum(o, i, 'bottom_shell_layers')) && startRatio < 1) item.flows = spiralRamp(item.pts, (f) => startRatio + f * (1 - startRatio));
+              // spiral finish: one more loop at the top height, its flow falling to the finishing ratio
+              const finRatio = ocfg(o, i).spiral_finishing_flow_ratio !== undefined ? onum(o, i, 'spiral_finishing_flow_ratio') : 1;
+              if (k === 0 && i === objLast[o] && finRatio < 1) {
+                wallItems.push(item);
+                item = { pts: [...item.pts, item.pts[0], item.pts[1]], closed: false, feature, width: loop.width, flow: 1, hole: loop.hole, flows: spiralRamp(item.pts, (f) => finRatio + (1 - f) * (1 - finRatio)) };
+              }
             } else {
               const scarfOn = !fuzzThis && scarfType !== 'none' && scarfLen > 0 && i > objStart
                 && (k === 0 ? (scarfType === 'all' || !loop.hole) : (scarfFromProcess ? obool(o, i, 'seam_slope_inner_walls') : true) && (scarfType === 'all' || !loop.hole))
-                && (!(scarfFromProcess ? obool(o, i, 'seam_slope_conditional') : true) || isSmoothLoop(pts, onum(o, i, 'scarf_angle_threshold') || 155));
+                && (!(scarfFromProcess ? obool(o, i, 'seam_slope_conditional') : true) || isSmoothLoop(pts, onum(o, i, 'scarf_angle_threshold') || 155))
+                // scarf overhang threshold: no scarf on a loop that hangs over the layer below too much
+                && !(lower && (() => { const u = unsupportedFraction(pts, supported()); return u > 0 && u * 100 >= onum(o, i, 'scarf_overhang_threshold'); })());
               if (scarfOn) {
                 const sc = scarfLoop(pts, {
                   length: scarfFromProcess && obool(o, i, 'seam_slope_entire_loop') ? len : scarfLen,
                   startFrac: Math.min(1, floatOrPercent(scarfStart, h) / h), steps: onum(o, i, 'seam_slope_steps') || 10,
                   gap: floatOrPercent(scarfGap, nozzle),
                 });
-                item = { pts: sc.pts, closed: false, feature, width: loop.width, flow: 1, depth: sc.depth, flows: sc.flows, hole: loop.hole };
+                // scarf joint flow ratio: on the ramp and its overlap (the segments with partial flow)
+                const scarfFlows = scarfFlowRatio !== 1 ? sc.flows.map((f) => (f < 1 - 1e-9 ? f * scarfFlowRatio : f)) : sc.flows;
+                item = { pts: sc.pts, closed: false, feature, width: loop.width, flow: 1, depth: sc.depth, flows: scarfFlows, hole: loop.hole };
+                scarfMask = sc.flows.map((f) => f < 1 - 1e-9);
               } else {
                 const gap = (onum(o, i, 'seam_gap') / 100) * nozzle;
                 const open = flows ? [...pts, pts[0], pts[1]] : seamGapLoop(pts, gap);
                 item = { pts: open, closed: false, feature, width: loop.width, flow: 1, hole: loop.hole, ...(flows ? { flows: [1, ...flows.slice(1), flows[0]] } : {}) };
               }
               item = classifyOverhang(item, lower, o);
+              // scarf joint speed (mm/s or % of the wall speed) on the ramp and its overlap
+              if (scarfMask) {
+                const wallV = speedFor(feature, i), sv = floatOrPercent(ocfg(o, i).scarf_joint_speed ?? '100%', wallV);
+                if (sv > 0 && sv < wallV) item.speeds = scarfMask.map((m, j) => (m ? Math.min(item.speeds?.[j] || Infinity, sv) : item.speeds?.[j] ?? 0));
+              }
             }
             item.wallDepth = k;
             if (small !== undefined) item.speed = small;
@@ -1857,11 +2233,22 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
             if (!item.spiral && item.pts.length >= 4) {
               // inward direction at the seam: left of the travel direction for a counter clockwise contour
               const sx = pts[0], sy = pts[1], tx = pts[2] - sx, ty = pts[3] - sy, tl = Math.hypot(tx, ty) || 1;
-              const side = wallCw ? -1 : 1, nx = (-ty / tl) * side, ny = (tx / tl) * side, w = loop.width;
+              const side = (wallCw ? -1 : 1) * (reversed ? -1 : 1), nx = (-ty / tl) * side, ny = (tx / tl) * side, w = loop.width;
+              // wipe inward: the wipe after the outer wall runs shifted toward the inner walls
+              if (k === 0 && wipeInward) item.wipeShift = side * Math.min(floatOrPercent(ocfg(o, i).wipe_inward_distance ?? '50%', w), w * (wallSeq === 'inner_outer' ? 1 : 0.5));
               if (k === 0 && wipeBeforeOuter) item.primeAt = [sx + nx * w, sy + ny * w];
               if (k === 0 && wipeLoops) item.wipeIn = [sx + (tx / tl + nx) * w * 0.7, sy + (ty / tl + ny) * w * 0.7];
             }
             wallItems.push(item);
+          }
+        }
+        // print unsupported walls last: loops entirely in mid air go after the other walls, innermost first
+        if (lower && obool(o, i, 'unsupported_wall_last')) {
+          const air = (it: PathItem) => { for (let q = 0; q < it.pts.length; q += 2) if (supported()(it.pts[q], it.pts[q + 1])) return false; return true; };
+          const flying = wallItems.filter(air);
+          if (flying.length) {
+            const rest = wallItems.filter((it) => !flying.includes(it));
+            wallItems.splice(0, wallItems.length, ...rest, ...flying.sort((a, b) => (b.wallDepth ?? 0) - (a.wallDepth ?? 0)));
           }
         }
         if (isl.walls.thin.length) pushAll(wallItems, orderPaths(isl.walls.thin.map((t) => ({ ...t, pts: t.pts.slice(), widths: t.widths!.slice(), flow: 1 } as PathItem)), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
@@ -1882,9 +2269,16 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         if (subInfill) for (const it of isFill) if (SUB_FILL.has(it.feature) && (it.fil ?? isl.fil) === isl.fil && (it.height === undefined || it.height < h)) toPass(it, n - 1, n);
       }
       const fillOrdered = () => {
-        const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
+        const groups: FeatureType[] = ['bottom_surface', 'bridge', 'internal_bridge', 'internal_solid_infill', 'sparse_infill', 'top_surface', 'ironing'];
         const outp: PathItem[] = [];
-        for (const g of groups) pushAll(outp, orderPaths(isFill.filter((f) => f.feature === g), isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths);
+        // flow rate calibration: top surface Archimedean chords in their own order, the centre spiral inside-out and last
+        const calibTop = obool(o, i, 'calib_flowrate_topinfill_special_order') && ostr(o, i, 'top_surface_pattern') === 'archimedeanchords';
+        for (const g of groups) {
+          const sorted = (q: PathItem[]) => orderPaths(q, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths;
+          const part = isFill.filter((f) => f.feature === g && !f.keepOrder);
+          pushAll(outp, calibTop && g === 'top_surface' ? calibTopOrder(part, sorted) : sorted(part));
+          pushAll(outp, isFill.filter((f) => f.feature === g && f.keepOrder)); // surface fill order: as generated
+        }
         return outp;
       };
       if (!wallItems.length && !isFill.length && !gapItems.length) return;
@@ -1919,19 +2313,32 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       const fanOn = tbool('enable_overhang_bridge_fan');
       const fanThr = parseFloat(tstr('overhang_fan_threshold') || '25') / 100;
       const fanSpeed = tnum('overhang_fan_speed');
+      // slow down for curled perimeters: walls over the overhanging walls of the layer below (which curl up)
+      const curl = slow && obool(o, i, 'slowdown_for_curled_perimeters') && isWall(item.feature) ? curledAt(o, i, w) : null;
+      const curlV = onum(o, i, 'overhang_3_4_speed');
       for (let k = 1; k < n; k++) {
         const mx = (pts[k * 2 - 2] + pts[k * 2]) / 2, my = (pts[k * 2 - 1] + pts[k * 2 + 1]) / 2;
+        if (curl && curlV > 0 && curl.below?.near(mx, my)) { speeds[k] = curlV; any = true; }
         let bucket = 0;
         while (bucket < levels.length && !ringAt(bucket)(mx, my)) bucket++;
+        if (curl && bucket >= 3) curl.here.add(mx, my);
         if (!bucket) { if (fanOn && fanThr <= 0 && item.feature === 'outer_wall') fans[k] = fanSpeed; continue; }
         any = true;
         if (bucket >= 3) feats[k] = 'overhang_wall'; // centre of the line is unsupported
-        if (slow && qs[bucket] > 0) speeds[k] = qs[bucket];
+        if (slow && qs[bucket] > 0) speeds[k] = speeds[k] > 0 ? Math.min(speeds[k], qs[bucket]) : qs[bucket];
         const degree = bucket >= 5 ? 1 : levels[bucket - 1];
         if (fanOn && degree >= fanThr) fans[k] = fanSpeed;
       }
       if (!any && !fans.some((f) => f > 0)) return item;
       return { ...item, feats, speeds, fans };
+    }
+    /** Curled perimeter grids: overhang wall points of the layer below (read) and of this layer (written). */
+    function curledAt(o: number, i2: number, w: number) {
+      const key = (l: number) => o * 1_000_000 + l;
+      let here = curled.get(key(i2));
+      if (!here) curled.set(key(i2), (here = new PointGrid(Math.max(0.2, w))));
+      curled.delete(key(i2 - 2));
+      return { here, below: curled.get(key(i2 - 1)) };
     }
     /** Wall points over an overhang (to keep seams off them). */
     function overhangPoints(pts: number[], lower: Paths, w: number): [number, number][] {
@@ -1996,7 +2403,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     // --- per filament: islands (walls, gap fill, fills) of every object
     for (const fil of order) {
       changeTo(fil);
-      for (const o of (only === null ? objs : [only])) for (const job of jobsByObj.get(o) ?? []) emitJob(o, job, (f) => f === fil);
+      // intra-layer order: the object list order, or nearest object next (print_order "default")
+      const objOrder = only !== null ? [only] : str('print_order') === 'default' ? nearestObjectOrder(objs.filter((o) => jobsByObj.get(o)?.length), (o) => {
+        const sl = objSlices[o][i];
+        if (!sl.length) return null;
+        const b = bounds(sl);
+        return [(b.minX + b.maxX) / 2 / SCALE, (b.minY + b.maxY) / 2 / SCALE];
+      }, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py) : objs;
+      for (const o of objOrder) for (const job of jobsByObj.get(o) ?? []) emitJob(o, job, (f) => f === fil);
     }
     // flush targets left over (no change happened after them): print them with the current filament
     if (deferred.length) { for (const it of orderPaths(deferred, isNaN(px) ? 0 : px, isNaN(py) ? 0 : py).paths) extrudePath(it); deferred = []; }
@@ -2056,9 +2470,16 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const topSp = num('support_interface_spacing'), botSp = num('support_bottom_interface_spacing');
         const sp = (support.bottomIface?.[i]?.length && !support.iface[i].length ? botSp : topSp) + sw;
         const ang = num('support_angle') + 90 + (ip === 'rectilinear_interlaced' && i % 2 ? 90 : 0);
-        const lines = ip === 'concentric' ? concentricFill(iface, sp, sw / 2)
-          : ip === 'grid' ? [...linesFill(iface, sp * 2, ang), ...linesFill(iface, sp * 2, ang + 90)]
-          : linesFill(iface, sp, ang);
+        // loop pattern interface: the top contact layer gets a loop around its edge, the pattern fills the rest
+        const contactLoop = bool('support_interface_loop_pattern') && support.iface[i].length > 0 && (i + 1 >= N || !support.iface[i + 1].length);
+        let fillReg = iface;
+        if (contactLoop) {
+          for (const p of offset(support.iface[i], -sw / 2)) items.push({ pts: pathToPoly(p), closed: true, feature: 'support_interface', width: sw, flow: 1, fil: ifaceFil >= 0 ? ifaceFil : bodyFil });
+          fillReg = union(offset(support.iface[i], -sw), support.bottomIface?.[i] ?? []);
+        }
+        const lines = ip === 'concentric' ? concentricFill(fillReg, sp, sw / 2)
+          : ip === 'grid' ? [...linesFill(fillReg, sp * 2, ang), ...linesFill(fillReg, sp * 2, ang + 90)]
+          : linesFill(fillReg, sp, ang);
         for (const p of lines) items.push({ ...p, feature: 'support_interface', width: sw, flow: 1, fil: ifaceFil >= 0 ? ifaceFil : bodyFil });
         // support ironing on the topmost interface layer
         if (bool('enable_support_ironing') && support.iface[i].length && (i + 1 >= N || !support.iface[i + 1].length)) {
@@ -2067,6 +2488,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
           const il = str('support_ironing_pattern') === 'concentric' ? concentricFill(reg, isp, isp / 2) : linesFill(reg, isp, num('support_ironing_direction'));
           for (const p of il) items.push({ ...p, feature: 'ironing', width: isp, flow: (num('support_ironing_flow') / 100) * (h / isp), speed: num('support_ironing_speed'), fil: ifaceFil >= 0 ? ifaceFil : bodyFil });
         }
+      }
+      // small support perimeters: short support paths slow down (a percentage is of the support / interface speed)
+      const smallT = num('small_support_perimeter_threshold');
+      if (smallT > 0) for (const it of items) {
+        if (it.feature !== 'support' && it.feature !== 'support_interface') continue;
+        const base = normalSpeed(it.feature);
+        const v = smallSupportSpeed(it, smallT, floatOrPercent(cfg.small_support_perimeter_speed ?? '50%', base), base);
+        if (v !== undefined) it.speed = it.speed !== undefined ? Math.min(it.speed, v) : v;
       }
       return items;
     }
@@ -2095,10 +2524,12 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
     }
 
     // --- tower remainder: keep it growing every layer until the last filament change
-    if (towerActive) {
-      towerOutline();
+    // (no sparse layers / combined sparse layers: skipped where no change printed on it)
+    if (towerActive && (!towerSkip || towerUsed)) {
+      towerOutline(true);
       for (let k = bandsDone; k < maxChanges; k++) towerBand(k, i === 0);
     }
+    if (towerUsed) towerPrintedZ = towerZ;
 
     if (seams.length) prevSeams = seams;
     const L: LayerOps = { z: zTop, h, ops, fan: 0, layer: i, tool: Math.max(0, curTool) };

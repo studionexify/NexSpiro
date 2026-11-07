@@ -54,6 +54,7 @@ export function plateMeshes(objs: SceneObject[], plate = useStore.getState().act
     paint: o.paint,
     faceSets: faceSetsOf(o.paint?.motion),
     layerHeights: o.layerHeights,
+    rotationZ: o.rotation?.[2] ?? 0,
     heightRanges: o.heightRanges,
     brimEars: o.brimEars?.map(([x, y, z]) => {
       const p = new THREE.Vector3(x, y, z ?? 0).applyMatrix4(toPlate.clone().multiply(objectMatrix(o)));

@@ -4,6 +4,7 @@ import { clipLines, difference, exToPaths, intersection, offset, opening, orient
 import { medialAxis, splitNarrow, type VarPath } from './arachne';
 import type { ExPolygon, FeatureType, Path, Paths } from './types';
 import { pushAll } from './util';
+import { overhangPerimeters, simplifyWall } from './wallParity';
 
 export interface WallItem {
   pts: number[];
@@ -33,6 +34,12 @@ export interface WallParams {
   precise?: boolean;
   /** Part of the island that is a top surface and should keep only its outer wall (null = none). */
   topOneWall: Paths | null;
+  /** Arachne: open thin walls shorter than this factor x their width are dropped (min_length_factor). */
+  minLengthFactor?: number;
+  /** Arachne: maximum wall resolution / deviation (mm, 0 = off). */
+  maxResolution?: number; maxDeviation?: number;
+  /** Extra perimeters on overhangs: the layer below (null = off). */
+  overhangBelow?: Paths | null;
 }
 
 export interface IslandWalls {
@@ -76,7 +83,15 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
       A = sn.wide.length ? offset(sn.wide, -(k === 0 && p.precise ? p.wo : sp)) : [];
     }
     distribute(loops, thin, p);
-    return { loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(A, ip, p), thin, gaps };
+    // minimum wall length: short open beads are not worth printing
+    const f = p.minLengthFactor ?? 0;
+    const kept = f > 0 ? thin.filter((t) => lenOf(t.pts) >= f * t.width) : thin;
+    // maximum wall resolution / deviation (Arachne meshfix)
+    if ((p.maxResolution ?? 0) > 0 && (p.maxDeviation ?? 0) > 0) {
+      for (const ring of loops) for (const l of ring) l.pts = simplifyWall(l.pts, true, p.maxResolution!, p.maxDeviation!).pts;
+      for (const t of kept) { const r = simplifyWall(t.pts, false, p.maxResolution!, p.maxDeviation!, t.widths); t.pts = r.pts; t.widths = r.widths; }
+    }
+    return overhangExtras({ loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(A, ip, p), thin: kept, gaps }, p);
   }
 
   // classic: constant-width offset loops
@@ -116,7 +131,17 @@ export function islandWalls(ex: ExPolygon, p: WallParams): IslandWalls {
       if (lenOf(v.pts) >= p.wo) gaps.push({ ...varItem(v, 'gap_infill', p.walls), widths: v.widths.map((x) => Math.min(p.wo * 2, Math.max(p.nozzle * 0.25, x))) });
     }
   }
-  return { loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(inner, ip, p), thin, gaps };
+  return overhangExtras({ loops: cutInnerWallsOnTop(loops, ip, p), inner: topInner(inner, ip, p), thin, gaps }, p);
+}
+
+/** Extra perimeters on overhangs: concentric overhang wall loops instead of infill where the island hangs out. */
+function overhangExtras(w: IslandWalls, p: WallParams): IslandWalls {
+  if (!p.overhangBelow || !w.inner.length) return w;
+  const r = overhangPerimeters(w.inner, p.overhangBelow, p.wi, p.si);
+  if (!r.loops.length) return w;
+  w.loops.push(r.loops.map((q) => ({ pts: toPts(q), closed: true, feature: 'overhang_wall' as FeatureType, width: p.wi, ring: w.loops.length, hole: !orientation(q) })));
+  w.inner = r.inner;
+  return w;
 }
 
 /**

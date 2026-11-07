@@ -92,12 +92,16 @@ function lineStrip(lines: Paths, d: number): Paths {
  * (a wavefront grown from each colour's surface inside the cross-section); painted top / bottom faces colour the
  * layers within `flatReach` mm of them (the top / bottom shell).
  */
-export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Paths, z: number, depth: number, flatReach = 0.5): Map<number, Paths> {
+/**
+ * `penetration` (top / bottom paint penetration): how far below a painted top face and above a painted bottom face
+ * the flat paint reaches (mm); without it a flat face reaches `flatReach` both ways.
+ */
+export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Paths, z: number, depth: number, flatReach = 0.5, penetration?: { top: number; bottom: number }): Map<number, Paths> {
   const byColor = new Map<number, { lines: Paths; flats: Paths }>();
   const get = (c: number) => { let e = byColor.get(c); if (!e) byColor.set(c, (e = { lines: [], flats: [] })); return e; };
   const v = mesh.vertices, ix = mesh.indices;
   for (const p of tris) {
-    const reach = depth > 0 ? depth : flatReach;
+    const reach = depth > 0 ? depth : penetration ? Math.max(penetration.top, penetration.bottom, 0.05) : flatReach;
     if (p.zmax < z - reach || p.zmin > z + reach) continue;
     const s = p.zmin <= z && p.zmax >= z ? triSegment(mesh, p.t, z) : null;
     if (s) get(p.value).lines.push([{ X: Math.round(s[0] * SCALE), Y: Math.round(s[1] * SCALE) }, { X: Math.round(s[2] * SCALE), Y: Math.round(s[3] * SCALE) }]);
@@ -106,7 +110,9 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
     const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2];
     const wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
     const nz = ux * wy - uy * wx, len = Math.hypot(uy * wz - uz * wy, uz * wx - ux * wz, nz);
-    if (len > 0 && Math.abs(nz / len) > 0.7) {
+    // a top face colours the layers below it, a bottom face those above it, each as deep as its penetration
+    const within = !penetration || (nz > 0 ? p.zmin >= z - 1e-6 && p.zmin <= z + penetration.top + 1e-6 : p.zmax <= z + 1e-6 && p.zmax >= z - penetration.bottom - 1e-6);
+    if (len > 0 && Math.abs(nz / len) > 0.7 && within) {
       const f = triFootprint(mesh, p.t);
       if (f.length) get(p.value).flats.push(f);
     }

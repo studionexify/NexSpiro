@@ -77,6 +77,23 @@ Defaults follow the references. Where an option exists only in OrcaSlicer / Snap
 | `machine_max_acceleration_travel` | printer | Motion ability / Machine limits | `0` *neutral* | o=0., 0. / b=1500., 1250. / s=0., 0. | written by emit_machine_limits_to_gcode | tests/parity-options.test.ts |
 | `machine_min_extruding_rate` | printer | Motion ability / Machine limits | `0` *neutral* | o=0., 0. / b=0., 0. / s=0., 0. | written by emit_machine_limits_to_gcode | tests/parity-options.test.ts |
 | `machine_min_travel_rate` | printer | Motion ability / Machine limits | `0` *neutral* | o=0., 0. / b=0., 0. / s=0., 0. | written by emit_machine_limits_to_gcode | tests/parity-options.test.ts |
+| `tree_support_angle_slow` | print | Support / Tree Support | `25` | o=25 / s=25 | Tree Organic: branches merge at this angle (avoidance keeps the branch angle) | tests/parity-support.test.ts |
+| `tree_support_auto_brim` | print | Support / Tree Support | `False` *neutral* | o=true / s=true | non-organic tree feet grow by max(2, min(r + d_top / r * 0.5, 12)) - r on layer 1 | tests/parity-support.test.ts |
+| `tree_support_branch_angle_organic` | print | Support / Tree Support | `40` | o=40. / s=40. | Tree Organic maximum branch angle (replaces tree_support_branch_angle) | tests/parity-support.test.ts |
+| `tree_support_branch_diameter_organic` | print | Support / Tree Support | `2` | o=2. / s=2. | Tree Organic maximum branch diameter (replaces tree_support_branch_diameter) | tests/parity-support.test.ts |
+| `tree_support_branch_distance_organic` | print | Support / Tree Support | `1` | o=1. / s=1. | Tree Organic tip row distance (replaces tree_support_branch_distance) | tests/parity-support.test.ts |
+| `tree_support_brim_width` | print | Support / Tree Support | `0` *neutral* | o=3 / s=3 | fixed brim around non-organic tree feet on layer 1 | tests/parity-support.test.ts |
+| `tree_support_top_rate` | print | Support / Tree Support | `30` | o=30 / s=30 | Tree Organic tip spacing along a row = line width * 100 / rate + max(tip diameter - line width, 0) | tests/parity-support.test.ts |
+| `support_interface_loop_pattern` | print | Support / Advanced | `False` | o=false / b=false / s=false | loop around the top contact layer, interface pattern inside | tests/parity-support.test.ts |
+| `small_support_perimeter_speed` | print | Speed / Other layers speed | `50%` | o=FloatOrPercent(50, true) | speed of short support paths (% of support / interface speed; 0 = 50%) | tests/parity-support.test.ts |
+| `small_support_perimeter_threshold` | print | Speed / Other layers speed | `0` | o=0 | support paths up to 2*pi*threshold long are small | tests/parity-support.test.ts |
+| `enforce_support_layers` | print | Support / Support | `0` | o=0 / b=0 / s=0 | first N layers: every overhang supported, angle ignored, even with support off | tests/parity-support.test.ts |
+| `raft_expansion` | print | Support / Raft | `1.5` | o=1.5 / b=1.5 / s=1.5 | raft layers grown by this (was a fixed 1.5 mm) | tests/parity-support.test.ts |
+| `brim_ears_detection_length` | print | Others / Bed adhesion | `0` *neutral* | o=1 / s=1 | Douglas-Peucker decimation before auto ear corner detection | tests/parity-support.test.ts |
+| `brim_ears_max_angle` | print | Others / Bed adhesion | `125` | o=125 / s=125 | auto ears on convex corners sharper than this (was a fixed 125) | tests/parity-support.test.ts |
+| `brim_ears_outer_only` | print | Others / Bed adhesion | `False` | o=false | false: auto ears also on hole corners; true: no ears in holes or on enclosed parts | tests/parity-support.test.ts |
+| `brim_use_efc_outline` | print | Others / Bed adhesion | `True` *neutral* | o=false | brim follows the EFC outline (true, previous behaviour) or the uncompensated one | tests/parity-support.test.ts |
+| `combine_brims` | print | Others / Bed adhesion | `False` | o=false | brims of all objects merged into one area and filled once (not per-object skirt / by object) | tests/parity-support.test.ts |
 
 ## Fixed
 
@@ -247,14 +264,9 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `bottom_layer_direction` | print | o | Bottom layer direction |  |
 | `bottom_surface_fill_order` | print | o | Bottom surface fill order |  |
 | `bridge_line_width` | print | o | Bridge |  |
-| `brim_ears_detection_length` | print | os | Brim ear detection radius |  |
-| `brim_ears_max_angle` | print | os | Brim ear max angle |  |
-| `brim_ears_outer_only` | print | o | Brim ears outer only |  |
-| `brim_use_efc_outline` | print | o | Brim follows compensated outline |  |
 | `calib_flowrate_topinfill_special_order` | print | os |  |  |
 | `center_of_surface_pattern` | print | o | Center surface pattern on |  |
 | `chamber_minimal_temperature` | filament | o | Minimal |  |
-| `combine_brims` | print | o | Combine brims |  |
 | `complete_print_exhaust_fan_speed` | filament | obs | Fan speed |  |
 | `cooling_tube_length` | printer | os | Cooling tube length | MMU ramming sequence not modelled |
 | `cooling_tube_retraction` | printer | os | Cooling tube position | MMU ramming sequence not modelled |
@@ -265,9 +277,8 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `elefant_foot_layers_density` | print | o | Elephant foot layers density |  |
 | `enable_extra_bridge_layer` | print | os | Extra bridge layers (beta) |  |
 | `enable_filament_ramming` | printer | os | Enable filament ramming |  |
-| `enforce_support_layers` | print | obs | Enforce support for the first |  |
 | `exclude_object_tolerance` | print | o | Outline tolerance |  |
-| `extra_brim_width` | print | o | Extra brim width |  |
+| `extra_brim_width` | print | o | Extra brim width | belt printers only in OrcaSlicer (no effect unless belt_printer); NexSpiro has no belt printer mode |
 | `extra_loading_move` | printer | os | Extra loading distance |  |
 | `extra_perimeters_on_overhangs` | print | os | Extra perimeters on overhangs | extra loops on overhangs |
 | `extrusion_rate_smoothing_external_perimeter_only` | print | os | Apply only on external features |  |
@@ -326,7 +337,7 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `ironing_expansion` | print | o | Ironing expansion |  |
 | `lateral_lattice_angle_1` | print | os | Lateral lattice angle 1 |  |
 | `lateral_lattice_angle_2` | print | os | Lateral lattice angle 2 |  |
-| `leading_brim_length` | print | o | Leading brim length |  |
+| `leading_brim_length` | print | o | Leading brim length | belt printers only in OrcaSlicer (no effect unless belt_printer); NexSpiro has no belt printer mode |
 | `lightning_overhang_angle` | print | o | Lightning overhang angle |  |
 | `lightning_prune_angle` | print | o | Prune angle |  |
 | `lightning_straightening_angle` | print | o | Straightening angle |  |
@@ -346,7 +357,6 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `prime_tower_enable_framework` | print | obs | Internal ribs |  |
 | `print_order` | print | os | Intra-layer order | object print order |
 | `process_change_extrusion_role_gcode` | print | o | Change extrusion role G-code (process) | process-level variant of change_extrusion_role_gcode |
-| `raft_expansion` | print | obs | Raft expansion |  |
 | `relative_bridge_angle` | print | o | Relative bridge angle |  |
 | `scarf_joint_flow_ratio` | print | os | Scarf joint flow ratio | scarf joint speed / flow / overhang threshold |
 | `scarf_joint_speed` | print | os | Scarf joint speed | scarf joint speed / flow / overhang threshold |
@@ -356,8 +366,6 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `slowdown_for_curled_perimeters` | print | os | Slow down for curled perimeters | needs curl estimation |
 | `small_area_infill_flow_compensation` | print | os | Small area flow compensation (beta) | needs flow model curve |
 | `small_area_infill_flow_compensation_model` | print | os | Flow Compensation Model | needs flow model curve |
-| `small_support_perimeter_speed` | print | o | Small support perimeters |  |
-| `small_support_perimeter_threshold` | print | o | Small support perimeters threshold |  |
 | `solid_infill_rotate_template` | print | os | Solid infill rotation template |  |
 | `sparse_infill_lattice_angle_1` | print | b | Lattice angle 1 |  |
 | `sparse_infill_lattice_angle_2` | print | b | Lattice angle 2 |  |
@@ -367,7 +375,6 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `spiral_starting_flow_ratio` | print | os | Spiral starting flow ratio |  |
 | `supertack_plate_temp` | filament | obs | Other layers | plate type not in NexSpiro plate list (printers.ts) |
 | `supertack_plate_temp_initial_layer` | filament | obs | First layer | plate type not in NexSpiro plate list (printers.ts) |
-| `support_interface_loop_pattern` | print | obs | Loop pattern interface |  |
 | `symmetric_infill_y_axis` | print | obs | Symmetric infill Y axis |  |
 | `textured_cool_plate_temp` | filament | os | Other layers | plate type not in NexSpiro plate list (printers.ts) |
 | `textured_cool_plate_temp_initial_layer` | filament | os | First layer | plate type not in NexSpiro plate list (printers.ts) |
@@ -380,13 +387,6 @@ User-facing options not implemented in this pass (no definition added, so nothin
 | `top_surface_expansion_direction` | print | o | Top expansion direction | top surface expansion family |
 | `top_surface_expansion_margin` | print | o | Top expansion wall margin | top surface expansion family |
 | `top_surface_fill_order` | print | o | Top surface fill order |  |
-| `tree_support_angle_slow` | print | os | Preferred Branch Angle | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_auto_brim` | print | os | Auto brim width | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_branch_angle_organic` | print | os | Tree support branch angle | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_branch_diameter_organic` | print | os | Tree support branch diameter | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_branch_distance_organic` | print | os | Tree support branch distance | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_brim_width` | print | os | Tree support brim width | organic tree tuning not mapped onto NexSpiro tree support |
-| `tree_support_top_rate` | print | os | Branch Density | organic tree tuning not mapped onto NexSpiro tree support |
 | `unsupported_wall_last` | print | o | Print unsupported walls last |  |
 | `wait_for_temp_on_wipe_tower` | printer | o | Wait for temperature on wipe tower |  |
 | `wall_maximum_deviation` | print | o | Maximum wall deviation |  |

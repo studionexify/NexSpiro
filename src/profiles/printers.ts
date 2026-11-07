@@ -10,7 +10,7 @@ import vendorU1 from './vendor/snapmaker-u1.json';
 import vendorN4Max from './vendor/elegoo-neptune4max.json';
 import { GENERATED_VENDOR } from './vendor/index';
 
-export type PlateType = 'cool_plate' | 'engineering_plate' | 'high_temp_plate' | 'textured_pei_plate';
+export type PlateType = 'cool_plate' | 'engineering_plate' | 'high_temp_plate' | 'textured_pei_plate' | 'supertack_plate' | 'textured_cool_plate';
 
 export interface PrinterProfile {
   id: string;
@@ -34,7 +34,9 @@ export interface PrinterProfile {
 }
 
 const BBL_PLATES: PrinterProfile['plates'] = [
-  { type: 'cool_plate', label: 'Cool Plate (SuperTack)' },
+  { type: 'cool_plate', label: 'Cool Plate' },
+  { type: 'supertack_plate', label: 'Cool Plate SuperTack' },
+  { type: 'textured_cool_plate', label: 'Textured Cool Plate' },
   { type: 'engineering_plate', label: 'Engineering Plate' },
   { type: 'high_temp_plate', label: 'Smooth PEI / High Temp Plate' },
   { type: 'textured_pei_plate', label: 'Textured PEI Plate' },

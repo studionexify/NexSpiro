@@ -13,6 +13,7 @@ export const FEATURE_COLORS: Record<FeatureType, string> = {
   top_surface: '#EB5757',
   bottom_surface: '#8E44AD',
   bridge: '#2D9CDB',
+  internal_bridge: '#56CCF2',
   gap_infill: '#FFFFFF',
   ironing: '#F2C94C',
   skirt: '#27AE60',

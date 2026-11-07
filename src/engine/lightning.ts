@@ -1,7 +1,7 @@
 // Lightning infill: tree-shaped infill that only holds up the surfaces above it. Built top-down: under every solid
 // area, points are seeded and joined into a tree rooted on the inner walls; going down a layer, every branch tip
 // moves toward its parent (at most one layer height × tan(angle)), so the trees shrink into the walls.
-import { bounds, SCALE } from './clipper';
+import { bounds, intersection, offset, SCALE } from './clipper';
 import ClipperLib from 'clipper-lib';
 import type { Paths, Polyline2 } from './types';
 
@@ -60,24 +60,34 @@ interface Node { x: number; y: number; px: number; py: number; root: boolean }
  * @param need    per layer: area of that layer's sparse region that has solid infill / skin directly above
  * @param spacing distance between seeded points (infill line spacing)
  * @param heights layer heights
- * @param angle   largest lean of a branch from vertical (degrees)
+ * @param angle   largest lean of a branch from vertical (degrees): how far a tip moves toward its parent per layer
+ * @param opts    OrcaSlicer's lightning angles (degrees). overhang: areas within layer height x tan(angle) of the
+ *                walls need no branch (the walls hold them); prune: a tip closer to its parent than layer height x
+ *                tan(angle) is dropped; straighten: a branch node moves up to layer height x tan(angle) per layer
+ *                toward the straight line between its neighbours.
  * @returns per layer: the lightning polylines
  */
-export function lightningInfill(sparse: Paths[], need: Paths[], spacing: number, heights: number[], angle = 45): Polyline2[][] {
+export function lightningInfill(sparse: Paths[], need: Paths[], spacing: number, heights: number[], angle = 45, opts: { overhang?: number; prune?: number; straighten?: number } = {}): Polyline2[][] {
   const N = sparse.length;
   const out: Polyline2[][] = Array.from({ length: N }, () => []);
   let carry: { x: number; y: number }[] = [];
+  const tanOf = (a: number) => Math.tan((Math.max(5, Math.min(85, a)) * Math.PI) / 180);
   const tan = Math.tan((Math.max(5, Math.min(80, angle)) * Math.PI) / 180);
+  const tanPrune = opts.prune === undefined ? tan : tanOf(opts.prune);
+  const tanWall = opts.overhang === undefined ? 0 : tanOf(opts.overhang);
+  const tanStraight = opts.straighten === undefined ? 0 : tanOf(opts.straighten);
   for (let i = N - 1; i >= 0; i--) {
     const region = sparse[i];
     if (!region.length) { carry = []; continue; }
     // seed points under the solid areas of the layer above
     const pts: { x: number; y: number }[] = carry.filter((p) => insideAny(p.x, p.y, region));
-    if (need[i]?.length) {
-      const b = bounds(need[i]);
+    // the walls hold what lies within the wall supporting radius of them
+    const needHere = need[i]?.length && tanWall > 0 ? intersection(need[i], offset(region, -heights[i] * tanWall)) : need[i];
+    if (needHere?.length) {
+      const b = bounds(needHere);
       const x0 = Math.floor(b.minX / SCALE / spacing) * spacing, y0 = Math.floor(b.minY / SCALE / spacing) * spacing;
       for (let y = y0 + spacing / 2; y < b.maxY / SCALE; y += spacing) for (let x = x0 + spacing / 2; x < b.maxX / SCALE; x += spacing) {
-        if (insideAny(x, y, need[i]) && insideAny(x, y, region)) pts.push({ x, y });
+        if (insideAny(x, y, needHere) && insideAny(x, y, region)) pts.push({ x, y });
       }
     }
     if (!pts.length) { carry = []; continue; }
@@ -107,6 +117,25 @@ export function lightningInfill(sparse: Paths[], need: Paths[], spacing: number,
       const key = `${cx},${cy}`;
       const l = placed.get(key); if (l) l.push(n); else placed.set(key, [n]);
     }
+    // straightening: a node joined to a parent that is itself a child moves toward the line between its child and
+    // grandparent, by at most layer height x tan(straightening angle)
+    if (tanStraight > 0) {
+      const maxMove = heights[i] * tanStraight;
+      const at = new Map<string, Node>();
+      const key = (x: number, y: number) => `${Math.round(x * 1000)},${Math.round(y * 1000)}`;
+      for (const n of nodes) at.set(key(n.x, n.y), n);
+      for (const n of nodes) {
+        const p = at.get(key(n.px, n.py));
+        if (!p || p.root) continue;
+        const mx = (n.x + p.px) / 2, my = (n.y + p.py) / 2, d = Math.hypot(mx - p.x, my - p.y);
+        if (d < 1e-6) continue;
+        const k = Math.min(1, maxMove / d);
+        const nx = p.x + (mx - p.x) * k, ny = p.y + (my - p.y) * k;
+        if (!insideAny(nx, ny, region)) continue;
+        for (const c of nodes) if (c.px === p.x && c.py === p.y) { c.px = nx; c.py = ny; }
+        p.x = nx; p.y = ny;
+      }
+    }
     out[i] = nodes.filter((n) => Math.hypot(n.px - n.x, n.py - n.y) > 0.05).map((n) => ({ pts: [n.x, n.y, n.px, n.py], closed: false }));
     // the layer below: tips move toward their parents and disappear once they reach them (or the wall)
     const step = heights[i] * tan;
@@ -114,7 +143,7 @@ export function lightningInfill(sparse: Paths[], need: Paths[], spacing: number,
     const seen = new Set<string>();
     for (const n of nodes) {
       const d = Math.hypot(n.px - n.x, n.py - n.y);
-      if (d <= step) continue;
+      if (d <= Math.max(step, heights[i] * tanPrune)) continue; // reached its parent, or pruned
       const x = n.x + ((n.px - n.x) / d) * step, y = n.y + ((n.py - n.y) / d) * step;
       const key = `${Math.round(x / (spacing * 0.5))},${Math.round(y / (spacing * 0.5))}`;
       if (seen.has(key)) continue; // nearby tips merge

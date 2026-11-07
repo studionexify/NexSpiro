@@ -66,6 +66,8 @@ const PLATE_LOOK: Record<PlateType, { base: string; edge: string; texture: 'pei'
   high_temp_plate: { base: '#d9b873', edge: '#b8963f', texture: 'smooth' },
   cool_plate: { base: '#6d90b8', edge: '#4d709a', texture: 'cool' },
   engineering_plate: { base: '#8f8f93', edge: '#6c6c70', texture: 'eng' },
+  supertack_plate: { base: '#4f6f8f', edge: '#3a5675', texture: 'cool' },
+  textured_cool_plate: { base: '#7d9cc0', edge: '#5d7ca0', texture: 'pei' },
 };
 
 export function PlateThumb({ type, size = 76 }: { type: PlateType; size?: number }) {

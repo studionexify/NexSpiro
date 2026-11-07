@@ -1,5 +1,5 @@
 // Fuzzy skin: displacement / extrusion noise along wall loops (fuzzy skin modes and noise types).
-export type NoiseType = 'classic' | 'perlin' | 'billow' | 'ridgedmulti' | 'voronoi';
+export type NoiseType = 'classic' | 'perlin' | 'billow' | 'ridgedmulti' | 'voronoi' | 'ripple';
 export type FuzzyMode = 'displacement' | 'extrusion' | 'combined';
 
 // ---------------------------------------------------------------- improved Perlin noise (3D)
@@ -70,6 +70,18 @@ export interface FuzzyParams {
   scale: number; octaves: number; persistence: number; z: number; rnd: () => number;
   /** Line width (extrusion mode varies the flow relative to it). */
   width: number;
+  /** Ripple noise: full sine cycles per loop, and the phase shift of this layer (radians). */
+  ripples?: number; ripplePhase?: number;
+}
+
+/**
+ * Ripple phase shift of a layer (OrcaSlicer ripple_phase_shift_rad): the pattern moves on by `offsetPct` % of a
+ * wavelength once every `every` layers.
+ */
+export function ripplePhase(layer: number, offsetPct: number, every: number): number {
+  if (!offsetPct || every <= 0) return 0;
+  const period = Math.floor(Math.max(0, layer) / Math.max(1, every));
+  return (period * (offsetPct / 100) * 2 * Math.PI) % (2 * Math.PI);
 }
 
 /**
@@ -82,6 +94,16 @@ export function fuzzLoop(pts: number[], p: FuzzyParams): { pts: number[]; flows?
   const n = pts.length / 2;
   const wantFlow = p.mode !== 'displacement';
   const disp = p.mode === 'extrusion' ? 0 : p.mode === 'combined' ? 0.5 : 1;
+  // ripple: a sine wave along the arc length, N cycles per loop, peaking at the leftmost point (stable over layers)
+  let perim = 0, anchor = 0, minX = Infinity;
+  if (p.noise === 'ripple') {
+    for (let i = 0; i < n; i++) {
+      if (pts[i * 2] < minX - 1e-9) { minX = pts[i * 2]; anchor = perim; }
+      perim += Math.hypot(pts[((i + 1) % n) * 2] - pts[i * 2], pts[((i + 1) % n) * 2 + 1] - pts[i * 2 + 1]);
+    }
+  }
+  const N = Math.max(1, Math.round(p.ripples ?? 15));
+  let arc = 0;
   for (let i = 0; i < n; i++) {
     const ax = pts[i * 2], ay = pts[i * 2 + 1];
     const bx = pts[((i + 1) % n) * 2], by = pts[((i + 1) % n) * 2 + 1];
@@ -92,12 +114,14 @@ export function fuzzLoop(pts: number[], p: FuzzyParams): { pts: number[]; flows?
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
       const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
-      const r = p.noise === 'classic' ? p.rnd() * 2 - 1 : coherentNoise(p.noise, x, y, p.z, p.scale, p.octaves, p.persistence);
+      const r = p.noise === 'ripple' ? Math.sin((N * 2 * Math.PI * (arc + len * t - anchor)) / Math.max(perim, 1e-6) + Math.PI / 2 + (p.ripplePhase ?? 0))
+        : p.noise === 'classic' ? p.rnd() * 2 - 1 : coherentNoise(p.noise, x, y, p.z, p.scale, p.octaves, p.persistence);
       const d = r * p.thickness;
       out.push(x + nx * d * disp, y + ny * d * disp);
       // extrusion mode: the bead swells and thins by the noise instead of moving
       if (wantFlow) flows.push(Math.max(0.2, 1 + (r * p.thickness * (1 - disp)) / Math.max(0.1, p.width)));
     }
+    arc += len;
   }
   return wantFlow ? { pts: out, flows } : { pts: out };
 }

@@ -16,7 +16,9 @@ function bedLook(type: PlateType, isBbl: boolean, label: string, dark: boolean):
   const sheet = (light: string, deep: string, print: string, strip: string, textured: boolean): BedLook => ({ color: dark ? deep : light, print, strip, textured, ink, grid });
   if (isBbl) {
     switch (type) {
-      case 'cool_plate': return sheet('#ECECEE', '#232327', 'Cool Plate SuperTack', 'PLA/PETG/TPU', false);
+      case 'cool_plate': return sheet('#ECECEE', '#232327', 'Cool Plate', 'PLA', false);
+      case 'supertack_plate': return sheet('#ECECEE', '#232327', 'Cool Plate SuperTack', 'PLA/PETG/TPU', false);
+      case 'textured_cool_plate': return sheet('#E6E9EE', '#24272C', 'Textured Cool Plate', 'PLA/PETG', true);
       case 'engineering_plate': return sheet('#DEDEE2', '#2A2A30', 'Engineering Plate', 'ABS/ASA/PC/PA', false);
       case 'high_temp_plate': return sheet('#E8E4DC', '#2C2A26', 'Smooth PEI Plate', 'PLA/ABS/PETG', false);
       default: return sheet('#E4E4E7', '#26262B', 'Textured PEI Plate', 'PLA/ABS/PETG', true);

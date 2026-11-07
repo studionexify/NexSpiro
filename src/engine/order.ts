@@ -1,7 +1,7 @@
 // Stage 8: path ordering (greedy nearest-neighbour TSP) & seam placement.
 import type { Polyline2 } from './types';
 
-export type SeamMode = 'nearest' | 'aligned' | 'back' | 'random';
+export type SeamMode = 'nearest' | 'aligned' | 'aligned_back' | 'back' | 'random';
 
 /** Rotate a closed loop so it starts at vertex `i`. */
 export function rotateLoop(pts: number[], i: number): number[] {
@@ -13,6 +13,7 @@ export interface SeamHints { enforce: [number, number][]; block: [number, number
 
 export function pickSeam(pts: number[], mode: SeamMode, px: number, py: number, prev: [number, number] | null, rnd: () => number, hints?: SeamHints): number {
   const n = pts.length / 2;
+  const back = mode === 'aligned_back' && !!prev;
   // painted seam enforcers win when close to this loop
   if (hints?.enforce.length) {
     let bi = -1, bd = 2.25; // within 1.5 mm
@@ -27,14 +28,18 @@ export function pickSeam(pts: number[], mode: SeamMode, px: number, py: number, 
     for (let k = 0; k < 20; k++) { const i = Math.floor(rnd() * n); if (!blocked(i)) return i; }
     return Math.floor(rnd() * n);
   }
+  // aligned back (OrcaSlicer spAlignedBack): aligned seams that start at the back and keep to it
+  if (mode === 'aligned_back') mode = prev ? 'aligned' : 'back';
   let best = 0, bestScore = Infinity;
   const tx = mode === 'aligned' && prev ? prev[0] : px;
   const ty = mode === 'aligned' && prev ? prev[1] : py;
+  let maxY = -Infinity;
+  if (back) for (let i = 0; i < n; i++) maxY = Math.max(maxY, pts[i * 2 + 1]);
   for (let i = 0; i < n; i++) {
     const x = pts[i * 2], y = pts[i * 2 + 1];
     let score: number;
     if (mode === 'back') score = -y + 0.01 * Math.abs(x - tx);
-    else score = (x - tx) ** 2 + (y - ty) ** 2;
+    else score = (x - tx) ** 2 + (y - ty) ** 2 + (back ? (maxY - y) * 0.5 : 0);
     // prefer concave/sharp corners slightly: hides the seam
     const ax = pts[((i - 1 + n) % n) * 2] - x, ay = pts[((i - 1 + n) % n) * 2 + 1] - y;
     const bx = pts[((i + 1) % n) * 2] - x, by = pts[((i + 1) % n) * 2 + 1] - y;

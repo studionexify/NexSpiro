@@ -60,7 +60,8 @@ export function concentricFill(region: Paths, spacing: number, firstInset: numbe
  * Gyroid: iso-lines of sin(x)cos(y)+sin(y)cos(z)+sin(z)cos(x)=0 at this layer's z,
  * extracted with marching squares and clipped to the region.
  */
-export function gyroidFill(region: Paths, spacing: number, z: number): Polyline2[] {
+/** `zFactor` > 1 tightens the wave along Z (gyroid Z-buckling bias optimisation). */
+export function gyroidFill(region: Paths, spacing: number, z: number, zFactor = 1): Polyline2[] {
   if (!region.length) return [];
   const b = bounds(region);
   const minX = b.minX / SCALE, minY = b.minY / SCALE, maxX = b.maxX / SCALE, maxY = b.maxY / SCALE;
@@ -68,7 +69,7 @@ export function gyroidFill(region: Paths, spacing: number, z: number): Polyline2
   const k = (2 * Math.PI) / period;
   const step = period / 16;
   const nx = Math.ceil((maxX - minX) / step) + 2, ny = Math.ceil((maxY - minY) / step) + 2;
-  const sz = Math.sin(z * k), cz = Math.cos(z * k);
+  const sz = Math.sin(z * k * zFactor), cz = Math.cos(z * k * zFactor);
   const f = (x: number, y: number) => {
     const X = x * k, Y = y * k;
     return Math.sin(X) * Math.cos(Y) + Math.sin(Y) * cz + sz * Math.cos(X);
@@ -134,10 +135,12 @@ export function gyroidFill(region: Paths, spacing: number, z: number): Polyline2
 
 export type SparsePattern =
   | 'rectilinear' | 'aligned_rectilinear' | 'grid' | 'triangles' | 'gyroid' | 'concentric' | 'line' | 'cubic' | 'tri-hexagon'
-  | 'honeycomb' | 'adaptivecubic' | '3dhoneycomb' | 'hilbertcurve' | 'archimedeanchords' | 'octagramspiral' | 'supportcubic' | 'lightning' | 'crosshatch';
+  | 'honeycomb' | 'adaptivecubic' | '3dhoneycomb' | 'hilbertcurve' | 'archimedeanchords' | 'octagramspiral' | 'supportcubic' | 'lightning' | 'crosshatch'
+  | 'zigzag' | 'crosszag' | 'lockedzag' | 'lateral-lattice' | '2dlattice' | 'lateral-honeycomb';
 
 /** Patterns whose lines are joined along the inner wall by the sparse infill anchors. */
-export const ANCHORED_PATTERNS = new Set<SparsePattern>(['rectilinear', 'aligned_rectilinear', 'grid', 'triangles', 'gyroid', 'cubic', 'tri-hexagon', 'honeycomb', '3dhoneycomb', 'adaptivecubic', 'supportcubic', 'crosshatch']);
+export const ANCHORED_PATTERNS = new Set<SparsePattern>(['rectilinear', 'aligned_rectilinear', 'grid', 'triangles', 'gyroid', 'cubic', 'tri-hexagon', 'honeycomb', '3dhoneycomb', 'adaptivecubic', 'supportcubic', 'crosshatch',
+  'zigzag', 'crosszag', 'lockedzag', 'lateral-lattice', '2dlattice', 'lateral-honeycomb']);
 
 /**
  * Sparse infill lines for one region. Adaptive / support cubic and lightning need neighbouring layers and are

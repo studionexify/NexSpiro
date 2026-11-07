@@ -4,7 +4,8 @@ import { FILAMENTS, filamentById } from '../profiles/filaments';
 import { touchAdd } from './TouchMods';
 import { arcSupportNote, PRINTERS, printerById } from '../profiles/printers';
 import { autoFlushMatrix } from '../profiles/flush';
-import { baseProcess, effectiveNozzle, NOZZLES } from '../profiles/resolve';
+import { baseProcess, bedTemps, effectiveNozzle, NOZZLES } from '../profiles/resolve';
+import { filamentConfig } from '../profiles/filamentParams';
 import { HEIGHT_RANGE_KEYS, MODIFIER_KEYS, OBJECT_KEYS, PARAM_BY_KEY, PROCESS_PARAMS, PROCESS_PRESETS, PROCESS_TABS, type Config, type ProcessTab } from '../profiles/settings';
 import { activeUserPreset, currentPresetValue, isActiveUserPresetModified, selectPresetValue } from '../state/userPresets';
 import { USER_PREFIX } from '../profiles/userPresets';
@@ -204,7 +205,7 @@ export function FilamentCard() {
       <Body closed={closed}><div className="slots">
         {filaments.map((f, k) => {
           const fil = filamentById(f.presetId);
-          const bed = fil.bedTemp[plate] ?? 0;
+          const bed = bedTemps(filamentConfig(fil), plate)[1];
           return (
             <div className="row slot" key={k}>
               <label title="Filament colour" className="swatch-btn" style={{ background: f.color }}>

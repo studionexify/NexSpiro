@@ -18,6 +18,7 @@ export type FeatureType =
   | 'top_surface'
   | 'bottom_surface'
   | 'bridge'
+  | 'internal_bridge'
   | 'gap_infill'
   | 'ironing'
   | 'skirt'
@@ -37,6 +38,7 @@ export const FEATURE_LABELS: Record<FeatureType, string> = {
   top_surface: 'Top surface',
   bottom_surface: 'Bottom surface',
   bridge: 'Bridge',
+  internal_bridge: 'Internal bridge',
   gap_infill: 'Gap infill',
   ironing: 'Ironing',
   skirt: 'Skirt',
@@ -115,6 +117,8 @@ export interface MeshInput {
   faceSets?: FaceSet[];
   /** Height range modifiers: settings for layers whose top lies in [z0, z1) (object-relative mm). */
   heightRanges?: { z0: number; z1: number; overrides: Record<string, number | boolean | string> }[];
+  /** Rotation of the object about Z on the plate (degrees), for "Align directions to model". */
+  rotationZ?: number;
   /** Brim ear points painted with the brim ears tool (world XY, mm). */
   brimEars?: [number, number][];
 }
@@ -214,6 +218,6 @@ export interface SliceOutput {
 
 export const FEATURE_ORDER: FeatureType[] = [
   'outer_wall', 'inner_wall', 'overhang_wall', 'sparse_infill', 'internal_solid_infill',
-  'top_surface', 'bottom_surface', 'bridge', 'ironing', 'skirt', 'brim', 'support',
+  'top_surface', 'bottom_surface', 'bridge', 'internal_bridge', 'ironing', 'skirt', 'brim', 'support',
   'support_interface', 'travel', 'prime_tower', 'gap_infill', 'wave_overhang',
 ];
