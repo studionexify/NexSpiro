@@ -64,6 +64,8 @@ function useShortcuts() {
         ui.set({ paletteOpen: !ui.paletteOpen }); e.preventDefault(); return;
       }
       if (useUi.getState().paletteOpen) return;
+      // a Studio handled the key (its own undo / redo)
+      if (e.defaultPrevented) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const s = useStore.getState();

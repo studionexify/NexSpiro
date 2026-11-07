@@ -11,6 +11,7 @@ import { printerById } from '../../../profiles/printers';
 import { assembled, buildLamp, rotateXYZ, type BuildResult, type BuiltPart } from '../build';
 import { translate, toMesh, bounds, type Soup } from '../geom';
 import { defaultDesign, type LampDesign } from '../model';
+import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.lumonex.v1';
 const SAVED = 'nexspiro.lumonex.designs.v1';
@@ -56,7 +57,15 @@ export function changed(geometry = true): void {
   version++;
   if (geometry) geometryVersion++;
   listeners.forEach((l) => l());
+  undoHistory.touch();
 }
+
+/** Undo / redo of the lamp design (a drag is one step). */
+export const undoHistory = createHistory(() => lx.design, (d) => {
+  lx.design = d;
+  if (!d.sections.some((s) => s.id === lx.selected)) lx.selected = d.sections[0]?.id ?? '';
+  changed();
+});
 
 export function setDesign(d: LampDesign): void {
   lx.design = d;
@@ -277,4 +286,5 @@ export function loadProject(data: unknown): void {
   lx.placed = d.placed ?? [];
   lx.mode = d.mode ?? 'print';
   changed();
+  undoHistory.reset();
 }

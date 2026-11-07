@@ -13,11 +13,12 @@ import { assembled, buildLamp, rotateXYZ, type BuiltPart } from '../build';
 import { bounds, toMesh, translate, type Soup } from '../geom';
 import { EditorColumn, ReportColumn, useReport } from './LumonexPanel';
 import { LiveBadge, Seg, Stat, StudioWindow, ToolGroup } from '../../../ui/studio/Studio';
+import { UndoRedo } from '../../../ui/studio/UndoRedo';
 import { StackEditorBody, StackEditorHead } from './StackEditor';
 import { swatch } from '../catalog';
 import { RenexStudio } from '../../../renex/ui/RenexStudio';
 import { lumonexRenexSource } from '../renexSource';
-import { bedOf, changed, geometryVersion, groupByFilament, lx, openStudio, transferToPlate, useLx, type StudioView } from './state';
+import { bedOf, changed, geometryVersion, groupByFilament, lx, openStudio, transferToPlate, undoHistory, useLx, type StudioView } from './state';
 
 export function LumonexStudioHost() {
   useLx();
@@ -261,7 +262,7 @@ function Studio() {
         stage={stage}
         editor={<><StackEditorHead /><div className="st-editor-body"><StackEditorBody /></div></>}
         editorHeight={270}
-        actions={<><button className="st-btn" title="Photorealistic render of the printed lamp (Renex)" onClick={() => setRenex(true)}>Render</button><button className="st-btn" onClick={transfer} title="Take the lamp apart onto print plates">Transfer to plate</button></>} />
+        actions={<><UndoRedo history={undoHistory} /><button className="st-btn" title="Photorealistic render of the printed lamp (Renex)" onClick={() => setRenex(true)}>Render</button><button className="st-btn" onClick={transfer} title="Take the lamp apart onto print plates">Transfer to plate</button></>} />
       {renex && <RenexStudio source="lumonex" build={lumonexRenexSource} onClose={() => setRenex(false)} />}
     </>
   );

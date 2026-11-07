@@ -53,8 +53,8 @@ function PatternexStudio() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redoChart(); else undoChart(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoChart(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redoChart(); else undoChart(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); e.stopImmediatePropagation(); redoChart(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (/^[1-9]$/.test(e.key)) { const s = Number(e.key) - 1; if (s < useStore.getState().filaments.length) setPaint(s); }
       else if (e.key === '0') setPaint(BASE);
@@ -62,8 +62,8 @@ function PatternexStudio() {
       else if (e.key.toLowerCase() === 'g') setTool('fill');
       else if (e.key.toLowerCase() === 'i') setTool('pick');
     };
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
+    window.addEventListener('keydown', k, true);
+    return () => window.removeEventListener('keydown', k, true);
   }, []);
 
   const plateObjs = plateObjects(activePlate).filter((o) => o.printable !== false);

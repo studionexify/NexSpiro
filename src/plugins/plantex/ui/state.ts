@@ -13,6 +13,7 @@ import { defaultSpec, normalizeSpec, type PlantexSpec } from '../model';
 import { paintBody } from '../paint';
 import { patternMask } from '../patternLink';
 import { autoChanges } from '../../../profiles/changer';
+import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.plantex.v1';
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -61,7 +62,11 @@ export function changed(geometry = true) {
   persist();
   version++;
   listeners.forEach((l) => l());
+  undoHistory.touch();
 }
+
+/** Undo / redo of the pot design (a drag is one step). */
+export const undoHistory = createHistory(() => pt.spec, (spec) => { pt.spec = spec; changed(); });
 
 export const masks = (key: string) => patternMask(key);
 
@@ -207,4 +212,5 @@ export function loadPlantexProject(d: unknown) {
   if (x.spec) pt.spec = normalizeSpec(x.spec);
   pt.placed = x.placed ?? [];
   changed();
+  undoHistory.reset();
 }

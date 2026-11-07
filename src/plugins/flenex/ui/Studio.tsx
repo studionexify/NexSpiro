@@ -16,10 +16,12 @@ import { EditorColumn, PrinterPicker } from './Editor';
 import { Card } from './controls';
 import { HandleCurve } from '../../../ui/studio/HandleCurve';
 import { LiveBadge, Num, Seg, Stat, StudioWindow, ToolGroup } from '../../../ui/studio/Studio';
+import { UndoRedo } from '../../../ui/studio/UndoRedo';
 import { PROFILES } from '../presets';
 import { SPINES } from '../design';
 import {
   addCut, addPart, changed, addPaint, baseBvh, built, building, statusText, currentMachine, editAnyCut, export3mf, fx, lastError, meshVersion, nextCutId, notify, openStudio, paintVersion, sendToPlate, setTraceStart, traceStart, useFx,
+  undoHistory,
 } from './state';
 
 export function FlenexStudioHost() {
@@ -383,6 +385,7 @@ function Studio() {
       rail={<><small>Colours</small>{fx.palette.map((c, i) => <button key={i} className={`st-sw ${fx.slot === i + 1 ? 'on' : ''}`} style={{ background: c, width: 24, height: 24 }} title={`Colour ${i + 1}`} aria-label={`Paint colour ${i + 1}`} onClick={() => { fx.slot = i + 1; notify(); }} />)}</>}
       stage={stage} editor={editor} editorHeight={250}
       actions={<>
+        <UndoRedo history={undoHistory} />
         <div style={{ width: 210 }}><PrinterPicker /></div>
         <button className="st-btn" disabled={!built} onClick={async () => { const p = await export3mf(); say(p ? `Saved ${p}` : 'Export cancelled'); }}>Export 3MF</button>
         <button className="st-btn" disabled={!built} onClick={() => { const r = sendToPlate(); if (r) say(`Placed on the plate (${r.colours} colour${r.colours === 1 ? '' : 's'}).`); }}>Send to plate</button>

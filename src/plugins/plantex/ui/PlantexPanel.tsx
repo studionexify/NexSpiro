@@ -9,7 +9,7 @@ import { KINDS } from '../textures';
 import { patternEntry } from '../patternLink';
 import { ProfileEditor } from './ProfileEditor';
 import { WallMap } from './WallMap';
-import { changed, deleteDesign, ensureSlot, loadSpec, openStudio, pt, saveDesign, transferToPlate, usePt } from './state';
+import { changed, deleteDesign, ensureSlot, loadSpec, openStudio, pt, saveDesign, transferToPlate, undoHistory, usePt } from './state';
 import { StudioViewer } from './StudioViewer';
 import { RenexStudio } from '../../../renex/ui/RenexStudio';
 import { plantexRenexSource } from '../renexSource';
@@ -17,6 +17,7 @@ import { useStore } from '../../../state/store';
 import { FILAMENTS } from '../../../profiles/filaments';
 import { designThumb, designOutline, textureThumb } from './thumbs';
 import { Live3D } from '../../../ui/Live3D';
+import { UndoRedo } from '../../../ui/studio/UndoRedo';
 import { Num as StNum, Seg as StSeg, SideCard, Stat, StudioWindow, ToolGroup, useInStudio } from '../../../ui/studio/Studio';
 import { printerById } from '../../../profiles/printers';
 
@@ -501,6 +502,7 @@ export function PlantexStudio() {
         rail={<><small>Type</small><span className="st-hint" style={{ margin: 0 }}>{s.kind}</span></>}
         stage={stage} editor={editor} editorHeight={290}
         actions={<>
+          <UndoRedo history={undoHistory} />
           <button className="st-btn" title="Photorealistic render of the printed design (Renex)" onClick={() => setRenex(true)}>Render</button>
           {pt.placed.length > 0 && <button className="st-btn" disabled={busy} onClick={() => transfer(true)}>Transfer as new copy</button>}
           <button className="st-btn" disabled={busy} onClick={() => transfer(false)}>{busy ? 'Building parts…' : pt.placed.length ? 'Transfer (replace)' : 'Transfer to plate'}</button>

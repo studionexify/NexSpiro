@@ -22,6 +22,7 @@ import type { BedFit, CutOrientation } from '../place';
 import type { JointKind } from '../joints';
 import { build3mf } from '../export3mf';
 import { saveFile } from '../../../platform';
+import { createHistory } from '../../../ui/studio/history';
 
 const KEY = 'nexspiro.flenex.v1';
 const storage = typeof localStorage !== 'undefined' ? localStorage : null;
@@ -136,7 +137,19 @@ export function notify(): void {
   } catch { /* storage full */ }
   version++;
   listeners.forEach((l) => l());
+  undoHistory.touch();
 }
+
+/** The parts of the state undo / redo covers: the design, cuts, parts, paint and fit (not the view or tool). */
+const undoable = () => ({ design: fx.design, presetId: fx.presetId, cutsMode: fx.cutsMode, manualCuts: fx.manualCuts, groups: fx.groups, palette: fx.palette, paintOps: fx.paintOps, clearance: fx.clearance, gap: fx.gap, importRot: fx.importRot, importScale: fx.importScale });
+/** Undo / redo of the Flenex design (a drag or brush stroke is one step). */
+export const undoHistory = createHistory(undoable, (s) => {
+  const paintOnly = JSON.stringify({ ...undoable(), paintOps: null, palette: null }) === JSON.stringify({ ...s, paintOps: null, palette: null });
+  Object.assign(fx, s);
+  if (fx.selectedCut && !fx.manualCuts.some((c) => c.id === fx.selectedCut)) fx.selectedCut = null;
+  if (fx.selectedGroup && !fx.groups.some((g) => g.id === fx.selectedGroup)) fx.selectedGroup = null;
+  schedule(paintOnly);
+});
 
 // ---------------------------------------------------------------- worker
 let worker: Worker | null = null;
@@ -256,6 +269,7 @@ export async function importModel(name: string, mesh: IndexedMesh): Promise<void
   fx.source = 'import'; fx.importName = name; fx.importRot = [0, 0, 0]; fx.importScale = 1;
   fx.cutsMode = 'manual'; fx.manualCuts = []; fx.groups = []; fx.selectedGroup = null; fx.selectedCut = null; fx.tab = 'cuts'; fx.tool = 'place';
   schedule(false, 10);
+  undoHistory.reset();
 }
 
 // ---------------------------------------------------------------- cut groups (parts of an imported model)
@@ -360,6 +374,7 @@ export function loadProject(data: unknown): void {
   if (!d?.design || d.design.version !== 1) return;
   Object.assign(fx, { design: d.design, presetId: d.presetId ?? fx.presetId, cutsMode: d.cutsMode ?? 'auto', manualCuts: d.manualCuts ?? [], groups: d.groups ?? [], palette: d.palette ?? fx.palette, paintOps: d.paintOps ?? fx.paintOps, clearance: d.clearance ?? 0, gap: d.gap ?? 0, source: 'creature' });
   schedule();
+  undoHistory.reset();
 }
 
 void plateOrigin;
