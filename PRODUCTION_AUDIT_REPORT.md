@@ -104,7 +104,7 @@ $ npx tsc --noEmit
 (no errors)
 
 $ npx vitest run
- Test Files  106 passed | 1 skipped (107)
-      Tests  2397 passed | 1 skipped (2398)
+ Test Files  107 passed | 1 skipped (108)
+      Tests  2399 passed | 1 skipped (2400)
 ```
-No regressions: 2395 tests passed before the changes, and 2397 pass after, counting the 2 new macro tests.
+No regressions: 2395 tests passed before the audit, and 2399 pass after. The 4 new ones are the 2 macro tests and the 2 stats-consistency tests.
