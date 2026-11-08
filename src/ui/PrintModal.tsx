@@ -7,7 +7,7 @@ import { printerById } from '../profiles/printers';
 import { changerOf, toolheadCount } from '../profiles/changer';
 import { toolMapProblems, parseToolMap } from '../engine/toolmap';
 import { currentConfig } from '../state/slicing';
-import { connectDevice, initDevices, uploadAndPrint, useDevices } from '../state/devices';
+import { connectDevice, initDevices, reportDeviceError, uploadAndPrint, useDevices } from '../state/devices';
 import { buildPrintJob } from '../state/printjob';
 import { useStore } from '../state/store';
 import { fmtDuration, StatusDot } from './DevicePage';
@@ -65,7 +65,7 @@ export function PrintModal({ onClose }: { onClose: () => void }) {
     if (pick) setDevId(pick.id);
   }, [devices.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (dev && (!st || st.state === 'offline')) connectDevice(dev.id).catch(() => {});
+    if (dev && (!st || st.state === 'offline')) connectDevice(dev.id).catch((e) => reportDeviceError(`Could not connect to ${dev.name}`, e));
   }, [dev?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!trays.length) { setMapping(null); return; }

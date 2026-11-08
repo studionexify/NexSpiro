@@ -1,5 +1,6 @@
 // Floating panels for the Cut, Mesh Boolean, Text and Measure tools.
 import { edgeLength, measure } from '../state/measure';
+import { onSvgOffered, takeSvg } from '../state/svgHandoff';
 import { embossVolume, objectFromWorld, svgMesh, textMesh, type EmbossKind } from '../state/tools';
 import { DEFAULT_GROOVE, type ConnectorSettings, type ConnectorShape, type ConnectorStyle, type ConnectorType, type GrooveSettings } from '../state/cutConnectors';
 import { useEffect, useState } from 'react';
@@ -112,8 +113,9 @@ export function BooleanPanel() {
   return (
     <div className="float panel" style={{ width: 290 }}>
       <h4>Mesh boolean</h4>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Shift+click to select two or more objects. The first selected is the base: <b>Difference</b> subtracts the others from it.</p>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Click objects in the viewport to add them (click again to remove). The first one picked is the base: <b>Difference</b> subtracts the others from it.</p>
       {sel.map((o, i) => <div key={o!.id} className="row" style={{ marginBottom: 2 }}><span className="badge">{i === 0 ? 'Base' : `+${i}`}</span>{o!.name}</div>)}
+      {sel.length > 0 && <button className="btn-secondary btn-small" onClick={() => useStore.getState().set({ selected: [], selectedPart: null })}>Clear picks</button>}
       <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
         {([['union', 'Union'], ['difference', 'Difference'], ['intersection', 'Intersection']] as const).map(([op, label]) => (
           <button key={op} className="btn-secondary btn-small" disabled={sel.length < 2} onClick={() => booleanSelected(op)}>{label}</button>
@@ -137,6 +139,11 @@ export function TextPanel() {
   const [svg, setSvg] = useState<{ name: string; text: string } | null>(null);
   const [useSurface, setUseSurface] = useState(true);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const pick = () => { const p = takeSvg(); if (p) { setSvg(p); setSrc('svg'); } };
+    pick();
+    return onSvgOffered(pick);
+  }, []);
   if (tool !== 'text') return null;
   const volume = o.mode === 'part' || o.mode === 'negative' || o.mode === 'modifier';
   const ready = src === 'text' ? !!o.text.trim() : !!svg;

@@ -96,7 +96,7 @@ p.mx-muted:not(.px-warn), .mx-head .mx-sub, .empty-hint, .dock-body p.muted, .sh
 .sh-stage.ws-preview .vslider { right: 14px; top: 14px; bottom: 150px; }
 .sh-stage.ws-preview .hslider { bottom: 14px; left: calc(14px + var(--sh-dock-w) + 12px); right: 70px; transform: none; width: auto; max-width: 560px; }
 .sh-stage.ws-preview .plate-list { right: 92px; top: 14px; }
-.sh-stage.ws-preview .viewcube { right: 62px; bottom: 70px; }
+.sh-stage.ws-preview .viewcube { right: 86px; bottom: 70px; } /* clear of the 64px layer slider at right 14px */
 .sh-stage.ws-preview .sh-viewbar { left: calc(14px + var(--sh-dock-w) + 12px); bottom: 70px; }
 
 /* summary labels stay on one line; the long value wraps instead */

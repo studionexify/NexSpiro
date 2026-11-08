@@ -631,7 +631,8 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
           if (moved) pushMove(op.travel ? 'travel' : op.feature, op.w, op.h, op.f, t, fanOut, op.travel ? 0 : op.wave);
           const fk = op.travel ? 'travel' : op.feature;
           const bf = byFeature[fk] ?? (byFeature[fk] = { time: 0, filamentMm: 0 });
-          bf.time += t; bf.filamentMm += op.e;
+          // travel (incl. wipe-retract) carries no extrusion in the feature table; retract/unretract pairs net out in the total
+          bf.time += t; if (!op.travel) bf.filamentMm += op.e;
           break;
         }
       }

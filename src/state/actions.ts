@@ -14,6 +14,15 @@ export async function importBuffers(files: { name: string; data: ArrayBuffer }[]
   const added: SceneObject[] = [];
   let placedExactly = false;
   for (const f of files) {
+    if (/\.svg$/i.test(f.name)) {
+      // SVG is a 2-D outline: it goes through the Text / Emboss tool rather than the mesh loader
+      if (confirm(`SVG detected: ${f.name}. Load it into the Text/Emboss volume tool?`)) {
+        const { offerSvg } = await import('./svgHandoff');
+        offerSvg(f.name, new TextDecoder().decode(f.data));
+        useStore.getState().set({ tool: 'text' });
+      } else useStore.getState().set({ toast: { kind: 'info', text: `${f.name} was not imported.` } });
+      continue;
+    }
     importStart(f.name);
     try {
       if (/\.3mf$/i.test(f.name)) {

@@ -246,13 +246,44 @@ export function MoveSlider() {
   const v = moveCursor < 0 ? count - 1 : moveCursor;
   return (
     <div className="float hslider">
-      <Icon name="slice" size={16} />
+      <MovePlayer count={count} />
       <input type="range" min={0} max={Math.max(0, count - 1)} value={v} aria-label="Move slider"
         onChange={(e) => { const x = +e.target.value; set({ moveCursor: x >= count - 1 ? -1 : x }); }} />
       <span className="mono" style={{ minWidth: 90, textAlign: 'right', color: 'var(--text-muted)' }}>{v + 1} / {count}</span>
       <button className={`icon-btn ${showGcode ? 'active' : ''}`} title="Show G-code next to the move slider" aria-label="G-code" onClick={() => set({ showGcode: !showGcode })}><Icon name="file" size={15} /></button>
       {showGcode && r.moveLines && <GcodeLines gcode={r.gcode} line={r.moveLines[L.moveStart + v]} move={L.moveStart + v} />}
     </div>
+  );
+}
+
+const PLAY_SPEEDS = [1, 2, 5, 10] as const;
+/** Intra-layer toolhead playback: steps the move cursor (and so the nozzle marker) through the top layer. */
+function MovePlayer({ count }: { count: number }) {
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<(typeof PLAY_SPEEDS)[number]>(1);
+  useEffect(() => {
+    if (!playing) return;
+    const t = setInterval(() => {
+      const st = useStore.getState();
+      if (st.moveCursor < 0) { setPlaying(false); return; } // the user jumped to the end
+      const nx = st.moveCursor + speed;
+      if (nx >= count - 1) { st.set({ moveCursor: -1 }); setPlaying(false); }
+      else st.set({ moveCursor: nx });
+    }, 40);
+    return () => clearInterval(t);
+  }, [playing, speed, count]);
+  const toggle = () => {
+    if (!playing && useStore.getState().moveCursor < 0) useStore.getState().set({ moveCursor: 0 }); // restart from the layer start
+    setPlaying(!playing);
+  };
+  return (
+    <>
+      <button className={`icon-btn ${playing ? 'active' : ''}`} title={playing ? 'Pause' : 'Play the moves of this layer'} aria-label={playing ? 'Pause' : 'Play'} onClick={toggle}>
+        <span aria-hidden style={{ fontSize: 13, lineHeight: 1 }}>{playing ? '❚❚' : '▶'}</span>
+      </button>
+      <button className="btn-secondary btn-small mono" title="Playback speed" aria-label="Playback speed" style={{ minWidth: 36 }}
+        onClick={() => setSpeed(PLAY_SPEEDS[(PLAY_SPEEDS.indexOf(speed) + 1) % PLAY_SPEEDS.length])}>{speed}×</button>
+    </>
   );
 }
 

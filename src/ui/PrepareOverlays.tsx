@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { autoOrient, importDialog } from '../state/actions';
 import { splitObject } from '../state/objectOps';
 import { repairObjects } from '../state/meshTools';
-import { choiceColors, slotColor, useStore, worldBounds, type Tool } from '../state/store';
+import { choiceColors, objectPlate, slotColor, useStore, worldBounds, type Tool } from '../state/store';
 import { mixLabel } from '../profiles/mixing';
 import { addPlate, arrangeAll, arrangeSelected, currentProfile, orientPlate, signedVolume, objectHeight, profileBounds, vlhAdaptive, vlhRange, vlhReset, vlhSmooth } from '../state/ops';
 import { viewApi } from '../viewport/Viewport';
@@ -289,6 +289,7 @@ export function VlhPanel() {
   const [range, setRange] = useState({ z0: 2, z1: 6, h: 0.1 });
   const canvas = useRef<HTMLCanvasElement>(null);
   const o = s.objects.find((x) => x.id === s.selected[0]);
+  const vlhShared = o ? s.objects.filter((x) => x.layerHeights?.length && objectPlate(x, s.printerId, s.plates.length) === objectPlate(o, s.printerId, s.plates.length)).length : 0;
   const prof = useMemo(() => (o ? currentProfile(o) : []), [o, s.printerId, s.presetId, s.overrides]);
   useEffect(() => {
     const c = canvas.current;
@@ -335,6 +336,8 @@ export function VlhPanel() {
         <button className="btn-secondary btn-small" disabled={!o.layerHeights} onClick={() => vlhReset(o.id)}>Reset</button>
       </div>
       <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>{prof.length} layers · {pb.minHeight}–{pb.maxHeight} mm allowed{o.layerHeights ? '' : ' · uniform'}</div>
+      {vlhShared > 1 && <div className="badge warn" role="status" style={{ marginTop: 6, whiteSpace: 'normal' }} title="All objects on one plate share the same layers">
+        {vlhShared} objects on this plate have variable layer heights. Layers are shared by the whole plate, so the first object's profile is used for all of them.</div>}
     </div>
   );
 }

@@ -2,6 +2,13 @@
 import { create } from 'zustand';
 import { deviceHandle, discoverPrinters, loadDevices, saveDevices, type DeviceHandle, type FoundPrinter } from '../connect/client';
 import type { PrinterStatus, SavedDevice } from '../connect/types';
+import { useStore } from './store';
+
+/** Tell the operator a printer connection failed instead of swallowing the error. */
+export function reportDeviceError(what: string, e: unknown) {
+  const msg = String((e as any)?.message ?? e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '');
+  try { useStore.getState().set({ toast: { kind: 'error', text: `${what}: ${msg}` } }); } catch { /* store not ready */ }
+}
 
 interface DevState {
   loaded: boolean;
@@ -28,7 +35,7 @@ export async function initDevices() {
   useDevices.setState({ loaded: true, devices, selected: devices[0]?.id ?? null });
   // Reconnect every saved network printer in the background. Connecting only reads status;
   // it never sends motion or G-code. USB printers need a user gesture, so they are skipped.
-  for (const d of devices) if (d.config.kind !== 'serial') void connectDevice(d.id).catch(() => {});
+  for (const d of devices) if (d.config.kind !== 'serial') void connectDevice(d.id).catch((e) => reportDeviceError(`${d.name} is offline`, e));
 }
 
 export function handleOf(id: string): DeviceHandle {
@@ -100,7 +107,7 @@ async function learnIdentity(id: string) {
 }
 
 export async function connectDevice(id: string) {
-  try { await run(id, 'Connecting…', (h) => h.connect()); void learnIdentity(id).catch(() => {}); }
+  try { await run(id, 'Connecting…', (h) => h.connect()); void learnIdentity(id).catch((e) => console.warn('printer identity lookup failed', e)); }
   catch (e: any) {
     if (await relocate(id).catch(() => false)) {
       try { await run(id, 'Connecting…', (h) => h.connect()); return; } catch (e2) { e = e2; }
