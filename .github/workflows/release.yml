@@ -43,12 +43,35 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # GitHub release downloads (Electron, NSIS) intermittently return 504:
+      # cache them and retry with backoff.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-dl-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-dl-${{ runner.os }}-
+      - name: npm ci (with retry)
+        shell: bash
+        run: |
+          for i in 1 2 3 4; do
+            npm ci && exit 0
+            echo "npm ci attempt $i failed; retrying"; sleep $((i*30))
+          done
+          exit 1
       # tests run on every push in ci.yml; skipped here to keep installer builds fast
       - run: npm run build
-      - run: npx electron-builder ${{ matrix.target }} --publish never
+      - name: electron-builder (with retry)
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          for i in 1 2 3 4; do
+            npx electron-builder ${{ matrix.target }} --publish never && exit 0
+            echo "electron-builder attempt $i failed; retrying"; sleep $((i*30))
+          done
+          exit 1
       - if: runner.os == 'Windows'
         run: node scripts/package-win.mjs
       - uses: actions/upload-artifact@v4
