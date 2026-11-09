@@ -116,6 +116,7 @@ export class LanConnection implements PrinterConnection {
   private frames = new Emitter<Uint8Array>();
   private cam: tls.TLSSocket | null = null;
   private seq = 0;
+  private replies = new Set<(msg: any) => void>();
 
   constructor(private cfg: LanConfig) {}
 
@@ -146,6 +147,7 @@ export class LanConnection implements PrinterConnection {
       c.on('message', (_t, payload) => {
         try {
           const msg = JSON.parse(payload.toString());
+          for (const r of this.replies) r(msg);
           mergeReport(this.acc, msg);
           this.set(statusFromReport(this.acc));
         } catch { /* ignore malformed */ }
@@ -196,8 +198,11 @@ export class LanConnection implements PrinterConnection {
   }
 
   async startPrint(fileName: string, o: PrintOptions = {}) {
+    const before = this.acc.print?.gcode_state;
+    let sent: Record<string, any>;
     if (/\.3mf$/i.test(fileName)) {
-      this.publish({
+      const useAms = o.useAms !== false && !!(o.amsMapping?.some((t) => t >= 0));
+      sent = this.publish({
         print: {
           command: 'project_file',
           param: `Metadata/plate_${o.plate ?? 1}.gcode`,
@@ -206,12 +211,47 @@ export class LanConnection implements PrinterConnection {
           project_id: '0', profile_id: '0', task_id: '0', subtask_id: '0',
           md5: '', timelapse: !!o.timelapse, bed_type: 'auto', bed_levelling: o.bedLevelling !== false,
           flow_cali: !!o.flowCalibration, vibration_cali: false, layer_inspect: false,
-          use_ams: o.useAms !== false && !!(o.amsMapping?.some((t) => t >= 0)), ams_mapping: o.amsMapping ?? [],
+          use_ams: useAms, ams_mapping: useAms ? o.amsMapping : [],
         },
       });
     } else {
-      this.publish({ print: { command: 'gcode_file', param: `/sdcard/${fileName}` } });
+      sent = this.publish({ print: { command: 'gcode_file', param: `/sdcard/${fileName}` } });
     }
+    await this.confirmStart(sent.print, before);
+  }
+
+  /**
+   * The printer answers a print command on its report topic (same command and sequence_id, result "success" or
+   * "fail" with a reason) and then moves gcode_state to PREPARE / RUNNING. Without checking, a refused command
+   * looked like "Print started" while the printer stayed idle. Recent Bambu firmware refuses print commands from
+   * apps other than Bambu's own unless the printer is in LAN Only mode with Developer Mode on.
+   */
+  private confirmStart(req: { command: string; sequence_id: string }, before: unknown, timeoutMs = 25000): Promise<void> {
+    const hint = 'On the printer, turn on LAN Only mode and Developer Mode (Settings → Network / LAN Only), then try again — recent Bambu firmware ignores print commands from other apps otherwise.';
+    return new Promise((resolve, reject) => {
+      let acked = false;
+      const done = (err?: Error) => { clearTimeout(t); this.replies.delete(on); err ? reject(err) : resolve(); };
+      const on = (msg: any) => {
+        const p = msg?.print;
+        if (!p) return;
+        if (p.command === req.command && String(p.sequence_id) === req.sequence_id) {
+          const failed = p.result && String(p.result).toLowerCase() !== 'success';
+          if (failed || p.reason && String(p.reason).toLowerCase() !== 'success') {
+            const why = [p.reason, p.err_code ?? p.error_code].filter((x) => x != null && x !== '').join(' · ') || 'refused';
+            return done(new Error(`The printer refused the print (${why}). ${hint}`));
+          }
+          acked = true;
+        }
+        const st = p.gcode_state;
+        if (st && /^(PREPARE|RUNNING|SLICING)$/.test(st) && (acked || st !== before)) done();
+        const err = Number(p.print_error ?? 0);
+        if (acked && err) done(new Error(`The printer reported print error ${err.toString(16).toUpperCase().padStart(8, '0')}.`));
+      };
+      const t = setTimeout(() => done(new Error(acked
+        ? 'The printer accepted the command but did not start within 25 s. Check its screen for a prompt (filament / plate / AMS mapping).'
+        : `The printer did not answer the print command. ${hint}`)), timeoutMs);
+      this.replies.add(on);
+    });
   }
   async pause() { this.publish({ print: { command: 'pause' } }); }
   async resume() { this.publish({ print: { command: 'resume' } }); }

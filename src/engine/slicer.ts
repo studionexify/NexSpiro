@@ -1372,6 +1372,9 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
 
   const layerOps: LayerOps[] = [];
   let px = 0, py = 0;
+  // false until the first travel: after the start G-code the head is wherever the maker's macros left it
+  // (Snapmaker U1: the end of the purge line at X185 Y1), not at 0,0, so a hop must not draw around px/py yet
+  let posKnown = false;
   let retracted = false;
   // tool changers: each parked head keeps the filament it was retracted by (retract_length_toolchange, as in
   // Orca / Snapmaker Orca); it comes back when that head is picked up again. null = the normal retraction
@@ -1453,7 +1456,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       if (isNaN(px)) {
         // position unknown after a filament change macro
         ops.push({ k: 'move', x, y, z: zz, e: 0, f: travelSpeed, feature: 'travel', w: 0, h, travel: true });
-        px = x; py = y; curZ = zz; firstTravel = false;
+        px = x; py = y; curZ = zz; firstTravel = false; posKnown = true;
         return;
       }
       if (safeZ !== null) {
@@ -1461,7 +1464,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         ops.push({ k: 'move', x: px, y: py, z: safeZ, e: 0, f: zTravel, feature: 'travel', w: 0, h, travel: true, fixed: true });
         ops.push({ k: 'move', x, y, z: safeZ, e: 0, f: travelSpeed, feature: 'travel', w: 0, h, travel: true });
         ops.push({ k: 'move', x, y, z: zz, e: 0, f: zTravel, feature: 'travel', w: 0, h, travel: true, fixed: true });
-        safeZ = null; px = x; py = y; curZ = zz; firstTravel = false;
+        safeZ = null; px = x; py = y; curZ = zz; firstTravel = false; posKnown = true; posKnown = true;
         return;
       }
       const d = Math.hypot(x - px, y - py);
@@ -1487,7 +1490,14 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         const hz = curZ + zHop;
         const slope = Math.max(1, Math.min(90, tnum('travel_slope') || 90));
         if (type === 'slope' && slope >= 89.999) type = 'normal';
-        if (type === 'spiral') ops.push({ k: 'lift', x: px, y: py, z: hz, r: Math.max(0.5, zHop * 2), f: Math.min(tf, 200) });
+        const here = posKnown && Number.isFinite(px) && Number.isFinite(py);
+        if (!here) {
+          // position unknown (first travel, after a tool change): a spiral or a straight lift around a guessed
+          // 0,0 drives the head past the axis limit (Y-0.8 → Snapmaker U1 0003-0522 "Y-axis exceeded travel
+          // limit"). Rise on the way to the target instead.
+          type = 'unknown'; // no lift move here: the travel below runs at hop height, then comes down
+        }
+        if (type === 'unknown') { /* see above */ } else if (type === 'spiral') ops.push({ k: 'lift', x: px, y: py, z: hz, r: Math.max(0.5, zHop * 2), f: Math.min(tf, 200) });
         else if (type === 'slope' && d > zHop * 2) {
           // rise while already moving: reach the hop height after hop / tan(travel angle) along the travel (at most half of it)
           const t = Math.min(0.5, zHop / Math.tan((slope * Math.PI) / 180) / d);
@@ -1500,7 +1510,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         for (let k = 0; k < via.length; k += 2) ops.push({ k: 'move', x: via[k], y: via[k + 1], z: curZ, e: 0, f: tf, feature: 'travel', w: 0, h, travel: true });
         ops.push({ k: 'move', x, y, z: zz, e: 0, f: tf, feature: 'travel', w: 0, h, travel: true });
       }
-      curZ = zz; px = x; py = y; firstTravel = false;
+      curZ = zz; px = x; py = y; firstTravel = false; posKnown = true;
     };
     /** Retract, wiping back along the last path while doing it if the printer / filament asks for it. */
     const retract = () => {

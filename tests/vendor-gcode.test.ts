@@ -155,6 +155,16 @@ describe('slicing with the makers\' templates', () => {
     const pulled = lines.slice(k + 1).filter((l) => /^G1 E-?[\d.]+ F/.test(l)).reduce((a, l) => a - Number(/E(-?[\d.]+)/.exec(l)![1]), 0);
     expect(pulled).toBeCloseTo(10, 6);
   });
+  it('Snapmaker U1: the first hop does not circle a guessed 0,0 (Y-0.8 → error 0003-0522 Y travel limit)', () => {
+    const { g } = sliceOn('snapmaker-u1', 2);
+    const moves = body(g).split('\n').filter((l) => /^G[0-3] /.test(l));
+    for (const l of moves) {
+      const m = /Y(-?[\d.]+)/.exec(l);
+      if (m) expect(Number(m[1]), l).toBeGreaterThanOrEqual(0);
+      const xm = /X(-?[\d.]+)/.exec(l);
+      if (xm) expect(Number(xm[1]), l).toBeGreaterThanOrEqual(0);
+    }
+  });
   it('Elegoo Neptune 4 Max: purge line from the bed size, layer markers, end move', () => {
     const { g, c } = sliceOn('elegoo-neptune4max', 1);
     expect(printerById('elegoo-neptune4max').bed).toEqual({ x: 426, y: 426, z: 480 });

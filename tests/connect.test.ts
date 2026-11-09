@@ -187,6 +187,13 @@ describe('LAN access-code connection over a real MQTT/TLS broker', () => {
       if (msg.pushing?.command === 'pushall') {
         broker.publish({ topic: 'device/01P00A000000001/report', payload: Buffer.from(JSON.stringify({ print: { gcode_state: 'IDLE', nozzle_temper: 25, bed_temper: 24, lights_report: [{ node: 'chamber_light', mode: 'on' }] } })), qos: 0, retain: false, cmd: 'publish', dup: false }, () => {});
       }
+      if (msg.print?.command === 'project_file') {
+        // like the firmware: answer the command, then move to PREPARE — or refuse it
+        const refuse = msg.print.subtask_name === 'refused';
+        const reply = refuse ? { command: 'project_file', sequence_id: msg.print.sequence_id, result: 'fail', reason: 'mqtt message verify failed', err_code: 84033543 }
+          : { command: 'project_file', sequence_id: msg.print.sequence_id, result: 'success', gcode_state: 'PREPARE' };
+        broker.publish({ topic: 'device/01P00A000000001/report', payload: Buffer.from(JSON.stringify({ print: reply })), qos: 0, retain: false, cmd: 'publish', dup: false }, () => {});
+      }
     });
     server = tls.createServer({ key: fs.readFileSync(path.join(dir, 'k.pem')), cert: fs.readFileSync(path.join(dir, 'c.pem')) }, broker.handle);
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
@@ -211,6 +218,12 @@ describe('LAN access-code connection over a real MQTT/TLS broker', () => {
     // sequence ids increase
     const seqs = received.map((m) => Number(Object.values(m as Record<string, any>)[0].sequence_id));
     expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
+    await c.disconnect();
+  });
+  it('a print the printer refuses is reported, not shown as started', async () => {
+    const c = new LanConnection({ kind: 'bbl_lan', host: '127.0.0.1', serial: '01P00A000000001', accessCode: 'CODE1234', mqttPort: port });
+    await c.connect();
+    await expect(c.startPrint('refused.gcode.3mf', { plate: 1 })).rejects.toThrow(/refused the print \(mqtt message verify failed · 84033543\).*Developer Mode/);
     await c.disconnect();
   });
 
