@@ -8,6 +8,7 @@ import './ui/shell/shell.css';
 import { PhoneArrows } from './ui/shell/PhoneArrows';
 import { TouchMods } from './ui/TouchMods';
 import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
+import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Outliner } from './ui/shell/Outliner';
 import { useStore, type Workspace } from './state/store';
 import { initDevices } from './state/devices';
@@ -163,7 +164,7 @@ export default function App() {
       <MenuBar />
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
-          <Viewport />
+          <ErrorBoundary area="The 3D view"><Viewport /></ErrorBoundary>
           {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /><Outliner /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
