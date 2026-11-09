@@ -22,7 +22,9 @@ export function ActionDock() {
   // The check comes from the last slice: a collision blocks Export only while that slice is current. Once the
   // scene changes (Auto-fix, a smaller motion…) the CTA is "Slice plate" again so the check can re-run.
   const collision = clr.state === 'collision' && !clr.stale;
-  const ready = sum.ready && !busy;
+  const workspace = useStore((s) => s.workspace);
+  // Export lives on Preview only; on Prepare the CTA is always Slice (it switches to Preview when done)
+  const ready = sum.ready && !busy && workspace === 'preview';
   const metric = (k: string, v?: string) => (
     <div className="sh-metric"><div className="k">{k}</div><div className={`v ${v ? '' : 'dim'}`}>{v ?? '—'}</div></div>
   );

@@ -2069,6 +2069,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         if (a.gcode) ops.push({ k: 'raw', text: a.gcode });
         continue;
       }
+      if (!vase && maxPrinted > 0 && (a.type === 'pause' || (a.type === 'custom' && a.gcode))) retract();
       if (a.type === 'pause') ops.push({ k: 'raw', text: `; PAUSE at layer ${i + 1}\n${str('machine_pause_gcode') || 'M601'}`, resetPos: true });
       else if (a.type === 'custom' && a.gcode) ops.push({ k: 'raw', text: `; custom G-code at layer ${i + 1}\n${a.gcode}` });
     }
@@ -2082,7 +2083,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
       } else if (far) {
         retract();
         travel(far[0], far[1], 'travel', curZ);
-      }
+      } else if (!vase && maxPrinted > 0) retract(); // the makers' snapshot macros park the head: never do that unretracted (ooze → blob on return)
       ops.push({ k: 'raw', text: vendorTpl ? renderVendor(timelapse, cfg, filaments, {
         ...(far ? { timelapse_pos_x: Math.round(far[0]), timelapse_pos_y: Math.round(far[1]), has_timelapse_safe_pos: true } : {}), farthest_point_timelapse_enabled: !!far,
         layer_num: i, layer_z: zTop, max_layer_z: Math.max(maxPrinted, zTop - h), timelapse_type: smoothLapse ? 1 : 0, spiral_mode: vase,

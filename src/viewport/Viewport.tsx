@@ -1764,7 +1764,16 @@ export function Viewport() {
           const n = lines.reduce((a, l) => a + l.positions.length, 0);
           const P = new Float32Array(n), C = new Float32Array(n);
           let o = 0;
-          for (const l of lines) { P.set(l.positions, o); C.set(l.colors, o); o += l.positions.length; }
+          // colours can be shorter/longer than positions (markers, merged parts): copy each part's overlap only
+          // and pad with white, so a mismatch never throws "offset is out of bounds" and kills the whole UI
+          for (const l of lines) {
+            const k = l.positions.length;
+            P.set(l.positions, o);
+            const c = l.colors ?? new Float32Array(0);
+            if (c.length >= k) C.set(c.length === k ? c : c.subarray(0, k), o);
+            else { C.set(c, o); C.fill(1, o + c.length, o + k); }
+            o += k;
+          }
           if (n) { geo.setPositions(P); geo.setColors(C); }
         }
         motionLines.geometry.dispose();

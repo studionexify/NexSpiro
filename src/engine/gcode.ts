@@ -489,6 +489,16 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
     const layerIndex = L.layer ?? li;
     const firstFan = Number(filaments[L.tool ?? 0]?.settings?.initial_layer_fan_speed ?? cfg.initial_layer_fan_speed ?? -1);
     const layerFan = layerFanSpeed(c, (k) => (filaments[L.tool ?? 0]?.settings?.[k] ?? cfg[k]) === true, layerIndex, preSlowTimes[li], Number.isFinite(firstFan) ? firstFan : -1);
+    // The layer's leading retract / wipe runs BEFORE the layer change macros (as Bambu Studio / Orca do): the makers'
+    // macros (A1 timelapse, clog detect…) move the head away, and doing that unretracted oozes a blob onto the part.
+    let lead = 0, pulled = false;
+    for (let k = 0; k < L.ops.length; k++) {
+      const q = L.ops[k];
+      if ((q.k === 'retract' && q.len > 0) || (q.k === 'move' && q.travel && q.e < 0)) { pulled = true; lead = k + 1; }
+      else if (q.k !== 'accel' && q.k !== 'jerk') break;
+    }
+    if (!pulled || li === 0) lead = 0;
+    const layerHeader = () => {
     const bl = String(cfg.before_layer_change_gcode ?? '');
     if (bl) push(vendor ? macro(bl, 'Before layer change G-code', { layer_num: layerIndex, layer_z: L.z, max_layer_z: L.z, ...extruded() }) : expandMacro(bl, cfg, { layer_num: layerIndex, layer_z: n(L.z) }));
     push(';LAYER_CHANGE');
@@ -512,8 +522,11 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
       const a = auxFanSpeed(c, layerIndex);
       if (a !== auxOut) { auxOut = a; push(`M106 P2 S${Math.round((a / 100) * 255)}`); }
     }
+    };
+    if (!lead) layerHeader();
     let curFeature: FeatureType | null = null;
     for (let oi = 0; oi < L.ops.length; oi++) {
+      if (lead && oi === lead) layerHeader();
       const op = L.ops[oi];
       if (op.k === 'move' && !op.travel && op.e > 0) setFan(op.fanSet !== undefined ? op.fanSet : Math.max(layerFan, op.fanMin ?? 0));
       if (arcs && op.k === 'move' && !op.travel && !op.noArc && op.e > 0 && op.z === z && !isNaN(x)) {
@@ -637,6 +650,7 @@ export function emit({ cfg, filaments, layers, objectLabels, headerLines = [], b
         }
       }
     }
+    if (lead && lead >= L.ops.length) layerHeader();
     layerRes.push({ index: li, z: L.z, height: L.h, moveStart, moveEnd: feats.length, time: layerTimes[li] });
   });
 

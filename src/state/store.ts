@@ -553,3 +553,11 @@ export const slotColor = (s: State | ReturnType<typeof useStore.getState>, k: nu
 };
 /** Colours of every filament an object or paint can use: physical slots, then mixed filaments. */
 export const choiceColors = (s: State | ReturnType<typeof useStore.getState>) => [...s.filaments.map((f) => f.color), ...(s.mixes ?? []).map((m) => mixColor(m, s.filaments.map((f) => f.color)))];
+
+// Any edit to what gets printed (objects, presets, printer, filaments, plate) while viewing a slice invalidates it:
+// mark dirty and return to Prepare, even for code paths that forget to call markDirty().
+const EDIT_KEYS = ['objects', 'overrides', 'presetId', 'printerId', 'filaments', 'plate', 'machineOverrides', 'userPresetId'] as const;
+useStore.subscribe((s, p) => {
+  if (s.slice.status === 'slicing') return;
+  if (EDIT_KEYS.some((k) => s[k] !== p[k])) s.markDirty();
+});

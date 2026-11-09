@@ -228,7 +228,7 @@ function DeviceDashboard({ dev, onEdit }: { dev: SavedDevice; onEdit: () => void
       {up != null && <div className="tile" style={{ marginBottom: 12 }}>Uploading… {Math.round(up * 100)}%<div className="bar"><div style={{ width: `${up * 100}%` }} /></div></div>}
 
       <div className="device-grid">
-        <div className="tile camera-tile"><Camera dev={dev} online={online} /></div>
+        <div className="tile camera-tile" style={{ gridColumn: '1 / -1' }}><Camera dev={dev} online={online} /></div>
         <div className="tile">
           <h3 style={{ marginTop: 0 }}>Print job</h3>
           {active || st.state === 'finished' ? (
@@ -292,7 +292,22 @@ function SpeedLight({ dev, st, online }: { dev: SavedDevice; st: PrinterStatus; 
   );
 }
 
+/** In the desktop app LAN http camera URLs go through nxcam:// (see electron main): the app page is a secure origin and
+ *  Chromium would otherwise block or https-upgrade the printer's plain-http stream, leaving the camera blank. */
+export function camUrl(u: string | null): string | null {
+  if (!u) return u;
+  const desktop = typeof window !== 'undefined' && !!(window as any).nexspiro;
+  return desktop && u.startsWith('http://') ? `nxcam://${u.slice(7)}` : u;
+}
+
 function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    if (!big) return;
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setBig(false); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [big]);
   const [src, setSrc] = useState<string | null>(null);
   const [rtsp, setRtsp] = useState<string | null>(null);
   const [on, setOn] = useState(false);
@@ -314,7 +329,7 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
         stop = await h.camera((u) => { if (!dead) setSrc(u); });
         if (!stop) {
           const u = await h.cameraUrl();
-          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead && u) { if (/snapshot/i.test(u)) setSnap(u); else setSrc(u); }
+          if (u?.startsWith('rtsp')) setRtsp(u); else if (!dead && u) { const w = camUrl(u)!; if (/snapshot/i.test(w)) setSnap(w); else setSrc(w); }
         }
       } catch (e: any) { toast('warn', `Camera: ${e?.message ?? e}`); }
     })();
@@ -323,8 +338,10 @@ function Camera({ dev, online }: { dev: SavedDevice; online: boolean }) {
   return (
     <>
       <div className="row" style={{ marginBottom: 8 }}><h3 style={{ margin: 0 }}>Camera</h3><span className="spacer" />
-        <button className="btn-secondary btn-small" disabled={!online} onClick={() => setOn(!on)}><Icon name="eye" size={14} />{on ? 'Stop' : 'Start'}</button></div>
-      <div className="camera-view">
+        <button className="btn-secondary btn-small" disabled={!online} onClick={() => setOn(!on)}><Icon name="eye" size={14} />{on ? 'Stop' : 'Start'}</button>
+        <button className="btn-secondary btn-small" style={{ marginLeft: 6 }} onClick={() => setBig(!big)} title={big ? 'Shrink (Esc)' : 'Expand camera'} aria-pressed={big}>{big ? 'Shrink' : 'Expand'}</button></div>
+      {big && <div className="camera-backdrop" onClick={() => setBig(false)} />}
+      <div className={`camera-view${big ? ' camera-big' : ''}`} onDoubleClick={() => setBig(!big)}>
         {snap ? <img src={`${snap}${snap.includes('?') ? '&' : '?'}t=${tick}`} alt="Printer camera" />
           : src ? <img src={src} alt="Printer camera" onError={() => { if (!src.startsWith('blob:')) { setSnap(toSnapshot(src)); setSrc(null); } }} /> : rtsp ? (
           <p className="muted" style={{ padding: 16, fontSize: 12 }}>This printer streams RTSPS video. Open it in VLC: <span className="mono" style={{ userSelect: 'all', wordBreak: 'break-all' }}>{rtsp}</span></p>

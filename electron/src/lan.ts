@@ -152,11 +152,23 @@ export class LanConnection implements PrinterConnection {
           this.set(statusFromReport(this.acc));
         } catch { /* ignore malformed */ }
       });
+      // A printer that is asleep / off / on another network when NexSpiro starts used to end the client on the first
+      // error, so it never came online until "Connect" was pressed again. Now only a wrong access code stops it:
+      // anything else rejects this call (so the UI can say so) but keeps MQTT reconnecting in the background.
+      const giveUp = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.set({ ...this.st, state: 'offline', message: 'Printer unreachable — retrying in the background…' });
+        reject(new Error(`No answer from ${this.cfg.host}:${this.cfg.mqttPort ?? 8883}. Check the IP, that the printer is on and on the same network, and that LAN mode is enabled. NexSpiro keeps retrying.`));
+      }, 15000);
       c.on('error', (e) => {
-        const msg = /Not authorized|Bad username/i.test(e.message) ? 'Access code rejected by the printer.' : e.message;
+        const auth = /Not authorized|Bad username|bad user name|connack.*(4|5)/i.test(e.message);
+        const msg = auth ? 'Access code rejected by the printer (it changes when LAN mode is toggled — re-enter it from the printer screen).' : e.message;
         this.set({ ...this.st, state: 'offline', message: msg });
-        if (!settled) { settled = true; c.end(true); reject(new Error(msg)); }
+        if (auth) { clearTimeout(giveUp); c.end(true); }
+        if (!settled) { settled = true; clearTimeout(giveUp); reject(new Error(msg)); }
       });
+      c.on('connect', () => clearTimeout(giveUp));
       c.on('offline', () => this.set({ ...this.st, state: 'offline', message: 'Printer unreachable — retrying…' }));
     });
   }

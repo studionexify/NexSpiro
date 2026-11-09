@@ -31,6 +31,9 @@ const DIST = path.join(ROOT, 'dist');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  // printer cameras (Moonraker / Snapmaker U1 / OctoPrint): plain http on the LAN. The app page is a secure origin,
+  // so Chromium blocks/upgrades http <img> sources (mixed content) and the camera stays blank. nxcam:// proxies them.
+  { scheme: 'nxcam', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
 ]);
 
 let serialPick: ((portId: string) => void) | null = null;
@@ -72,6 +75,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  protocol.handle('nxcam', (req) => {
+    const target = 'http://' + req.url.slice('nxcam://'.length);
+    const u = new URL(target);
+    // LAN printers only: never turn the app into an open proxy to the internet
+    const lan = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.)/.test(u.hostname) || u.hostname === 'localhost' || u.hostname.endsWith('.local') || !u.hostname.includes('.');
+    if (!lan) return new Response('camera host must be on the local network', { status: 403 });
+    return net.fetch(target, { headers: { 'Cache-Control': 'no-cache' } });
+  });
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);
     const rel = decodeURIComponent(pathname).replace(/^\/+/, '') || 'index.html';
