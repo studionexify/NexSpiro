@@ -23,7 +23,7 @@ import { machineConfig } from '../profiles/resolve';
 import { allTris, assignMotion, SURFACE_COLORS, trisInScreenPolygon } from '../state/motionPaint';
 import { ToolpathView } from './toolpaths';
 import { ThreadMesh } from './threads';
-import { currentConfig } from '../state/slicing';
+import { clearKeepOut, currentConfig } from '../state/slicing';
 import { hasThreads, linesToThreads, mergeThreads, type PluginPreview, type ThreadData } from '../plugins/threads';
 import { setDrool } from '../plugins/droolState';
 import { mx } from '../plugins/motionex/ui/MotionexPanel';
@@ -35,7 +35,7 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PLUGINS } from '../plugins/registry';
 import { buildPlate, iconTexture, type PlateIcon } from './plate';
-import { arrange, deletePlate, orientPlate, updatePlate } from '../state/ops';
+import { addPlate, arrange, deletePlate, orientPlate, updatePlate } from '../state/ops';
 import { selectPlate } from '../state/objectOps';
 import { openPlateSettings } from '../ui/PlateControls';
 import { useAdvanced } from '../state/advanced';
@@ -892,6 +892,7 @@ export function Viewport() {
       // moving onto another plate makes it the active plate
       const pi = plateAt(proxy.position.x, proxy.position.y, s.printerId, s.plates.length);
       if (pi !== s.activePlate) s.set({ activePlate: pi });
+      clearKeepOut([t.o.id]);
     });
     let applyRing: (() => void) | null = null; // rotate rings: replaces three's angle before the meshes follow the proxy
     /** Plane tilt from the gizmo: the tiltX / tiltY (Euler XYZ, no Z) that give the same plane normal. */
@@ -1537,6 +1538,7 @@ export function Viewport() {
       // dropping onto another plate makes it the active plate
       const pi = plateAt(d.start.x + dx, d.start.y + dy, s.printerId, s.plates.length);
       if (pi !== s.activePlate) s.set({ activePlate: pi });
+      clearKeepOut(d.ids);
       return true;
     };
     // Runs before the camera controls see the press: a left press with a painting or placing tool that
@@ -1638,9 +1640,10 @@ export function Viewport() {
     const runIcon = (pi: PlateIcon) => {
       if (!pi.enabled) return;
       const s = useStore.getState();
-      if (s.activePlate !== pi.plate && pi.action !== 'remove') s.set({ activePlate: pi.plate });
+      if (s.activePlate !== pi.plate && pi.action !== 'remove' && pi.action !== 'add') s.set({ activePlate: pi.plate });
       switch (pi.action) {
         case 'remove': deletePlate(pi.plate); break;
+        case 'add': addPlate(); break;
         case 'orient': orientPlate(pi.plate); break;
         case 'arrange': arrange(undefined, pi.plate); break;
         case 'lock': updatePlate(pi.plate, { locked: !s.plates[pi.plate]?.locked }); break;

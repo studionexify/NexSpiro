@@ -11,6 +11,7 @@ import { emit, expandMacro, type LayerOps, type Op } from './gcode';
 import { flushSplit, renderVendor, usesVendorTemplates } from '../../templateVars';
 import type { IndexedMesh } from '../../mesh';
 import { splitNarrow } from './arachne';
+import { smoothOverhangRuns } from '../../overhangRuns';
 import { orderLayerTools } from '../../toolmap';
 import { orderPaths, pickSeam, rotateLoop, simplify, type SeamHints, type SeamMode } from '../../order';
 import { colorRegionsAtZ, footprintsInBand, paintedTris, pointsAtZ, type PaintedTri } from '../../paint';
@@ -56,11 +57,17 @@ function splitOverhang(item: PathItem, support: Paths | null): PathItem[] {
   const pts = item.closed ? [...item.pts, item.pts[0], item.pts[1]] : item.pts;
   const n = pts.length / 2;
   const runs: PathItem[] = [];
+  // per segment (index k = segment k-1 → k), then short flickering runs merged so the wall only switches where the overhang is real
+  const feats: FeatureType[] = new Array(n).fill(item.feature);
+  for (let i = 0; i < n - 1; i++) {
+    const mx = (pts[i * 2] + pts[i * 2 + 2]) / 2, my = (pts[i * 2 + 1] + pts[i * 2 + 3]) / 2;
+    if (!pointInPaths(mx, my, support)) feats[i + 1] = 'overhang_wall';
+  }
+  smoothOverhangRuns(pts, false, feats, new Array(n).fill(0), new Array(n).fill(0), Math.max(4, 8 * item.width));
   let curFeat: FeatureType | null = null;
   let cur: number[] = [];
   for (let i = 0; i < n - 1; i++) {
-    const mx = (pts[i * 2] + pts[i * 2 + 2]) / 2, my = (pts[i * 2 + 1] + pts[i * 2 + 3]) / 2;
-    const f: FeatureType = pointInPaths(mx, my, support) ? item.feature : 'overhang_wall';
+    const f = feats[i + 1];
     if (f !== curFeat) {
       if (cur.length >= 4) runs.push({ ...item, feature: curFeat!, pts: cur, closed: false });
       cur = [pts[i * 2], pts[i * 2 + 1]];

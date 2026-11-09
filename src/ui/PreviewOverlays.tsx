@@ -205,15 +205,25 @@ export function LayerSlider() {
     e.preventDefault();
     const el = track.current!;
     const move = (ev: PointerEvent) => {
+      // the button was released somewhere we never heard about (outside the window, over an iframe, alt-tab): stop dragging
+      if (ev.buttons === 0) { up(); return; }
       const r = el.getBoundingClientRect();
       const t = 1 - Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
       const i = Math.round(t * (n - 1));
       const { layerRange: [a, b], oneLayer } = useStore.getState();
       set({ layerRange: oneLayer ? [i, i] : which === 1 ? [a, Math.max(a, i)] : [Math.min(i, b), b], moveCursor: -1 });
     };
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
+    move(e.nativeEvent);
   };
   return (
     <div className="float vslider" aria-label="Layer slider">
@@ -336,7 +346,7 @@ export function PreviewEmpty() {
 function removeAction(plate: number, k: number) {
   const s = useStore.getState();
   s.set({ plates: s.plates.map((p, i) => (i === plate ? { ...p, layerActions: p.layerActions.filter((_, j) => j !== k) } : p)) });
-  s.markDirty();
+  s.markDirty(true);
 }
 
 function LayerActionMenu({ z, layer, plate }: { z: number; layer: number; plate: number }) {
@@ -347,7 +357,7 @@ function LayerActionMenu({ z, layer, plate }: { z: number; layer: number; plate:
   const add = (a: { type: 'pause' | 'color' | 'custom'; filament?: number; gcode?: string }) => {
     const s = useStore.getState();
     set({ plates: s.plates.map((p, i) => (i === plate ? { ...p, layerActions: [...p.layerActions, { z, ...a }] } : p)) });
-    s.markDirty();
+    s.markDirty(true);
     setOpen(false);
   };
   return (

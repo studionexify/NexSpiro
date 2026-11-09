@@ -187,7 +187,7 @@ interface State {
   showTravel: boolean;
   layerRange: [number, number];
   moveCursor: number; // index within top layer, -1 = all
-  toast: { kind: 'info' | 'error' | 'warn'; text: string } | null;
+  toast: { kind: 'info' | 'error' | 'warn'; text: string; action?: { label: string; run: () => void } } | null;
   project: ProjectInfo;
   /** Flushing volumes [from][to] in mm³; null = calculated from the filament colours. */
   flushMatrix: number[][] | null;
@@ -227,7 +227,8 @@ interface State {
   redo: () => void;
   setOverride: (key: string, v: Config[string] | undefined) => void;
   setMachine: (key: string, v: Config[string] | undefined) => void;
-  markDirty: () => void;
+  /** `stay`: keep the Preview open (layer pauses / colour changes are made there). */
+  markDirty: (stay?: boolean) => void;
 }
 
 /** Edge selection that was active when an undo snapshot was taken (keyed by the snapshot), so Undo brings the picked edges back. */
@@ -434,7 +435,8 @@ export const useStore = create<State>((set, get) => ({
     });
     get().markDirty();
   },
-  markDirty: () => set((s) => (s.slice.dirty ? {} : { slice: { ...s.slice, dirty: true } })),
+  // a change after slicing makes the preview a lie: send the user back to Prepare so they must slice again
+  markDirty: (stay) => set((s) => ({ ...(s.slice.dirty ? {} : { slice: { ...s.slice, dirty: true } }), ...(!stay && s.workspace === 'preview' && s.slice.status !== 'slicing' ? { workspace: 'prepare' as Workspace } : {}) })),
 }));
 
 // persist preferences

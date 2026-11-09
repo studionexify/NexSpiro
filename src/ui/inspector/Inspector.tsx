@@ -12,7 +12,7 @@ import { applyIntentPreset, INTENT_PRESETS, openEffect, setEffectEnabled, useAct
 import { ParamRow } from '../ParamRow';
 import { Icon } from '../icons';
 import { Modal } from '../Modals';
-import { FilamentCard, ObjectsCard, PART_HELP, PresetOptions, PrinterCard, useProcessModel } from '../Sidebar';
+import { FilamentCard, PART_HELP, PresetOptions, PrinterCard, useProcessModel } from '../Sidebar';
 import { isWaveZone } from '../../plugins/motionex/weave/zones';
 import { WeaveZoneSettings } from '../../plugins/motionex/ui/WeavePanel';
 import { activeUserPreset, applyUserPreset, currentPresetValue, deleteUserPreset, isActiveUserPresetModified, renameUserPreset, saveUserPreset, selectPresetValue, updateUserPreset } from '../../state/userPresets';
@@ -164,16 +164,14 @@ function PlateView() {
   const setUi = useUi((u) => u.set);
   return <>
     <div className="insp-cards"><PrinterCard /><FilamentCard /></div>
-    <PresetSection />
     {advanced && <PhysicsCore />}
-    <InlineSettings objMode={objMode} title={
+    <InlineSettings objMode={objMode} preset={!objMode && <PresetSection />} title={
       <span className="proc-mode">Process
         <span className="seg proc-seg" role="tablist" aria-label="Process settings for">
           <button role="tab" aria-selected={!objMode} className={!objMode ? 'on' : ''} title="Settings for the whole plate" onClick={() => setUi({ inspectorCtx: 'plate' })}>Global</button>
           <button role="tab" aria-selected={objMode} className={objMode ? 'on' : ''} title="Settings for the selected object only; the object keeps them when you switch back to Global" onClick={() => setUi({ inspectorCtx: 'object' })}>Objects</button>
         </span>
       </span>} />
-    <div className="insp-cards"><ObjectsCard /></div>
   </>;
 }
 
@@ -269,6 +267,7 @@ function PhysicsCore() {
 
 /* ---------- inline process settings ---------- */
 
+const TAB_ICON: Record<ProcessTab, string> = { Quality: 'quality', Strength: 'strength', Speed: 'speed', Support: 'support', Others: 'others' };
 const TAB_HINT: Record<ProcessTab, string> = {
   Quality: 'Layer height, seams and surface finish',
   Strength: 'Walls, top/bottom shells and infill',
@@ -277,7 +276,7 @@ const TAB_HINT: Record<ProcessTab, string> = {
   Others: 'Brim, prime tower, special modes and G-code',
 };
 
-function InlineSettings({ objMode, title }: { objMode: boolean; title: React.ReactNode }) {
+function InlineSettings({ objMode, title, preset }: { objMode: boolean; title: React.ReactNode; preset?: React.ReactNode }) {
   const s = useStore();
   const m = useProcessModel(objMode);
   const { pinnedParams, togglePinParam } = useUi();
@@ -314,6 +313,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: React.Rea
         <a role="button" tabIndex={0} aria-pressed={changedOnly} className={changedOnly ? 'on' : ''} title="Show only the settings you changed"
           onClick={() => setChangedOnly(!changedOnly)}><Icon name="others" size={12} />Changed</a>
       </div>
+      {preset}
       {objMode && m.selObjs.length > 0 && (
         <div className="obj-target">
           <Icon name="cube" size={14} />
@@ -352,7 +352,7 @@ function InlineSettings({ objMode, title }: { objMode: boolean; title: React.Rea
         <div className="params">
           {groups.map((g) => (
             <div key={g}>
-              <div className="grp">{g}</div>
+              <div className="grp"><Icon name={TAB_ICON[(flat ? g.split(' › ')[0] : tab) as ProcessTab] ?? 'layers'} size={15} />{g}</div>
               {list.filter((p) => gname(p) === g).map((p) => (
                 <ParamRow key={p.key} {...m.rowProps(p.key)} hint={HINTS[p.key]}
                   pin={{ on: pinnedParams.includes(p.key), toggle: () => togglePinParam(p.key) }} />

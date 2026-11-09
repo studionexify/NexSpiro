@@ -92,3 +92,57 @@
 .up-list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .up-list .r { display: flex; align-items: center; gap: 6px; }
 .up-list .r input { flex: 1; min-width: 0; }
+
+/* ---------- Bambu Studio–style layout: full-width section bands, underlined tabs, icon group titles ---------- */
+.insp .iscroll { padding: 0 0 16px; gap: 0; }
+.insp .iscroll > section, .insp .iscroll > .insp-cards > .card { padding: 0 12px 12px; }
+.insp .iscroll > .insp-cards { gap: 0; }
+/* section header band (Printer / Filament / Process) */
+.insp .insp-cards > .card > .card-head, .insp .insp-settings > .h {
+  margin: 0 -12px 10px; padding: 0 12px; min-height: 34px; display: flex; align-items: center; gap: 8px;
+  background: var(--i-panel-2); border-top: 1px solid var(--i-line); border-bottom: 1px solid var(--i-line); }
+.insp .iscroll > .insp-cards:first-child > .card:first-child > .card-head { border-top: 0; }
+.insp .insp-cards .card-title { font-size: 13.5px; font-weight: 600; }
+.insp .insp-settings > .h { font-size: 13.5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); }
+.insp .insp-settings > .h .proc-mode { display: inline-flex; align-items: center; gap: 8px; }
+.insp .insp-settings > .h .insp-adv-toggle { margin-left: auto; font-size: 12.5px; font-weight: 500; color: var(--text); }
+.insp .insp-settings > .h > a { margin-left: 0; font-size: 12px; }
+/* preset row sits right under the Process band */
+.insp .insp-settings .preset-row { margin: 0 0 10px; }
+.insp .insp-settings .preset-row .h-inline { display: none; }
+.insp .insp-settings .preset-row .preset-select { flex: 1; min-width: 0; height: 30px; }
+/* tabs: plain text, active one green with an underline */
+.insp .stabs { gap: 0; padding: 0; background: none; border: 0; border-radius: 0; border-bottom: 1px solid var(--i-line); margin: 0 -12px; padding: 0 6px; overflow-x: auto; scrollbar-width: none; }
+.insp .stabs button { flex: 0 0 auto; padding: 8px 10px 7px; border-radius: 0; font-size: 13px; color: var(--i-t2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.insp .stabs button:hover { color: var(--text); }
+.insp .stabs button.on { background: none; box-shadow: none; color: var(--ns-primary, var(--accent)); font-weight: 600; border-bottom-color: var(--ns-primary, var(--accent)); }
+.insp .stabs button .c { top: 2px; right: -2px; }
+.insp .ssearch { margin: 10px 0 2px; }
+/* group titles: icon + bold label */
+.insp .grp { font-size: 13px; font-weight: 600; color: var(--text); margin: 14px 0 4px; gap: 7px; }
+.insp .grp svg { color: var(--text); flex: none; }
+.insp .grp::after { display: none; }
+/* rows: indented label, compact boxed control of fixed width */
+.insp .params .prow { padding-left: 22px; grid-template-columns: minmax(0, 1fr) 16px 124px; gap: 6px; min-height: 30px; }
+.insp .params .prow.has-pin { grid-template-columns: minmax(0, 1fr) 16px 124px 14px; }
+.insp .params .prow .plabel { opacity: 1; font-size: 12.5px; }
+.insp .params .pinput .input, .insp .params .pinput .select { height: 26px; border-radius: 4px; }
+.insp .params .pinput { position: relative; }
+.insp .params .pinput .unit { position: absolute; right: 7px; pointer-events: none; font-size: 11px; min-width: 0; }
+.insp .params .pinput:has(.unit) .input { padding-right: 34px; }
+.insp .params .pinput .toggle { margin-left: 0; }
+
+/* ---------- floating object outliner (over the 3D view, beside the tool rail) ---------- */
+.sh-stage .float.sh-outliner { position: absolute; left: 98px; top: 14px; z-index: 5; width: 260px; max-height: calc(100% - 190px); display: flex; flex-direction: column;
+  background: var(--ns-panel, var(--surface-secondary)); border: 1px solid var(--ns-line, var(--border)); border-radius: var(--ns-r-outer, 12px); box-shadow: var(--ns-shadow, var(--shadow)); overflow: hidden; }
+.sh-outliner > .card { background: transparent; border: 0; box-shadow: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 0; }
+.sh-outliner .card-head { padding: 6px 8px 6px 10px; margin: 0; }
+.sh-outliner .card-title { font-size: 13px; font-weight: 600; }
+.sh-outliner .objlist { overflow-y: auto; min-height: 0; padding: 0 4px 6px; border-top: 1px solid var(--ns-line, var(--border)); }
+@media (max-width: 767px) { .sh-stage .float.sh-outliner { display: none; } }
+.insp .insp-settings > .h { flex-wrap: nowrap; white-space: nowrap; }
+.insp .stabs button.on { color: var(--success, #00AE42); border-bottom-color: var(--success, #00AE42); }
+.sh-outliner .objlist:not(:has(.objrow)) { display: none; }
+.insp .insp-settings > .h > a { font-size: 0; gap: 0; padding: 4px; border-radius: 4px; }
+.insp .insp-settings > .h > a svg { width: 14px; height: 14px; }
+.insp .insp-settings > .h > a.on { background: var(--i-line); text-decoration: none; }

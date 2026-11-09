@@ -335,6 +335,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toast.warn { border-color: var(--warning); } .toast.warn svg { color: var(--warning); }
 .toast.error { border-color: var(--error); } .toast.error svg { color: var(--error); }
 .toast.info svg { color: var(--info); }
+.toast-act { flex: none; white-space: nowrap; padding: 6px 12px; font-size: 12px; }
 
 /* ---------- phase 2 */
 .slots { display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; }

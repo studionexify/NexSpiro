@@ -8,6 +8,7 @@ import './ui/shell/shell.css';
 import { PhoneArrows } from './ui/shell/PhoneArrows';
 import { TouchMods } from './ui/TouchMods';
 import { useRightWidth, useDockOpen, useNarrow } from './ui/shell/RightColumn';
+import { Outliner } from './ui/shell/Outliner';
 import { useStore, type Workspace } from './state/store';
 import { initDevices } from './state/devices';
 import { startAutoFilamentSync } from './state/amsSync';
@@ -47,7 +48,7 @@ function Toast() {
   useEffect(() => { startAutoFilamentSync(); startStepTracking(); startMachineSync(); void initDevices(); }, []);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => set({ toast: null }), toast.kind === 'error' ? 9000 : 5000);
+    const t = setTimeout(() => set({ toast: null }), toast.action ? 15000 : toast.kind === 'error' ? 9000 : 5000);
     return () => clearTimeout(t);
   }, [toast, set]);
   if (!toast) return null;
@@ -55,6 +56,7 @@ function Toast() {
     <div className={`toast ${toast.kind}`} role="alert">
       <Icon name={toast.kind === 'info' ? 'info' : 'warn'} />
       <span>{toast.text}</span>
+      {toast.action && <button className="btn-primary toast-act" onClick={() => { toast.action!.run(); set({ toast: null }); }}>{toast.action.label}</button>}
       <button className="icon-btn" onClick={() => set({ toast: null })} aria-label="Dismiss"><Icon name="close" size={14} /></button>
     </div>
   );
@@ -162,7 +164,7 @@ export default function App() {
       <div className="sh-body" style={{ gridTemplateColumns: bodyCols }}>
         <main className={`stage sh-stage ws-${workspace}`} style={is3d || Studio ? undefined : { display: 'none' }}>
           <Viewport />
-          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /></>}
+          {workspace === 'prepare' && <><Toolbar /><TransformPanel /><PaintPanel /><AdvPaintPanel /><VlhPanel /><CutPanel /><BooleanPanel /><EdgesPanel /><TextPanel /><MeasurePanel /><BrimEarsPanel /><PlateList /><ObjectInfo /><LiveChip /><Outliner /></>}
           {workspace === 'preview' && <><PlateList /><Legend /><LayerSlider /><MoveSlider /><PreviewEmpty /></>}
           <ViewBar />
           {is3d && <ActionDock />}

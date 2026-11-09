@@ -1136,8 +1136,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.19851661682926758,
-      "checkedMm": 26757.43329980896,
-      "checkedSegments": 2735,
+      "checkedMm": 26757.437512642875,
+      "checkedSegments": 2715,
       "belowResolution": 0,
       "failureCount": 0
     },
@@ -1180,7 +1180,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 2735,
+      "declaredHits": 2715,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -1209,8 +1209,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.07991579136705454,
-      "checkedMm": 7186.2752407823755,
-      "checkedSegments": 714,
+      "checkedMm": 7186.279453616291,
+      "checkedSegments": 694,
       "belowResolution": 1,
       "failureCount": 0
     },
@@ -1253,7 +1253,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 715,
+      "declaredHits": 695,
       "maxPosErrMm": 0.0005032348632880712,
       "failureCount": 0
     },
@@ -1281,9 +1281,9 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "maxRelErrPct": 0.3839525437241982,
-      "checkedMm": 17767.522836815035,
-      "checkedSegments": 4193,
+      "maxRelErrPct": 0.18518054439027126,
+      "checkedMm": 17767.52297901286,
+      "checkedSegments": 4172,
       "belowResolution": 71,
       "failureCount": 0
     },
@@ -1326,7 +1326,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 4264,
+      "declaredHits": 4243,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -5370,8 +5370,8 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.3639107332543716,
-      "checkedMm": 125343.5281192477,
-      "checkedSegments": 18113,
+      "checkedMm": 125343.55451147206,
+      "checkedSegments": 17973,
       "belowResolution": 1422,
       "failureCount": 0
     },
@@ -5414,7 +5414,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 19535,
+      "declaredHits": 19395,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },
@@ -5511,9 +5511,9 @@
     "failureCount": 0,
     "metrics": {
       "maxRelErrPct": 0.5799699501081553,
-      "checkedMm": 315759.9973334034,
-      "checkedSegments": 51961,
-      "belowResolution": 20088,
+      "checkedMm": 315691.703105532,
+      "checkedSegments": 50373,
+      "belowResolution": 20247,
       "failureCount": 0
     },
     "firstFailures": []
@@ -5555,7 +5555,7 @@
     "pass": true,
     "failureCount": 0,
     "metrics": {
-      "declaredHits": 89106,
+      "declaredHits": 87991,
       "maxPosErrMm": 0.000503662109380798,
       "failureCount": 0
     },

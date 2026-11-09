@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { PlateType, PrinterProfile } from '../profiles/printers';
 import { ICON_PATHS } from '../ui/icons';
 
-export type PlateAction = 'remove' | 'orient' | 'arrange' | 'lock' | 'settings' | 'number' | 'name';
+export type PlateAction = 'remove' | 'add' | 'orient' | 'arrange' | 'lock' | 'settings' | 'number' | 'name';
 export const ACCENT_GREEN = '#10B981';
 
 interface BedLook { color: string; print: string; strip: string; textured: boolean; ink: string; grid: string }
@@ -42,9 +42,46 @@ function roundedPath(p: { moveTo(x: number, y: number): void; lineTo(x: number, 
   }
 }
 
+type PlateFamily = 'corner-tabs' | 'snapmaker' | 'center-tab' | 'plain';
+function plateFamily(id: string): PlateFamily {
+  if (id.startsWith('snapmaker')) return 'snapmaker';
+  if (id.startsWith('creality') || id.startsWith('elegoo')) return 'corner-tabs';
+  if (/^(qidi|sovol|artillery|voron)/.test(id)) return 'center-tab';
+  return 'plain';
+}
+
 /** Plate outline in plate coordinates (printable area is 0..X, 0..Y). */
-function outline(X: number, Y: number, isBbl: boolean): { pts: V2[]; radii: number[] } {
+function outline(X: number, Y: number, isBbl: boolean, id = ''): { pts: V2[]; radii: number[] } {
   const M = isBbl ? 2 : 3;
+  const fam = plateFamily(id);
+  if (fam === 'corner-tabs') {
+    // magnetic PEI sheet a little larger than the print area, with a pull tab at each front corner (Creality, Elegoo)
+    const m = 6, L = -m, R = X + m, B = -m, T = Y + m, tw = Math.min(26, X * 0.12), th = 9;
+    return {
+      pts: [[L, B - th], [L + tw, B - th], [L + tw + 6, B], [R - tw - 6, B], [R - tw, B - th], [R, B - th], [R, T], [L, T]],
+      radii: [4, 3, 3, 3, 3, 4, 6, 6],
+    };
+  }
+  if (fam === 'snapmaker') {
+    // Snapmaker U1 PEI sheet: square corners, a wide label lip centred on the front edge,
+    // and the back edge split into four tabs by three V notches
+    const m = 5, L = -m, R = X + m, B = -m, T = Y + m, W = R - L;
+    const lx0 = L + W * 0.226, lx1 = L + W * 0.774, lip = W * 0.04, nw = W * 0.032, nd = W * 0.016;
+    const back: V2[] = [];
+    for (const f of [0.75, 0.5, 0.25]) { const cx = L + W * f; back.push([cx + nw / 2, T], [cx, T - nd], [cx - nw / 2, T]); }
+    return {
+      pts: [[L, B], [lx0 - 3, B], [lx0, B - lip], [lx1, B - lip], [lx1 + 3, B], [R, B], [R, T], ...back, [L, T]],
+      radii: [2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2],
+    };
+  }
+  if (fam === 'center-tab') {
+    // PEI sheet with one pull tab centred on the front edge (Qidi, Sovol, Artillery, Voron)
+    const m = 4, L = -m, R = X + m, B = -m, T = Y + m, cx = X / 2, tw = Math.min(50, X * 0.18), th = 8;
+    return {
+      pts: [[L, B], [cx - tw / 2 - 5, B], [cx - tw / 2, B - th], [cx + tw / 2, B - th], [cx + tw / 2 + 5, B], [R, B], [R, T], [L, T]],
+      radii: [5, 3, 3, 3, 3, 5, 5, 5],
+    };
+  }
   const L = -M, R = X + M, B = -M, T = Y + M;
   if (!isBbl) return { pts: [[L, B], [R, B], [R, T], [L, T]], radii: [5, 5, 5, 5] };
   const lipX = X * 0.3, lip = 9;
@@ -64,7 +101,7 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean,
   // draw in millimetres, y up
   const mm = () => g.setTransform(k, 0, 0, -k, -box.x0 * k, box.y1 * k);
   mm();
-  const o = outline(X, Y, isBbl);
+  const o = outline(X, Y, isBbl, p.id);
   g.beginPath(); roundedPath(g, o.pts, o.radii); g.closePath();
   g.fillStyle = look.color; g.fill();
   if (look.textured) {
@@ -94,8 +131,27 @@ function surfaceTexture(p: PrinterProfile, X: number, Y: number, isBbl: boolean,
     g.fillText(s, 0, 0);
     g.restore();
   };
+  // printer's own plate print in the centre, faint: vendor wordmark over the model name
+  {
+    const big = Math.min(X, Y) / 9;
+    g.save(); g.globalAlpha = 0.5;
+    text(plateFamily(p.id) === 'snapmaker' ? p.vendor.toLowerCase() : p.vendor.toUpperCase(), X / 2, Y / 2 + big * 0.35, big, look.ink, 0, '800', 'center');
+    text(p.model, X / 2, Y / 2 - big * 0.75, big * 0.45, look.ink, 0, '600', 'center');
+    g.restore();
+  }
   // bed type printed along the left edge, reading from the back towards the front
-  if (look.print) text(look.print, 6.5, Y - 8, Math.min(9, X / 26), look.ink, Math.PI / 2);
+  if (plateFamily(p.id) === 'snapmaker') {
+    // white slots on the four back tabs, and the label lip: warning triangle, PEI Coated PLATE, material box
+    const W = X + 10, L = -5, T = Y + 5;
+    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1.2; g.lineCap = 'round';
+    for (let i = 0; i < 4; i++) { const x0 = L + W * (i * 0.25 + 0.05), x1 = L + W * (i * 0.25 + 0.2); g.beginPath(); g.moveTo(x0, T - 2.2); g.lineTo(x1, T - 2.2); g.stroke(); }
+    const ly = -5 - W * 0.02, ls = Math.min(4, X / 70);
+    text('⚠  PEI Coated PLATE', X * 0.3, ly, ls, 'rgba(255,255,255,0.9)', 0, '700');
+    text('PLA/ABS/PETG/TPU', X * 0.7, ly, ls * 0.8, 'rgba(255,255,255,0.9)', 0, '500', 'right');
+    g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 0.4;
+    g.strokeRect(X * 0.7 - ls * 9, ly - ls * 0.7, ls * 9.4, ls * 1.4);
+  }
+  if (look.print && plateFamily(p.id) !== 'snapmaker') text(look.print, 6.5, Y - 8, Math.min(9, X / 26), look.ink, Math.PI / 2);
   if (isBbl) {
     // front lip: material strip with HOT SURFACE warning, and the lip markings
     const sx0 = X * 0.36, sx1 = X * 0.86, sy0 = -2 - 7.6, sy1 = -2 - 1.6;
@@ -165,8 +221,14 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   const g = new THREE.Group();
   const { x: X, y: Y } = p.bed;
   const isBbl = p.flavor === 'bbl';
-  const look = bedLook(plateType, isBbl, bedLabel, opts.dark);
-  const o = outline(X, Y, isBbl);
+  const base = bedLook(plateType, isBbl, bedLabel, opts.dark);
+  // textured PEI sheets: golden bronze like the real plates; the Ender-3 V3 KE ships a black PEI sheet
+  const pei = base.textured && (isBbl ? base.print === 'Textured PEI Plate' : true);
+  const look: BedLook = !pei ? base
+    : p.id === 'creality-ender3v3ke'
+      ? { ...base, color: opts.dark ? '#1C1C1F' : '#2A2A2E', ink: 'rgba(255,255,255,0.5)', grid: '#5A5A60' }
+      : { ...base, color: opts.dark ? '#4A3E33' : '#9A8472', ink: 'rgba(255,255,255,0.6)', grid: opts.dark ? '#7A6A5A' : '#6B5B4C' };
+  const o = outline(X, Y, isBbl, p.id);
   const xs = o.pts.map((q) => q[0]), ys = o.pts.map((q) => q[1]);
   const box = { x0: Math.min(...xs) - 1, y0: Math.min(...ys) - 1, x1: Math.max(...xs) + 1, y1: Math.max(...ys) + 1 };
 
@@ -208,6 +270,7 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
   const icons: PlateIcon[] = [];
   const defs: [PlateAction, string, string, boolean, boolean][] = [
     ['remove', 'close', 'Remove plate', opts.plates > 1, false],
+    ['add', 'add', 'Add a new plate', true, false],
     ['orient', 'orient', 'Auto orient objects on this plate', !opts.locked, false],
     ['arrange', 'arrange', 'Arrange objects on this plate', !opts.locked, false],
     ['lock', opts.locked ? 'lock' : 'unlock', opts.locked ? 'Unlock plate' : 'Lock plate', true, opts.locked],
@@ -221,6 +284,23 @@ export function buildPlate(p: PrinterProfile, plateType: PlateType, bedLabel: st
     icons.push(pi);
     g.add(mesh);
   });
+
+  // build volume under the settings icon, so the usable X × Y × Z is always in view
+  const dimTex = canvasTex(512, 160, (c) => {
+    c.textBaseline = 'middle'; c.textAlign = 'left';
+    c.fillStyle = opts.dark ? '#9AA4B2' : '#6B7280';
+    c.font = '600 46px "Segoe UI", system-ui, sans-serif';
+    c.fillText("Build volume (X×Y×Z)", 4, 40, 504);
+    c.fillStyle = opts.dark ? '#E5E7EB' : '#1F2937';
+    c.font = '700 58px ui-monospace, "Cascadia Mono", Menlo, monospace';
+    c.fillText(`${p.bed.x}×${p.bed.y}×${p.bed.z} mm`, 4, 112, 504);
+  });
+  const dw = S * 3.4, dh = dw * 160 / 512;
+  // turned to run along the icon column, centred on it, continuing below the settings icon
+  const dim = flatQuad(dimTex, dw, dh, right + 4 + S / 2, Y + 2 - defs.length * (S + 3) - dw / 2 + 1);
+  dim.rotation.z = Math.PI / 2;
+  dim.userData.tip = `Build volume: X ${p.bed.x} × Y ${p.bed.y} × Z ${p.bed.z} mm`;
+  g.add(dim);
 
   // plate number at the front-right, pencil (and custom name) at the back-left
   const numTex = canvasTex(256, 128, (c) => {

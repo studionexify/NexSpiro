@@ -1,4 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+/** Settings-row tooltips: the first one waits 2 s; once one has shown, moving to other labels opens them instantly
+ *  until the pointer has been off every label for a short grace period. */
+const TIP_DELAY = 2000, TIP_GRACE = 800;
+let tipWarm = false;
+let coolTimer: ReturnType<typeof setTimeout> | undefined;
 import type { Config, ParamDef } from '../profiles/settings';
 import { Icon } from './icons';
 
@@ -21,6 +27,18 @@ export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onRes
   const shown = off ? nullable!.inherited : value;
   const disabled = off || (def.disabledWhen?.(cfg) ?? false);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(openTimer.current), []);
+  const enter = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect(), at = { x: r.right + 8, y: r.top };
+    clearTimeout(coolTimer); clearTimeout(openTimer.current);
+    if (tipWarm) { setTip(at); return; }
+    openTimer.current = setTimeout(() => { tipWarm = true; setTip(at); }, TIP_DELAY);
+  };
+  const leave = () => {
+    clearTimeout(openTimer.current); setTip(null);
+    clearTimeout(coolTimer); coolTimer = setTimeout(() => { tipWarm = false; }, TIP_GRACE);
+  };
 
   let control;
   if (def.type === 'bool') {
@@ -49,8 +67,8 @@ export function ParamRow({ def, value, baseValue, cfg, modified, onCommit, onRes
   return (
     <div className={`prow ${pin ? 'has-pin' : ''} ${modified ? 'modified' : ''} ${disabled ? 'disabled' : ''} ${def.type === 'text' ? 'wide' : ''}`}>
       <span className="plabel"
-        onMouseEnter={(e) => { const r = (e.target as HTMLElement).getBoundingClientRect(); setTip({ x: r.right + 8, y: r.top }); }}
-        onMouseLeave={() => setTip(null)}
+        onMouseEnter={(e) => enter(e.currentTarget)}
+        onMouseLeave={leave}
         onPointerUp={(e) => { if (e.pointerType === 'mouse') return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setTip((t) => (t ? null : { x: Math.min(r.left, window.innerWidth - 280), y: r.bottom + 4 })); }}>
         {nullable && (
           <input type="checkbox" className="ovr-check" checked={!off} aria-label={`Override ${def.label}`}

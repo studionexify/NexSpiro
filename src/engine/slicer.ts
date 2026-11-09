@@ -32,6 +32,7 @@ import { TravelPlanner } from './travel';
 import { islandWalls, type IslandWalls, type WallItem } from './walls';
 import { applyConicalOverhang, applyPolyholes, nearestObjectOrder, overhangsBy, PointGrid, reverseKeepStart, unsupportedFraction } from './wallParity';
 import { interlockRegions } from './interlock';
+import { smoothOverhangRuns } from './overhangRuns';
 import type { ExPolygon, FeatureType, FilamentSlot, MeshInput, PartInput, Paths, Polyline2, SliceOptions, SliceOutput } from './types';
 import { pushAll } from './util';
 import { checkInputs } from './validate';
@@ -2337,6 +2338,7 @@ function sliceChecked(meshes: MeshInput[], cfg: Config, progress: ProgressFn, op
         if (fanOn && degree >= fanThr) fans[k] = fanSpeed;
       }
       if (!any && !fans.some((f) => f > 0)) return item;
+      smoothOverhangRuns(pts, item.closed, feats, speeds, fans, Math.max(4, 8 * w));
       return { ...item, feats, speeds, fans };
     }
     /** Curled perimeter grids: overhang wall points of the layer below (read) and of this layer (written). */
@@ -2704,3 +2706,4 @@ function nearestOn(paths: Paths, x: number, y: number): [number, number] {
 }
 
 export type { WallItem };
+
