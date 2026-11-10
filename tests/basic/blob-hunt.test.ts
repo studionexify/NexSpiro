@@ -15,6 +15,7 @@ export function analyze(gcode: string) {
   const issues: Issue[] = [];
   const ratios: Record<string, number[]> = {};
   let unretractedLongTravels = 0, travels = 0;
+  const samples: string[] = [];
   for (let i = Math.max(0, start); i < lines.length; i++) {
     const raw = lines[i]; const l = raw.split(';')[0].trim();
     if (raw.startsWith(';TYPE:')) type = raw.slice(6).trim();
@@ -41,7 +42,8 @@ export function analyze(gcode: string) {
       }
     } else if (d > 0 && v.E === undefined) {
       travels++;
-      if (d > 3 && retracted < 0.01 && type !== 'Travel') unretractedLongTravels++;
+      // travels that stay inside sparse infill may skip the retract (reduce_infill_retraction, as Bambu/Orca)
+      if (d > 3 && retracted < 0.01 && type !== 'Travel' && !/sparse infill/i.test(type)) { unretractedLongTravels++; if (samples.length < 12) samples.push(`${i + 1}[${type}] ${lines.slice(Math.max(0, i - 3), i + 2).join(' | ')}`); }
     }
     x = nx; y = ny;
   }
@@ -51,7 +53,7 @@ export function analyze(gcode: string) {
     const spikes = r.filter((q) => q > med * 3).length;
     if (spikes) issues.push({ line: 0, kind: 'flow-spike', text: `${t}: ${spikes}/${r.length} moves >3x median ${med.toFixed(4)}` });
   }
-  return { issues, travels, unretractedLongTravels, ratios };
+  return { issues, travels, unretractedLongTravels, ratios, samples };
 }
 
 function sphere(cx: number, cy: number, r: number, seg = 48, rings = 32): Float32Array {
