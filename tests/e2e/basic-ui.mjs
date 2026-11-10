@@ -38,11 +38,17 @@ async function sliceNow(label) {
   stepLog(`slice ${label}`);
   await page.keyboard.press('Control+r');
   await page.waitForFunction(() => !document.body.innerText.includes('Slicing…'), null, { timeout: 600000 }).catch(() => errors.push(`[timeout] ${label}`));
+  // wait until the page answers again (preview build; slow on headless software GL)
+  for (let k = 0; k < 60; k++) {
+    const ok = await Promise.race([page.evaluate(() => 1).then(() => true), new Promise((r) => setTimeout(() => r(false), 5000))]);
+    if (ok) break;
+    if (k === 59) errors.push(`[unresponsive >5 min] ${label}`);
+  }
   await wait(1500);
   await guard(_step);
 }
 async function clickAll(scope, label) {
-  const skip = /delete|remove|new project|close|quit|reload|reset|clear all|print|send|connect|update|export|save|open|import|add model|sign/i;
+  const skip = /slice|delete|remove|new project|close|quit|reload|reset|clear all|print|send|connect|update|export|save|open|import|add model|sign/i;
   const btns = await page.locator(`${scope} button:visible`).all();
   let n = 0;
   for (const b of btns) {
@@ -62,6 +68,7 @@ for (const b of await page.locator('button:has-text("Skip"), button:has-text("Go
 await page.evaluate(() => (window).__nxStore?.getState?.().set?.({ workspace: 'prepare' }));
 
 await importFiles(['helmet.stl', 'trophy.stl']);
+console.log('objects after import:', await page.evaluate(() => window.__nxStore.getState().objects.length));
 await page.keyboard.press('Control+a');
 // tool shortcuts on the selection (move, rotate, scale, lay flat, cut, paint support/seam/colour, text, measure…)
 for (const k of ['m', 'r', 's', 'f', 'c', 'l', 'p', 'n', 'h', 'e', 'b', 't', 'Delete']) {
