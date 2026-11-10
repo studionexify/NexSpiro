@@ -8,15 +8,18 @@ const URL = process.argv[2] ?? 'http://localhost:5173/';
 const MODELS = path.resolve('tests/models');
 const errors = [];
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-page.on('pageerror', (e) => errors.push(`[pageerror @${_step}] ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|DevTools|Download the React/.test(m.text())) errors.push(`[console @${_step}] ${m.text().slice(0, 300)}`); });
-page.on('dialog', (d) => d.accept());
+let page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+function hook(pg) {
+  pg.on('pageerror', (e) => errors.push(`[pageerror @${_step}] ${e.message}`));
+  pg.on('console', (m) => { if (m.type() === 'error' && !/favicon|DevTools|Download the React/.test(m.text())) errors.push(`[console @${_step}] ${m.text().slice(0, 300)}`); });
+  pg.on('dialog', (d) => d.accept().catch(() => {}));
+}
+hook(page);
 let _step = 'load';
 const T0 = Date.now();
 const stepLog = (s) => { _step = s; console.log(`${((Date.now() - T0) / 1000).toFixed(0)}s ${s}`); };
 const wait = (ms) => page.waitForTimeout(ms);
-const crashed = async () => (await page.locator('text=ran into a problem').count()) > 0;
+const crashed = async () => (await page.locator('text=ran into a problem').count().catch(() => 0)) > 0;
 async function guard(label) {
   if (await crashed()) {
     const msg = await page.locator('code, pre, .mono').first().textContent().catch(() => '');
@@ -47,18 +50,23 @@ async function sliceNow(label) {
   await wait(1500);
   await guard(_step);
 }
+const within = (pr, ms, v = 'TIMEOUT') => Promise.race([pr, new Promise((r) => setTimeout(() => r(v), ms))]);
+async function alive() { return (await within(page.evaluate(() => 'ok').catch(() => 'dead'), 8000)) === 'ok'; }
 async function clickAll(scope, label) {
   const skip = /slice|delete|remove|new project|close|quit|reload|reset|clear all|print|send|connect|update|export|save|open|import|add model|sign/i;
-  const btns = await page.locator(`${scope} button:visible`).all();
+  const names = await within(page.locator(`${scope} button:visible`).evaluateAll((bs) => bs.map((b) => (b.getAttribute('aria-label') || b.title || b.textContent || '').trim().slice(0, 50))), 10000, []);
   let n = 0;
-  for (const b of btns) {
-    const name = ((await b.getAttribute('aria-label').catch(() => null)) ?? (await b.getAttribute('title').catch(() => null)) ?? (await b.textContent().catch(() => '')) ?? '').trim().slice(0, 50);
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
     if (!name || skip.test(name)) continue;
     stepLog(`${label}: ${name}`);
-    try { await b.click({ timeout: 1500 }); n++; } catch { continue; }
-    await wait(250);
-    await guard(_step);
-    await page.keyboard.press('Escape'); await wait(100);
+    const r = await within(page.locator(`${scope} button:visible`).nth(i).click({ timeout: 1500 }).then(() => 'ok', () => 'skip'), 5000);
+    if (r === 'skip') continue;
+    n++;
+    await wait(300);
+    if (!(await alive())) { errors.push(`[FREEZE after clicking] ${_step}`); console.log('FREEZE', _step); return n; }
+    await within(guard(_step), 5000);
+    await within(page.keyboard.press('Escape'), 3000); await wait(100);
   }
   return n;
 }
@@ -82,6 +90,13 @@ stepLog('arrange'); await page.keyboard.press('a'); await wait(800); await guard
 stepLog('undo/redo'); await page.keyboard.press('Control+z'); await wait(300); await page.keyboard.press('Control+y'); await wait(300); await guard(_step);
 const prep = await clickAll('body', 'prepare');
 console.log('prepare buttons clicked:', prep);
+for (let k = 0; k < 12; k++) {
+  const ok = await Promise.race([page.evaluate(() => { const s = window.__nxStore.getState(); return `ok ws=${s.workspace} tool=${s.tool} objs=${s.objects.length} slice=${s.slice.status}`; }), new Promise((r) => setTimeout(() => r('FROZEN'), 5000))]);
+  console.log('after-sweep', k * 5 + 's', ok);
+  if (String(ok).startsWith('ok')) break;
+}
+await page.close({ runBeforeUnload: false }).catch(() => {});
+page = await browser.newPage({ viewport: { width: 1440, height: 900 } }); hook(page);
 await page.goto(URL); await wait(2500);
 await importFiles(['helmet.stl']);
 await sliceNow('helmet');
