@@ -32,14 +32,14 @@ async function importFiles(files) {
   await wait(8000);
   for (const b of await page.locator('.modal button:has-text("Yes"), .modal button:has-text("Import"), .modal button:has-text("OK"), .modal button:has-text("Keep")').all()) await b.click().catch(() => {});
   await wait(1500);
-  await guard(step);
+  await guard(_step);
 }
 async function sliceNow(label) {
   stepLog(`slice ${label}`);
   await page.keyboard.press('Control+r');
   await page.waitForFunction(() => !document.body.innerText.includes('Slicing…'), null, { timeout: 600000 }).catch(() => errors.push(`[timeout] ${label}`));
   await wait(1500);
-  await guard(step);
+  await guard(_step);
 }
 async function clickAll(scope, label) {
   const skip = /delete|remove|new project|close|quit|reload|reset|clear all|print|send|connect|update|export|save|open|import|add model|sign/i;
@@ -51,7 +51,7 @@ async function clickAll(scope, label) {
     stepLog(`${label}: ${name}`);
     try { await b.click({ timeout: 1500 }); n++; } catch { continue; }
     await wait(250);
-    await guard(step);
+    await guard(_step);
     await page.keyboard.press('Escape'); await wait(100);
   }
   return n;
@@ -68,11 +68,11 @@ for (const k of ['m', 'r', 's', 'f', 'c', 'l', 'p', 'n', 'h', 'e', 'b', 't', 'De
   if (k === 'Delete') break;
   stepLog(`shortcut ${k}`);
   await page.mouse.click(720, 450); await page.keyboard.press('Control+a');
-  await page.keyboard.press(k); await wait(500); await guard(step);
+  await page.keyboard.press(k); await wait(500); await guard(_step);
   await page.keyboard.press('Escape'); await wait(200);
 }
-stepLog('arrange'); await page.keyboard.press('a'); await wait(800); await guard(step);
-stepLog('undo/redo'); await page.keyboard.press('Control+z'); await wait(300); await page.keyboard.press('Control+y'); await wait(300); await guard(step);
+stepLog('arrange'); await page.keyboard.press('a'); await wait(800); await guard(_step);
+stepLog('undo/redo'); await page.keyboard.press('Control+z'); await wait(300); await page.keyboard.press('Control+y'); await wait(300); await guard(_step);
 const prep = await clickAll('body', 'prepare');
 console.log('prepare buttons clicked:', prep);
 await page.goto(URL); await wait(2500);
