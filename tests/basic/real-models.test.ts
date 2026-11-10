@@ -44,7 +44,7 @@ function run(ms: MeshInput[], o: Opts = {}) {
 function check(out: ReturnType<typeof slice>, ms: MeshInput[], bed: { x: number; y: number }, o: Opts) {
   const g = out.gcode;
   const body = g.split('\n').filter((l) => !l.startsWith(';')).join('\n');
-  expect(body, 'unexpanded placeholder / NaN').not.toMatch(/NaN|Infinity|undefined|\{[a-z_]+\}|\[[a-z_]+\]/);
+  expect(/NaN|Infinity|undefined|\{[a-z_]+\}|\[[a-z_]+\]/.exec(body)?.[0] ?? null, 'unexpanded placeholder / NaN').toBe(null);
   expect(out.layers.length).toBeGreaterThan(0);
   expect(out.layers.every((L, i) => i === 0 || L.z > out.layers[i - 1].z), 'layers climb').toBe(true);
   const want = topZ(ms);
@@ -84,16 +84,16 @@ describe('supports', () => {
   for (const st of ['normal_auto', 'tree_auto']) for (const iface of [0, 2]) {
     it(`trophy ${st}, ${iface} interface layers: support printed and clean`, () => {
       const out = run([place(models['trophy.stl'][0], 't', 128, 128, 0.5)], { overrides: { enable_support: true, support_type: st, support_interface_top_layers: iface } });
-      expect(out.gcode).toMatch(/;TYPE:[Ss]upport/);
+      expect(/;TYPE:[Ss]upport/.test(out.gcode), 'G-code should match /;TYPE:[Ss]upport/').toBe(true);
     }, 60000);
   }
   it('trophy without support prints no support', () => {
     const out = run([place(models['trophy.stl'][0], 't', 128, 128, 0.5)], { overrides: { enable_support: false } });
-    expect(out.gcode).not.toMatch(/;TYPE:[Ss]upport/);
+    expect(/;TYPE:[Ss]upport/.test(out.gcode), 'G-code should not match /;TYPE:[Ss]upport/').toBe(false);
   }, 60000);
   it('helmet has no steep overhang: auto support adds nothing', () => {
     const out = run([place(models['helmet.stl'][0], 'h', 128, 128)], { overrides: { enable_support: true } });
-    expect(out.gcode).not.toMatch(/;TYPE:[Ss]upport/);
+    expect(/;TYPE:[Ss]upport/.test(out.gcode), 'G-code should not match /;TYPE:[Ss]upport/').toBe(false);
   }, 60000);
 });
 
@@ -111,7 +111,7 @@ describe('multicolour', () => {
     const I = h.indices, V = h.vertices, color = new Uint8Array(I.length / 3);
     for (let t = 0; t < color.length; t++) color[t] = V[I[t * 3] * 3 + 2] > 12 ? 2 : 0;
     const out = run([{ ...h, paint: { color } }], { filaments: 2 });
-    expect(out.gcode).toMatch(/^T1/m);
+    expect(/^T1/m.test(out.gcode), 'G-code should match /^T1/m').toBe(true);
   }, 120000);
 });
 
@@ -119,7 +119,7 @@ describe('vase mode', () => {
   it('helmet in spiral vase: one continuous wall, no retractions after the bottom', () => {
     const out = run([place(models['helmet.stl'][0], 'h', 128, 128)], { vase: true, overrides: { spiral_mode: true } });
     const after = out.gcode.split(';LAYER_CHANGE').slice(6).join('');
-    expect(after).not.toMatch(/G1 E-|E-\d[\d.]* F/);
+    expect((after.match(/G1 E-|E-\d[\d.]* F/g) ?? []).length, 'retractions inside the spiral').toBe(0);
   }, 60000);
 });
 
