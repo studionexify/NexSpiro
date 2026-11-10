@@ -29,7 +29,7 @@ const topZ = (ms: MeshInput[]) => Math.max(...ms.map((m) => { let z = 0; for (le
 
 interface Opts { printer?: string; preset?: string; filament?: string; overrides?: Record<string, unknown>; filaments?: number; vase?: boolean }
 function run(ms: MeshInput[], o: Opts = {}) {
-  process.stderr.write(`SLICE ${JSON.stringify({ ...o, n: ms.length, z: topZ(ms).toFixed(1) })}\n`);
+  process.stderr.write(`SLICE ${Math.round(process.memoryUsage().heapUsed / 1e6)}MB ${JSON.stringify({ ...o, n: ms.length, z: topZ(ms).toFixed(1) })}\n`);
   const pid = o.printer ?? 'bbl-a1';
   const p = printerById(pid);
   const cfg = resolveConfig({ printerId: pid, plate: p.plates[0].type, filamentId: o.filament ?? 'generic-pla', presetId: o.preset ?? '0.20', overrides: (o.overrides ?? {}) as never });
