@@ -2,7 +2,7 @@
   "name": "nexspiro",
   "productName": "NexSpiro",
   "version": "0.2.9",
-  "description": "NexSpiro — 3D printing slicer",
+  "description": "NexSpiro \u2014 3D printing slicer",
   "main": "electron/dist/main.cjs",
   "type": "module",
   "scripts": {
@@ -15,7 +15,9 @@
     "package:win": "npm run build && electron-builder --win --publish never && node scripts/package-win.mjs",
     "build:electron": "node scripts/build-electron.mjs",
     "hanex:prints": "cross-env HANEX_TEST_PRINTS=out/hanex vitest run tests/hanex/calibration.test.ts",
-    "desktop:win": "npm version patch --no-git-tag-version && npm run build && electron-builder --win nsis --x64"
+    "desktop:win": "npm version patch --no-git-tag-version && npm run build && electron-builder --win nsis --x64",
+    "test:basic": "vitest run tests/basic",
+    "test:ui": "node tests/e2e/basic-ui.mjs"
   },
   "build": {
     "appId": "com.nexspiro.app",
