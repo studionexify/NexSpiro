@@ -4,3 +4,4 @@ release/
 electron/dist/
 out/
 desktop-build/
+tests/e2e/last.png
