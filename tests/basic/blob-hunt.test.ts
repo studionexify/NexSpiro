@@ -11,14 +11,17 @@ export interface Issue { line: number; kind: string; text: string }
 export function analyze(gcode: string) {
   const lines = gcode.split('\n');
   const start = lines.findIndex((l) => l.includes('end of start G-code'));
-  let rel = false, x = NaN, y = NaN, z = 0, e = 0, retracted = 0, type = '';
+  let rel = false, x = NaN, y = NaN, z = 0, e = 0, retracted = 0, type = '', inChange = false;
   const issues: Issue[] = [];
   const ratios: Record<string, number[]> = {};
   let unretractedLongTravels = 0, travels = 0;
   const samples: string[] = [];
   for (let i = Math.max(0, start); i < lines.length; i++) {
     const raw = lines[i]; const l = raw.split(';')[0].trim();
-    if (raw.startsWith(';TYPE:')) type = raw.slice(6).trim();
+    if (raw.startsWith(';TYPE:')) { type = raw.slice(6).trim(); inChange = false; }
+    // a filament / tool change (T, AMS M620, Klipper changer macros) unloads, loads and purges in place: the
+    // filament state is reset by the macro, so its moves are not part of the retract bookkeeping
+    if (/^\s*(T\d+|M620|M621|SM_|TOOL_CHANGE|; FLUSH_START|;\s*CP TOOLCHANGE)/.test(raw)) { inChange = true; retracted = 0; }
     if (raw.includes('start of end G-code') || raw.includes('MACHINE_END')) break;
     if (!l) continue;
     if (l.startsWith('M83')) rel = true; else if (l.startsWith('M82')) rel = false;
@@ -30,6 +33,7 @@ export function analyze(gcode: string) {
     let de = 0; if (v.E !== undefined) { de = rel ? v.E : v.E - e; e = rel ? e + v.E : v.E; }
     const d = Number.isFinite(x) ? Math.hypot(nx - x, ny - y) : 0;
     const arc = g[1] === '2' || g[1] === '3';
+    if (inChange) { x = nx; y = ny; continue; }
     if (de < 0) retracted -= de;
     else if (de > 0) {
       if (d < 1e-4 && !arc) {
