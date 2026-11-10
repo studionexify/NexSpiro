@@ -74,11 +74,66 @@ export function pointsAtZ(mesh: IndexedMesh, tris: PaintedTri[], value: number, 
  * from the slice outline; painted near-horizontal faces within ±depth of the layer project down/up.
  * Returns region paths keyed by 1-based colour value; the caller assigns the remainder to the base filament.
  */
+
+/** Join 2-point segments that share an end point (exact integer match) into polylines. Other paths pass through. */
+export function chainSegments(lines: Paths): Paths {
+  const key = (p: { X: number; Y: number }) => `${p.X},${p.Y}`;
+  const segs: Paths = [], out: Paths = [];
+  for (const l of lines) (l.length === 2 ? segs : out).push(l);
+  if (segs.length < 2) return out.concat(segs);
+  const at = new Map<string, number[]>();
+  segs.forEach((s, i) => { for (const p of s) { const k = key(p); const a = at.get(k); if (a) a.push(i); else at.set(k, [i]); } });
+  const used = new Uint8Array(segs.length);
+  const other = (i: number, p: { X: number; Y: number }) => (segs[i][0].X === p.X && segs[i][0].Y === p.Y ? segs[i][1] : segs[i][0]);
+  const extend = (path: { X: number; Y: number }[]) => {
+    for (;;) {
+      const end = path[path.length - 1];
+      const next = (at.get(key(end)) ?? []).find((j) => !used[j]);
+      if (next === undefined) return;
+      used[next] = 1;
+      path.push(other(next, end));
+    }
+  };
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const fwd = [segs[i][0], segs[i][1]];
+    extend(fwd);
+    const back = [fwd[0]];
+    extend(back);
+    out.push(back.length > 1 ? back.slice(1).reverse().concat(fwd) : fwd);
+  }
+  return out;
+}
+
+/** Painted triangles sorted by zmin, so a layer only visits the ones near it. */
+const zIndex = new WeakMap<PaintedTri[], { order: Int32Array; zmin: Float64Array; maxH: number }>();
+function nearZ(tris: PaintedTri[], lo: number, hi: number): number[] {
+  let ix = zIndex.get(tris);
+  if (!ix) {
+    const order = Int32Array.from(tris.keys()).sort((a, b) => tris[a].zmin - tris[b].zmin);
+    const zmin = Float64Array.from(order, (i) => tris[i].zmin);
+    let maxH = 0; for (const p of tris) maxH = Math.max(maxH, p.zmax - p.zmin);
+    ix = { order, zmin, maxH };
+    zIndex.set(tris, ix);
+  }
+  // first with zmin >= lo - maxH (anything lower ends below lo)
+  let a = 0, b = ix.zmin.length;
+  const from = lo - ix.maxH - 1e-9;
+  while (a < b) { const m = (a + b) >> 1; if (ix.zmin[m] < from) a = m + 1; else b = m; }
+  const out: number[] = [];
+  for (let k = a; k < ix.zmin.length && ix.zmin[k] <= hi; k++) { const i = ix.order[k]; if (tris[i].zmax >= lo) out.push(i); }
+  return out.sort((x, y) => x - y); // original order: same G-code as a full scan
+}
+
 /** Strip of half-width `d` (mm) around open polylines. */
 function lineStrip(lines: Paths, d: number): Paths {
   if (!lines.length) return [];
-  const co = new C.ClipperOffset(2, SCALE * 0.0025);
-  co.AddPaths(lines, C.JoinType.jtRound, C.EndType.etOpenRound);
+  // Painted meshes give thousands of 2-point segments per layer; offsetting each with its own round caps at a few µm
+  // made one detailed figure take >10 min. Chain touching segments into polylines first (same strip, a fraction of
+  // the caps) and round at 10 µm (still ~40x finer than a line width).
+  const co = new C.ClipperOffset(2, SCALE * 0.01);
+  co.AddPaths(chainSegments(lines), C.JoinType.jtRound, C.EndType.etOpenRound);
   const out: Paths = [];
   co.Execute(out, Math.round(d * SCALE));
   return out;
@@ -100,8 +155,9 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
   const byColor = new Map<number, { lines: Paths; flats: Paths }>();
   const get = (c: number) => { let e = byColor.get(c); if (!e) byColor.set(c, (e = { lines: [], flats: [] })); return e; };
   const v = mesh.vertices, ix = mesh.indices;
-  for (const p of tris) {
-    const reach = depth > 0 ? depth : penetration ? Math.max(penetration.top, penetration.bottom, 0.05) : flatReach;
+  const reach = depth > 0 ? depth : penetration ? Math.max(penetration.top, penetration.bottom, 0.05) : flatReach;
+  for (const ti of nearZ(tris, z - reach, z + reach)) {
+    const p = tris[ti];
     if (p.zmax < z - reach || p.zmin > z + reach) continue;
     const s = p.zmin <= z && p.zmax >= z ? triSegment(mesh, p.t, z) : null;
     if (s) get(p.value).lines.push([{ X: Math.round(s[0] * SCALE), Y: Math.round(s[1] * SCALE) }, { X: Math.round(s[2] * SCALE), Y: Math.round(s[3] * SCALE) }]);
@@ -122,11 +178,7 @@ export function colorRegionsAtZ(mesh: IndexedMesh, tris: PaintedTri[], slice: Pa
   for (const [color, e] of byColor) {
     let region: Paths = [];
     if (e.lines.length) {
-      const co = new C.ClipperOffset(2, SCALE * 0.0025);
-      co.AddPaths(e.lines, C.JoinType.jtRound, C.EndType.etOpenRound);
-      const strip: Paths = [];
-      co.Execute(strip, Math.round(depth * SCALE));
-      region = region.concat(strip);
+      region = region.concat(lineStrip(e.lines, depth));
     }
     if (e.flats.length) region = region.concat(offset(union(e.flats), 0.05));
     const r = intersection(union(region), slice);
