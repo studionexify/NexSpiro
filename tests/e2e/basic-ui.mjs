@@ -9,10 +9,12 @@ const MODELS = path.resolve('tests/models');
 const errors = [];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-page.on('pageerror', (e) => errors.push(`[pageerror @${step}] ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error' && !/favicon|DevTools|Download the React/.test(m.text())) errors.push(`[console @${step}] ${m.text().slice(0, 300)}`); });
+page.on('pageerror', (e) => errors.push(`[pageerror @${_step}] ${e.message}`));
+page.on('console', (m) => { if (m.type() === 'error' && !/favicon|DevTools|Download the React/.test(m.text())) errors.push(`[console @${_step}] ${m.text().slice(0, 300)}`); });
 page.on('dialog', (d) => d.accept());
-let step = 'load';
+let _step = 'load';
+const T0 = Date.now();
+const stepLog = (s) => { _step = s; console.log(`${((Date.now() - T0) / 1000).toFixed(0)}s ${s}`); };
 const wait = (ms) => page.waitForTimeout(ms);
 const crashed = async () => (await page.locator('text=ran into a problem').count()) > 0;
 async function guard(label) {
@@ -24,7 +26,7 @@ async function guard(label) {
   }
 }
 async function importFiles(files) {
-  step = `import ${files.join(',')}`;
+  stepLog(`import ${files.join(',')}`);
   const [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 10000 }), page.keyboard.press('Control+i')]);
   await fc.setFiles(files.map((f) => path.join(MODELS, f)));
   await wait(8000);
@@ -33,7 +35,7 @@ async function importFiles(files) {
   await guard(step);
 }
 async function sliceNow(label) {
-  step = `slice ${label}`;
+  stepLog(`slice ${label}`);
   await page.keyboard.press('Control+r');
   await page.waitForFunction(() => !document.body.innerText.includes('Slicing…'), null, { timeout: 600000 }).catch(() => errors.push(`[timeout] ${label}`));
   await wait(1500);
@@ -46,7 +48,7 @@ async function clickAll(scope, label) {
   for (const b of btns) {
     const name = ((await b.getAttribute('aria-label').catch(() => null)) ?? (await b.getAttribute('title').catch(() => null)) ?? (await b.textContent().catch(() => '')) ?? '').trim().slice(0, 50);
     if (!name || skip.test(name)) continue;
-    step = `${label}: ${name}`;
+    stepLog(`${label}: ${name}`);
     try { await b.click({ timeout: 1500 }); n++; } catch { continue; }
     await wait(250);
     await guard(step);
@@ -64,13 +66,13 @@ await page.keyboard.press('Control+a');
 // tool shortcuts on the selection (move, rotate, scale, lay flat, cut, paint support/seam/colour, text, measure…)
 for (const k of ['m', 'r', 's', 'f', 'c', 'l', 'p', 'n', 'h', 'e', 'b', 't', 'Delete']) {
   if (k === 'Delete') break;
-  step = `shortcut ${k}`;
+  stepLog(`shortcut ${k}`);
   await page.mouse.click(720, 450); await page.keyboard.press('Control+a');
   await page.keyboard.press(k); await wait(500); await guard(step);
   await page.keyboard.press('Escape'); await wait(200);
 }
-step = 'arrange'; await page.keyboard.press('a'); await wait(800); await guard(step);
-step = 'undo/redo'; await page.keyboard.press('Control+z'); await wait(300); await page.keyboard.press('Control+y'); await wait(300); await guard(step);
+stepLog('arrange'); await page.keyboard.press('a'); await wait(800); await guard(step);
+stepLog('undo/redo'); await page.keyboard.press('Control+z'); await wait(300); await page.keyboard.press('Control+y'); await wait(300); await guard(step);
 const prep = await clickAll('body', 'prepare');
 console.log('prepare buttons clicked:', prep);
 await page.goto(URL); await wait(2500);
@@ -79,7 +81,7 @@ await sliceNow('helmet');
 const prev = await clickAll('body', 'preview');
 console.log('preview buttons clicked:', prev);
 // edit after slice must return to Prepare and the CTA must say Slice
-step = 'edit after slice';
+stepLog('edit after slice');
 await page.keyboard.press('Control+a'); await page.keyboard.press('Control+d').catch(() => {}); await wait(800);
 const cta = await page.locator('.sh-cta').textContent().catch(() => '');
 if (/Export/i.test(cta ?? '')) errors.push(`[bug] CTA still "${cta}" after an edit`);

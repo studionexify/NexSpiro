@@ -29,6 +29,7 @@ const topZ = (ms: MeshInput[]) => Math.max(...ms.map((m) => { let z = 0; for (le
 
 interface Opts { printer?: string; preset?: string; filament?: string; overrides?: Record<string, unknown>; filaments?: number; vase?: boolean }
 function run(ms: MeshInput[], o: Opts = {}) {
+  process.stderr.write(`SLICE ${JSON.stringify({ ...o, n: ms.length, z: topZ(ms).toFixed(1) })}\n`);
   const pid = o.printer ?? 'bbl-a1';
   const p = printerById(pid);
   const cfg = resolveConfig({ printerId: pid, plate: p.plates[0].type, filamentId: o.filament ?? 'generic-pla', presetId: o.preset ?? '0.20', overrides: (o.overrides ?? {}) as never });
@@ -139,6 +140,7 @@ describe('every enum process setting, every option', () => {
     it(`${p.key}: ${opts.join(' | ')}`, () => {
       for (const v of opts) {
         const vase = p.key === 'spiral_mode' || (p.key === 'slicing_mode' && v !== 'regular');
+        process.stderr.write(`RUN ${p.key}=${String(v)}\n`);
         try { run([place(models['trophy.stl'][0], 't', 128, 128, 0.25)], { vase, overrides: { [p.key]: v } }); }
         catch (e) { throw new Error(`${p.key} = ${String(v)}: ${(e as Error).message}`); }
       }
