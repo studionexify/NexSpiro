@@ -146,6 +146,7 @@ function useMenus(openPrefs: () => void): [string, Item[]][] {
     ]],
     ['Plugins', PLUGINS.map((p): Item => ({ label: p.name, switch: true, checked: s.plugins.includes(p.id), keep: true, onClick: () => togglePlugin(p.id) }))],
     ['Help', [
+      ...(window.nexspiro?.updateFromFile ? [{ label: 'Update from file…', onClick: () => void window.nexspiro!.updateFromFile!() }, { sep: true } as Item] : []),
       { label: 'Keyboard shortcuts', kbd: '?', onClick: () => s.set({ shortcutsOpen: true }) },
       { label: 'Search everything', kbd: 'Ctrl+K', onClick: () => useUi.getState().set({ paletteOpen: true }) },
     ]],

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('nexspiro', {
   saveFile: (opts) => ipcRenderer.invoke('nx:saveFile', opts),
   openFiles: (opts) => ipcRenderer.invoke('nx:openFiles', opts),
   postProcess: (opts) => ipcRenderer.invoke('nx:postProcess', opts),
+  updateFromFile: () => ipcRenderer.invoke('nx:updateFromFile'),
   devices: {
     load: () => ipcRenderer.invoke('nx:devices:load'),
     save: (list) => ipcRenderer.invoke('nx:devices:save', list),
